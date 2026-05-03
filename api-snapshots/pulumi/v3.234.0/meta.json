@@ -1,0 +1,7 @@
+{
+  "api_accept_version": "application/vnd.pulumi+9",
+  "extracted_at": "2026-05-03T20:26:03Z",
+  "matched_in_spec": 48,
+  "pulumi_ref": "v3.234.0",
+  "total_endpoints": 82
+}

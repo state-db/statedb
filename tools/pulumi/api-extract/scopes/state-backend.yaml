@@ -1,0 +1,53 @@
+# Scope: Wave 1 state backend — core stack management only.
+#
+# Uses exclude mode: all endpoints are in scope unless explicitly listed here.
+# New Pulumi endpoints will automatically appear in the spec subset until
+# a deliberate decision is made to exclude them.
+#
+# Values: endpoint names from Pulumi's api_endpoints.go.
+# Pattern rules:
+#   exactName  — matches that endpoint only
+#   prefix*    — prefix glob, covers {updateKind} variants (_update, _preview, _destroy, _refresh)
+
+exclude:
+  # Secrets — use an external secrets provider instead of Pulumi Cloud's encrypt/decrypt
+  - encryptValue
+  - decryptValue
+  - batchEncrypt
+  - batchDecrypt
+
+  # Stack metadata — not required for core operations
+  - updateStackTags
+  - updateStackConfig
+  - getStackLogs
+
+  # Update content file browsing — not required
+  - getUpdateContentsFiles
+  - getUpdateContentsFilePath
+
+  # Pulumi Deployments — cloud-only managed execution feature
+  - updateDeploymentSettings
+  - destroyDeploymentSettings
+  - encryptDeploymentSecret
+
+  # Policy packs — out of scope for Wave 1
+  - publishPolicyPack
+  - completePolicyPackPublish
+
+  # Package and template registry — out of scope
+  - publishPackage
+  - completePackagePublish
+  - deletePackageVersion
+  - publishTemplate
+  - completeTemplatePublish
+
+  # Templates browsing — out of scope
+  - listTemplates
+  - downloadTemplates
+
+  # Resource search — out of scope
+  - getSearchResources
+  - getSearchResourcesParse
+
+  # GitHub App integration — out of scope
+  - getGHAppIntegration
