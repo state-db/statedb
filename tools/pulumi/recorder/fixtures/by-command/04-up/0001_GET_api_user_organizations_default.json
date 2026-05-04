@@ -1,0 +1,22 @@
+{
+  "seq": 17,
+  "command": "04-up",
+  "cmd_seq": 1,
+  "timestamp": "2026-05-04T02:12:59.986139339Z",
+  "method": "GET",
+  "path": "/api/user/organizations/default",
+  "headers": {
+    "Accept": "application/vnd.pulumi+9",
+    "Accept-Encoding": "gzip",
+    "Authorization": "REDACTED",
+    "Content-Type": "application/json",
+    "User-Agent": "pulumi-cli/1 (v3.234.0; linux)"
+  },
+  "status_code": 200,
+  "response": {
+    "organization": {
+      "githubLogin": "testorg",
+      "name": "testorg"
+    }
+  }
+}

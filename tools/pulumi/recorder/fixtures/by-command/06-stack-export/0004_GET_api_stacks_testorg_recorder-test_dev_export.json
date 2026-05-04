@@ -1,0 +1,20 @@
+{
+  "seq": 43,
+  "command": "06-stack-export",
+  "cmd_seq": 4,
+  "timestamp": "2026-05-04T02:13:00.198328715Z",
+  "method": "GET",
+  "path": "/api/stacks/testorg/recorder-test/dev/export",
+  "headers": {
+    "Accept": "application/vnd.pulumi+9",
+    "Accept-Encoding": "gzip",
+    "Authorization": "REDACTED",
+    "Content-Type": "application/json",
+    "User-Agent": "pulumi-cli/1 (v3.234.0; linux)"
+  },
+  "status_code": 200,
+  "response": {
+    "deployment": null,
+    "version": 3
+  }
+}

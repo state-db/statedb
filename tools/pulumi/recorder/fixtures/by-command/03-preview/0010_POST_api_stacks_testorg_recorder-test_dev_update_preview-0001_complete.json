@@ -1,0 +1,21 @@
+{
+  "seq": 16,
+  "command": "03-preview",
+  "cmd_seq": 10,
+  "timestamp": "2026-05-04T02:12:59.914963881Z",
+  "method": "POST",
+  "path": "/api/stacks/testorg/recorder-test/dev/update/preview-0001/complete",
+  "headers": {
+    "Accept": "application/vnd.pulumi+9",
+    "Accept-Encoding": "gzip",
+    "Authorization": "REDACTED",
+    "Content-Length": "22",
+    "Content-Type": "application/json",
+    "User-Agent": "pulumi-cli/1 (v3.234.0; linux)"
+  },
+  "body": {
+    "status": "succeeded"
+  },
+  "status_code": 200,
+  "response": {}
+}

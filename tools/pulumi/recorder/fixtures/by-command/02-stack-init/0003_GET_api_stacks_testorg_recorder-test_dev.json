@@ -1,0 +1,20 @@
+{
+  "seq": 5,
+  "command": "02-stack-init",
+  "cmd_seq": 3,
+  "timestamp": "2026-05-04T02:12:59.795252298Z",
+  "method": "GET",
+  "path": "/api/stacks/testorg/recorder-test/dev",
+  "headers": {
+    "Accept": "application/vnd.pulumi+9",
+    "Accept-Encoding": "gzip",
+    "Authorization": "REDACTED",
+    "Content-Type": "application/json",
+    "User-Agent": "pulumi-cli/1 (v3.234.0; linux)"
+  },
+  "status_code": 404,
+  "response": {
+    "detail": "testorg/recorder-test/dev",
+    "message": "stack not found"
+  }
+}

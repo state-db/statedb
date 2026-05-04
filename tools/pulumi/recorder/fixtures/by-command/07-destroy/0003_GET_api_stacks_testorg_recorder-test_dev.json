@@ -1,0 +1,28 @@
+{
+  "seq": 46,
+  "command": "07-destroy",
+  "cmd_seq": 3,
+  "timestamp": "2026-05-04T02:13:00.268439631Z",
+  "method": "GET",
+  "path": "/api/stacks/testorg/recorder-test/dev",
+  "headers": {
+    "Accept": "application/vnd.pulumi+9",
+    "Accept-Encoding": "gzip",
+    "Authorization": "REDACTED",
+    "Content-Type": "application/json",
+    "User-Agent": "pulumi-cli/1 (v3.234.0; linux)"
+  },
+  "status_code": 200,
+  "response": {
+    "activeUpdate": "",
+    "currentOperation": null,
+    "orgName": "testorg",
+    "projectName": "recorder-test",
+    "stackName": "dev",
+    "tags": {
+      "pulumi:description": "Minimal Pulumi project for API recording — no resources, no providers.",
+      "pulumi:project": "recorder-test",
+      "pulumi:runtime": "yaml"
+    }
+  }
+}

@@ -1,0 +1,18 @@
+{
+  "seq": 65,
+  "command": "08-stack-rm",
+  "cmd_seq": 4,
+  "timestamp": "2026-05-04T02:13:00.402807298Z",
+  "method": "DELETE",
+  "path": "/api/stacks/testorg/recorder-test/dev",
+  "query": "force=false",
+  "headers": {
+    "Accept": "application/vnd.pulumi+9",
+    "Accept-Encoding": "gzip",
+    "Authorization": "REDACTED",
+    "Content-Type": "application/json",
+    "User-Agent": "pulumi-cli/1 (v3.234.0; linux)"
+  },
+  "status_code": 200,
+  "response": {}
+}

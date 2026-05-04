@@ -1,0 +1,21 @@
+{
+  "seq": 61,
+  "command": "07-destroy",
+  "cmd_seq": 18,
+  "timestamp": "2026-05-04T02:13:00.325640465Z",
+  "method": "POST",
+  "path": "/api/stacks/testorg/recorder-test/dev/update/destroy-0005/complete",
+  "headers": {
+    "Accept": "application/vnd.pulumi+9",
+    "Accept-Encoding": "gzip",
+    "Authorization": "REDACTED",
+    "Content-Length": "22",
+    "Content-Type": "application/json",
+    "User-Agent": "pulumi-cli/1 (v3.234.0; linux)"
+  },
+  "body": {
+    "status": "succeeded"
+  },
+  "status_code": 200,
+  "response": {}
+}

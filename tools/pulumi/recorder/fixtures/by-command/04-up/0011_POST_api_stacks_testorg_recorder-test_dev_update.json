@@ -1,0 +1,58 @@
+{
+  "seq": 27,
+  "command": "04-up",
+  "cmd_seq": 11,
+  "timestamp": "2026-05-04T02:13:00.025973006Z",
+  "method": "POST",
+  "path": "/api/stacks/testorg/recorder-test/dev/update",
+  "headers": {
+    "Accept": "application/vnd.pulumi+9",
+    "Accept-Encoding": "gzip",
+    "Authorization": "REDACTED",
+    "Content-Length": "796",
+    "Content-Type": "application/json",
+    "User-Agent": "pulumi-cli/1 (v3.234.0; linux)"
+  },
+  "body": {
+    "config": {},
+    "description": "Minimal Pulumi project for API recording — no resources, no providers.",
+    "main": "",
+    "metadata": {
+      "environment": {
+        "exec.kind": "cli",
+        "pulumi.arch": "arm64",
+        "pulumi.env.PULUMI_ACCESS_TOKEN": "set",
+        "pulumi.env.PULUMI_BACKEND_URL": "set",
+        "pulumi.env.PULUMI_CONFIG_PASSPHRASE": "set",
+        "pulumi.env.PULUMI_HOME": "set",
+        "pulumi.env.PULUMI_SKIP_CONFIRMATIONS": "true",
+        "pulumi.env.PULUMI_SKIP_UPDATE_CHECK": "true",
+        "pulumi.flag.yes": "true",
+        "pulumi.os": "linux",
+        "pulumi.version": "v3.234.0",
+        "runtime.name": "yaml",
+        "stack.environments": "[]",
+        "updatePlan": "false"
+      },
+      "message": ""
+    },
+    "name": "recorder-test",
+    "options": {
+      "color": "raw",
+      "debug": false,
+      "dryRun": false,
+      "localPolicyPackPaths": [],
+      "parallel": 40,
+      "showConfig": false,
+      "showNames": false,
+      "showReplacementSteps": false,
+      "summary": false
+    },
+    "runtime": "yaml"
+  },
+  "status_code": 200,
+  "response": {
+    "updateID": "update-0003",
+    "version": 1
+  }
+}

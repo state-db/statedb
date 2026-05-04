@@ -1,0 +1,20 @@
+{
+  "seq": 39,
+  "command": "05-stack-ls",
+  "cmd_seq": 4,
+  "timestamp": "2026-05-04T02:13:00.119307756Z",
+  "method": "GET",
+  "path": "/api/user/stacks",
+  "query": "project=recorder-test",
+  "headers": {
+    "Accept": "application/vnd.pulumi+9",
+    "Accept-Encoding": "gzip",
+    "Authorization": "REDACTED",
+    "Content-Type": "application/json",
+    "User-Agent": "pulumi-cli/1 (v3.234.0; linux)"
+  },
+  "status_code": 200,
+  "response": {
+    "stacks": []
+  }
+}

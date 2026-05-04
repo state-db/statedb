@@ -1,0 +1,20 @@
+{
+  "seq": 60,
+  "command": "07-destroy",
+  "cmd_seq": 17,
+  "timestamp": "2026-05-04T02:13:00.32440884Z",
+  "method": "POST",
+  "path": "/api/stacks/testorg/recorder-test/dev/update/destroy-0005/events/batch",
+  "headers": {
+    "Accept": "application/vnd.pulumi+9",
+    "Accept-Encoding": "gzip",
+    "Authorization": "REDACTED",
+    "Content-Encoding": "gzip",
+    "Content-Length": "178",
+    "Content-Type": "application/json",
+    "User-Agent": "pulumi-cli/1 (v3.234.0; linux)"
+  },
+  "body_raw": "\u001f\ufffd\b\u0000\u0000\u0000\u0000\u0000\u0000\ufffdtͱJ\ufffd0\u0014\ufffd\ufffdw\ufffds\ufffdv1%kq/8\ufffdCLOk\ufffdI\ufffd\ufffdI\ufffd\ufffd\ufffd\ufffdT\ufffd\ufffd|\ufffd\ufffd\ufffd\ufffdW\ufffd\ufffd\ufffdk%\ufffdWAt \ufffd)\ufffd\u003e@\ufffd\r;\ufffd^k=\u003cuz\ufffd\u0014팭\ufffdx\ufffd^d*\ufffd\u0014\u0017\ufffd\ufffd\ufffd\ufffd5\ufffd\ufffd\ufffd\u001f\u0012RB\ufffd|\ufffd\u0011\ufffd\ufffd\ufffd\u0018\u0013s\ufffd3\ufffd\ufffdn\u0002Esa\ufffd}\ufffd/p)\ufffd\ufffd\ufffd1$\u0015v\u0018?l\\!WTє6\ufffd\ufffdɺ\ufffd{\ufffd21\u000e\ufffd\ufffd\ufffdj\ufffd\ufffd\ufffd\u0004\u0000\u0000\ufffd\ufffd@Gt\ufffd\ufffd\u0000\u0000\u0000",
+  "status_code": 200,
+  "response": {}
+}

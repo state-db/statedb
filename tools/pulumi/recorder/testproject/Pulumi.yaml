@@ -1,0 +1,3 @@
+name: recorder-test
+runtime: yaml
+description: Minimal Pulumi project for API recording — no resources, no providers.

@@ -1,0 +1,29 @@
+{
+  "seq": 12,
+  "command": "03-preview",
+  "cmd_seq": 6,
+  "timestamp": "2026-05-04T02:12:59.893697339Z",
+  "method": "POST",
+  "path": "/api/stacks/testorg/recorder-test/dev/update/preview-0001",
+  "headers": {
+    "Accept": "application/vnd.pulumi+9",
+    "Accept-Encoding": "gzip",
+    "Authorization": "REDACTED",
+    "Content-Length": "182",
+    "Content-Type": "application/json",
+    "User-Agent": "pulumi-cli/1 (v3.234.0; linux)"
+  },
+  "body": {
+    "journalVersion": 1,
+    "tags": {
+      "pulumi:description": "Minimal Pulumi project for API recording — no resources, no providers.",
+      "pulumi:project": "recorder-test",
+      "pulumi:runtime": "yaml"
+    }
+  },
+  "status_code": 200,
+  "response": {
+    "duration": 3600,
+    "token": "lease-0001"
+  }
+}

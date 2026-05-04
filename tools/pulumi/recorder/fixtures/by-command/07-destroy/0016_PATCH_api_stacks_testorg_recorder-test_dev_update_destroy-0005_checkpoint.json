@@ -1,0 +1,20 @@
+{
+  "seq": 59,
+  "command": "07-destroy",
+  "cmd_seq": 16,
+  "timestamp": "2026-05-04T02:13:00.321096548Z",
+  "method": "PATCH",
+  "path": "/api/stacks/testorg/recorder-test/dev/update/destroy-0005/checkpoint",
+  "headers": {
+    "Accept": "application/vnd.pulumi+9",
+    "Accept-Encoding": "gzip",
+    "Authorization": "REDACTED",
+    "Content-Encoding": "gzip",
+    "Content-Length": "273",
+    "Content-Type": "application/json",
+    "User-Agent": "pulumi-cli/1 (v3.234.0; linux)"
+  },
+  "body_raw": "\u001f\ufffd\b\u0000\u0000\u0000\u0000\u0000\u0000\ufffdL\ufffdAn\ufffd0\u0014\ufffd὜\ufffd\ufffd\u0018\u001b\b\ufffd;x\ufffd7\ufffd\ufffd2\ufffdu\ufffd\u00160\ufffdo\ufffd\ufffd\ufffd\ufffdWI'\ufffd\u001d闎\ufffd\u0007R\ufffd\ufffdlnJ\u0001\u0014\ufffdTYa\ufffdRS^@V!\ufffd:\ufffd\ufffd̋\ufffd\u001e\ufffdݒ\"\ufffdז43\bF\ufffd\ufffd\ufffd\ufffd\ufffdn\ufffdkC\ufffd%\ufffd\ufffd\ufffd\ufffd\ufffd\ufffdl\ufffd\u0006\ufffd\ufffd]\ufffd\u0007a\u0018\ufffdǳ\ufffd\ufffd7c\ufffd\ufffd\ufffd\u0012y\ufffd}Զ\u000bc\ufffdKc\ufffdޘΙ\u003e8\u001b\ufffdН;\ufffd\ufffd\ufffd`\ufffd\ufffd\ufffd~\ufffd\ufffd\ufffd\ufffdf\ufffdƶG\ufffd]\ufffd\ufffd/,\ufffd}-yK\ufffdK}\ufffd\ufffd\ufffd\u0013W\ufffdl\ufffd3\u0014\ufffd8\ufffdg\ufffd*\u0013\b7\ufffd\ufffdN\ufffd){7\ufffdr\u0015\u001a\ufffd\ufffd\ufffd\ufffd\ufffd\u0017. \bW\ufffd\ufffd\n\ufffd\ufffd\ufffd\u000f\ufffd\u0002Ba\ufffdK\ufffdrx\ufffd\ufffdK\ufffd\tB\ufffd\r\ufffd\ufffd0\ufffd\ufffd\ufffdā\u001e\ufffd\ufffd\ufffd\u0004\u0000\u0000\ufffd\ufffd\ufffdwЄY\u0001\u0000\u0000",
+  "status_code": 200,
+  "response": {}
+}
