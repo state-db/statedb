@@ -50,6 +50,8 @@ Two HTTP surfaces, one domain core, one DB. Same JAR. Same native binary.
 | `/pulumi/api/...` | Pulumi backend protocol | `Authorization: token <tok>` | Users configure CLI as `pulumi login https://host/pulumi`. CLI then constructs `/pulumi/api/...`. Tofu ships under `/tofu/...` in Wave 3. |
 | `/api/...` | Console REST API | OIDC session cookie | Used only by the SPA. Never exposed to the Pulumi CLI. |
 | `/api/admin/...` | Admin-only console endpoints | OIDC session + admin allow-list | Subject `<iss>:<sub>` must be in `STATE_DB_ADMIN_SUBJECTS` env. |
+| `/api/auth/login/*`, `/api/auth/callback/*` | OIDC login + callback (one route per configured provider) | None (initiates auth) | Sets the encrypted session cookie on success. |
+| `/api/auth/cli-mint`, `/api/auth/cli-mint/callback` | OIDC `prompt=none` re-auth → mint a short-lived CLI token | OIDC session cookie | One-time-display page returns the raw token; see "CLI token issuance". |
 | `/api/auth/local` | Break-glass local login | Username/password from local DB table | Only enabled when (a) Quarkus profile is not `prod` AND (b) request originates from `127.0.0.1`/`::1`. Both checks; either fail = 404. |
 | `/assets/*`, `/favicon.ico`, etc. | Static SPA bundle | None | Served from `META-INF/resources/` populated by the bun build. |
 | Anything else | SPA fallback → `index.html` | None | Catches client-side router paths. Filter explicitly does NOT match `/api/*` or `/pulumi/*`. |
@@ -226,6 +228,66 @@ Signed-and-encrypted cookie carrying `{user_id, iss, sub, exp}`. No server-side 
 
 Cookie is `HttpOnly; Secure; SameSite=Strict; Path=/api/`. Not sent to `/pulumi/api/` because path scope excludes it. Defense in depth.
 
+### CLI token issuance
+
+Pulumi CLI authenticates with `Authorization: token <tok>` and has no OIDC client of its own — and we will not be forking it. To still get IdP-driven access control on CLI traffic, every CLI token is **bootstrapped from the user's OIDC session and issued with a short TTL** (24h default). Disablement at the IdP propagates within the TTL because the user can no longer mint a fresh token.
+
+The mechanism is a standard OIDC trick: re-launching the authorization flow with `prompt=none`. The IdP redirects back immediately if the user's IdP session is still alive, or returns `error=login_required` if the session has been invalidated (logout, account disabled, MFA challenge required, conditional-access denial, etc.). We do not store IdP refresh tokens, do not call introspection, do not poll the IdP. The silent re-auth at mint time is the only liveness signal.
+
+#### Mint flow
+
+```
+SPA "Get CLI token" button → GET /api/auth/cli-mint
+  ↓
+state-db builds OIDC authz URL with prompt=none, state=signed{intent=cli-mint}
+state-db → 302 → IdP /authorize
+  ↓
+IdP — live session?
+  ├─ yes → 302 back with code   (no UI shown)
+  └─ no  → 302 back with error=login_required
+            → state-db: "your IdP session expired, sign in again"
+            → bounce through /api/auth/login/{provider} → return here
+  ↓
+state-db /api/auth/cli-mint/callback
+  exchanges code → fresh id_token
+  verifies (iss, sub) match the current console session's user
+  INSERT api_tokens (kind='oidc', expires_at = now() + 24h)
+  → renders one-time-display page: raw token + ready-to-paste hints
+       pulumi login https://state-db.example.com/pulumi
+       export PULUMI_ACCESS_TOKEN=<tok>
+```
+
+#### Daily lifecycle
+
+- Around 24h after mint, `pulumi up` returns 401. The CLI prints "you must login again."
+- User opens the console → "Get CLI token". If both the console session cookie and the IdP session are still alive, the entire mint round-trips silently — one click, one paste.
+- If either session is gone, the user gets a real OIDC sign-in prompt before the silent mint completes.
+
+#### Disabled-user propagation
+
+- T+0: admin disables the user at the IdP. The existing CLI token still works.
+- T+ε to T+24h: existing token expires; CLI gets 401.
+- User attempts re-mint → `prompt=none` returns `login_required` → user is bounced to full sign-in → IdP rejects credentials. No new token is issued. CLI access is dead.
+
+If sub-24h propagation ever becomes important (it isn't for Wave 1), shorter TTL or OIDC `offline_access` refresh tokens are additive changes to this design — neither breaks the wire format or the schema.
+
+#### Implementation notes
+
+- The OIDC `state` parameter on the cli-mint authz request encodes a signed `intent=cli-mint` so the callback can distinguish mint redirects from regular login redirects.
+- The cli-mint callback verifies the freshly returned id_token's `(iss, sub)` matches the console session's `(iss, sub)`. This blocks an attacker who hijacked a session cookie from minting tokens against a different user's IdP session.
+- Tokens are still hashed (sha256) before insert; the raw token is returned exactly once.
+- No new tables — `api_tokens` carries everything via the `kind` column (see db-schema.md decision #10).
+
+### Service-account tokens (CI/CD)
+
+Non-interactive callers cannot run an OIDC flow. They are served by a separate path:
+
+- Minted by an admin via `POST /api/admin/tokens`.
+- `api_tokens.kind = 'service_account'`. Owner is the minting admin's user (or a synthetic admin-owned user, depending on operational policy). `expires_at` is mandatory and capped at 1y in app code.
+- Revocation is manual. Convention: one token per service, narrowly described (`description = "github-actions/state-db-deploy"`).
+
+Both kinds share the wire format (`Authorization: token <tok>`) and the same `TokenAuthFilter`. The discriminator only affects mint policy and operational expectations, not protocol.
+
 ### Admin
 
 `AdminAllowList` is a singleton bean reading `STATE_DB_ADMIN_SUBJECTS` at boot:
@@ -263,13 +325,15 @@ Read-heavy. Notable resources:
 - `GET /api/pulumi/stacks/{ref}` — single stack: current resources (reconstructed checkpoint), tags, version.
 - `GET /api/pulumi/stacks/{ref}/updates` — history from `stack_updates`.
 - `GET /api/pulumi/stacks/{ref}/updates/{id}/events` — paginated `update_events`.
-- `POST /api/tokens` — mint a new token. Body `{description, org_id, expires_at?}`. Returns the raw token *once*; afterwards only the hash is stored.
-- `DELETE /api/tokens/{id}` — revoke.
+- `GET /api/auth/cli-mint` — interactive CLI token mint. Triggers OIDC `prompt=none` re-auth, then returns the raw token via a one-time-display page. `kind='oidc'`, 24h TTL. See "CLI token issuance".
+- `GET /api/tokens` — list the current user's tokens (id, description, kind, expires_at, last_used_at).
+- `DELETE /api/tokens/{id}` — revoke (owner or admin).
 - `GET /api/me` — current user + admin status + org memberships.
 
 Admin:
 - `GET/POST /api/admin/providers` — manage `oidc_providers`.
 - `GET /api/admin/users` — list users for support/auditing.
+- `POST /api/admin/tokens` — mint a service-account token. Body `{description, org_id, expires_at}` (mandatory, ≤1y). `kind='service_account'`. Returns the raw token once. Used for CI/CD.
 - `DELETE /api/admin/stacks/{ref}/lock` — manual unlock.
 
 ---
@@ -420,7 +484,8 @@ Wave 2 (console) starts after step 7; OIDC + workspace listing can develop in pa
 Things we've explicitly deferred. Each is solvable inside Wave 1's architecture without breaking changes.
 
 - **OIDC identity linking** — one user, multiple IdPs. Add `user_identities` table and a "link account" flow.
-- **Token rotation policy** — currently tokens have an optional `expires_at` and no scheduled rotation. Will bolt on later.
+- **Token rotation policy** — OIDC-derived tokens auto-expire in 24h; service-account rotation is admin-driven. Automated rotation hooks (near-expiry webhooks, IdP-event-driven revocation) are future work.
+- **`statedb-cli` companion** — small CLI to automate the daily OIDC re-auth and write the resulting token into `~/.pulumi/credentials.json` (AWS-SSO-style), removing the daily paste. Deferred; console-paste flow is acceptable for Wave 1.
 - **Session re-read on admin-list change** — admin allow-list is read at boot; rotating admins requires redeploy. SIGHUP re-read is small future work.
 - **Rate limiting** — not implemented; revisit when metrics show abuse.
 - **Long-running event streaming** — currently `update_events` is poll-based for the console. SSE/WebSocket for live update tailing is Wave 2.5.
@@ -447,3 +512,6 @@ For posterity, the choices that shaped this doc:
 | Native image as Wave 1 GA target | JVM default during dev; native validated before launch |
 | App-level workspace lifecycle | Trigger-based auto-create rejected for clarity; app must INSERT workspace then stack in one tx |
 | No org-membership cache initially | Defer until profiling shows it matters |
+| OIDC-bootstrapped CLI tokens, 24h TTL | IdP disablement propagates within TTL via failed `prompt=none` re-auth at next mint; no IdP refresh tokens stored, no introspection, no polling |
+| `api_tokens.kind` discriminator | Single table, two policies — short-lived OIDC vs long-lived service-account; same wire format, same auth filter |
+| Defer `statedb-cli` helper | Console-paste UX is acceptable for Wave 1; companion CLI to write `~/.pulumi/credentials.json` automatically is later UX polish |

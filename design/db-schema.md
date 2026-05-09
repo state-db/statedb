@@ -26,7 +26,7 @@ Forward compatibility for OpenTofu: the `workspaces` parent table provides type-
 | 7 | **Lock expiry + heartbeat** | Stale lock recovery when client crashes; `lock_token` must match to unlock |
 | 8 | **Immutable journal entries** | Append-only matches Pulumi journaling semantics; compaction creates new snapshot |
 | 9 | **Async compaction job queue** | Compaction is slow; shouldn't block API responses; can be retried |
-| 10 | **`api_tokens` table** | `Authorization: token <tok>` header on every CLI request; tokens are user-owned and org-scoped |
+| 10 | **`api_tokens.kind` discriminator (`oidc` vs `service_account`)** | OIDC-derived tokens are short-lived (24h default) and require a fresh OIDC handshake (`prompt=none` re-auth) at every mint, so disablement at the IdP propagates within the TTL with no IdP storage, polling, or introspection. Service-account tokens are long-lived for CI/CD with mandatory `expires_at` enforced in app code. Both share the wire format (`Authorization: token <tok>`) — the distinction is policy, not protocol. |
 | 11 | **`workspaces` parent table** | Type-erased identity for cross-tool listing (Pulumi today, Tofu in Wave 3); 1:1 with type-specific row; deletion cascades down the type-specific tree |
 | 12 | **`update_events` first-class** | Event payloads from `events/batch` are decoded and queryable per update; BRIN index on `created_at` enables cheap time-bounded vacuum |
 | 13 | **OIDC users + `org_members`** | Console authn via configurable OIDC providers; org membership decoupled from token ownership; admin set is env-driven, not stored in DB |
@@ -40,7 +40,7 @@ Forward compatibility for OpenTofu: the `workspaces` parent table provides type-
 | `organizations` | Top-level tenant boundary |
 | `projects` | Belongs to org, renameable |
 | `stacks` | Belongs to project, renameable; holds denormalized `stack_ref` |
-| `api_tokens` | Authenticates Pulumi CLI requests (hashed) |
+| `api_tokens` | Authenticates Pulumi CLI requests (hashed); `kind` separates short-lived OIDC tokens from long-lived service-account tokens |
 | `snapshots` | Full DeploymentV3 checkpoint at compaction points |
 | `stack_state` | Per-stack pointer: current snapshot + journal position + read cache |
 | `stack_updates` | One row per operation (preview/update/destroy/refresh/import) |
@@ -109,12 +109,23 @@ CREATE TABLE users (
 -- API tokens are minted from the console; every token has an owner. They
 -- additionally carry an org scope used for authorization on Pulumi CLI calls.
 -- Pulumi CLI sends `Authorization: token <tok>`; we store sha256, never the raw.
+--
+-- Two kinds:
+--   'oidc'            — minted by a user via OIDC re-auth (prompt=none); short
+--                       TTL (24h default). When the user is disabled at the
+--                       IdP, the next mint attempt fails (login_required) and
+--                       the existing token expires within its TTL, so CLI
+--                       access dies without any background reconciliation.
+--   'service_account' — minted by an admin for non-interactive callers (CI/CD).
+--                       Long-lived, manually revoked. App code enforces a
+--                       mandatory expires_at on this kind (capped at 1y).
 CREATE TABLE api_tokens (
     id           UUID        PRIMARY KEY,
     token_hash   TEXT        NOT NULL UNIQUE,
     description  TEXT,
     user_id      UUID        NOT NULL REFERENCES users(id) ON DELETE CASCADE,  -- owner who minted it
     org_id       UUID        NOT NULL,                                          -- FK added after organizations; access scope
+    kind         TEXT        NOT NULL CHECK (kind IN ('oidc', 'service_account')),
     created_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
     last_used_at TIMESTAMPTZ,
     expires_at   TIMESTAMPTZ
@@ -680,6 +691,7 @@ The 16-point review below separates what the schema enforces from what applicati
 | Stack config (`PUT .../config`) | Separate per-stack config storage not required for Wave 1 |
 | Secrets encryption | Delegated to user-configured secrets providers (AWS KMS, Azure Key Vault, etc.); stored opaquely inside checkpoint JSONB. Service never sees plaintext. |
 | OIDC identity linking | One user = one `(iss, sub)`. Linking multiple IdP identities to a single user (e.g., "I have Google and Okta accounts") is future work. |
+| `statedb-cli` companion | A small CLI helper to automate the daily OIDC re-auth and write the resulting token into `~/.pulumi/credentials.json` (AWS-SSO-style). Wave 1 ships console-paste only; helper is later UX polish. |
 | Tofu workspace extension | `workspaces` parent ships in Wave 1 so identity is stable from day one. Type-specific `tofu_workspaces` extension and Tofu state tables ship in Wave 3. |
 | Event vacuum scheduler | `update_events` retention is enforced by an app-level job that deletes by `created_at`. The job itself (cadence, threshold) is config, not schema. |
 
