@@ -81,7 +81,7 @@ state-db/
     │   ├── jsonb/              AttributeConverter for JSONB ↔ JsonNode
     │   └── db/migration/       V1__init.sql, V2__..., V3__...
     ├── pulumi-api/             JAX-RS resources for /pulumi/api/*
-    │   ├── filter/             TokenAuthFilter, OrgScopeFilter
+    │   ├── filter/             TokenAuthFilter, LeaseTokenFilter
     │   ├── stack/              StackResource, StackEncryptionResource
     │   ├── update/             UpdateResource, LeaseResource, EventsResource
     │   └── error/              Pulumi-specific error mapping (409 lock conflict, etc.)
@@ -152,11 +152,8 @@ TokenAuthFilter   (everything that isn't lease-scoped)
   │    FROM api_tokens t JOIN organizations o ON o.id = t.org_id
   │   WHERE t.token_hash = ? AND (t.expires_at IS NULL OR t.expires_at > now())
   ├─ if miss → 401
+  ├─ verify org_members row exists for (Subject.user_id, Subject.org_id) → else 401
   └─ attach Subject{user_id, org_id, org_name} to SecurityContext
-
-OrgScopeFilter   (only on /pulumi/api/stacks/{org}/...)
-  ├─ if {org} != Subject.org_name → 403
-  └─ also verify org_members row exists for (Subject.user_id, Subject.org_id) → else 403
 
 LeaseTokenFilter   (only on lease-scoped routes listed above)
   ├─ parse Authorization header (must be scheme="update-token")
@@ -165,14 +162,15 @@ LeaseTokenFilter   (only on lease-scoped routes listed above)
   ├─ verify {stack} path segment resolves to the same stack_id as the lock row → else 409
   └─ attach LeaseContext{stack_id, update_id} to SecurityContext
 
+→ AuthorizeInterceptor (Cedar PDP; see auth.md)
 → Resource method (transactional via @Transactional)
 ```
 
-Subject carries `org_name` (resolved at auth time via the JOIN above) so OrgScopeFilter doesn't need a per-request DB lookup to compare against the path segment.
+Subject carries `org_name` (resolved at auth time via the JOIN above) so the Cedar PDP can compare against the `{org}` path segment without a per-request DB lookup. Org-scope enforcement (`{org}` path == token's org) is a policy clause in Cedar, not a separate filter — see `auth.md`.
 
 The `org_members` re-check on every TokenAuthFilter-protected request is intentional. It means revoking a user's org membership instantly invalidates all their tokens for that org without touching the tokens table. Cost is one indexed PK lookup; we'll cache later if profiling demands.
 
-LeaseTokenFilter does NOT consult `api_tokens` or `org_members` — possession of a valid, unexpired `lock_token` is sufficient. Authority is established at lease-acquire time (which goes through TokenAuthFilter); the lease token then carries that authority for the duration of the update.
+LeaseTokenFilter does NOT consult `api_tokens` or `org_members` and does NOT invoke the PDP — possession of a valid, unexpired `lock_token` is sufficient. Authority is established at lease-acquire time (which goes through TokenAuthFilter and the PDP); the lease token then carries that authority for the duration of the update.
 
 ### Update lifecycle (state machine)
 
@@ -244,13 +242,17 @@ STATE_DB_OIDC_BOOTSTRAP_CLIENT_SECRET=...
 
 At startup, the app upserts this row into `oidc_providers`. Env wins on conflict (so rotating client secrets via env redeploy works).
 
-Multi-provider Quarkus integration uses `TenantConfigResolver`. Login URL is `/api/auth/login/{provider_name}`; the resolver returns the config for that row. Callback at `/api/auth/callback/{provider_name}`. On success, we upsert `users` keyed by `(iss, sub)` and issue a session cookie.
+Multi-provider Quarkus integration uses `TenantConfigResolver`. Login URL is `/api/auth/login/{provider_name}`; the resolver returns the config for that row. Callback at `/api/auth/callback/{provider_name}`. On success, we upsert `users` keyed by `(iss, sub)` and the extension issues a session cookie.
 
 ### Session storage
 
-Signed-and-encrypted cookie carrying `{user_id, iss, sub, exp}`. No server-side session store — keeps horizontal scaling stateless. Cookie key from env (`STATE_DB_SESSION_KEY`, 32-byte base64). Rotate by setting an `OLD` key alongside; both accepted on read, only new key signs new cookies.
+The console runs the **backend-for-frontend (BFF)** pattern with `quarkus-oidc` in `web-app` mode. The SPA never sees access or id tokens — only an HttpOnly session cookie issued by the extension. We get JWKS rotation, refresh-token rotation, OIDC discovery, end-session endpoints, and `state`/`nonce`/PKCE handling without rolling our own.
 
-Cookie is `HttpOnly; Secure; SameSite=Strict; Path=/api/`. Not sent to `/pulumi/api/` because path scope excludes it. Defense in depth.
+The session cookie is generated and verified by `quarkus-oidc`. Encryption key from env (`quarkus.oidc.token-state-manager.encryption-secret`); rotation is the standard redeploy-with-overlap dance.
+
+Cookie is `HttpOnly; Secure; SameSite=Lax; Path=/api/`. SameSite=Lax (not Strict) so the IdP redirect-back works. The `Path=/api/` scope is critical: the cookie is not sent to `/pulumi/api/*`, preserving the no-overlap property between the two surfaces.
+
+See `auth.md` "Console: SPA + BFF with quarkus-oidc" for the full login/logout flow and integration notes.
 
 ### CLI token issuance
 
@@ -418,7 +420,7 @@ Multi-tenant schema, but 99% of deployments will run with a single org. The cons
 - Subsequent admin-issued invites add users to orgs.
 - Pulumi `{org}` path segment is checked against the token's org name (`organizations.name`), not its UUID. CLI users see human-readable refs.
 
-Cross-org data leakage protection is enforced in `OrgScopeFilter` and in every console-api query that resolves a stack — every such query JOINs `stacks → projects → organizations` and filters by the SecurityContext's `org_id`. A bare `stack_id` from external input is never trusted (db-schema.md invariant #14).
+Cross-org data leakage protection is enforced by the Cedar PDP (`auth.md`) and in every console-api query that resolves a stack — every such query JOINs `stacks → projects → organizations` and filters by the SecurityContext's `org_id`. A bare `stack_id` from external input is never trusted (db-schema.md invariant #14).
 
 ---
 
@@ -464,14 +466,15 @@ Out of scope for Wave 1. The Pulumi CLI is well-behaved by default; abuse will c
 
 ## Native image
 
-JVM is the default deployable. Native is the target before Wave 1 GA.
+Wave 1 ships JVM-only. `cedar-java` (the policy engine; see `auth.md`) uses JNI bindings into a Rust core, and GraalVM native image support for that combination is fragile enough that we don't gate the release on it. JVM startup and footprint are acceptable for a self-hosted backend; native image is an optimization, not a correctness requirement.
 
-Known reflection sources to register:
+Native build remains in CI as a non-blocking experimental job. When `cedar-java`'s native image story stabilizes, the experimental build is promoted to a release artifact alongside the JVM image.
+
+Known reflection sources to register when native is promoted:
 - All `@Entity` classes in `persistence/entity/` (Quarkus Hibernate extension auto-registers most; verify with `mvn package -Pnative -Dquarkus.native.enable-reports=true`).
 - The JSONB `AttributeConverter` and any custom `JsonDeserializer`s.
 - DTO classes used in JAX-RS request/response bodies (Quarkus REST extension auto-registers).
-
-Native build is gated in CI on a separate job (5–10 min) so PR feedback isn't blocked. The release pipeline produces both JVM and native images; default to native in published Docker tags, ship JVM as a fallback variant.
+- `cedar-java`'s JNI entrypoints and the bundled Rust shared library per target arch.
 
 ---
 
@@ -535,7 +538,9 @@ Future work. Each is additive — solvable inside Wave 1's architecture without 
 | Quarkus imperative (not reactive) | Short request-response, no streaming, simpler SQL paths |
 | Flyway migrations | No auto-migrate in prod; CI step before image rollout |
 | Bun build, copied into Quarkus resources | Dev: bun proxies to Quarkus. Prod: single static-served bundle |
-| Native image as Wave 1 GA target | JVM default during dev; native validated before launch |
+| JVM-only Wave 1; native image experimental | `cedar-java` JNI/native image story is fragile; ship JVM and revisit when upstream support stabilizes |
+| `quarkus-oidc` web-app session via BFF | Standard library; SPA gets HttpOnly session cookie. No rolled-our-own session crypto |
+| Single Cedar PDP for authorization (see auth.md) | One source of truth for "who can do what"; org-scope and role checks fold into policy clauses rather than per-handler `if` |
 | App-level workspace lifecycle | App INSERTs workspace then stack in one transaction; lifecycle stays explicit rather than hidden in triggers |
 | No org-membership cache initially | Defer until profiling shows it matters |
 | OIDC-bootstrapped CLI tokens, 24h TTL | Each mint round-trips through the IdP via `prompt=none`; IdP disablement propagates within TTL through the failed re-auth, with no extra IdP integration beyond what login already requires |
