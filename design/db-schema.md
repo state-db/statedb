@@ -440,17 +440,28 @@ CREATE INDEX idx_pending_ops_stack ON pending_operations (stack_id);
 
 -- Exclusive per-stack lock (PRIMARY KEY enforces one lock per stack).
 -- Acquired by POST .../update/{updateID} (start-update).
--- lock_token is returned in the lease response as `token`; must match to unlock.
--- Stale lock recovery: any operation can steal a lock where expires_at < now().
--- update_id is SET NULL on stack_updates delete so the lock row survives for cleanup.
+--
+-- lock_token is returned in the lease response as `token`. The Pulumi CLI then
+-- sends it as `Authorization: update-token <lock_token>` (NOT `token <…>`) on
+-- lease-scoped operations: PATCH /checkpoint, POST /events/batch, POST /complete,
+-- POST /renew_lease, DELETE /update/{id}. Validation: token must match AND
+-- expires_at > now(). This is wholly separate from api_tokens auth.
+--
+-- Stale lock recovery: any acquire can steal a lock where expires_at < now().
+--
+-- Composite FK enforces stack_id consistency with the parent update (same
+-- pattern as journal_entries / pending_operations / update_events). Default
+-- NO ACTION means the app must DELETE the lock before deleting its parent
+-- update — preventing silently orphaned locks.
 CREATE TABLE stack_locks (
     stack_id     UUID        PRIMARY KEY REFERENCES stacks(id) ON DELETE CASCADE,
-    update_id    UUID        REFERENCES stack_updates(id) ON DELETE SET NULL,
+    update_id    UUID,
     locked_by    TEXT        NOT NULL,
     lock_token   UUID        NOT NULL,
     locked_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
     expires_at   TIMESTAMPTZ NOT NULL,
-    heartbeat_at TIMESTAMPTZ NOT NULL DEFAULT now()
+    heartbeat_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    FOREIGN KEY (update_id, stack_id) REFERENCES stack_updates(id, stack_id)
 );
 
 -- ============================================================================
@@ -651,8 +662,8 @@ The 16-point review below separates what the schema enforces from what applicati
 
 | # | Concern | Mechanism |
 |---|---------|-----------|
-| 1 | Orphaned records | `ON DELETE CASCADE` on all child tables; `ON DELETE RESTRICT` on `stack_state.base_snapshot_id` (prevents deleting active base snapshot); `ON DELETE SET NULL` on `stack_locks.update_id` and `compaction_jobs.new_snapshot_id` |
-| 2 | Cross-entity mismatch | Composite FK `(update_id, stack_id) → stack_updates(id, stack_id)` on both `journal_entries` and `pending_operations`; DB rejects entries whose `update_id` belongs to a different stack |
+| 1 | Orphaned records | `ON DELETE CASCADE` on all child tables; `ON DELETE RESTRICT` on `stack_state.base_snapshot_id` (prevents deleting active base snapshot); `ON DELETE SET NULL` on `compaction_jobs.new_snapshot_id`; default `NO ACTION` on `stack_locks` composite FK (forces app to DELETE the lock before deleting its parent update) |
+| 2 | Cross-entity mismatch | Composite FK `(update_id, stack_id) → stack_updates(id, stack_id)` on `journal_entries`, `pending_operations`, `update_events`, and `stack_locks`; DB rejects rows whose `update_id` belongs to a different stack |
 | 3/4 | Rename drift / insert-time denormalization | `trg_stack_upsert` fires on `BEFORE INSERT OR UPDATE OF name`; INSERT branch computes `stack_ref` directly from `NEW.project_id` without querying the not-yet-committed row |
 | 6 | Duplicate singletons | `stack_state` and `stack_locks` both use `stack_id PRIMARY KEY` |
 | 7 | Invalid status transitions | `trg_update_status_guard` rejects any UPDATE that tries to leave a terminal status or revert to `in-progress` |
@@ -667,7 +678,7 @@ The 16-point review below separates what the schema enforces from what applicati
 | 5 | Multi-table partial failure | Every write that touches multiple tables must run inside a single transaction (`BEGIN` / `COMMIT`). Notably: create update + set `stacks.active_update_id`; complete update + delete lock + increment `stacks.version`. |
 | 8 | Lost update / version races | `stacks.version` increment and `stack_updates.version` assignment must use `SELECT ... FOR UPDATE` on the `stacks` row. Since the lock prevents concurrent writers on the same stack, races only arise between the lock-acquire step and version increment — serialize these in the same transaction. |
 | 9 | Journal sequence ordering | Assign `sequence_id` by doing `SELECT stack_state.journal_seq + 1 FOR UPDATE`, then incrementing `stack_state.journal_seq` and inserting the journal entry — all in one transaction. The row lock serializes concurrent sequence allocation. |
-| 10 | Lock token validation | On every `PATCH .../checkpoint`, `POST .../events/batch`, and `POST .../complete`, verify the `Authorization: token <tok>` header matches `stack_locks.lock_token` and `expires_at > now()`. Reject with 409 if the token is wrong or expired. |
+| 10 | Lease token validation | On lease-scoped operations (`PATCH .../checkpoint`, `POST .../events/batch`, `POST .../complete`, `POST .../renew_lease`, `DELETE .../update/{id}`), the Pulumi CLI swaps its `Authorization` header from `token <apiTok>` to `update-token <leaseTok>`. Verify the `<leaseTok>` matches `stack_locks.lock_token` AND `stack_locks.expires_at > now()`. Reject with 409 if mismatched or expired. This validation path is **separate** from the `api_tokens` auth used everywhere else; the two never overlap on the same request. |
 | 12 | Compaction races | The compactor must hold a `SELECT ... FOR UPDATE` on `stack_state` for the duration of its read → compute → commit cycle. This blocks concurrent journal appends (which also lock `stack_state`) and ensures `to_journal_seq` remains consistent at commit time. |
 | 14 | Tenant isolation | Every query that retrieves stacks or state must join through the `stack_ref` to verify the org matches the authenticated token's `org_id`. Never accept a bare `stack_id` from external input without confirming ownership. |
 | 17 | Workspace lifecycle | Stack creation must `INSERT workspaces` then `INSERT stacks` (with `workspace_id` set) inside one transaction. Stack deletion must `DELETE FROM workspaces` (which cascades). Never `DELETE FROM stacks` directly — the workspace row would be orphaned. |

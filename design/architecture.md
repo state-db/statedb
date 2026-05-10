@@ -52,7 +52,7 @@ Two HTTP surfaces, one domain core, one DB. Same JAR. Same native binary.
 | `/api/admin/...` | Admin-only console endpoints | OIDC session + admin allow-list | Subject `<iss>:<sub>` must be in `STATE_DB_ADMIN_SUBJECTS` env. |
 | `/api/auth/login/*`, `/api/auth/callback/*` | OIDC login + callback (one route per configured provider) | None (initiates auth) | Sets the encrypted session cookie on success. |
 | `/api/auth/cli-mint`, `/api/auth/cli-mint/callback` | OIDC `prompt=none` re-auth → mint a short-lived CLI token | OIDC session cookie | One-time-display page returns the raw token; see "CLI token issuance". |
-| `/api/auth/local` | Break-glass local login | Username/password from local DB table | Only enabled when (a) Quarkus profile is not `prod` AND (b) request originates from `127.0.0.1`/`::1`. Both checks; either fail = 404. |
+| `/api/auth/local` | Break-glass local login | Static credential from env (`STATE_DB_LOCAL_GLASS_PASSWORD_HASH`) | Only enabled when (a) Quarkus profile is not `prod` AND (b) request originates from `127.0.0.1`/`::1`. Both checks; either fail = 404. |
 | `/assets/*`, `/favicon.ico`, etc. | Static SPA bundle | None | Served from `META-INF/resources/` populated by the bun build. |
 | Anything else | SPA fallback → `index.html` | None | Catches client-side router paths. Filter explicitly does NOT match `/api/*` or `/pulumi/*`. |
 
@@ -133,22 +133,41 @@ The contract is captured in `tools/pulumi/recorder/fixtures/`. Each fixture is o
 
 ### Request lifecycle
 
+Pulumi sends two distinct `Authorization` schemes depending on the operation:
+- `Authorization: token <apiTok>` — every CLI request *except* the lease-scoped ones below.
+- `Authorization: update-token <leaseTok>` — `PATCH /checkpoint`, `POST /events/batch`, `POST /complete`, `POST /renew_lease`, `DELETE /update/{id}`. The CLI swaps automatically; we never see both on one request.
+
+Two filter chains, mutually exclusive by route:
+
 ```
-TokenAuthFilter
-  ├─ parse Authorization header
+TokenAuthFilter   (everything that isn't lease-scoped)
+  ├─ parse Authorization header (must be scheme="token")
   ├─ sha256 the raw token
-  ├─ SELECT api_tokens WHERE token_hash = ? AND (expires_at IS NULL OR expires_at > now())
+  ├─ SELECT t.user_id, t.org_id, o.name AS org_name
+  │    FROM api_tokens t JOIN organizations o ON o.id = t.org_id
+  │   WHERE t.token_hash = ? AND (t.expires_at IS NULL OR t.expires_at > now())
   ├─ if miss → 401
-  └─ attach Subject{user_id, org_id} to SecurityContext
+  └─ attach Subject{user_id, org_id, org_name} to SecurityContext
 
 OrgScopeFilter   (only on /pulumi/api/stacks/{org}/...)
   ├─ if {org} != Subject.org_name → 403
   └─ also verify org_members row exists for (Subject.user_id, Subject.org_id) → else 403
 
+LeaseTokenFilter   (only on lease-scoped routes listed above)
+  ├─ parse Authorization header (must be scheme="update-token")
+  ├─ SELECT stack_id, update_id, expires_at FROM stack_locks WHERE lock_token = ?
+  ├─ if miss OR expires_at <= now() → 409
+  ├─ verify {stack} path segment resolves to the same stack_id as the lock row → else 409
+  └─ attach LeaseContext{stack_id, update_id} to SecurityContext
+
 → Resource method (transactional via @Transactional)
 ```
 
-The `org_members` re-check on every request is intentional. It means revoking a user's org membership instantly invalidates all their tokens for that org without touching the tokens table. Cost is one indexed PK lookup; we'll cache later if profiling demands.
+Subject carries `org_name` (resolved at auth time via the JOIN above) so OrgScopeFilter doesn't need a per-request DB lookup to compare against the path segment.
+
+The `org_members` re-check on every TokenAuthFilter-protected request is intentional. It means revoking a user's org membership instantly invalidates all their tokens for that org without touching the tokens table. Cost is one indexed PK lookup; we'll cache later if profiling demands.
+
+LeaseTokenFilter does NOT consult `api_tokens` or `org_members` — possession of a valid, unexpired `lock_token` is sufficient. Authority is established at lease-acquire time (which goes through TokenAuthFilter); the lease token then carries that authority for the duration of the update.
 
 ### Update lifecycle (state machine)
 
@@ -317,6 +336,12 @@ public class LocalGlassFilter implements ContainerRequestFilter {
 
 Loopback check uses `InetAddress.isLoopbackAddress()`. Reverse proxies are not trusted — the request's TCP source must literally be loopback. This makes it usable for `pulumi login http://localhost:8080/pulumi` style local dev and for bare-metal recovery (`ssh server; curl localhost:8080/api/auth/local`). It is not usable through any deployed ingress.
 
+**Credential source — env, not DB.** There is no `local_users` table; storing recovery credentials in the same DB the operator may be trying to recover is a footgun. The route reads:
+
+- `STATE_DB_LOCAL_GLASS_PASSWORD_HASH` — bcrypt/argon2 hash of the recovery password.
+
+The handler verifies the POSTed password against the env hash. On success it signs a session cookie bound to the first `<iss>:<sub>` listed in `STATE_DB_ADMIN_SUBJECTS` — local-glass cannot escalate beyond the existing admin allow-list. Rotation is via redeploy.
+
 ### Console API surface
 
 Read-heavy. Notable resources:
@@ -415,7 +440,7 @@ Quarkus profiles: `dev` (local Maven), `prod` (deployed), `local-glass` (admin-r
 
 ### Database
 
-Single Postgres, version 14+. `pgcrypto` extension required (for `gen_random_uuid`). Encryption at rest is the operator's responsibility — the DB will hold OIDC client secrets and (by reference) tokens. Document this as a deployment requirement.
+Single Postgres, version 14+. Encryption at rest is the operator's responsibility — the DB will hold OIDC client secrets and (by reference) tokens. Document this as a deployment requirement.
 
 ### Backups
 
