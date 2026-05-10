@@ -42,3 +42,16 @@ Pulumi's HTTP backend (`httpstate`) speaks a REST-ish API. Key reference points:
 - Authentication is via token in the `Authorization: token <tok>` header
 
 When in doubt about API shape, read the Pulumi source rather than guessing.
+
+## Persistence
+
+Entities live in `modules/persistence` (Hibernate ORM + Panache, Postgres). Schema is owned by Flyway (`src/main/resources/db/migration/`); Hibernate has `database.generation=none` and never touches DDL.
+
+Two `@MappedSuperclass` base classes define the standard entity shape — extend one rather than redeclaring `id` / timestamps on every new entity:
+
+- `io.statedb.persistence.BaseEntity` — UUIDv7 `id` (Hibernate `@UuidGenerator(style = TIME)`, application-generated) + DB-defaulted `created_at`. Use for append-only / immutable rows (e.g. `ApiToken`).
+- `io.statedb.persistence.TimestampedEntity extends BaseEntity` — adds DB-defaulted `updated_at`. Use for mutable rows (e.g. `Organization`, `User`, `OidcProvider`).
+
+Hibernate populates both columns via `@CreationTimestamp` / `@UpdateTimestamp` (JVM clock). Migrations should still declare `created_at TIMESTAMPTZ NOT NULL DEFAULT now()` and (for `TimestampedEntity` tables) `updated_at TIMESTAMPTZ NOT NULL DEFAULT now()` — the column defaults are a safety net for raw-SQL inserts only; nothing in the DB advances `updated_at` on UPDATE, so writers that bypass Hibernate (admin scripts, batch SQL) must set it explicitly.
+
+Composite-PK entities (e.g. `OrgMember` with `@IdClass`) don't fit either superclass — extend `PanacheEntityBase` directly.
