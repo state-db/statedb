@@ -1,7 +1,13 @@
-.PHONY: pulumi-extract pulumi-compare pulumi-discover pulumi-api-test
+.PHONY: \
+	pulumi-extract pulumi-compare pulumi-discover pulumi-api-test \
+	pulumi-recorder-run pulumi-recorder-run-no-build pulumi-recorder-catalog pulumi-recorder-verify pulumi-recorder-discover
 
-PULUMI_SCOPE        ?= $(CURDIR)/tools/pulumi/api-extract/scopes/state-backend.yaml
+PULUMI_SCOPE         ?= $(CURDIR)/tools/pulumi/api-extract/scopes/state-backend.yaml
 PULUMI_SNAPSHOTS_DIR ?= $(CURDIR)/api-snapshots/pulumi
+
+## -------------------------
+## Pulumi API Extractor
+## -------------------------
 
 ## Extract Pulumi API endpoints for a specific version.
 ## Usage: make pulumi-extract PULUMI_REF=v3.234.0
@@ -48,3 +54,27 @@ endif
 ## Run tests for the Pulumi API extractor tool.
 pulumi-api-test:
 	$(MAKE) -C tools/pulumi/api-extract test
+
+## -------------------------
+## Pulumi Recorder
+## -------------------------
+
+## Build + run full recorder capture flow (fixtures + catalog).
+pulumi-recorder-run:
+	$(MAKE) -C tools/pulumi/recorder run
+
+## Run recorder without rebuilding Docker image.
+pulumi-recorder-run-no-build:
+	$(MAKE) -C tools/pulumi/recorder run-no-build
+
+## Regenerate catalog from existing fixtures.
+pulumi-recorder-catalog:
+	$(MAKE) -C tools/pulumi/recorder catalog
+
+## Verify recorder binaries/tests.
+pulumi-recorder-verify:
+	$(MAKE) -C tools/pulumi/recorder verify
+
+## AI harness style end-to-end recording target.
+pulumi-recorder-discover:
+	$(MAKE) -C tools/pulumi/recorder discover
