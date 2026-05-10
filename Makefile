@@ -10,27 +10,30 @@ PULUMI_SNAPSHOTS_DIR ?= $(CURDIR)/api-snapshots/pulumi
 ## -------------------------
 ## state-db Quarkus app
 ## -------------------------
-## All targets assume you are running inside the dev container
-## (.devcontainer/devcontainer.json). Outside, install JDK 21 + Maven 3.9
-## and ensure Docker is reachable for Dev Services.
+## All targets route through ./bin/in-container, which executes the command
+## inside the dev container (.devcontainer/devcontainer.json). Running these
+## targets on the host is not supported. The wrapper is a no-op when invoked
+## from inside the container, so nested calls don't bounce.
+
+IN_CONTAINER := ./bin/in-container
 
 ## Run the app in dev mode with live reload. Quarkus Dev Services
 ## auto-starts an ephemeral Postgres container on the host's Docker.
 ## Listens on http://localhost:8080.
 app-dev:
-	mvn -f modules/pom.xml -pl app -am quarkus:dev
+	$(IN_CONTAINER) mvn -f modules/pom.xml -pl app -am quarkus:dev
 
 ## Build a runnable JAR (target/quarkus-app/quarkus-run.jar).
 app-build:
-	mvn -f modules/pom.xml -pl app -am package -DskipTests
+	$(IN_CONTAINER) mvn -f modules/pom.xml -pl app -am package -DskipTests
 
 ## Run unit + integration tests across all modules.
 app-test:
-	mvn -f modules/pom.xml test
+	$(IN_CONTAINER) mvn -f modules/pom.xml test
 
 ## Clean all module build outputs.
 app-clean:
-	mvn -f modules/pom.xml clean
+	$(IN_CONTAINER) mvn -f modules/pom.xml clean
 
 ## -------------------------
 ## Formatting
@@ -41,13 +44,13 @@ app-clean:
 
 ## Apply formatting to all source files in place.
 format:
-	mvn -f modules/pom.xml spotless:apply
-	gofmt -w tools
+	$(IN_CONTAINER) mvn -f modules/pom.xml spotless:apply
+	$(IN_CONTAINER) gofmt -w tools
 
 ## Verify all source files are formatted. Non-zero exit on any diff.
 format-check:
-	mvn -f modules/pom.xml spotless:check
-	@unformatted=$$(gofmt -l tools); \
+	$(IN_CONTAINER) mvn -f modules/pom.xml spotless:check
+	@unformatted=$$($(IN_CONTAINER) gofmt -l tools); \
 	if [ -n "$$unformatted" ]; then \
 		echo "gofmt: the following files need formatting:"; \
 		echo "$$unformatted"; \

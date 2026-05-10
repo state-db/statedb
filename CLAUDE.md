@@ -2,6 +2,34 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## Execution: dev container only (non-negotiable)
+
+This repo MUST be built, tested, and run inside the dev container defined by
+`.devcontainer/devcontainer.json`. The host is treated as incomplete (wrong
+JDK, no Maven, no Postgres). Do not fall back to the host if an in-container
+command fails — diagnose and fix instead.
+
+All project commands route through `./bin/in-container`:
+
+```
+./bin/in-container mvn -f modules/pom.xml test
+./bin/in-container mvn -f modules/pom.xml -pl app -am quarkus:dev
+```
+
+Rules for agents:
+
+- Never invoke `mvn`, `gradle`, `java`, `npm`, `python`, `pytest`, `psql`,
+  etc. directly on the host. Always go through `./bin/in-container`. Show
+  that form in any commands you suggest to the user.
+- Read-only commands (`git`, `ls`, `rg`, file edits) are fine on the host.
+- If the wrapper reports no running container, **stop** and tell the user to
+  start it (Zed: "Rebuild Container"; or `devcontainer up --workspace-folder
+  .`). Do not retry on the host.
+
+Deliberate exception: `tools/pulumi/api-extract` (pure-Go host tool) and
+`tools/pulumi/recorder` (builds and runs its own docker image) are not routed
+through the gateway — they manage their own execution environments.
+
 ## Project: state-db
 
 A self-hosted state management backend for Pulumi (primary target) and OpenTofu (stretch goal). The goal is to fill the gap between Pulumi's existing self-hosted backends (S3, filesystem, Postgres) — which are functional but headless — and the fully-managed Pulumi Cloud console. state-db provides both the HTTP state storage backend and a web console for browsing stacks and resources, i.e. a "poor man's Pulumi console."
