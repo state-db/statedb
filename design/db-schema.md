@@ -2,10 +2,7 @@
 
 ## Context
 
-This schema supports the Wave 1 HTTP state backend for Pulumi and the identity/membership tables that the Wave 2 console needs to authenticate users and mint API tokens. The Pulumi CLI speaks a REST-ish API when `PULUMI_BACKEND_URL` is set to a custom HTTP endpoint; this service implements that protocol. The schema is distilled from two sources:
-
-1. **Design discussion** — a thorough design doc covering journaling, UUIDs as PKs, compaction strategy, and locking semantics
-2. **Fixture catalog** — actual request/response pairs recorded from Pulumi CLI v3.234.0 against a stub backend (`tools/pulumi/recorder/fixtures/`)
+This schema supports the Wave 1 HTTP state backend for Pulumi and the identity/membership tables that the Wave 2 console needs to authenticate users and mint API tokens. The Pulumi CLI speaks a REST-ish API when `PULUMI_BACKEND_URL` is set to a custom HTTP endpoint; this service implements that protocol. Wire-shape ground truth is the recorded fixture catalog at `tools/pulumi/recorder/fixtures/` (Pulumi CLI v3.234.0 against a stub backend); when fixtures and Pulumi documentation disagree, fixtures win.
 
 The design must support the `delta-checkpoint-updates` journaling protocol (capability version 1), which is what `journalVersion: 1` in the start-update request activates. Without journaling, the checkpoint PATCH contains a full snapshot; with journaling it contains incremental entries.
 
@@ -26,7 +23,7 @@ Forward compatibility for OpenTofu: the `workspaces` parent table provides type-
 | 7 | **Lock expiry + heartbeat** | Stale lock recovery when client crashes; `lock_token` must match to unlock |
 | 8 | **Immutable journal entries** | Append-only matches Pulumi journaling semantics; compaction creates new snapshot |
 | 9 | **Async compaction job queue** | Compaction is slow; shouldn't block API responses; can be retried |
-| 10 | **`api_tokens.kind` discriminator (`oidc` vs `service_account`)** | OIDC-derived tokens are short-lived (24h default) and require a fresh OIDC handshake (`prompt=none` re-auth) at every mint, so disablement at the IdP propagates within the TTL with no IdP storage, polling, or introspection. Service-account tokens are long-lived for CI/CD with mandatory `expires_at` enforced in app code. Both share the wire format (`Authorization: token <tok>`) — the distinction is policy, not protocol. |
+| 10 | **`api_tokens.kind` discriminator (`oidc` vs `service_account`)** | OIDC-derived tokens are short-lived (24h default); each mint requires a fresh OIDC handshake (`prompt=none` re-auth), so IdP disablement propagates within the TTL through OIDC primitives alone. Service-account tokens are long-lived for CI/CD with mandatory `expires_at` enforced in app code. Both share the wire format (`Authorization: token <tok>`) — the distinction is policy, not protocol. |
 | 11 | **`workspaces` parent table** | Type-erased identity for cross-tool listing (Pulumi today, Tofu in Wave 3); 1:1 with type-specific row; deletion cascades down the type-specific tree |
 | 12 | **`update_events` first-class** | Event payloads from `events/batch` are decoded and queryable per update; BRIN index on `created_at` enables cheap time-bounded vacuum |
 | 13 | **OIDC users + `org_members`** | Console authn via configurable OIDC providers; org membership decoupled from token ownership; admin set is env-driven, not stored in DB |
@@ -114,8 +111,7 @@ CREATE TABLE users (
 --   'oidc'            — minted by a user via OIDC re-auth (prompt=none); short
 --                       TTL (24h default). When the user is disabled at the
 --                       IdP, the next mint attempt fails (login_required) and
---                       the existing token expires within its TTL, so CLI
---                       access dies without any background reconciliation.
+--                       the existing token expires within its TTL.
 --   'service_account' — minted by an admin for non-interactive callers (CI/CD).
 --                       Long-lived, manually revoked. App code enforces a
 --                       mandatory expires_at on this kind (capped at 1y).
@@ -441,11 +437,11 @@ CREATE INDEX idx_pending_ops_stack ON pending_operations (stack_id);
 -- Exclusive per-stack lock (PRIMARY KEY enforces one lock per stack).
 -- Acquired by POST .../update/{updateID} (start-update).
 --
--- lock_token is returned in the lease response as `token`. The Pulumi CLI then
--- sends it as `Authorization: update-token <lock_token>` (NOT `token <…>`) on
--- lease-scoped operations: PATCH /checkpoint, POST /events/batch, POST /complete,
--- POST /renew_lease, DELETE /update/{id}. Validation: token must match AND
--- expires_at > now(). This is wholly separate from api_tokens auth.
+-- lock_token is returned in the lease response as `token`. The Pulumi CLI sends
+-- it as `Authorization: update-token <lock_token>` on lease-scoped operations:
+-- PATCH /checkpoint, POST /events/batch, POST /complete, POST /renew_lease,
+-- DELETE /update/{id}. Validation: token must match AND expires_at > now().
+-- Lease-token validation is a separate code path from api_tokens auth.
 --
 -- Stale lock recovery: any acquire can steal a lock where expires_at < now().
 --
@@ -656,7 +652,7 @@ rebuilt_base_state → {}
 
 ## Correctness Invariants
 
-The 16-point review below separates what the schema enforces from what application code must guarantee.
+The tables below split what the schema enforces from what application code must guarantee.
 
 ### Handled by schema
 
@@ -678,7 +674,7 @@ The 16-point review below separates what the schema enforces from what applicati
 | 5 | Multi-table partial failure | Every write that touches multiple tables must run inside a single transaction (`BEGIN` / `COMMIT`). Notably: create update + set `stacks.active_update_id`; complete update + delete lock + increment `stacks.version`. |
 | 8 | Lost update / version races | `stacks.version` increment and `stack_updates.version` assignment must use `SELECT ... FOR UPDATE` on the `stacks` row. Since the lock prevents concurrent writers on the same stack, races only arise between the lock-acquire step and version increment — serialize these in the same transaction. |
 | 9 | Journal sequence ordering | Assign `sequence_id` by doing `SELECT stack_state.journal_seq + 1 FOR UPDATE`, then incrementing `stack_state.journal_seq` and inserting the journal entry — all in one transaction. The row lock serializes concurrent sequence allocation. |
-| 10 | Lease token validation | On lease-scoped operations (`PATCH .../checkpoint`, `POST .../events/batch`, `POST .../complete`, `POST .../renew_lease`, `DELETE .../update/{id}`), the Pulumi CLI swaps its `Authorization` header from `token <apiTok>` to `update-token <leaseTok>`. Verify the `<leaseTok>` matches `stack_locks.lock_token` AND `stack_locks.expires_at > now()`. Reject with 409 if mismatched or expired. This validation path is **separate** from the `api_tokens` auth used everywhere else; the two never overlap on the same request. |
+| 10 | Lease token validation | Lease-scoped operations (`PATCH .../checkpoint`, `POST .../events/batch`, `POST .../complete`, `POST .../renew_lease`, `DELETE .../update/{id}`) carry `Authorization: update-token <leaseTok>` instead of `token <apiTok>`. Verify the `<leaseTok>` matches `stack_locks.lock_token` AND `stack_locks.expires_at > now()`. Reject with 409 if mismatched or expired. The lease-token and api-token paths are independent and never overlap on the same request. |
 | 12 | Compaction races | The compactor must hold a `SELECT ... FOR UPDATE` on `stack_state` for the duration of its read → compute → commit cycle. This blocks concurrent journal appends (which also lock `stack_state`) and ensures `to_journal_seq` remains consistent at commit time. |
 | 14 | Tenant isolation | Every query that retrieves stacks or state must join through the `stack_ref` to verify the org matches the authenticated token's `org_id`. Never accept a bare `stack_id` from external input without confirming ownership. |
 | 17 | Workspace lifecycle | Stack creation must `INSERT workspaces` then `INSERT stacks` (with `workspace_id` set) inside one transaction. Stack deletion must `DELETE FROM workspaces` (which cascades). Never `DELETE FROM stacks` directly — the workspace row would be orphaned. |

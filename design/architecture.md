@@ -249,9 +249,9 @@ Cookie is `HttpOnly; Secure; SameSite=Strict; Path=/api/`. Not sent to `/pulumi/
 
 ### CLI token issuance
 
-Pulumi CLI authenticates with `Authorization: token <tok>` and has no OIDC client of its own — and we will not be forking it. To still get IdP-driven access control on CLI traffic, every CLI token is **bootstrapped from the user's OIDC session and issued with a short TTL** (24h default). Disablement at the IdP propagates within the TTL because the user can no longer mint a fresh token.
+Pulumi CLI authenticates with `Authorization: token <tok>` and has no OIDC client of its own. To get IdP-driven access control on CLI traffic without forking the CLI, every CLI token is **bootstrapped from the user's OIDC session and issued with a short TTL** (24h default). Disablement at the IdP propagates within the TTL because the user can no longer mint a fresh token.
 
-The mechanism is a standard OIDC trick: re-launching the authorization flow with `prompt=none`. The IdP redirects back immediately if the user's IdP session is still alive, or returns `error=login_required` if the session has been invalidated (logout, account disabled, MFA challenge required, conditional-access denial, etc.). We do not store IdP refresh tokens, do not call introspection, do not poll the IdP. The silent re-auth at mint time is the only liveness signal.
+The mechanism is a standard OIDC trick: re-launching the authorization flow with `prompt=none`. The IdP redirects back immediately if the user's IdP session is still alive, or returns `error=login_required` if the session has been invalidated (logout, account disabled, MFA challenge required, conditional-access denial, etc.). The silent re-auth at mint time is sufficient as a liveness check — the entire mechanism rides on the same OIDC primitives we already use for login.
 
 #### Mint flow
 
@@ -288,14 +288,12 @@ state-db /api/auth/cli-mint/callback
 - T+ε to T+24h: existing token expires; CLI gets 401.
 - User attempts re-mint → `prompt=none` returns `login_required` → user is bounced to full sign-in → IdP rejects credentials. No new token is issued. CLI access is dead.
 
-If sub-24h propagation ever becomes important (it isn't for Wave 1), shorter TTL or OIDC `offline_access` refresh tokens are additive changes to this design — neither breaks the wire format or the schema.
-
 #### Implementation notes
 
 - The OIDC `state` parameter on the cli-mint authz request encodes a signed `intent=cli-mint` so the callback can distinguish mint redirects from regular login redirects.
 - The cli-mint callback verifies the freshly returned id_token's `(iss, sub)` matches the console session's `(iss, sub)`. This blocks an attacker who hijacked a session cookie from minting tokens against a different user's IdP session.
 - Tokens are still hashed (sha256) before insert; the raw token is returned exactly once.
-- No new tables — `api_tokens` carries everything via the `kind` column (see db-schema.md decision #10).
+- The `kind` column on `api_tokens` distinguishes OIDC-bootstrapped tokens from service-account tokens (see db-schema.md decision #10).
 
 ### Service-account tokens (CI/CD)
 
@@ -336,7 +334,7 @@ public class LocalGlassFilter implements ContainerRequestFilter {
 
 Loopback check uses `InetAddress.isLoopbackAddress()`. Reverse proxies are not trusted — the request's TCP source must literally be loopback. This makes it usable for `pulumi login http://localhost:8080/pulumi` style local dev and for bare-metal recovery (`ssh server; curl localhost:8080/api/auth/local`). It is not usable through any deployed ingress.
 
-**Credential source — env, not DB.** There is no `local_users` table; storing recovery credentials in the same DB the operator may be trying to recover is a footgun. The route reads:
+**Credential source: env, never DB.** Recovery credentials live where the operator can read them while the DB is down. The route reads:
 
 - `STATE_DB_LOCAL_GLASS_PASSWORD_HASH` — bcrypt/argon2 hash of the recovery password.
 
@@ -506,7 +504,7 @@ Wave 2 (console) starts after step 7; OIDC + workspace listing can develop in pa
 
 ## Open items
 
-Things we've explicitly deferred. Each is solvable inside Wave 1's architecture without breaking changes.
+Future work. Each is additive — solvable inside Wave 1's architecture without breaking changes.
 
 - **OIDC identity linking** — one user, multiple IdPs. Add `user_identities` table and a "link account" flow.
 - **Token rotation policy** — OIDC-derived tokens auto-expire in 24h; service-account rotation is admin-driven. Automated rotation hooks (near-expiry webhooks, IdP-event-driven revocation) are future work.
@@ -518,25 +516,23 @@ Things we've explicitly deferred. Each is solvable inside Wave 1's architecture 
 
 ---
 
-## Decisions log (this conversation)
-
-For posterity, the choices that shaped this doc:
+## Design decisions
 
 | Decision | Rationale |
 |----------|-----------|
 | `/pulumi/...` prefix for backend | Keeps `/api/` for console; users configure `pulumi login https://host/pulumi` |
 | Self-service token issuance | Tokens minted from console after OIDC login; never out-of-band |
-| OIDC + local break-glass | OIDC is primary; local users only on loopback in non-prod profiles |
+| OIDC + loopback break-glass | OIDC is primary console authn; loopback-only env-credential fallback exists for admin recovery in non-prod profiles |
 | Multi-tenant, single-tenant default | First admin login auto-creates `default` org |
 | Postgres for blobs (no S3) | Per-resource journal entries are small; checkpoints periodically compacted |
 | Tofu via shared `workspaces` parent + separate state tables | Identity unified; state model type-specific because Pulumi/Tofu fundamentally differ |
-| Hibernate ORM + Panache | jOOQ ruled out (license); native queries for hot paths |
+| Hibernate ORM + Panache | Panache for typical CRUD; native SQL drops in for hot paths (journal apply, sequence allocation, lock acquire) |
 | Quarkus imperative (not reactive) | Short request-response, no streaming, simpler SQL paths |
 | Flyway migrations | No auto-migrate in prod; CI step before image rollout |
 | Bun build, copied into Quarkus resources | Dev: bun proxies to Quarkus. Prod: single static-served bundle |
 | Native image as Wave 1 GA target | JVM default during dev; native validated before launch |
-| App-level workspace lifecycle | Trigger-based auto-create rejected for clarity; app must INSERT workspace then stack in one tx |
+| App-level workspace lifecycle | App INSERTs workspace then stack in one transaction; lifecycle stays explicit rather than hidden in triggers |
 | No org-membership cache initially | Defer until profiling shows it matters |
-| OIDC-bootstrapped CLI tokens, 24h TTL | IdP disablement propagates within TTL via failed `prompt=none` re-auth at next mint; no IdP refresh tokens stored, no introspection, no polling |
+| OIDC-bootstrapped CLI tokens, 24h TTL | Each mint round-trips through the IdP via `prompt=none`; IdP disablement propagates within TTL through the failed re-auth, with no extra IdP integration beyond what login already requires |
 | `api_tokens.kind` discriminator | Single table, two policies — short-lived OIDC vs long-lived service-account; same wire format, same auth filter |
-| Defer `statedb-cli` helper | Console-paste UX is acceptable for Wave 1; companion CLI to write `~/.pulumi/credentials.json` automatically is later UX polish |
+| Daily console paste over a companion CLI | Console-paste flow is acceptable for Wave 1; a `statedb-cli` to write `~/.pulumi/credentials.json` automatically (AWS-SSO-style) is later UX polish |
