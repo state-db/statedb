@@ -1,0 +1,20 @@
+quarkus:
+  application:
+    name: state-db
+  http:
+    port: 8080
+  datasource:
+    db-kind: postgresql
+  log:
+    level: INFO
+
+# In dev/test, no jdbc.url is set → Quarkus Dev Services starts an
+# ephemeral Postgres container (requires a reachable Docker daemon).
+# In prod, the URL/credentials must come from the environment.
+"%prod":
+  quarkus:
+    datasource:
+      jdbc:
+        url: ${STATE_DB_JDBC_URL}
+      username: ${STATE_DB_DB_USER}
+      password: ${STATE_DB_DB_PASSWORD}

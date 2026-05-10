@@ -1,0 +1,38 @@
+{
+  "name": "state-db",
+  "image": "mcr.microsoft.com/devcontainers/java:3-21-trixie",
+  "features": {
+    // The base image's :3-21-trixie tag implies JDK 21, but SDKMAN's default
+    // can drift (we observed JDK 25 picked up here, which neither Quarkus 3.15
+    // LTS nor Google Java Format support). This feature pins the SDKMAN
+    // default to JDK 21 and installs Maven on the same SDKMAN keel.
+    "ghcr.io/devcontainers/features/java:1": {
+      "version": "21",
+      "installMaven": "true",
+      "mavenVersion": "3.9.15",
+    },
+    "ghcr.io/devcontainers/features/docker-outside-of-docker:1.9.1": {
+      "moby": false,
+      "dockerDashComposeVersion": "v2",
+    },
+  },
+  "forwardPorts": [8080],
+  "containerEnv": {
+    // Testcontainers (used by Quarkus Dev Services) defaults to reaching
+    // sibling containers via the Docker bridge gateway (172.17.0.1). On
+    // Docker Desktop the bridge gateway is not routable from inside a
+    // sibling container — host.docker.internal is. Without this override,
+    // Ryuk is unreachable and Dev Services hangs before starting Postgres.
+    "TESTCONTAINERS_HOST_OVERRIDE": "host.docker.internal",
+  },
+  "postCreateCommand": "java -version && mvn -version && docker version --format '{{.Client.Version}}'",
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "redhat.java",
+        "vscjava.vscode-java-pack",
+        "redhat.vscode-quarkus",
+      ],
+    },
+  },
+}

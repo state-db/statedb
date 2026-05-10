@@ -1,0 +1,21 @@
+# Maven / Quarkus
+target/
+.quarkus/
+*.jar
+*.war
+
+# IDEs
+.idea/
+*.iml
+*.iws
+.vscode/
+!.vscode/settings.json
+.factorypath
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Env files (never commit)
+.env
+.env.local

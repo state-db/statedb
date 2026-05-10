@@ -1,9 +1,58 @@
 .PHONY: \
+	app-dev app-build app-test app-clean \
+	format format-check \
 	pulumi-extract pulumi-compare pulumi-discover pulumi-api-test \
 	pulumi-recorder-run pulumi-recorder-run-no-build pulumi-recorder-catalog pulumi-recorder-verify pulumi-recorder-discover
 
 PULUMI_SCOPE         ?= $(CURDIR)/tools/pulumi/api-extract/scopes/state-backend.yaml
 PULUMI_SNAPSHOTS_DIR ?= $(CURDIR)/api-snapshots/pulumi
+
+## -------------------------
+## state-db Quarkus app
+## -------------------------
+## All targets assume you are running inside the dev container
+## (.devcontainer/devcontainer.json). Outside, install JDK 21 + Maven 3.9
+## and ensure Docker is reachable for Dev Services.
+
+## Run the app in dev mode with live reload. Quarkus Dev Services
+## auto-starts an ephemeral Postgres container on the host's Docker.
+## Listens on http://localhost:8080.
+app-dev:
+	mvn -f modules/pom.xml -pl app -am quarkus:dev
+
+## Build a runnable JAR (target/quarkus-app/quarkus-run.jar).
+app-build:
+	mvn -f modules/pom.xml -pl app -am package -DskipTests
+
+## Run unit + integration tests across all modules.
+app-test:
+	mvn -f modules/pom.xml test
+
+## Clean all module build outputs.
+app-clean:
+	mvn -f modules/pom.xml clean
+
+## -------------------------
+## Formatting
+## -------------------------
+## Java + pom.xml + YAML + Markdown via Spotless (Google Java Format).
+## Go via gofmt. `mvn verify` enforces Spotless; CI should also run format-check
+## to cover gofmt.
+
+## Apply formatting to all source files in place.
+format:
+	mvn -f modules/pom.xml spotless:apply
+	gofmt -w tools
+
+## Verify all source files are formatted. Non-zero exit on any diff.
+format-check:
+	mvn -f modules/pom.xml spotless:check
+	@unformatted=$$(gofmt -l tools); \
+	if [ -n "$$unformatted" ]; then \
+		echo "gofmt: the following files need formatting:"; \
+		echo "$$unformatted"; \
+		exit 1; \
+	fi
 
 ## -------------------------
 ## Pulumi API Extractor

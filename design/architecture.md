@@ -62,42 +62,47 @@ The `/pulumi` prefix is mandatory in `PULUMI_BACKEND_URL` because Pulumi's CLI r
 
 ## Module layout
 
-Maven multi-module project. Each module a separate JAR; `app/` is the only deployable.
+Maven multi-module project. All shipped code lives under `modules/` so it stays visually separate from `design/`, `api-snapshots/`, and `tools/` at the repo root. Each module is a separate JAR; `modules/app/` is the only deployable.
 
 ```
 state-db/
-├── core/                   pure-Java domain types and logic, no Quarkus
-│   ├── checkpoint/         CheckpointAssembler, journal apply rules
-│   ├── update/             UpdateLifecycle state machine
-│   └── identity/           Subject, Role, AdminAllowList
-├── persistence/            Quarkus + Hibernate ORM + Panache + Flyway
-│   ├── entity/             @Entity classes mapping db-schema.md
-│   ├── repo/               PanacheRepository<T> + native-query hot paths
-│   ├── jsonb/              AttributeConverter for JSONB ↔ JsonNode
-│   └── db/migration/       V1__init.sql, V2__..., V3__...
-├── pulumi-api/             JAX-RS resources for /pulumi/api/*
-│   ├── filter/             TokenAuthFilter, OrgScopeFilter
-│   ├── stack/              StackResource, StackEncryptionResource
-│   ├── update/             UpdateResource, LeaseResource, EventsResource
-│   └── error/              Pulumi-specific error mapping (409 lock conflict, etc.)
-├── console-api/            JAX-RS resources for /api/*
-│   ├── filter/             SessionAuthFilter, AdminFilter, LocalGlassFilter
-│   ├── auth/               OIDC login/callback, multi-provider TenantConfigResolver
-│   ├── workspace/          WorkspacesResource (cross-kind list)
-│   ├── pulumi/             PulumiStackResource (drilldown), HistoryResource
-│   ├── token/              TokensResource (mint/list/revoke)
-│   └── admin/              ProvidersResource, UsersResource, OrgsResource
-├── web/                    bun + TanStack SPA
-│   ├── src/                React + TanStack Router + TanStack Query
-│   ├── package.json
-│   ├── bunfig.toml         dev server proxy: /api, /pulumi → :8080
-│   └── (build output)      copied into app/ at package phase
-└── app/                    Quarkus assembly
-    ├── pom.xml             depends on all above; bun build hooked here
-    ├── src/main/resources/
-    │   ├── application.yml
-    │   └── META-INF/resources/   (populated by web build)
-    └── Dockerfile
+├── design/                     architecture & schema docs (this file lives here)
+├── api-snapshots/              versioned capture of the Pulumi protocol — the living spec
+├── tools/                      Go-based extractor and recorder
+└── modules/                    all shipped code; parent pom lives here
+    ├── pom.xml
+    ├── core/                   pure-Java domain types and logic, no Quarkus
+    │   ├── checkpoint/         CheckpointAssembler, journal apply rules
+    │   ├── update/             UpdateLifecycle state machine
+    │   └── identity/           Subject, Role, AdminAllowList
+    ├── persistence/            Quarkus + Hibernate ORM + Panache + Flyway
+    │   ├── entity/             @Entity classes mapping db-schema.md
+    │   ├── repo/               PanacheRepository<T> + native-query hot paths
+    │   ├── jsonb/              AttributeConverter for JSONB ↔ JsonNode
+    │   └── db/migration/       V1__init.sql, V2__..., V3__...
+    ├── pulumi-api/             JAX-RS resources for /pulumi/api/*
+    │   ├── filter/             TokenAuthFilter, OrgScopeFilter
+    │   ├── stack/              StackResource, StackEncryptionResource
+    │   ├── update/             UpdateResource, LeaseResource, EventsResource
+    │   └── error/              Pulumi-specific error mapping (409 lock conflict, etc.)
+    ├── console-api/            JAX-RS resources for /api/*
+    │   ├── filter/             SessionAuthFilter, AdminFilter, LocalGlassFilter
+    │   ├── auth/               OIDC login/callback, multi-provider TenantConfigResolver
+    │   ├── workspace/          WorkspacesResource (cross-kind list)
+    │   ├── pulumi/             PulumiStackResource (drilldown), HistoryResource
+    │   ├── token/              TokensResource (mint/list/revoke)
+    │   └── admin/              ProvidersResource, UsersResource, OrgsResource
+    ├── web/                    bun + TanStack SPA
+    │   ├── src/                React + TanStack Router + TanStack Query
+    │   ├── package.json
+    │   ├── bunfig.toml         dev server proxy: /api, /pulumi → :8080
+    │   └── (build output)      copied into app/ at package phase
+    └── app/                    Quarkus assembly
+        ├── pom.xml             depends on all above; bun build hooked here
+        ├── src/main/resources/
+        │   ├── application.yml
+        │   └── META-INF/resources/   (populated by web build)
+        └── Dockerfile
 ```
 
 The split exists so `pulumi-api` and `console-api` cannot accidentally share security filters or JAX-RS providers. They each have their own filter chain and their own error mapping. `core` has no Quarkus annotations and is unit-testable without a runtime.
