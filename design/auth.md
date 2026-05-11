@@ -12,7 +12,7 @@ Companion to [`architecture.md`](./architecture.md) and [`db-schema.md`](./db-sc
 
 - **One PDP for everything.** Every authorization decision — Pulumi CLI request, console request, admin operation — is made by the same `Authorizer` against the same Cedar policy set. No per-handler `if (role == "owner")` scattered through the codebase.
 - **Standard libraries, no rolled-our-own crypto.** `quarkus-oidc` for the SPA backend-for-frontend session, `cedar-java` for policy evaluation, OS-provided primitives elsewhere.
-- **Cedar entities mirror schema entities.** A `Stack` Cedar entity carries the same `org/project/stack` identity as `stacks.stack_ref`. No second source of truth.
+- **Cedar entities mirror schema entities.** A `Stack` Cedar entity carries the same `org/project/stack` identity assembled from `stacks` + `projects` + `organizations`. No second source of truth.
 - **Policies are reviewable.** Policy text lives in `git` for Wave 1, with a per-deployment override table available in DB. The console policy editor is Wave 2.5.
 - **Decisions are auditable.** Every authorization check writes a structured decision record (allow/deny + matching policy ids) to the request log. This is useful in production and essential for debugging policy regressions.
 

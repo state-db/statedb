@@ -12,6 +12,12 @@ quarkus:
     # Schema is owned by Flyway; Hibernate must never touch DDL.
     database:
       generation: none
+    # Use Quarkus's default JSON format mapper for JSONB columns rather than
+    # the REST-facing ObjectMapper, whose date customizations would affect DB
+    # serialization. Will be the default in a future Quarkus.
+    mapping:
+      format:
+        global: ignore
   log:
     level: INFO
 

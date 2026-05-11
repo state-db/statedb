@@ -15,7 +15,7 @@ Forward compatibility for OpenTofu: the `workspaces` parent table provides type-
 | # | Decision | Rationale |
 |---|----------|-----------|
 | 1 | **UUIDv7 PKs, generated app-side by Hibernate** | Orgs, projects, stacks can all be renamed, so FK relationships must not break — UUIDs survive renames. UUIDv7's millisecond-timestamp prefix preserves insert locality on append-heavy tables (`journal_entries`, `update_events`, `snapshots`), avoiding the page-split churn of random v4. Generation in the app (Hibernate `@UuidGenerator(style = TIME)`) keeps the schema portable across Postgres versions and makes IDs available pre-insert for correlation/logging. |
-| 2 | **Denormalized `stack_ref`** | Avoids 3-table join on every API request; maintained by triggers on both INSERT and UPDATE |
+| 2 | **No denormalized `stack_ref`; resolve `(org, project, stack)` via JOIN at read time** | The 3-table JOIN is microseconds on small FK-indexed parent tables. Denormalizing would buy nothing at our scale and cost three rename triggers, a PL/pgSQL helper, and a `@Generated` round-trip on every stack write. Pulumi-API response strings of the form `org/project/stack` are assembled in the DTO layer from data the request already loaded. |
 | 3 | **Checkpoint as JSONB** | Resource structure varies wildly per provider; Pulumi expects exact JSON back |
 | 4 | **Separate `snapshots` + `journal_entries`** | Different access patterns: snapshots are infrequent large writes; journal entries are frequent small appends |
 | 5 | **`stack_state` pointer table** | Single source of truth for current snapshot + journal position per stack |
@@ -27,6 +27,7 @@ Forward compatibility for OpenTofu: the `workspaces` parent table provides type-
 | 11 | **`workspaces` parent table** | Type-erased identity for cross-tool listing (Pulumi today, Tofu in Wave 3); 1:1 with type-specific row; deletion cascades down the type-specific tree |
 | 12 | **`update_events` first-class** | Event payloads from `events/batch` are decoded and queryable per update; BRIN index on `created_at` enables cheap time-bounded vacuum |
 | 13 | **OIDC users + `org_members`** | Console authn via configurable OIDC providers; org membership decoupled from token ownership; admin set is env-driven, not stored in DB |
+| 14 | **Surrogate UUIDv7 PK on every mutable entity** | All mutable entities carry their own `id UUID PRIMARY KEY` and extend `BaseEntity` / `TimestampedEntity`. 1:1 lifecycle binding to a parent is expressed via `UNIQUE FK + ON DELETE CASCADE`, never a shared PK. Keeps the entity layer uniform (no `@MapsId` edge cases) at the cost of one extra UUID column on `stack_state` / `stack_locks`. `org_members` remains the only exception — composite-PK association tables fit nothing else. |
 
 ---
 
@@ -36,7 +37,7 @@ Forward compatibility for OpenTofu: the `workspaces` parent table provides type-
 |-------|---------|
 | `organizations` | Top-level tenant boundary |
 | `projects` | Belongs to org, renameable |
-| `stacks` | Belongs to project, renameable; holds denormalized `stack_ref` |
+| `stacks` | Belongs to project, renameable |
 | `api_tokens` | Authenticates Pulumi CLI requests (hashed); `kind` separates short-lived OIDC tokens from long-lived service-account tokens |
 | `snapshots` | Full DeploymentV3 checkpoint at compaction points |
 | `stack_state` | Per-stack pointer: current snapshot + journal position + read cache |
@@ -172,7 +173,9 @@ CREATE TABLE workspaces (
     org_id     UUID        NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
     kind       TEXT        NOT NULL CHECK (kind IN ('pulumi', 'tofu')),
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-    updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+    updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    -- Target for the composite FK from stacks(workspace_id, org_id).
+    UNIQUE (id, org_id)
 );
 
 CREATE INDEX idx_workspaces_org_kind ON workspaces (org_id, kind);
@@ -183,24 +186,29 @@ CREATE TABLE projects (
     name       TEXT        NOT NULL,
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-    UNIQUE (org_id, name)
+    UNIQUE (org_id, name),
+    -- Target for the composite FK from stacks(project_id, org_id).
+    UNIQUE (id, org_id)
 );
 
--- Stacks can be renamed; stack_ref is kept in sync by the trg_stack_upsert trigger
--- on both INSERT and UPDATE.
--- active_update_id is denormalized (FK is DEFERRABLE to avoid circular dep with
--- stack_updates, which is created later).
+-- Stacks can be renamed; (org, project, stack) lookups JOIN through projects
+-- and organizations at read time (no denormalized ref column).
+-- active_update_id FK is DEFERRABLE to avoid the circular dep with
+-- stack_updates, which is created later.
+--
+-- org_id is denormalized so that a single composite FK can enforce that
+-- project_id and workspace_id resolve to rows in the same organization. Without
+-- it, a stack could reference a project in org A and a workspace in org B,
+-- silently breaking tenant isolation.
 CREATE TABLE stacks (
     id               UUID        PRIMARY KEY,
-    project_id       UUID        NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+    org_id           UUID        NOT NULL,
+    project_id       UUID        NOT NULL,
     name             TEXT        NOT NULL,
 
     -- 1:1 with the type-erased workspaces row. Lifecycle is owned by workspaces:
     -- DELETE FROM workspaces WHERE id = ? cascades here and to all state below.
-    workspace_id     UUID        NOT NULL UNIQUE REFERENCES workspaces(id) ON DELETE CASCADE,
-
-    -- Denormalized: "org/project/stack" — set on INSERT and updated on any rename
-    stack_ref        TEXT        NOT NULL UNIQUE,
+    workspace_id     UUID        NOT NULL UNIQUE,
 
     -- Pulumi API response fields
     version          INTEGER     NOT NULL DEFAULT 0,  -- increments on each completed non-preview op
@@ -210,10 +218,10 @@ CREATE TABLE stacks (
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
 
-    UNIQUE (project_id, name)
+    UNIQUE (project_id, name),
+    FOREIGN KEY (project_id, org_id) REFERENCES projects(id, org_id) ON DELETE CASCADE,
+    FOREIGN KEY (workspace_id, org_id) REFERENCES workspaces(id, org_id) ON DELETE CASCADE
 );
-
-CREATE INDEX idx_stacks_ref ON stacks (stack_ref);
 
 -- ============================================================================
 -- STATE STORAGE
@@ -242,11 +250,13 @@ CREATE TABLE snapshots (
 
 CREATE INDEX idx_snapshots_stack_version ON snapshots (stack_id, version DESC);
 
--- One row per stack (PRIMARY KEY enforces singleton). Tracks the current base
--- snapshot and journal position. cached_checkpoint is a read optimization;
--- the trg_journal_invalidates_cache trigger ensures it is never stale.
+-- One row per stack (UNIQUE(stack_id) enforces singleton; surrogate `id` per
+-- Decision #14). Tracks the current base snapshot and journal position.
+-- cached_checkpoint is a read optimization; the trg_journal_invalidates_cache
+-- trigger ensures it is never stale.
 CREATE TABLE stack_state (
-    stack_id                        UUID        PRIMARY KEY REFERENCES stacks(id) ON DELETE CASCADE,
+    id                              UUID        PRIMARY KEY,
+    stack_id                        UUID        NOT NULL UNIQUE REFERENCES stacks(id) ON DELETE CASCADE,
 
     -- RESTRICT prevents deleting a snapshot that is still the active base.
     -- Update this pointer first, then the old snapshot becomes deletable.
@@ -262,6 +272,7 @@ CREATE TABLE stack_state (
     cached_at                       TIMESTAMPTZ,
     cache_valid                     BOOLEAN     NOT NULL DEFAULT false,
 
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
@@ -434,8 +445,9 @@ CREATE INDEX idx_pending_ops_stack ON pending_operations (stack_id);
 -- LOCKING
 -- ============================================================================
 
--- Exclusive per-stack lock (PRIMARY KEY enforces one lock per stack).
--- Acquired by POST .../update/{updateID} (start-update).
+-- Exclusive per-stack lock (UNIQUE(stack_id) enforces one lock per stack;
+-- surrogate `id` per Decision #14). Acquired by POST .../update/{updateID}
+-- (start-update).
 --
 -- lock_token is returned in the lease response as `token`. The Pulumi CLI sends
 -- it as `Authorization: update-token <lock_token>` on lease-scoped operations:
@@ -450,7 +462,8 @@ CREATE INDEX idx_pending_ops_stack ON pending_operations (stack_id);
 -- NO ACTION means the app must DELETE the lock before deleting its parent
 -- update — preventing silently orphaned locks.
 CREATE TABLE stack_locks (
-    stack_id     UUID        PRIMARY KEY REFERENCES stacks(id) ON DELETE CASCADE,
+    id           UUID        PRIMARY KEY,
+    stack_id     UUID        NOT NULL UNIQUE REFERENCES stacks(id) ON DELETE CASCADE,
     update_id    UUID,
     locked_by    TEXT        NOT NULL,
     lock_token   UUID        NOT NULL,
@@ -489,65 +502,7 @@ CREATE INDEX idx_compaction_pending ON compaction_jobs (status, created_at)
 -- ============================================================================
 
 -- ---------------------------------------------------------------------------
--- 1. stack_ref: computed on INSERT and kept in sync on rename
--- ---------------------------------------------------------------------------
--- build_stack_ref is used for UPDATE (row already exists in DB).
--- INSERT uses inline computation because the new row isn't yet visible.
-CREATE OR REPLACE FUNCTION build_stack_ref(p_stack_id UUID)
-RETURNS TEXT LANGUAGE SQL STABLE AS $$
-    SELECT o.name || '/' || p.name || '/' || s.name
-    FROM stacks s
-    JOIN projects p ON s.project_id = p.id
-    JOIN organizations o ON p.org_id = o.id
-    WHERE s.id = p_stack_id
-$$;
-
-CREATE OR REPLACE FUNCTION trg_update_stack_refs()
-RETURNS TRIGGER LANGUAGE plpgsql AS $$
-BEGIN
-    IF TG_TABLE_NAME = 'organizations' THEN
-        UPDATE stacks s
-           SET stack_ref  = build_stack_ref(s.id),
-               updated_at = now()
-          FROM projects p
-         WHERE s.project_id = p.id AND p.org_id = NEW.id;
-    ELSIF TG_TABLE_NAME = 'projects' THEN
-        UPDATE stacks
-           SET stack_ref  = build_stack_ref(id),
-               updated_at = now()
-         WHERE project_id = NEW.id;
-    ELSIF TG_TABLE_NAME = 'stacks' THEN
-        IF TG_OP = 'INSERT' THEN
-            -- Row doesn't exist in the DB yet; can't use build_stack_ref.
-            SELECT o.name || '/' || p.name || '/' || NEW.name
-              INTO NEW.stack_ref
-              FROM projects p
-              JOIN organizations o ON p.org_id = o.id
-             WHERE p.id = NEW.project_id;
-        ELSE
-            NEW.stack_ref := build_stack_ref(NEW.id);
-        END IF;
-        NEW.updated_at := now();
-    END IF;
-    RETURN NEW;
-END
-$$;
-
-CREATE TRIGGER trg_org_rename
-    AFTER UPDATE OF name ON organizations
-    FOR EACH ROW EXECUTE FUNCTION trg_update_stack_refs();
-
-CREATE TRIGGER trg_project_rename
-    AFTER UPDATE OF name ON projects
-    FOR EACH ROW EXECUTE FUNCTION trg_update_stack_refs();
-
--- Fires on INSERT (sets stack_ref) and on name UPDATE (keeps it in sync).
-CREATE TRIGGER trg_stack_upsert
-    BEFORE INSERT OR UPDATE OF name ON stacks
-    FOR EACH ROW EXECUTE FUNCTION trg_update_stack_refs();
-
--- ---------------------------------------------------------------------------
--- 2. Status transition guard: terminal status is irreversible
+-- 1. Status transition guard: terminal status is irreversible
 -- ---------------------------------------------------------------------------
 CREATE OR REPLACE FUNCTION trg_guard_update_status()
 RETURNS TRIGGER LANGUAGE plpgsql AS $$
@@ -571,7 +526,7 @@ CREATE TRIGGER trg_update_status_guard
     FOR EACH ROW EXECUTE FUNCTION trg_guard_update_status();
 
 -- ---------------------------------------------------------------------------
--- 3. Cache invalidation: journal INSERT automatically clears cached_checkpoint
+-- 2. Cache invalidation: journal INSERT automatically clears cached_checkpoint
 -- ---------------------------------------------------------------------------
 CREATE OR REPLACE FUNCTION trg_invalidate_stack_cache()
 RETURNS TRIGGER LANGUAGE plpgsql AS $$
@@ -600,7 +555,7 @@ CREATE TRIGGER trg_journal_invalidates_cache
 | `GET /api/user/organizations/default` | — | `organizations` |
 | `GET /api/user/stacks?project=X` | — | `stacks`, `projects`, `organizations` |
 | `POST /api/stacks/{org}/{project}` | `workspaces`, `stacks`, `stack_state` | `projects`, `organizations` |
-| `GET /api/stacks/{org}/{project}/{stack}` | — | `stacks` (via `stack_ref`) |
+| `GET /api/stacks/{org}/{project}/{stack}` | — | `stacks`, `projects`, `organizations` |
 | `DELETE /api/stacks/{org}/{project}/{stack}` | DELETE `workspaces` (cascades to `stacks` and all state) | `stack_state` (check resources == 0) |
 | `GET /api/stacks/{org}/{project}/{stack}/export` | — | `stack_state` → `snapshots` + `journal_entries` |
 | `POST .../update\|preview\|destroy` | INSERT `stack_updates` | `stacks` |
@@ -660,8 +615,7 @@ The tables below split what the schema enforces from what application code must 
 |---|---------|-----------|
 | 1 | Orphaned records | `ON DELETE CASCADE` on all child tables; `ON DELETE RESTRICT` on `stack_state.base_snapshot_id` (prevents deleting active base snapshot); `ON DELETE SET NULL` on `compaction_jobs.new_snapshot_id`; default `NO ACTION` on `stack_locks` composite FK (forces app to DELETE the lock before deleting its parent update) |
 | 2 | Cross-entity mismatch | Composite FK `(update_id, stack_id) → stack_updates(id, stack_id)` on `journal_entries`, `pending_operations`, `update_events`, and `stack_locks`; DB rejects rows whose `update_id` belongs to a different stack |
-| 3/4 | Rename drift / insert-time denormalization | `trg_stack_upsert` fires on `BEFORE INSERT OR UPDATE OF name`; INSERT branch computes `stack_ref` directly from `NEW.project_id` without querying the not-yet-committed row |
-| 6 | Duplicate singletons | `stack_state` and `stack_locks` both use `stack_id PRIMARY KEY` |
+| 6 | Duplicate singletons | `stack_state` and `stack_locks` both carry `UNIQUE (stack_id)` (the surrogate PK is the row's own `id`) |
 | 7 | Invalid status transitions | `trg_update_status_guard` rejects any UPDATE that tries to leave a terminal status or revert to `in-progress` |
 | 11 | Cache staleness | `trg_journal_invalidates_cache` sets `cache_valid = false` on every `journal_entries` INSERT for that stack |
 | 13 | Idempotent update creation | `client_request_id TEXT` + partial unique index `(stack_id, client_request_id) WHERE client_request_id IS NOT NULL`; app uses `INSERT ... ON CONFLICT DO NOTHING` |
@@ -676,7 +630,7 @@ The tables below split what the schema enforces from what application code must 
 | 9 | Journal sequence ordering | Assign `sequence_id` by doing `SELECT stack_state.journal_seq + 1 FOR UPDATE`, then incrementing `stack_state.journal_seq` and inserting the journal entry — all in one transaction. The row lock serializes concurrent sequence allocation. |
 | 10 | Lease token validation | Lease-scoped operations (`PATCH .../checkpoint`, `POST .../events/batch`, `POST .../complete`, `POST .../renew_lease`, `DELETE .../update/{id}`) carry `Authorization: update-token <leaseTok>` instead of `token <apiTok>`. Verify the `<leaseTok>` matches `stack_locks.lock_token` AND `stack_locks.expires_at > now()`. Reject with 409 if mismatched or expired. The lease-token and api-token paths are independent and never overlap on the same request. |
 | 12 | Compaction races | The compactor must hold a `SELECT ... FOR UPDATE` on `stack_state` for the duration of its read → compute → commit cycle. This blocks concurrent journal appends (which also lock `stack_state`) and ensures `to_journal_seq` remains consistent at commit time. |
-| 14 | Tenant isolation | Every query that retrieves stacks or state must join through the `stack_ref` to verify the org matches the authenticated token's `org_id`. Never accept a bare `stack_id` from external input without confirming ownership. |
+| 14 | Tenant isolation | Every query that retrieves stacks or state must JOIN to `projects` / `organizations` (or filter by `stacks.project_id → projects.org_id`) to verify the org matches the authenticated token's `org_id`. Never accept a bare `stack_id` from external input without confirming ownership. |
 | 17 | Workspace lifecycle | Stack creation must `INSERT workspaces` then `INSERT stacks` (with `workspace_id` set) inside one transaction. Stack deletion must `DELETE FROM workspaces` (which cascades). Never `DELETE FROM stacks` directly — the workspace row would be orphaned. |
 | 18 | Token authorization scope | Every Pulumi CLI request must verify (a) the token's hash exists and is unexpired, (b) `api_tokens.org_id` matches the target stack's org, and (c) `org_members` row still exists for `(token.org_id, token.user_id)`. Removing a user from an org must invalidate their tokens for that org without deleting the row. |
 
@@ -692,7 +646,7 @@ The tables below split what the schema enforces from what application code must 
 
 | Feature | Note |
 |---------|------|
-| Stack rename (`POST .../rename`) | No new table needed; triggers handle `stack_ref` update |
+| Stack rename (`POST .../rename`) | Single-row `UPDATE stacks SET name = ?`; lookups always resolve through the JOIN, so no derived data to maintain |
 | Lease renewal (`POST .../renew_lease`) | Updates `stack_locks.expires_at`; needed for long deploys |
 | History endpoint (`GET .../updates`) | Reads `stack_updates`; no new table needed |
 | Stack config (`PUT .../config`) | Separate per-stack config storage not required for Wave 1 |
@@ -707,7 +661,7 @@ The tables below split what the schema enforces from what application code must 
 ## Verification (when implementing)
 
 1. `pulumi login http://localhost:<port>` → validates `/api/user`, `/api/user/organizations/default`
-2. `pulumi stack init dev` → `stacks` row inserted with correct `stack_ref`; `stack_state` row created
+2. `pulumi stack init dev` → `stacks` row inserted; `stack_state` row created; `(org, project, stack)` lookup returns the new stack
 3. `pulumi up` → full update lifecycle: 2× `stack_updates`, `stack_locks`, `journal_entries`; `stacks.version` increments; `cache_valid` reset to false after each journal insert
 4. `pulumi stack export` → reconstructs checkpoint from `stack_state` + `journal_entries`; diff against expected output
 5. `pulumi destroy` → new `stack_updates` rows; `pending_operations` cleared; `stacks.version` increments
@@ -715,4 +669,4 @@ The tables below split what the schema enforces from what application code must 
 7. Concurrent `pulumi up` from two terminals → second returns lock conflict (409)
 8. Duplicate `POST /update` with same `client_request_id` → returns existing row, no duplicate
 9. `UPDATE stack_updates SET status = 'in-progress' WHERE status = 'succeeded'` → trigger raises exception
-10. Rename org → all `stacks.stack_ref` values updated atomically by trigger
+10. Rename org → subsequent `(new_org_name, project, stack)` lookups resolve correctly; no derived data needs rewriting
