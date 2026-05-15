@@ -1,8 +1,13 @@
 Copyright (c) 2025 Sharath Madappa
 
-Elastic License 2.0
+Elastic License 2.0, with Additional Limitations
 
-URL: https://www.elastic.co/licensing/elastic-license
+Base license URL: https://www.elastic.co/licensing/elastic-license
+
+This is the Elastic License 2.0 with one additional limitation (the
+"Free Edition Use Limit") added under the Limitations section below.
+The Free Edition Use Limit is the only departure from the unmodified
+text of ELv2.
 
 ## Acceptance
 
@@ -28,6 +33,32 @@ functionality in the software that is protected by the license key.
 You may not alter, remove, or obscure any licensing, copyright, or other
 notices of the licensor in the software. Any use of the licensor's
 trademarks is subject to applicable law.
+
+## Free Edition Use Limit
+
+The software is made available in a "Free Edition" configuration that
+permits management of up to ten (10) active Stacks per deployment at
+no charge. For the purposes of this section:
+
+- A "Stack" is a named, isolated instance of project state managed by
+  the software, in the sense used by the Pulumi and OpenTofu command
+  line tools.
+- A Stack is "active" if it currently exists in the software's data
+  store. Stacks that have been deleted and are no longer present in
+  the data store do not count toward this limit.
+- A "deployment" is a single running installation of the software
+  backed by a single database. Operators of multiple independent
+  deployments count Stacks separately for each deployment.
+
+To manage more than ten (10) active Stacks in a single deployment, you
+must obtain a valid commercial license from the licensor. Use of the
+software to manage more than ten (10) active Stacks in a deployment
+without a valid commercial license is not permitted under these terms.
+
+The mechanism that enforces the Free Edition Use Limit, and any
+mechanism that validates or applies a commercial license, constitutes
+"license key functionality" within the meaning of the Limitations
+section above.
 
 ## Patents
 
