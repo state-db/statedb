@@ -24,6 +24,15 @@ fixture-driven contract test in the same PR.
 Migration filenames are illustrative; renumber if a prior slice has shipped
 ahead.
 
+**Module placement.** DB-shaped code (entities, finders, queries, journal
+assembly, repository-style services) lives in `persistence/`. HTTP-shaped
+code (JAX-RS resources, filters, exception mappers, wire DTOs) lives in
+`pulumi-api/` or `console-api/`. Pure-domain/policy logic that isn't bound
+to either — Cedar authorizer, adapter SPIs — lives in `core/` (introduced
+by Slice 18). When in doubt: if both HTTP modules would need it, put it in
+`persistence/`. Duplicating a tenant-isolated query across both modules is
+a security risk, not a cosmetic one.
+
 ---
 
 ## Phase 1 — Foundations for stack identity
@@ -62,14 +71,15 @@ ahead.
 
 ### Slice 4 · Stack reference resolver
 
-**Why now.** Pull lookup logic out of every future Pulumi endpoint.
+**Why now.** Pull lookup logic out of every future Pulumi endpoint. Console-api will need the same JOIN in Phase 8, so the resolver lives in `persistence/` — duplicating a tenant-isolated query across HTTP modules is a security risk.
 
 **Scope**
 
-- New `pulumi-api/src/main/java/io/statedb/pulumiapi/stack/StackRefResolver.java`:
-  - `Optional<StackRef> resolve(String org, String project, String stack)` joining `stacks → projects → organizations` by name.
-  - Returns a small DTO `StackRef { stackId, workspaceId, orgId, orgName, projectName, stackName, version, activeUpdateId }`.
-- A typed `StackNotFoundException` mapped to 404 by a JAX-RS `ExceptionMapper`.
+- New `persistence/src/main/java/io/statedb/persistence/stack/`:
+  - `StackRef` record `{ stackId, workspaceId, orgId, orgName, projectName, stackName, version, activeUpdateId }`.
+  - `StackRefResolver` (`@ApplicationScoped`) with `Optional<StackRef> resolve(String org, String project, String stack)` joining `stacks → projects → organizations` by name via HQL.
+  - `StackNotFoundException` (domain shorthand, throwable from either HTTP module).
+- New `pulumi-api/src/main/java/io/statedb/pulumiapi/stack/StackNotFoundExceptionMapper.java` mapping the exception to a Pulumi-shaped 404. Console-api writes its own mapper when it adopts the pattern — wire formats deliberately diverge.
 
 **Out of scope.** Auth filter wiring; using the resolver from real endpoints.
 
@@ -90,7 +100,7 @@ After this phase, `pulumi login http://localhost:8080/pulumi` followed by `pulum
 **Scope**
 
 - `pulumi-api/filter/TokenAuthFilter.java` bound `@PreMatching` to a hard-coded prefix list (`/pulumi/api/user`, `/pulumi/api/user/organizations/default`, `/pulumi/api/capabilities`, `/pulumi/api/stacks`).
-- Header parse, sha256, lookup against `api_tokens` joined with `organizations`.
+- Header parse, sha256, lookup against `api_tokens` joined with `organizations` via a new `persistence/identity/ApiTokenFinder` — same DB shape is touched by Slice 26 (`last_used_at` bookkeeping, console list/revoke), so the query lives in `persistence/` from day one.
 - Membership re-check via `org_members`.
 - Sets a request-scoped `@CurrentPrincipal` CDI bean carrying `{userId, orgId, orgName, kind}`.
 - Dev helper: a `@QuarkusTest` resource installer that inserts one user + org + membership + token at boot when `STATE_DB_DEV_SEED=true`. Keeps the manual-verification step one curl.
@@ -176,7 +186,8 @@ pulumi stack init dev   # in a Pulumi project pointed at the backend
 
 **Scope**
 
-- Stack detail payload from fixture: `orgName`, `projectName`, `stackName`, `currentOperation` (null for now), `tags`, `version`, `lastUpdate`, `resourceCount` (0 for now).
+- A new `persistence/stack/StackHeadFinder` returning the joined `{ orgName, projectName, stackName, tags, version, lastUpdate, resourceCount }` projection. Slice 29 (console drilldown) consumes the same finder behind a different wire DTO.
+- Pulumi-shaped resource maps `StackHeadFinder` output to the fixture payload (`currentOperation` null for now, `lastUpdate` null until Slice 12, `resourceCount` zero until Slice 17).
 - 404 collapse: if caller's org doesn't match the path, return 404 (not 403) — pre-Cedar; matches the design rule that cross-org reads collapse to 404.
 
 **Out of scope.** Resource count from snapshot/journal (Slice 17), `lastUpdate` (Slice 11), `currentOperation` (Slice 12).
@@ -196,7 +207,7 @@ PULUMI_ACCESS_TOKEN=<tok> pulumi stack output --show-name
 
 **Scope**
 
-- Native query filtering by caller's `org_id` (per architecture: bare `stack_id` from external input is never trusted).
+- A new `persistence/stack/StackListFinder` doing the `workspaces → stacks → projects → organizations` JOIN filtered by caller's `org_id` (per architecture: bare `stack_id` from external input is never trusted). Slice 28 (`/api/workspaces` console read) consumes the same finder behind a different wire DTO.
 - Stable ordering by `(org name, project name, stack name)` for deterministic output.
 - Optional `project` query param filter (Pulumi CLI sometimes passes it).
 
@@ -385,11 +396,9 @@ Each slice in this phase moves one step closer to a real `pulumi up` cycle succe
 
 - `POST /complete`:
   - Single tx: mark `stack_updates.status` (`succeeded`/`failed`), DELETE `stack_locks`, UPDATE `stacks SET version = version + 1, active_update_id = NULL`. Preview never bumps `version`.
+- New `persistence/stack/StackAssembler` — pure persistence service that, given a `stackId`, reads the base snapshot from `stack_state` and replays `journal_entries WHERE sequence_id > base` per `db-schema.md` "State Reconstruction" rules (`begin`/`success`/`failure`/`refresh_success`/`outputs`/`write`/`rebuilt_base_state`). This is the *only* place reconstruction logic lives; Slice 21 (compaction worker) and Slice 29 (console stack drilldown) both call it. Drift between callers would produce different "current state" answers for the same stack — a correctness bug, not a cosmetic one.
 - `GET /api/stacks/{org}/{project}/{stack}/export`:
-  - Reads `stack_state` to find base snapshot (may be NULL — no snapshot until compaction).
-  - Streams `journal_entries WHERE stack_id = ? AND sequence_id > base` in order.
-  - Applies entries per `db-schema.md` "State Reconstruction" rules (`begin`/`success`/`failure`/`refresh_success`/`outputs`/`write`/`rebuilt_base_state`).
-  - Returns `{ version: 3, deployment: <reconstructed DeploymentV3> }`.
+  - Calls `StackAssembler.assemble(stackId)` and returns `{ version: 3, deployment: <reconstructed DeploymentV3> }`.
 
 **Out of scope.** Compaction (Slice 21); the assembler runs over the full journal every export until then.
 
@@ -471,7 +480,7 @@ pulumi stack export | jq .
 
 - Migration `V007__compaction.sql`: `snapshots`, `compaction_jobs`, FK from `stack_state.base_snapshot_id`.
 - Enqueue trigger inside the `POST /complete` transaction when `journal_entries_since_compaction >= auto_compact_threshold`.
-- `CompactionWorker` `@Scheduled`: poll for `status='pending'`, `SELECT ... FOR UPDATE` on `stack_state`, build snapshot by replaying journal, INSERT `snapshots`, point `stack_state.base_snapshot_id` at it, reset `journal_entries_since_compaction`, mark job `completed`.
+- `persistence/stack/CompactionWorker` `@Scheduled`: polls for `status='pending'`, `SELECT ... FOR UPDATE` on `stack_state`, calls Slice 17's `StackAssembler` to build the snapshot (same code path as `/export` — drift here would split-brain compaction vs. read), INSERT `snapshots`, point `stack_state.base_snapshot_id` at it, reset `journal_entries_since_compaction`, mark job `completed`.
 - Failure path: mark `failed` with `error_message`, retry capped at 3 attempts (`attempts` column on the job table — add to migration).
 
 **Tests**
@@ -594,8 +603,7 @@ pulumi stack export | jq .
 
 **Scope**
 
-- Native query joining `workspaces → stacks → projects → organizations` filtered by caller's `org_id`.
-- Response shape: `[{ id, kind, org, project, stack, version, lastUpdate, resourceCount }]`. `kind='pulumi'` for now; Tofu adds rows later.
+- Reuses Slice 9's `persistence/stack/StackListFinder` (workspaces ↔ stacks 1:1, so the same JOIN serves both endpoints). Console-api adds a thin DTO mapping to the response shape: `[{ id, kind, org, project, stack, version, lastUpdate, resourceCount }]`. `kind='pulumi'` for now; Tofu adds rows later.
 - Stable ordering by `(org name, project name, stack name)`.
 
 **Tests.** Org scoping. Stable ordering across multiple requests.
@@ -608,9 +616,9 @@ pulumi stack export | jq .
 
 **Scope**
 
-- `GET /api/pulumi/stacks/{ref}`: stack head + parsed resource list from the assembled checkpoint + tags + active update if any.
-- `GET /api/pulumi/stacks/{ref}/updates`: `stack_updates` history, paginated by `started_at`.
-- `GET /api/pulumi/stacks/{ref}/updates/{id}/events`: paginated `update_events`.
+- `GET /api/pulumi/stacks/{ref}`: reuses Slice 8's `StackHeadFinder` for the head and Slice 17's `StackAssembler` for the parsed resource list; console-api maps to its own DTO. No reconstruction logic in this module.
+- `GET /api/pulumi/stacks/{ref}/updates`: new `persistence/update/UpdateHistoryFinder` (will also back any Pulumi-side history endpoint that lands later) — paginated by `started_at`.
+- `GET /api/pulumi/stacks/{ref}/updates/{id}/events`: new `persistence/update/UpdateEventsFinder` paginating `update_events`.
 
 **Tests.** History paging boundaries. Cross-org returns 404 (loader).
 

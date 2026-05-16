@@ -12,6 +12,11 @@
 
     <dependencies>
         <dependency>
+            <groupId>io.statedb</groupId>
+            <artifactId>state-db-persistence</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+        <dependency>
             <groupId>io.quarkus</groupId>
             <artifactId>quarkus-rest</artifactId>
         </dependency>
