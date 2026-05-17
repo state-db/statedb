@@ -89,10 +89,6 @@ a security risk, not a cosmetic one.
 
 ---
 
-## Phase 2 — Make `pulumi login` succeed
-
-After this phase, `pulumi login http://localhost:8080/pulumi` followed by `pulumi whoami` should return the bootstrap admin.
-
 ### Slice 4.5 · Bootstrap admin + default org + initial API token
 
 **Why now.** Slice 5 needs real `users`, `organizations`, `org_members`, `api_tokens` rows to validate tokens against. This slice is the production onboarding path; without it, the only way to a usable deployment is hand-rolled SQL.
@@ -135,55 +131,37 @@ STATE_DB_BOOTSTRAP_ADMIN_TOKEN_HASH=$(printf %s "$TOKEN" | shasum -a 256 | cut -
 
 ---
 
-### Slice 5 · TokenAuthFilter (read-only routes only)
+### Slice 5 · TokenAuthFilter + login endpoints (Phase 2 — `pulumi login` succeeds)
 
-**Why now.** Every Pulumi route needs authn before it can return real data.
+**Why now.** Every Pulumi route needs authn before it can return real data, and the three endpoints `pulumi login` calls (`/api/user`, `/api/user/organizations/default`, `/api/capabilities`) are read-only — they share the same auth surface. Shipping them together in one PR keeps the "first verifiable end-to-end CLI call" as a single reviewable unit; what was originally planned as Slices 5 and 6 collapses here.
 
 **Scope**
 
-- `pulumi-api/filter/TokenAuthFilter.java` bound `@PreMatching` to a hard-coded prefix list (`/pulumi/api/user`, `/pulumi/api/user/organizations/default`, `/pulumi/api/capabilities`, `/pulumi/api/stacks`).
-- Header parse, sha256, lookup against `api_tokens` joined with `organizations` via a new `persistence/identity/ApiTokenFinder` — same DB shape is touched by Slice 26 (`last_used_at` bookkeeping, console list/revoke), so the query lives in `persistence/` from day one.
-- Membership re-check via `org_members`.
-- Sets a request-scoped `@CurrentPrincipal` CDI bean carrying `{userId, orgId, orgName, kind}`.
+- `pulumi-api/auth/TokenAuthFilter.java` — global `@Provider` `@Blocking` filter (priority `AUTHENTICATION`) gating a hard-coded prefix list (`/pulumi/api/user`, `/pulumi/api/user/organizations/default`, `/pulumi/api/capabilities`, `/pulumi/api/stacks`).
+  - The filter is *not* `@PreMatching`: Quarkus REST does not dispatch `@PreMatching` filters to worker threads, but the token lookup is a blocking JDBC call. A post-match `@Blocking` filter has functionally equivalent coverage because every Pulumi-surface route is a mapped resource — unauthenticated requests to unmapped paths still 404, which is the correct default.
+- Header parse (`Authorization: token <raw>`), sha256-hex digest, lookup against `api_tokens × organizations × org_members` via new `persistence/identity/ApiTokenFinder` — same DB shape is touched by Slice 26 (`last_used_at` bookkeeping, console list/revoke), so the query lives in `persistence/` from day one. Membership is part of the same JOIN, not a follow-up check.
+- `persistence/identity/AuthenticatedPrincipal` record `{userId, orgId, orgName, kind}` returned by the finder.
+- `pulumi-api/auth/CurrentPrincipal` `@RequestScoped` bean populated by the filter; injected by downstream handlers.
+- `pulumi-api/user/UserResource` — replaces placeholder with fixture-shaped DTO (`email`, `githubLogin`, `name`, `organizations[]`) populated from the principal + a follow-up `User.findById`. `siteAdmin` is omitted: the recorded fixture omits it and the CLI accepts the response as-is. DTOs have explicit `@JsonProperty` names.
+- `pulumi-api/user/UserDefaultOrgResource` — `GET /api/user/organizations/default` → `{ organization: { githubLogin, name } }` from the principal's org.
+- `pulumi-api/capabilities/CapabilitiesResource` — `GET /api/capabilities` → static `{ capabilities: [{ name: "delta-checkpoint-updates", version: 1 }] }`, pinned by the recorded fixture.
 - Tests rely on Slice 4.5's bootstrap mechanism (env-driven); no separate dev-seed flag.
 
-**Out of scope.** Cedar authorization, lease-token routes, last-used-at bookkeeping (Slice 20).
+**Out of scope.** Cedar authorization, lease-token routes, `last_used_at` bookkeeping (Slice 26), multi-org users, GitHub-specific User fields beyond what the CLI reads.
 
 **Tests**
 
-- 401 on missing header, unknown token, expired token.
-- 401 when membership row is gone but token row remains.
-- 200 when valid; principal carries the expected org name.
+- `ApiTokenFinderTest` (DB-level): expiry gating (active / NULL / past), unknown hash, missing membership.
+- `TokenAuthFilterTest` (HTTP-level, RestAssured): 401 on missing header, wrong scheme, unknown token, expired token, revoked membership; 200 + principal-shaped body when valid; coverage of the `/pulumi/api/capabilities` and `/pulumi/api/stacks/*` prefixes.
+- `LoginContractTest`: pins the JSON shape of all three login endpoints against the recorded fixtures under `tools/pulumi/recorder/fixtures/by-command/01-login/`. A precursor to the full replay harness (Slice 11).
 
 **Manual verification**
 
 ```
 ./bin/in-container mvn -f modules/pom.xml -pl app -am quarkus:dev
-# In another shell:
+# In another shell, with bootstrap env set as in Slice 4.5:
 curl -i -H 'Authorization: token <bootstrap-token>' http://localhost:8080/pulumi/api/user
-# Expect 200; remove header → 401.
-```
-
----
-
-### Slice 6 · `/api/user` + `/api/user/organizations/default` + `/api/capabilities`
-
-**Why now.** These three are the entire `pulumi login` call sequence in `api-snapshots/pulumi/catalog.md`.
-
-**Scope**
-
-- Replace `UserResource` placeholder with fixture-shaped DTO (`githubLogin`, `name`, `email`, `organizations[]`, `siteAdmin`).
-- Add `UserDefaultOrgResource` returning `{ name, displayName, githubLogin }` from the principal's org.
-- Add `CapabilitiesResource` returning the JSON Pulumi expects for `journalVersion: 1` advertisement. Static for now; shape pinned by fixture.
-- DTOs have explicit `@JsonProperty` names; never rely on default field-name mapping.
-
-**Out of scope.** Multi-org users, GitHub-specific fields beyond what the CLI reads.
-
-**Tests.** Contract tests against the three matching files under `tools/pulumi/recorder/fixtures/by-command/01-login/`. Assert status + JSON-shape equality (modulo timestamps).
-
-**Manual verification**
-
-```
+# Expect 200 with email/githubLogin/name/organizations.
 pulumi login http://localhost:8080/pulumi
 PULUMI_ACCESS_TOKEN=<bootstrap-token> pulumi whoami
 # Expect the bootstrap admin printed.
