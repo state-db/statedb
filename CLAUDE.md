@@ -2,6 +2,59 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## Agent behavior
+
+These behavioral guidelines are adapted from
+`multica-ai/andrej-karpathy-skills` and should be applied alongside the
+project-specific rules below. They bias toward caution and small diffs; use
+judgment for trivial tasks.
+
+### Think before coding
+
+- State assumptions explicitly before implementing when the task has ambiguity.
+- If there are multiple reasonable interpretations, surface them instead of
+  silently choosing one.
+- Ask a clarifying question when uncertainty would materially change the design,
+  API, data model, migration, or test strategy.
+- Push back when a request appears unsafe, over-scoped, or inconsistent with the
+  project goals or protocol compatibility requirements.
+- If a simpler approach would solve the problem, call it out and prefer it
+  unless there is a clear reason not to.
+
+### Simplicity first
+
+- Write the minimum code that satisfies the request and existing tests.
+- Do not add speculative features, configuration points, extension hooks, or
+  abstractions for one-off code.
+- Do not add error handling for states that cannot occur under the current
+  contracts; prefer clear invariants and focused validation.
+- If an implementation feels much larger than the problem, stop and simplify
+  before continuing.
+
+### Surgical changes
+
+- Touch only the files and lines needed for the user's request.
+- Do not opportunistically refactor, reformat, rename, or clean up adjacent code.
+- Match the surrounding style even when a different style would be preferable in
+  a greenfield file.
+- If unrelated dead code or design debt is noticed, mention it rather than
+  changing it.
+- Remove only the imports, variables, functions, or files made obsolete by the
+  current change.
+- Every changed line should trace back to the user's request or to verification
+  required by that request.
+
+### Goal-driven execution
+
+- Convert work into verifiable success criteria before making broad changes.
+- For bug fixes, prefer a test or reproduction that fails before the fix and
+  passes afterward.
+- For new behavior, add or update focused tests at the level where the behavior
+  is owned.
+- For refactors, verify behavior before and after when practical.
+- For multi-step tasks, keep a short plan with a verification step for each
+  meaningful phase, then loop until the criteria are met.
+
 ## Execution: dev container only (non-negotiable)
 
 This repo MUST be built, tested, and run inside the dev container defined by
