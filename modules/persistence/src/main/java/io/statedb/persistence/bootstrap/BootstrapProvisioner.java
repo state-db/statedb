@@ -1,7 +1,9 @@
-package io.statedb.persistence.identity;
+package io.statedb.persistence.bootstrap;
 
 import io.quarkus.runtime.StartupEvent;
 import io.statedb.persistence.AdvisoryLock;
+import io.statedb.persistence.BaseEntity;
+import io.statedb.persistence.TimestampedEntity;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.enterprise.event.Observes;
 import jakarta.inject.Inject;

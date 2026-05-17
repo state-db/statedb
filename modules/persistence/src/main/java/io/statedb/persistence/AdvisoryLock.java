@@ -12,7 +12,7 @@ import jakarta.persistence.EntityManager;
  * acquires the lock as soon as the dead connection is reaped.
  *
  * <p>Use this to serialize any startup task whose effect we want exactly once per cluster (e.g.
- * {@link io.statedb.persistence.identity.BootstrapProvisioner}). The task body still has to be
+ * {@link io.statedb.persistence.bootstrap.BootstrapProvisioner}). The task body still has to be
  * idempotent — every pod will eventually take the lock and re-run, finding the work already done.
  * Idempotency + serialization together give "at most one pod does real work, every pod verifies
  * completion before serving."
@@ -26,7 +26,7 @@ import jakarta.persistence.EntityManager;
 @ApplicationScoped
 public class AdvisoryLock {
 
-  /** Guards {@link io.statedb.persistence.identity.BootstrapProvisioner#provision}. */
+  /** Guards {@link io.statedb.persistence.bootstrap.BootstrapProvisioner#provision}. */
   public static final long BOOTSTRAP_KEY = 0x5354415444425F31L;
 
   @Inject EntityManager em;

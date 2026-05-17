@@ -7,7 +7,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import io.quarkus.hibernate.orm.panache.Panache;
 import io.quarkus.test.TestTransaction;
 import io.quarkus.test.junit.QuarkusTest;
-import io.statedb.persistence.identity.ApiToken;
+import io.statedb.persistence.auth.ApiToken;
 import io.statedb.persistence.identity.OrgMember;
 import io.statedb.persistence.identity.Organization;
 import io.statedb.persistence.identity.User;

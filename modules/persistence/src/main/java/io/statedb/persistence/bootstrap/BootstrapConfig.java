@@ -1,4 +1,4 @@
-package io.statedb.persistence.identity;
+package io.statedb.persistence.bootstrap;
 
 import java.util.ArrayList;
 import java.util.List;

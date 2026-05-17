@@ -1,10 +1,10 @@
-package io.statedb.app.identity;
+package io.statedb.app.bootstrap;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-import io.statedb.persistence.identity.BootstrapConfig;
+import io.statedb.persistence.bootstrap.BootstrapConfig;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Optional;

@@ -1,8 +1,8 @@
 package io.statedb.pulumiapi.auth;
 
 import io.smallrye.common.annotation.Blocking;
-import io.statedb.persistence.identity.ApiTokenFinder;
-import io.statedb.persistence.identity.AuthenticatedPrincipal;
+import io.statedb.persistence.auth.ApiTokenFinder;
+import io.statedb.persistence.auth.AuthenticatedPrincipal;
 import jakarta.annotation.Priority;
 import jakarta.inject.Inject;
 import jakarta.ws.rs.Priorities;

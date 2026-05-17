@@ -1,4 +1,4 @@
-package io.statedb.persistence.identity;
+package io.statedb.persistence.auth;
 
 import io.statedb.persistence.BaseEntity;
 import jakarta.persistence.Column;

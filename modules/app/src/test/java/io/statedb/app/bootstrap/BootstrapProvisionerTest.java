@@ -1,4 +1,4 @@
-package io.statedb.app.identity;
+package io.statedb.app.bootstrap;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
@@ -9,9 +9,9 @@ import io.quarkus.narayana.jta.QuarkusTransaction;
 import io.quarkus.test.TestTransaction;
 import io.quarkus.test.junit.QuarkusTest;
 import io.statedb.persistence.AdvisoryLock;
-import io.statedb.persistence.identity.ApiToken;
-import io.statedb.persistence.identity.BootstrapConfig;
-import io.statedb.persistence.identity.BootstrapProvisioner;
+import io.statedb.persistence.auth.ApiToken;
+import io.statedb.persistence.bootstrap.BootstrapConfig;
+import io.statedb.persistence.bootstrap.BootstrapProvisioner;
 import io.statedb.persistence.identity.OrgMember;
 import io.statedb.persistence.identity.Organization;
 import io.statedb.persistence.identity.User;

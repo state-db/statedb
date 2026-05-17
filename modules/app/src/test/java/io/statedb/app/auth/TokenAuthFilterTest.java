@@ -5,7 +5,7 @@ import static org.hamcrest.Matchers.equalTo;
 
 import io.quarkus.narayana.jta.QuarkusTransaction;
 import io.quarkus.test.junit.QuarkusTest;
-import io.statedb.persistence.identity.ApiToken;
+import io.statedb.persistence.auth.ApiToken;
 import io.statedb.persistence.identity.OrgMember;
 import io.statedb.persistence.identity.Organization;
 import io.statedb.persistence.identity.User;

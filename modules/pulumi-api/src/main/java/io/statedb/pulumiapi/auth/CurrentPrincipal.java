@@ -1,6 +1,6 @@
 package io.statedb.pulumiapi.auth;
 
-import io.statedb.persistence.identity.AuthenticatedPrincipal;
+import io.statedb.persistence.auth.AuthenticatedPrincipal;
 import jakarta.enterprise.context.RequestScoped;
 
 @RequestScoped

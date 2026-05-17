@@ -1,13 +1,13 @@
-package io.statedb.app.identity;
+package io.statedb.app.auth;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import io.quarkus.test.TestTransaction;
 import io.quarkus.test.junit.QuarkusTest;
-import io.statedb.persistence.identity.ApiToken;
-import io.statedb.persistence.identity.ApiTokenFinder;
-import io.statedb.persistence.identity.AuthenticatedPrincipal;
+import io.statedb.persistence.auth.ApiToken;
+import io.statedb.persistence.auth.ApiTokenFinder;
+import io.statedb.persistence.auth.AuthenticatedPrincipal;
 import io.statedb.persistence.identity.OrgMember;
 import io.statedb.persistence.identity.Organization;
 import io.statedb.persistence.identity.User;
