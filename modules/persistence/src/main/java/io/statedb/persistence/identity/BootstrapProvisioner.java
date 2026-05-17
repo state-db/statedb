@@ -4,8 +4,8 @@ import io.quarkus.narayana.jta.QuarkusTransaction;
 import io.quarkus.runtime.StartupEvent;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.enterprise.event.Observes;
-import java.time.Instant;
-import java.time.temporal.ChronoUnit;
+import jakarta.inject.Inject;
+import jakarta.persistence.EntityManager;
 import java.util.UUID;
 import org.jboss.logging.Logger;
 
@@ -23,6 +23,13 @@ import org.jboss.logging.Logger;
  * <p>Re-running with the same env is a no-op. Re-running with a changed display-name or admin email
  * updates the existing rows in place. Re-running with a new token hash <em>adds</em> a row (old
  * token stays valid until manually revoked) — token rotation is operator-driven.
+ *
+ * <p>Each upsert is a single {@code INSERT ... ON CONFLICT} statement so concurrent boots (two app
+ * instances against a fresh DB) cannot race between SELECT and INSERT. Bootstrap rows use
+ * application-generated UUIDv4 — they're written once and rarely updated, so the temporal-ordering
+ * benefit that {@link BaseEntity}'s UUIDv7 generator provides for hot inserts doesn't apply here.
+ * Native SQL also bypasses Hibernate's {@code @UpdateTimestamp}, so {@code updated_at} is set
+ * explicitly on the UPDATE branch of the conflict clause for the {@link TimestampedEntity} tables.
  */
 @ApplicationScoped
 public class BootstrapProvisioner {
@@ -35,7 +42,8 @@ public class BootstrapProvisioner {
   public static final String BOOTSTRAP_SUB = "admin";
 
   private static final String TOKEN_DESCRIPTION = "bootstrap";
-  private static final long TOKEN_TTL_DAYS = 365;
+
+  @Inject EntityManager em;
 
   void onStart(@Observes StartupEvent ev) {
     // StartupEvent fires after Flyway has run (quarkus-flyway with migrate-at-start=true).
@@ -53,67 +61,79 @@ public class BootstrapProvisioner {
    * {@code @TestTransaction}; the {@link #onStart} path wraps with {@code QuarkusTransaction}).
    */
   public void provision(BootstrapConfig config) {
-    Organization org = upsertOrg(config);
-    User user = upsertBootstrapUser(config);
-    ensureMembership(org.id, user.id);
-    ensureToken(config.adminTokenHash(), org.id, user.id);
+    UUID orgId = upsertOrg(config);
+    UUID userId = upsertBootstrapUser(config);
+    ensureMembership(orgId, userId);
+    ensureToken(config.adminTokenHash(), orgId, userId);
     LOG.infof(
         "Bootstrap admin \"%s\" provisioned in org \"%s\"", config.adminEmail(), config.orgName());
   }
 
-  private Organization upsertOrg(BootstrapConfig config) {
-    Organization org = Organization.find("name", config.orgName()).firstResult();
-    if (org == null) {
-      org = new Organization();
-      org.name = config.orgName();
-      org.displayName = config.orgDisplayName();
-      org.persist();
-      return org;
-    }
-    if (!config.orgDisplayName().equals(org.displayName)) {
-      org.displayName = config.orgDisplayName();
-    }
-    return org;
+  private UUID upsertOrg(BootstrapConfig config) {
+    em.createNativeQuery(
+            """
+            INSERT INTO organizations (id, name, display_name)
+            VALUES (:id, :name, :display)
+            ON CONFLICT (name) DO UPDATE
+              SET display_name = EXCLUDED.display_name, updated_at = now()
+            """)
+        .setParameter("id", UUID.randomUUID())
+        .setParameter("name", config.orgName())
+        .setParameter("display", config.orgDisplayName())
+        .executeUpdate();
+    return (UUID)
+        em.createNativeQuery("SELECT id FROM organizations WHERE name = :name")
+            .setParameter("name", config.orgName())
+            .getSingleResult();
   }
 
-  private User upsertBootstrapUser(BootstrapConfig config) {
-    User user = User.find("iss = ?1 and sub = ?2", BOOTSTRAP_ISS, BOOTSTRAP_SUB).firstResult();
-    if (user == null) {
-      user = new User();
-      user.iss = BOOTSTRAP_ISS;
-      user.sub = BOOTSTRAP_SUB;
-      user.email = config.adminEmail();
-      user.displayName = config.adminDisplayName();
-      user.persist();
-      return user;
-    }
-    if (!config.adminEmail().equals(user.email)) {
-      user.email = config.adminEmail();
-    }
-    if (!config.adminDisplayName().equals(user.displayName)) {
-      user.displayName = config.adminDisplayName();
-    }
-    return user;
+  private UUID upsertBootstrapUser(BootstrapConfig config) {
+    em.createNativeQuery(
+            """
+            INSERT INTO users (id, iss, sub, email, display_name)
+            VALUES (:id, :iss, :sub, :email, :display)
+            ON CONFLICT (iss, sub) DO UPDATE
+              SET email = EXCLUDED.email,
+                  display_name = EXCLUDED.display_name,
+                  updated_at = now()
+            """)
+        .setParameter("id", UUID.randomUUID())
+        .setParameter("iss", BOOTSTRAP_ISS)
+        .setParameter("sub", BOOTSTRAP_SUB)
+        .setParameter("email", config.adminEmail())
+        .setParameter("display", config.adminDisplayName())
+        .executeUpdate();
+    return (UUID)
+        em.createNativeQuery("SELECT id FROM users WHERE iss = :iss AND sub = :sub")
+            .setParameter("iss", BOOTSTRAP_ISS)
+            .setParameter("sub", BOOTSTRAP_SUB)
+            .getSingleResult();
   }
 
   private void ensureMembership(UUID orgId, UUID userId) {
-    if (OrgMember.findById(new OrgMember.PK(orgId, userId)) != null) return;
-    OrgMember m = new OrgMember();
-    m.orgId = orgId;
-    m.userId = userId;
-    m.role = OrgMember.Role.owner;
-    m.persist();
+    em.createNativeQuery(
+            """
+            INSERT INTO org_members (org_id, user_id, role)
+            VALUES (:org, :user, 'owner')
+            ON CONFLICT (org_id, user_id) DO NOTHING
+            """)
+        .setParameter("org", orgId)
+        .setParameter("user", userId)
+        .executeUpdate();
   }
 
   private void ensureToken(String tokenHash, UUID orgId, UUID userId) {
-    if (ApiToken.find("tokenHash", tokenHash).firstResult() != null) return;
-    ApiToken t = new ApiToken();
-    t.tokenHash = tokenHash;
-    t.description = TOKEN_DESCRIPTION;
-    t.userId = userId;
-    t.orgId = orgId;
-    t.kind = ApiToken.Kind.service_account;
-    t.expiresAt = Instant.now().plus(TOKEN_TTL_DAYS, ChronoUnit.DAYS);
-    t.persist();
+    em.createNativeQuery(
+            """
+            INSERT INTO api_tokens (id, token_hash, description, user_id, org_id, kind, expires_at)
+            VALUES (:id, :hash, :desc, :user, :org, 'service_account', now() + interval '1 year')
+            ON CONFLICT (token_hash) DO NOTHING
+            """)
+        .setParameter("id", UUID.randomUUID())
+        .setParameter("hash", tokenHash)
+        .setParameter("desc", TOKEN_DESCRIPTION)
+        .setParameter("user", userId)
+        .setParameter("org", orgId)
+        .executeUpdate();
   }
 }
