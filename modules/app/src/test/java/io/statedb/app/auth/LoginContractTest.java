@@ -99,7 +99,7 @@ class LoginContractTest {
         .body("$", hasKey("organizations"))
         .body("email", equalTo("contract@example.com"))
         .body("name", equalTo("Contract Tester"))
-        .body("githubLogin", equalTo(ORG_NAME))
+        .body("githubLogin", equalTo("login-contract"))
         .body("organizations", hasSize(1))
         .body("organizations[0].githubLogin", equalTo(ORG_NAME))
         .body("organizations[0].name", equalTo(ORG_NAME));

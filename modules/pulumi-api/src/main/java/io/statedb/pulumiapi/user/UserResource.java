@@ -21,10 +21,10 @@ public class UserResource {
   public UserDto get() {
     AuthenticatedPrincipal p = currentPrincipal.get();
     User user = User.findById(p.userId());
-    // githubLogin mirrors orgName: the Pulumi CLI treats it as the default-org hint, and we
-    // have no GitHub linkage to source a real value from.
+    // Top-level githubLogin is what `pulumi whoami` prints — the user's account identity, not the
+    // org. We have no GitHub linkage, so use the OIDC subject as a stable per-user login.
     return new UserDto(
-        user.email, p.orgName(), user.displayName, List.of(new OrgRef(p.orgName(), p.orgName())));
+        user.email, user.sub, user.displayName, List.of(new OrgRef(p.orgName(), p.orgName())));
   }
 
   public record UserDto(
