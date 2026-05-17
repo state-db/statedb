@@ -15,6 +15,11 @@
       "moby": false,
       "dockerDashComposeVersion": "v2",
     },
+    // Pulumi CLI for end-to-end checks against the running server. Not a
+    // build-time dependency; tools/pulumi/recorder bundles its own CLI.
+    "ghcr.io/devcontainers-extra/features/pulumi:1": {
+      "version": "latest",
+    },
   },
   "forwardPorts": [8080],
   "containerEnv": {
@@ -25,7 +30,7 @@
     // Ryuk is unreachable and Dev Services hangs before starting Postgres.
     "TESTCONTAINERS_HOST_OVERRIDE": "host.docker.internal",
   },
-  "postCreateCommand": "java -version && mvn -version && docker version --format '{{.Client.Version}}'",
+  "postCreateCommand": "java -version && mvn -version && docker version --format '{{.Client.Version}}' && pulumi version",
   "customizations": {
     "vscode": {
       "extensions": [
