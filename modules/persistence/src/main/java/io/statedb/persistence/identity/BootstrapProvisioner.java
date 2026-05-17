@@ -1,7 +1,7 @@
 package io.statedb.persistence.identity;
 
-import io.quarkus.narayana.jta.QuarkusTransaction;
 import io.quarkus.runtime.StartupEvent;
+import io.statedb.persistence.AdvisoryLock;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.enterprise.event.Observes;
 import jakarta.inject.Inject;
@@ -24,8 +24,11 @@ import org.jboss.logging.Logger;
  * updates the existing rows in place. Re-running with a new token hash <em>adds</em> a row (old
  * token stays valid until manually revoked) — token rotation is operator-driven.
  *
- * <p>Each upsert is a single {@code INSERT ... ON CONFLICT} statement so concurrent boots (two app
- * instances against a fresh DB) cannot race between SELECT and INSERT. Bootstrap rows use
+ * <p>Concurrency: in multi-pod deployments the work is serialized cluster-wide by an {@link
+ * AdvisoryLock} on {@link AdvisoryLock#BOOTSTRAP_KEY} — one pod runs {@link #provision}, the rest
+ * block until its transaction commits and then re-run against the now-populated rows. Each upsert
+ * is still a single {@code INSERT ... ON CONFLICT} statement, so the per-row guarantee holds even
+ * for writers that bypass the lock (admin scripts, ad-hoc SQL). Bootstrap rows use
  * application-generated UUIDv4 — they're written once and rarely updated, so the temporal-ordering
  * benefit that {@link BaseEntity}'s UUIDv7 generator provides for hot inserts doesn't apply here.
  * Native SQL also bypasses Hibernate's {@code @UpdateTimestamp}, so {@code updated_at} is set
@@ -45,14 +48,18 @@ public class BootstrapProvisioner {
 
   @Inject EntityManager em;
 
+  @Inject AdvisoryLock advisoryLock;
+
   void onStart(@Observes StartupEvent ev) {
     // StartupEvent fires after Flyway has run (quarkus-flyway with migrate-at-start=true).
-    // QuarkusTransaction is used in lieu of @Transactional so that the same-bean call from
-    // onStart -> provision() actually gets a transaction; @Transactional only fires on
-    // cross-bean invocations through the CDI proxy.
+    // AdvisoryLock#runExclusive opens its own transaction and holds a Postgres advisory lock for
+    // its duration, so concurrent pods serialize through provision() rather than each racing the
+    // same upserts. The per-row ON CONFLICT clauses still guarantee correctness for any writer
+    // that bypasses the lock.
     BootstrapConfig.fromEnv()
         .ifPresentOrElse(
-            config -> QuarkusTransaction.requiringNew().run(() -> provision(config)),
+            config ->
+                advisoryLock.runExclusive(AdvisoryLock.BOOTSTRAP_KEY, () -> provision(config)),
             () -> LOG.infof("Bootstrap skipped: %s is unset", BootstrapConfig.ENV_ORG_NAME));
   }
 

@@ -83,3 +83,12 @@ Two `@MappedSuperclass` base classes define the standard entity shape — extend
 Hibernate populates both columns via `@CreationTimestamp` / `@UpdateTimestamp` (JVM clock). Migrations should still declare `created_at TIMESTAMPTZ NOT NULL DEFAULT now()` and (for `TimestampedEntity` tables) `updated_at TIMESTAMPTZ NOT NULL DEFAULT now()` — the column defaults are a safety net for raw-SQL inserts only; nothing in the DB advances `updated_at` on UPDATE, so writers that bypass Hibernate (admin scripts, batch SQL) must set it explicitly.
 
 Composite-PK entities (e.g. `OrgMember` with `@IdClass`) don't fit either superclass — extend `PanacheEntityBase` directly.
+
+## Multi-pod startup
+
+The app is designed to run with more than one replica behind a load balancer. Two pieces of startup work are at risk of racing across pods:
+
+- **Flyway migrations** — already safe. `quarkus-flyway` with `migrate-at-start: true` takes a Postgres advisory lock on `flyway_schema_history` before applying changes; concurrent pods serialize through it and followers find the schema already at the head revision.
+- **Run-once application init** (e.g. `BootstrapProvisioner`) — wrap the work in `AdvisoryLock#runExclusive(key, task)`. The helper opens a new JTA transaction and holds a Postgres transaction-scoped advisory lock for its duration, so concurrent pods serialize through `task` and a crashed leader releases the lock immediately when its DB session is reaped. The task body must still be idempotent (followers will take the lock and re-run after the leader commits — they should find the work already done and no-op).
+
+Lock keys live as `public static final long` constants on `AdvisoryLock`. Add a new constant rather than passing a literal — it keeps the registry in one place and makes collisions easy to spot.

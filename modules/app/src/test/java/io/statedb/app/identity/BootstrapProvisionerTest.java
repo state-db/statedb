@@ -4,8 +4,11 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import io.quarkus.arc.Arc;
+import io.quarkus.narayana.jta.QuarkusTransaction;
 import io.quarkus.test.TestTransaction;
 import io.quarkus.test.junit.QuarkusTest;
+import io.statedb.persistence.AdvisoryLock;
 import io.statedb.persistence.identity.ApiToken;
 import io.statedb.persistence.identity.BootstrapConfig;
 import io.statedb.persistence.identity.BootstrapProvisioner;
@@ -13,8 +16,17 @@ import io.statedb.persistence.identity.OrgMember;
 import io.statedb.persistence.identity.Organization;
 import io.statedb.persistence.identity.User;
 import jakarta.inject.Inject;
+import jakarta.persistence.EntityManager;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 
 /**
@@ -29,6 +41,13 @@ import org.junit.jupiter.api.Test;
 class BootstrapProvisionerTest {
 
   @Inject BootstrapProvisioner provisioner;
+
+  @Inject AdvisoryLock advisoryLock;
+
+  @Inject EntityManager em;
+
+  private static final String CONCURRENT_ORG = "acme-concurrent";
+  private static final String CONCURRENT_TOKEN_HASH = "sha256:" + "9".repeat(64);
 
   @Test
   @TestTransaction
@@ -170,5 +189,103 @@ class BootstrapProvisionerTest {
         "ops@" + orgName + ".example",
         orgName + " Ops",
         "sha256:" + hashSeed.repeat(64));
+  }
+
+  /**
+   * Multi-pod race: N threads each take {@link AdvisoryLock#BOOTSTRAP_KEY} and invoke {@link
+   * BootstrapProvisioner#provision} against the same fresh org. The lock serializes them and the
+   * per-row idempotent upserts make followers no-op, so the end state must be exactly one org /
+   * membership / token. Cannot use {@code @TestTransaction} — multiple threads need real commits
+   * for the advisory lock to hand off, so we clean the committed rows in {@link #cleanup}.
+   */
+  @Test
+  void concurrentBootstraps_produceSingleSetOfRows() throws Exception {
+    int callers = 4;
+    BootstrapConfig config =
+        new BootstrapConfig(
+            CONCURRENT_ORG,
+            "Acme Concurrent",
+            "ops@" + CONCURRENT_ORG + ".example",
+            "Acme Concurrent Ops",
+            CONCURRENT_TOKEN_HASH);
+
+    CountDownLatch start = new CountDownLatch(1);
+    ExecutorService pool = Executors.newFixedThreadPool(callers);
+    List<Future<?>> futures = new ArrayList<>(callers);
+    try {
+      for (int i = 0; i < callers; i++) {
+        futures.add(
+            pool.submit(
+                () -> {
+                  start.await();
+                  Arc.container().requestContext().activate();
+                  try {
+                    advisoryLock.runExclusive(
+                        AdvisoryLock.BOOTSTRAP_KEY, () -> provisioner.provision(config));
+                  } finally {
+                    Arc.container().requestContext().terminate();
+                  }
+                  return null;
+                }));
+      }
+      start.countDown();
+      pool.shutdown();
+      assertTrue(pool.awaitTermination(30, TimeUnit.SECONDS), "callers did not finish within 30s");
+      // Surface any worker exception — otherwise a partial-success run (e.g. 3 of 4 workers
+      // commit, 1 throws) leaves committed rows that satisfy the assertions below and the
+      // failure is invisible.
+      for (Future<?> f : futures) {
+        f.get();
+      }
+    } finally {
+      pool.shutdownNow();
+    }
+
+    QuarkusTransaction.requiringNew()
+        .run(
+            () -> {
+              assertEquals(1, Organization.count("name", CONCURRENT_ORG));
+              Organization org = Organization.find("name", CONCURRENT_ORG).firstResult();
+              User user =
+                  User.find(
+                          "iss = ?1 and sub = ?2",
+                          BootstrapProvisioner.BOOTSTRAP_ISS,
+                          BootstrapProvisioner.BOOTSTRAP_SUB)
+                      .firstResult();
+              assertNotNull(user, "bootstrap user must exist");
+              assertEquals(
+                  1,
+                  OrgMember.count("orgId = ?1 and userId = ?2", org.id, user.id),
+                  "exactly one membership for org+user");
+              assertEquals(
+                  1,
+                  ApiToken.count("tokenHash", CONCURRENT_TOKEN_HASH),
+                  "exactly one token row for the bootstrap hash");
+            });
+  }
+
+  /**
+   * The concurrent test commits real rows (advisory-lock semantics require commits, so
+   * {@code @TestTransaction} can't isolate it). Strip them so sibling tests' counts stay clean — in
+   * particular {@link #newTokenHashAddsRowWithoutRevokingPrior} which asserts the bootstrap user
+   * owns exactly two tokens.
+   */
+  @AfterEach
+  void cleanupConcurrentBootstrapRows() {
+    QuarkusTransaction.requiringNew()
+        .run(
+            () -> {
+              em.createNativeQuery("DELETE FROM api_tokens WHERE token_hash = ?1")
+                  .setParameter(1, CONCURRENT_TOKEN_HASH)
+                  .executeUpdate();
+              em.createNativeQuery(
+                      "DELETE FROM org_members WHERE org_id IN"
+                          + " (SELECT id FROM organizations WHERE name = ?1)")
+                  .setParameter(1, CONCURRENT_ORG)
+                  .executeUpdate();
+              em.createNativeQuery("DELETE FROM organizations WHERE name = ?1")
+                  .setParameter(1, CONCURRENT_ORG)
+                  .executeUpdate();
+            });
   }
 }
