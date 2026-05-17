@@ -110,7 +110,7 @@ After this phase, `pulumi login http://localhost:8080/pulumi` followed by `pulum
 - `STATE_DB_ADMIN_SUBJECTS` semantics: `local:bootstrap:admin` is implicitly admin.
 - Boot log: `Bootstrap admin "<email>" provisioned in org "<orgName>"` or `Bootstrap skipped`.
 
-**Out of scope.** Console password hash (Slice 4.6). Multiple orgs or users at bootstrap. Token rotation that auto-revokes prior tokens — re-running with a new hash *adds* a row; revoke manually via `psql` until Slice 26.
+**Out of scope.** Console password-based break-glass — deferred to Slice 25 because no `/api/*` endpoint reads a session cookie before Slice 23 wires OIDC, and Slice 23 replaces any hand-rolled session mint with `quarkus-oidc`'s primitive. The bootstrap **API token** provisioned here is sufficient for Phase 2 (`pulumi login` / `pulumi whoami`), which targets `/pulumi/api/*` and uses `Authorization: token <raw>`, not cookies. Multiple orgs or users at bootstrap. Token rotation that auto-revokes prior tokens — re-running with a new hash *adds* a row; revoke manually via `psql` until Slice 26.
 
 **Tests**
 
@@ -131,46 +131,6 @@ STATE_DB_BOOTSTRAP_ADMIN_DISPLAY_NAME='Acme Ops' \
 STATE_DB_BOOTSTRAP_ADMIN_TOKEN_HASH=$(printf %s "$TOKEN" | shasum -a 256 | cut -d' ' -f1) \
 ./bin/in-container mvn -f modules/pom.xml -pl app -am quarkus:dev
 # psql: SELECT (SELECT count(*) FROM organizations), (SELECT count(*) FROM users), (SELECT count(*) FROM org_members), (SELECT count(*) FROM api_tokens); expect 1,1,1,1.
-```
-
----
-
-### Slice 4.6 · Local password break-glass for console
-
-**Why now.** Before Slice 23 wires OIDC, the only way into the console is the bootstrap admin. Same mechanism is the IdP-down recovery path afterwards. Slice 25's OIDC-session-mint break-glass is a different problem and comes later.
-
-**Scope**
-
-- `console-api/auth/LocalBreakGlassResource`: `POST /api/auth/local-bootstrap` with `{ password }`.
-- `LoopbackOnlyFilter` `@PreMatching` on the route: 404 if remote address is not `InetAddress.isLoopbackAddress()`. Quarkus proxy headers must be off for this route — `X-Forwarded-For` is not honored.
-- Profile gate: route excluded from scan unless profile is `dev`, `local-glass`, or new `prod-bootstrap`.
-- Verifies the password against `STATE_DB_BOOTSTRAP_ADMIN_PASSWORD_HASH` (argon2). Read at request time; never stored in DB.
-- On success: mint a signed-cookie session for `(iss='local:bootstrap', sub='admin')`. Cookie `HttpOnly`, `Secure`, `SameSite=Strict`, `Path=/api/`, 12h TTL. Signing key from `STATE_DB_SESSION_SIGNING_KEY`.
-- `SessionContext` CDI bean exposes the principal — same shape Slice 23 will populate from `quarkus-oidc`, so downstream resources don't branch on auth path.
-- `WARN` at boot when the route is enabled under `prod-bootstrap`.
-
-**Out of scope.** OIDC-session-mint break-glass (Slice 25). Rate-limiting (loopback is the primary defense). Password rotation UX.
-
-**Tests**
-
-- Loopback + correct password → 200 + Set-Cookie.
-- Loopback + wrong password → 401, timing-tolerant.
-- Non-loopback → 404 regardless of password.
-- Profile not in `{dev, local-glass, prod-bootstrap}` → 404.
-- `STATE_DB_BOOTSTRAP_ADMIN_PASSWORD_HASH` unset → 503.
-
-**Manual verification**
-
-```
-STATE_DB_BOOTSTRAP_ADMIN_PASSWORD_HASH='$argon2id$v=19$m=...$...' \
-STATE_DB_SESSION_SIGNING_KEY=$(openssl rand -base64 32) \
-./bin/in-container mvn -f modules/pom.xml -pl app -am quarkus:dev -Dquarkus.profile=prod-bootstrap
-
-curl -i -H 'Content-Type: application/json' \
-  -d '{"password":"my-bootstrap-password"}' \
-  http://localhost:8080/api/auth/local-bootstrap
-# Expect 200 + Set-Cookie: state-db-session=...
-# From a non-loopback host: 404.
 ```
 
 ---
@@ -630,17 +590,21 @@ pulumi stack export | jq .
 
 ### Slice 25 · Local break-glass
 
+**Why now.** This is also the mechanism for pre-OIDC console access (the role originally proposed as Slice 4.6, then deferred when we noticed the cookie had no consumer until this phase). It covers both first-touch console login on a fresh deployment with no IdP configured *and* IdP-down recovery on an established deployment.
+
 **Scope**
 
 - `/api/auth/local` endpoint:
-  - `LocalGlassFilter` checks `InetAddress.isLoopbackAddress()` on the request remote address; else 404.
-  - Profile gate: route excluded from JAX-RS scan unless profile is `dev` or `local-glass`.
+  - `LocalGlassFilter` (`@PreMatching`) gates the route on two conditions; either failing → 404:
+    1. **Loopback.** Remote address must be loopback via `InetAddress.isLoopbackAddress()` on the raw socket. `X-Forwarded-For` is never honored.
+    2. **No working IdP.** `SELECT count(*) FROM oidc_providers WHERE enabled = true` must be 0. Tying the gate to system state rather than a profile flag means operators can't accidentally lock themselves out by forgetting a profile, and the route auto-disappears once OIDC is set up.
   - Verifies POSTed password against `STATE_DB_LOCAL_GLASS_PASSWORD_HASH` (argon2).
-  - On success, mints a `quarkus-oidc` session bound to the first `<iss>:<sub>` from `STATE_DB_ADMIN_SUBJECTS`.
+  - On success, mints a `quarkus-oidc` session bound to the first `<iss>:<sub>` from `STATE_DB_ADMIN_SUBJECTS`, falling back to the bootstrap admin (`local:bootstrap:admin`) if no explicit subjects are configured.
+- Boot WARN log line when the route is live (i.e., zero enabled providers).
 
-**Tests.** Loopback + correct password → session. Non-loopback → 404 regardless of password. Prod profile → 404 regardless of source.
+**Tests.** Unit test the `LocalGlassFilter` with a mocked request context and a stubbed enabled-provider counter: non-loopback → abort 404; loopback + 0 providers → pass-through; loopback + ≥1 enabled provider → abort 404. `@QuarkusTest` covers happy-path (200 + cookie), wrong password (401, timing-tolerant), unset hash (503), and the OIDC-provider-present case (404).
 
-**Manual verification.** `curl -d 'password=...' http://localhost:8080/api/auth/local` → session cookie; same call through a forwarded proxy IP → 404.
+**Manual verification.** With no `oidc_providers` rows: `curl -d '{"password":"..."}' http://localhost:8080/api/auth/local` → session cookie. Insert an `enabled=true` provider row, retry → 404. Same call through a non-loopback ingress → 404.
 
 ---
 
