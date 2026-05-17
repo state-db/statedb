@@ -91,7 +91,89 @@ a security risk, not a cosmetic one.
 
 ## Phase 2 — Make `pulumi login` succeed
 
-After this phase, `pulumi login http://localhost:8080/pulumi` followed by `pulumi whoami` should return the seeded user.
+After this phase, `pulumi login http://localhost:8080/pulumi` followed by `pulumi whoami` should return the bootstrap admin.
+
+### Slice 4.5 · Bootstrap admin + default org + initial API token
+
+**Why now.** Slice 5 needs real `users`, `organizations`, `org_members`, `api_tokens` rows to validate tokens against. This slice is the production onboarding path; without it, the only way to a usable deployment is hand-rolled SQL.
+
+**Scope**
+
+- `persistence/identity/BootstrapProvisioner` (`@ApplicationScoped`, fired from `@Startup` after Flyway). Idempotent across boots.
+- Env (or `state-db.bootstrap.*` config keys): `STATE_DB_BOOTSTRAP_ORG_NAME` (operators migrating off Pulumi Cloud point this at the same org name they used there), `STATE_DB_BOOTSTRAP_ORG_DISPLAY_NAME`, `STATE_DB_BOOTSTRAP_ADMIN_EMAIL`, `STATE_DB_BOOTSTRAP_ADMIN_DISPLAY_NAME`, `STATE_DB_BOOTSTRAP_ADMIN_TOKEN_HASH` (sha256 of an operator-chosen token; raw never reaches state-db).
+- Skip cleanly if `STATE_DB_BOOTSTRAP_ORG_NAME` is unset; fail fast if partial.
+- One transaction:
+  - `INSERT organizations ... ON CONFLICT (name) DO UPDATE SET display_name`.
+  - `INSERT users(iss='local:bootstrap', sub='admin', ...) ON CONFLICT (iss, sub) DO UPDATE`. `iss='local:bootstrap'` is the reserved namespace for non-OIDC bootstrap users; existing `users` schema is sufficient.
+  - `INSERT org_members(role='owner') ON CONFLICT DO NOTHING`.
+  - `INSERT api_tokens(kind='service_account', description='bootstrap', expires_at = now() + interval '1 year') ON CONFLICT (token_hash) DO NOTHING`.
+- `STATE_DB_ADMIN_SUBJECTS` semantics: `local:bootstrap:admin` is implicitly admin.
+- Boot log: `Bootstrap admin "<email>" provisioned in org "<orgName>"` or `Bootstrap skipped`.
+
+**Out of scope.** Console password hash (Slice 4.6). Multiple orgs or users at bootstrap. Token rotation that auto-revokes prior tokens — re-running with a new hash *adds* a row; revoke manually via `psql` until Slice 26.
+
+**Tests**
+
+- Cold boot with all env set creates exactly one row in each of the four tables.
+- Identical re-boot is a no-op.
+- Re-boot with a changed `STATE_DB_BOOTSTRAP_ORG_DISPLAY_NAME` updates in place.
+- Partial env fails before any INSERT.
+- No `STATE_DB_BOOTSTRAP_*` env → no writes; `Bootstrap skipped` logged.
+
+**Manual verification**
+
+```
+TOKEN=my-bootstrap-token
+STATE_DB_BOOTSTRAP_ORG_NAME=acme \
+STATE_DB_BOOTSTRAP_ORG_DISPLAY_NAME='Acme Inc' \
+STATE_DB_BOOTSTRAP_ADMIN_EMAIL=ops@acme.example \
+STATE_DB_BOOTSTRAP_ADMIN_DISPLAY_NAME='Acme Ops' \
+STATE_DB_BOOTSTRAP_ADMIN_TOKEN_HASH=$(printf %s "$TOKEN" | shasum -a 256 | cut -d' ' -f1) \
+./bin/in-container mvn -f modules/pom.xml -pl app -am quarkus:dev
+# psql: SELECT (SELECT count(*) FROM organizations), (SELECT count(*) FROM users), (SELECT count(*) FROM org_members), (SELECT count(*) FROM api_tokens); expect 1,1,1,1.
+```
+
+---
+
+### Slice 4.6 · Local password break-glass for console
+
+**Why now.** Before Slice 23 wires OIDC, the only way into the console is the bootstrap admin. Same mechanism is the IdP-down recovery path afterwards. Slice 25's OIDC-session-mint break-glass is a different problem and comes later.
+
+**Scope**
+
+- `console-api/auth/LocalBreakGlassResource`: `POST /api/auth/local-bootstrap` with `{ password }`.
+- `LoopbackOnlyFilter` `@PreMatching` on the route: 404 if remote address is not `InetAddress.isLoopbackAddress()`. Quarkus proxy headers must be off for this route — `X-Forwarded-For` is not honored.
+- Profile gate: route excluded from scan unless profile is `dev`, `local-glass`, or new `prod-bootstrap`.
+- Verifies the password against `STATE_DB_BOOTSTRAP_ADMIN_PASSWORD_HASH` (argon2). Read at request time; never stored in DB.
+- On success: mint a signed-cookie session for `(iss='local:bootstrap', sub='admin')`. Cookie `HttpOnly`, `Secure`, `SameSite=Strict`, `Path=/api/`, 12h TTL. Signing key from `STATE_DB_SESSION_SIGNING_KEY`.
+- `SessionContext` CDI bean exposes the principal — same shape Slice 23 will populate from `quarkus-oidc`, so downstream resources don't branch on auth path.
+- `WARN` at boot when the route is enabled under `prod-bootstrap`.
+
+**Out of scope.** OIDC-session-mint break-glass (Slice 25). Rate-limiting (loopback is the primary defense). Password rotation UX.
+
+**Tests**
+
+- Loopback + correct password → 200 + Set-Cookie.
+- Loopback + wrong password → 401, timing-tolerant.
+- Non-loopback → 404 regardless of password.
+- Profile not in `{dev, local-glass, prod-bootstrap}` → 404.
+- `STATE_DB_BOOTSTRAP_ADMIN_PASSWORD_HASH` unset → 503.
+
+**Manual verification**
+
+```
+STATE_DB_BOOTSTRAP_ADMIN_PASSWORD_HASH='$argon2id$v=19$m=...$...' \
+STATE_DB_SESSION_SIGNING_KEY=$(openssl rand -base64 32) \
+./bin/in-container mvn -f modules/pom.xml -pl app -am quarkus:dev -Dquarkus.profile=prod-bootstrap
+
+curl -i -H 'Content-Type: application/json' \
+  -d '{"password":"my-bootstrap-password"}' \
+  http://localhost:8080/api/auth/local-bootstrap
+# Expect 200 + Set-Cookie: state-db-session=...
+# From a non-loopback host: 404.
+```
+
+---
 
 ### Slice 5 · TokenAuthFilter (read-only routes only)
 
@@ -103,7 +185,7 @@ After this phase, `pulumi login http://localhost:8080/pulumi` followed by `pulum
 - Header parse, sha256, lookup against `api_tokens` joined with `organizations` via a new `persistence/identity/ApiTokenFinder` — same DB shape is touched by Slice 26 (`last_used_at` bookkeeping, console list/revoke), so the query lives in `persistence/` from day one.
 - Membership re-check via `org_members`.
 - Sets a request-scoped `@CurrentPrincipal` CDI bean carrying `{userId, orgId, orgName, kind}`.
-- Dev helper: a `@QuarkusTest` resource installer that inserts one user + org + membership + token at boot when `STATE_DB_DEV_SEED=true`. Keeps the manual-verification step one curl.
+- Tests rely on Slice 4.5's bootstrap mechanism (env-driven); no separate dev-seed flag.
 
 **Out of scope.** Cedar authorization, lease-token routes, last-used-at bookkeeping (Slice 20).
 
@@ -118,7 +200,7 @@ After this phase, `pulumi login http://localhost:8080/pulumi` followed by `pulum
 ```
 ./bin/in-container mvn -f modules/pom.xml -pl app -am quarkus:dev
 # In another shell:
-curl -i -H 'Authorization: token <seeded-token>' http://localhost:8080/pulumi/api/user
+curl -i -H 'Authorization: token <bootstrap-token>' http://localhost:8080/pulumi/api/user
 # Expect 200; remove header → 401.
 ```
 
@@ -143,8 +225,8 @@ curl -i -H 'Authorization: token <seeded-token>' http://localhost:8080/pulumi/ap
 
 ```
 pulumi login http://localhost:8080/pulumi
-PULUMI_ACCESS_TOKEN=<seeded-token> pulumi whoami
-# Expect the seeded user printed.
+PULUMI_ACCESS_TOKEN=<bootstrap-token> pulumi whoami
+# Expect the bootstrap admin printed.
 ```
 
 ---
@@ -440,7 +522,7 @@ pulumi stack export | jq .
 - Viewer denied on `Stack::Create`; member allowed.
 - Cross-org read returns 404 (loader returns empty), not 403.
 
-**Manual verification.** Demote the seeded user from `member` to `viewer` in `org_members`; `pulumi stack init` returns 403; revert and it succeeds.
+**Manual verification.** Insert a non-admin user via `psql` (`iss='local:test'`, `sub='viewer-1'`, `org_members.role='viewer'`) and mint them a token. `pulumi stack init` with that token returns 403; flip the role to `member` and it succeeds. The bootstrap admin can't be used here — it's implicitly admin via the `local:bootstrap:admin` allow-list and would bypass via `admin-escape`.
 
 ---
 
