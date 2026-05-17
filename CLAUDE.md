@@ -16,6 +16,16 @@ All project commands route through `./bin/in-container`:
 ./bin/in-container mvn -f modules/pom.xml -pl app -am quarkus:dev
 ```
 
+When running a single module or focused tests in a module, include Maven's
+reactor dependency build flag (`-am`) so sibling modules are built instead of
+failing with missing `0.1.0-SNAPSHOT` artifacts. If the focused test pattern
+only exists in the selected leaf module, also disable no-match failures for the
+upstream modules:
+
+```
+./bin/in-container mvn -f modules/pom.xml -pl app -am -Dtest=SomeTest -Dsurefire.failIfNoSpecifiedTests=false test
+```
+
 Rules for agents:
 
 - Never invoke `mvn`, `gradle`, `java`, `npm`, `python`, `pytest`, `psql`,
