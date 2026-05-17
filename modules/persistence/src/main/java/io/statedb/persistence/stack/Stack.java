@@ -11,9 +11,7 @@ import org.hibernate.annotations.JdbcTypeCode;
 import org.hibernate.type.SqlTypes;
 
 @Entity
-@Table(
-    name = "stacks",
-    uniqueConstraints = @UniqueConstraint(columnNames = {"project_id", "name"}))
+@Table(name = "stacks", uniqueConstraints = @UniqueConstraint(columnNames = {"project_id", "name"}))
 public class Stack extends TimestampedEntity {
 
   // Denormalized; the composite FKs in V002 require it to match

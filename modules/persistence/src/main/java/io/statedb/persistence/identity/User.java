@@ -8,9 +8,7 @@ import jakarta.persistence.UniqueConstraint;
 import java.time.Instant;
 
 @Entity
-@Table(
-    name = "users",
-    uniqueConstraints = @UniqueConstraint(columnNames = {"iss", "sub"}))
+@Table(name = "users", uniqueConstraints = @UniqueConstraint(columnNames = {"iss", "sub"}))
 public class User extends TimestampedEntity {
 
   @Column(nullable = false)

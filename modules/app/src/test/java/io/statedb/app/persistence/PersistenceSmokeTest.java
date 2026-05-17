@@ -12,9 +12,9 @@ import java.time.Instant;
 import org.junit.jupiter.api.Test;
 
 /**
- * {@link Organization} is used as a vehicle, not a subject — if this fails, something is wrong
- * with the persistence plumbing, not the identity model. Identity table contracts are covered
- * by {@code IdentityConstraintsTest}.
+ * {@link Organization} is used as a vehicle, not a subject — if this fails, something is wrong with
+ * the persistence plumbing, not the identity model. Identity table contracts are covered by {@code
+ * IdentityConstraintsTest}.
  */
 @QuarkusTest
 class PersistenceSmokeTest {
@@ -36,9 +36,9 @@ class PersistenceSmokeTest {
   }
 
   /**
-   * {@code updated_at} is maintained by Hibernate {@code @UpdateTimestamp} on
-   * {@link io.statedb.persistence.TimestampedEntity}. Catches anyone reverting the field to
-   * a {@code @Generated} mapping without a corresponding DB-side mechanism to advance it.
+   * {@code updated_at} is maintained by Hibernate {@code @UpdateTimestamp} on {@link
+   * io.statedb.persistence.TimestampedEntity}. Catches anyone reverting the field to a
+   * {@code @Generated} mapping without a corresponding DB-side mechanism to advance it.
    */
   @Test
   @TestTransaction

@@ -17,7 +17,8 @@ public class StackRefResolver {
 
   @Inject EntityManager em;
 
-  @SuppressWarnings("null") // JPA TypedQuery generics lack nullability annotations in static analysis
+  @SuppressWarnings(
+      "null") // JPA TypedQuery generics lack nullability annotations in static analysis
   public Optional<StackRef> resolve(String org, String project, String stack) {
     try {
       StackRef ref =

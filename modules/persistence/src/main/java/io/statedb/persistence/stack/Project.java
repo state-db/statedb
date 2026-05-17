@@ -8,9 +8,7 @@ import jakarta.persistence.UniqueConstraint;
 import java.util.UUID;
 
 @Entity
-@Table(
-    name = "projects",
-    uniqueConstraints = @UniqueConstraint(columnNames = {"org_id", "name"}))
+@Table(name = "projects", uniqueConstraints = @UniqueConstraint(columnNames = {"org_id", "name"}))
 public class Project extends TimestampedEntity {
 
   @Column(name = "org_id", nullable = false)
