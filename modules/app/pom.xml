@@ -33,6 +33,12 @@
         </dependency>
 
         <dependency>
+            <groupId>io.statedb</groupId>
+            <artifactId>state-db-test-support</artifactId>
+            <version>${project.version}</version>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
             <groupId>io.quarkus</groupId>
             <artifactId>quarkus-junit5</artifactId>
             <scope>test</scope>

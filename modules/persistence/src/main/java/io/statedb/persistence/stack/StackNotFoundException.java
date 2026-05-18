@@ -7,7 +7,14 @@ package io.statedb.persistence.stack;
  */
 public class StackNotFoundException extends RuntimeException {
 
+  private final String qualifiedName;
+
   public StackNotFoundException(String org, String project, String stack) {
-    super("Stack not found: " + org + "/" + project + "/" + stack);
+    super("stack not found");
+    this.qualifiedName = org + "/" + project + "/" + stack;
+  }
+
+  public String qualifiedName() {
+    return qualifiedName;
   }
 }

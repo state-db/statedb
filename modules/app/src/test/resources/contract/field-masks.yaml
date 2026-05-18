@@ -1,0 +1,8 @@
+fieldNames:
+  - updateID
+  - lockToken
+  - requestID
+  - requestId
+  - timestamp
+  - createdAt
+  - updatedAt

@@ -14,7 +14,7 @@ public class StackNotEmptyExceptionMapper implements ExceptionMapper<StackNotEmp
   public Response toResponse(StackNotEmptyException e) {
     return Response.status(Response.Status.CONFLICT)
         .type(MediaType.APPLICATION_JSON)
-        .entity(Map.of("message", e.getMessage()))
+        .entity(Map.of("message", e.getMessage(), "detail", e.qualifiedName()))
         .build();
   }
 }

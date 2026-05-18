@@ -7,7 +7,14 @@ package io.statedb.persistence.stack;
  */
 public class StackAlreadyExistsException extends RuntimeException {
 
+  private final String qualifiedName;
+
   public StackAlreadyExistsException(String org, String project, String stack) {
-    super("Stack already exists: " + org + "/" + project + "/" + stack);
+    super("stack already exists");
+    this.qualifiedName = org + "/" + project + "/" + stack;
+  }
+
+  public String qualifiedName() {
+    return qualifiedName;
   }
 }

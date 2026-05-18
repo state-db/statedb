@@ -14,7 +14,7 @@ public class StackNotFoundExceptionMapper implements ExceptionMapper<StackNotFou
   public Response toResponse(StackNotFoundException e) {
     return Response.status(Response.Status.NOT_FOUND)
         .type(MediaType.APPLICATION_JSON)
-        .entity(Map.of("message", e.getMessage()))
+        .entity(Map.of("message", e.getMessage(), "detail", e.qualifiedName()))
         .build();
   }
 }

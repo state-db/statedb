@@ -87,7 +87,7 @@ class StackCreatorTest {
         assertThrows(
             StackAlreadyExistsException.class,
             () -> stackCreator.create(orgId, ORG_NAME, "proj", "dup", Map.of()));
-    assertTrue(ex.getMessage().contains("dup"));
+    assertTrue(ex.qualifiedName().contains("dup"));
   }
 
   @Test

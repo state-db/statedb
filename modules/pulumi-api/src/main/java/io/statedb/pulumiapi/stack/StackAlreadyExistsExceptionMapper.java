@@ -15,7 +15,7 @@ public class StackAlreadyExistsExceptionMapper
   public Response toResponse(StackAlreadyExistsException e) {
     return Response.status(Response.Status.CONFLICT)
         .type(MediaType.APPLICATION_JSON)
-        .entity(Map.of("message", e.getMessage()))
+        .entity(Map.of("message", e.getMessage(), "detail", e.qualifiedName()))
         .build();
   }
 }
