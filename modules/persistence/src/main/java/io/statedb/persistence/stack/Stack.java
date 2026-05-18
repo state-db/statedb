@@ -46,4 +46,10 @@ public class Stack extends TimestampedEntity {
   @ManyToOne(fetch = FetchType.LAZY)
   @JoinColumn(name = "project_id", insertable = false, updatable = false)
   public Project project;
+
+  // Read-only navigation: writers set workspaceId directly so the UNIQUE constraint on
+  // workspace_id and the composite FK target in V002 remain the source of truth.
+  @ManyToOne(fetch = FetchType.LAZY)
+  @JoinColumn(name = "workspace_id", insertable = false, updatable = false)
+  public Workspace workspace;
 }
