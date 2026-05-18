@@ -22,7 +22,8 @@ public class UserResource {
     AuthenticatedPrincipal p = currentPrincipal.get();
     User user = User.findById(p.userId());
     // Top-level githubLogin is what `pulumi whoami` prints — the user's account identity, not the
-    // org. We have no GitHub linkage, so use the OIDC subject as a stable per-user login.
+    // org. Unqualified stack names target this personal namespace; org stacks should be addressed
+    // as <org>/<stack>.
     return new UserDto(
         user.email, user.sub, user.displayName, List.of(new OrgRef(p.orgName(), p.orgName())));
   }
