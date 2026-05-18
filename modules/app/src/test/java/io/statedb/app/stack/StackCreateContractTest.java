@@ -26,8 +26,8 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 /**
- * Pins the response shape of {@code POST /api/stacks/{org}/{project}} against the recorded
- * fixture under {@code tools/pulumi/recorder/fixtures/by-command/02-stack-init/}.
+ * Pins the response shape of {@code POST /api/stacks/{org}/{project}} against the recorded fixture
+ * under {@code tools/pulumi/recorder/fixtures/by-command/02-stack-init/}.
  */
 @QuarkusTest
 class StackCreateContractTest {
@@ -97,12 +97,13 @@ class StackCreateContractTest {
   void createsStackAndReturnsPulumiShape() {
     Map<String, Object> body =
         Map.of(
-            "stackName", "dev",
+            "stackName",
+            "dev",
             "tags",
-                Map.of(
-                    "pulumi:description", "test",
-                    "pulumi:project", PROJECT,
-                    "pulumi:runtime", "yaml"));
+            Map.of(
+                "pulumi:description", "test",
+                "pulumi:project", PROJECT,
+                "pulumi:runtime", "yaml"));
 
     given()
         .header("Authorization", "token " + RAW_TOKEN)

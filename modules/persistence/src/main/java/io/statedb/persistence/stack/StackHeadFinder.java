@@ -5,9 +5,10 @@ import java.util.Map;
 import java.util.Optional;
 
 /**
- * Loads the {@link StackHead} for a {@code (org, project, stack)} path triple. Uses the {@code
- * @ManyToOne} navigation on {@link Stack} to keep this in idiomatic Panache; {@code join fetch}
- * collapses the chain into a single SQL statement so callers don't pay the lazy-load round trips.
+ * Loads the {@link StackHead} for a {@code (org, project, stack)} path triple. Uses the
+ * {@code @ManyToOne} navigation on {@link Stack} to keep this in idiomatic Panache; {@code join
+ * fetch} collapses the chain into a single SQL statement so callers don't pay the lazy-load round
+ * trips.
  */
 @ApplicationScoped
 public class StackHeadFinder {

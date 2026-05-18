@@ -11,8 +11,8 @@ import org.hibernate.exception.ConstraintViolationException;
 
 /**
  * Creates a stack — and the project + workspace + stack_state rows that go with it — in one
- * transaction. Lives in {@code persistence/} per the module-placement rule: write paths against
- * the stack tree are tenant-isolated and must not be reimplemented in any HTTP module.
+ * transaction. Lives in {@code persistence/} per the module-placement rule: write paths against the
+ * stack tree are tenant-isolated and must not be reimplemented in any HTTP module.
  */
 @ApplicationScoped
 public class StackCreator {
@@ -20,17 +20,13 @@ public class StackCreator {
   @Inject EntityManager em;
 
   /**
-   * @throws StackAlreadyExistsException if {@code stackName} already exists under {@code
-   *     (orgId, projectName)} — either because a prior call created it or because a concurrent
-   *     caller raced this one to the same unique row.
+   * @throws StackAlreadyExistsException if {@code stackName} already exists under {@code (orgId,
+   *     projectName)} — either because a prior call created it or because a concurrent caller raced
+   *     this one to the same unique row.
    */
   @Transactional
   public StackRef create(
-      UUID orgId,
-      String orgName,
-      String projectName,
-      String stackName,
-      Map<String, String> tags) {
+      UUID orgId, String orgName, String projectName, String stackName, Map<String, String> tags) {
     UUID projectId = upsertProject(orgId, projectName);
 
     Workspace workspace = new Workspace();
@@ -59,8 +55,7 @@ public class StackCreator {
     state.journalSeq = 0L;
     state.persist();
 
-    return new StackRef(
-        stack.id, workspace.id, orgId, orgName, projectName, stackName, 0, null);
+    return new StackRef(stack.id, workspace.id, orgId, orgName, projectName, stackName, 0, null);
   }
 
   // Concurrency-safe project upsert: ON CONFLICT DO NOTHING then SELECT. Two concurrent first-

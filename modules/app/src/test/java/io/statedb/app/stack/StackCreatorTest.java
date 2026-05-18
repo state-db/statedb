@@ -21,8 +21,8 @@ import org.junit.jupiter.api.Test;
 
 /**
  * Persistence-level tests for {@link StackCreator}. Validates the constraint-violation translation
- * (P2 — duplicate-create race must surface as a domain exception, not a 500) and the project
- * upsert idempotency.
+ * (P2 — duplicate-create race must surface as a domain exception, not a 500) and the project upsert
+ * idempotency.
  */
 @QuarkusTest
 class StackCreatorTest {

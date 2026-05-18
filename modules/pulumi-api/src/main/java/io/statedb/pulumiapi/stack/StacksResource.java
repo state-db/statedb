@@ -27,9 +27,7 @@ public class StacksResource {
   @Consumes(MediaType.APPLICATION_JSON)
   @Produces(MediaType.APPLICATION_JSON)
   public StackDto create(
-      @PathParam("org") String org,
-      @PathParam("project") String project,
-      CreateStackRequest body) {
+      @PathParam("org") String org, @PathParam("project") String project, CreateStackRequest body) {
     AuthenticatedPrincipal principal = currentPrincipal.get();
     // Pre-Cedar: direct comparison of path org against the principal's org.
     if (!org.equals(principal.orgName())) {
@@ -59,7 +57,8 @@ public class StacksResource {
       @JsonProperty("projectName") String projectName,
       @JsonProperty("stackName") String stackName,
       @JsonProperty("tags") Map<String, String> tags) {
-    public StackDto(String orgName, String projectName, String stackName, Map<String, String> tags) {
+    public StackDto(
+        String orgName, String projectName, String stackName, Map<String, String> tags) {
       this("", null, orgName, projectName, stackName, tags);
     }
   }
