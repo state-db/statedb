@@ -4,6 +4,7 @@ import (
 	"errors"
 	"io"
 	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
 )
@@ -131,6 +132,25 @@ func TestFetchOpenAPISpecFallsBackToLive(t *testing.T) {
 	}
 	if source.Location != pulumiOpenAPIURL {
 		t.Fatalf("unexpected live location: %s", source.Location)
+	}
+}
+
+func TestGetOpenAPIUsesDescriptiveUserAgent(t *testing.T) {
+	var gotUserAgent string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotUserAgent = r.UserAgent()
+		w.WriteHeader(http.StatusOK)
+	}))
+	t.Cleanup(server.Close)
+
+	resp, err := getOpenAPI(server.URL)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	_ = resp.Body.Close()
+
+	if gotUserAgent != apiExtractUserAgent {
+		t.Fatalf("unexpected user agent: %q", gotUserAgent)
 	}
 }
 

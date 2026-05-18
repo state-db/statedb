@@ -11,3 +11,13 @@ their contribution and grants the licensor a perpetual, sublicensable,
 relicensable license under the terms of that agreement.
 
 For commercial licensing inquiries, see COMMERCIAL.md.
+
+Third-party notices:
+
+state-db includes compatibility tooling, recorded protocol fixtures, and API
+snapshots derived from public Pulumi source code and API descriptions. Pulumi
+is Copyright Pulumi Corporation and contributors, licensed under the Apache
+License 2.0. See https://github.com/pulumi/pulumi/blob/master/LICENSE.
+
+Pulumi is a trademark of Pulumi Corporation. state-db is an independent project
+and is not affiliated with, endorsed by, or sponsored by Pulumi Corporation.

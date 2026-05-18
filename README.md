@@ -1,8 +1,10 @@
 # state-db
 
-A self-hosted state management backend for Pulumi and OpenTofu. Implements the HTTP state storage protocol and pairs it with a web console for browsing stacks and resources — without requiring a managed cloud service.
+A self-hosted state management backend compatible with the Pulumi and OpenTofu command-line tools. It implements HTTP state storage protocols and pairs them with a web console for browsing stacks and resources — without requiring a managed cloud service.
 
 End users configure their CLI to point at this service via `PULUMI_BACKEND_URL`. Existing workflows remain unchanged.
+
+Third-party attributions and trademark notices are in [NOTICE](NOTICE).
 
 ## License
 

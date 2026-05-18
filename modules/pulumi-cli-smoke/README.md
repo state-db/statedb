@@ -1,4 +1,4 @@
-# Pulumi CLI Smoke Tests
+# Pulumi-compatible CLI Smoke Tests
 
 This module runs slower, opt-in integration tests against the real Pulumi CLI in
 a Docker container. Keep normal development on the fast app tests; run this when

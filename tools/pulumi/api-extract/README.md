@@ -1,4 +1,4 @@
-# pulumi api-extract
+# Pulumi-compatible API Extractor
 
 Extracts Pulumi HTTP backend API endpoints from `pulumi/pulumi`, writes versioned snapshots, and compares versions.
 
@@ -49,7 +49,7 @@ make pulumi-extract PULUMI_REF=v3.234.0 PULUMI_SCOPE=
 
 - Endpoint extraction is pinned to a Pulumi git `--ref` (tag/SHA).
 - OpenAPI is fetched from a pinned file in `pulumi/pulumi` when present.
-- If that file is missing for a ref, tool falls back to live Pulumi OpenAPI.
+- If that file is missing for a ref, the tool falls back to the live published OpenAPI document with a descriptive User-Agent. Prefer pinned repo fixtures for repeatable work.
 - `meta.json` records:
   - `openapi_source` (`repo-fixture` or `live-fallback`)
   - `openapi_location`

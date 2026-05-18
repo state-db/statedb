@@ -95,7 +95,7 @@ through the gateway — they manage their own execution environments.
 
 ## Project: state-db
 
-A self-hosted state management backend for Pulumi (primary target) and OpenTofu (stretch goal). The goal is to fill the gap between Pulumi's existing self-hosted backends (S3, filesystem, Postgres) — which are functional but headless — and the fully-managed Pulumi Cloud console. state-db provides both the HTTP state storage backend and a web console for browsing stacks and resources, i.e. a "poor man's Pulumi console."
+A self-hosted state management backend compatible with the Pulumi CLI (primary target) and OpenTofu (stretch goal). The goal is to fill the gap between existing self-hosted state backends (S3, filesystem, Postgres) — which are functional but headless — and a managed cloud console. state-db provides both the HTTP state storage backend and an independent web console for browsing stacks and resources.
 
 End users configure their Pulumi or OpenTofu CLI to point at this service as its backend. They never interact with state-db directly — their existing CLI workflows remain unchanged.
 
@@ -111,7 +111,7 @@ Implement the HTTP API that Pulumi's CLI speaks when `PULUMI_BACKEND_URL` points
 The API contract is defined by Pulumi's own service API; reverse-engineering or referencing the open-source Pulumi service code is the source of truth.
 
 **Wave 2 — Web Console**
-A read-oriented UI for humans to inspect what Pulumi is managing:
+A read-oriented UI for humans to inspect infrastructure managed through compatible CLI workflows:
 - Browse organizations, projects, and stacks
 - View current resources in a stack (parsed from the checkpoint blob)
 - View update history and diffs

@@ -2,8 +2,8 @@ package main
 
 import (
 	"crypto/sha256"
-	"encoding/json"
 	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
@@ -19,10 +19,21 @@ const pulumiOpenAPIURL = "https://api.pulumi.com/api/openapi/pulumi-spec.json"
 
 const pulumiOpenAPIRepoPath = "pkg/cmd/pulumi/cloud/testdata/openapi_public.json"
 
+const apiExtractUserAgent = "state-db-api-extract/0.1 (+https://github.com/state-db/state-db; compatibility research)"
+
 var (
-	httpGetOpenAPI   = http.Get
+	httpGetOpenAPI   = getOpenAPI
 	fetchFileAtRefFn = fetchFileAtRef
 )
+
+func getOpenAPI(url string) (*http.Response, error) {
+	req, err := http.NewRequest(http.MethodGet, url, nil)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("User-Agent", apiExtractUserAgent)
+	return http.DefaultClient.Do(req)
+}
 
 type openAPISource struct {
 	Type           string

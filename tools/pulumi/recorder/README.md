@@ -1,4 +1,4 @@
-# Pulumi Recorder
+# Pulumi-compatible Recorder
 
 Capture Pulumi CLI HTTP backend calls into JSON fixtures, then generate a deduplicated API catalog.
 
