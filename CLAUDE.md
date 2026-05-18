@@ -147,6 +147,18 @@ Hibernate populates both columns via `@CreationTimestamp` / `@UpdateTimestamp` (
 
 Composite-PK entities (e.g. `OrgMember` with `@IdClass`) don't fit either superclass — extend `PanacheEntityBase` directly.
 
+### ORM idioms
+
+Default to idiomatic Panache. Drop to `@Inject EntityManager` + raw HQL only when there is a specific, named reason — not as a habit.
+
+- **Reads / queries** — call Panache's static finders on the entity: `Stack.find("project.name = ?1 and name = ?2", project, stack)`, `Stack.list(...)`, `.firstResultOptional()`, `.project(Dto.class)`. Pass full HQL strings to `find(...)` when you need `join fetch` or a constructor projection — the API takes them.
+- **Writes** — `entity.persistAndFlush()` (or `persist()` if you don't need the immediate flush). Use `@Transactional` to bracket multi-write units of work (`StackCreator` is the canonical example).
+- **Relationship navigation** — entities expose `@ManyToOne` (and where appropriate `@OneToOne`) navigation *alongside* the raw UUID FK columns. The navigation field is `fetch = LAZY` and marked `insertable=false, updatable=false`; writers continue to set the UUID column directly so the DB schema (composite FKs, UNIQUE constraints, denormalized `org_id` rows) remains the source of truth. Add `join fetch` to your HQL when a finder needs to traverse the chain, to keep it one SQL round trip.
+- **Escape hatch — bare `EntityManager` + HQL.** Justified for scalar / constructor projection over multi-table joins on hot paths where avoiding entity hydration is a measurable win. `StackRefResolver` is the canonical example: every authenticated Pulumi request hits it, it returns an 8-field record, and it deliberately bypasses entity loading. Document the reason in the class Javadoc when you reach for this.
+- **Escape hatch — `EntityManager.createNativeQuery(...)`.** Reserved for things HQL can't express cleanly: `ON CONFLICT` upserts (`StackCreator#upsertProject`), advisory locks, BRIN-index hints, retention deletes that need to bypass the dialect's defaults. Not a general-purpose tool.
+
+When in doubt: write the Panache version first. If you find yourself reaching for `EntityManager` and can't state the reason in one sentence, you're defaulting to the escape hatch.
+
 ## Multi-pod startup
 
 The app is designed to run with more than one replica behind a load balancer. Two pieces of startup work are at risk of racing across pods:

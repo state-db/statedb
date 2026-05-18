@@ -1,8 +1,10 @@
 package io.statedb.pulumiapi.stack;
 
+import com.fasterxml.jackson.annotation.JsonInclude;
+import com.fasterxml.jackson.annotation.JsonProperty;
+import io.statedb.persistence.stack.StackHead;
+import io.statedb.persistence.stack.StackHeadFinder;
 import io.statedb.persistence.stack.StackNotFoundException;
-import io.statedb.persistence.stack.StackRef;
-import io.statedb.persistence.stack.StackRefResolver;
 import io.statedb.pulumiapi.auth.CurrentPrincipal;
 import jakarta.inject.Inject;
 import jakarta.ws.rs.GET;
@@ -15,29 +17,42 @@ import java.util.Map;
 @Path("/pulumi/api/stacks/{org}/{project}/{stack}")
 public class StackResource {
 
-  @Inject StackRefResolver resolver;
+  @Inject StackHeadFinder finder;
 
   @Inject CurrentPrincipal currentPrincipal;
 
-  // Slice 8 will replace this with the full StackHeadFinder projection. For Slice 7's manual
-  // verification (pulumi stack init), the CLI does a pre-flight GET expecting 404 when the
-  // stack does not yet exist; without that the CLI panics on the placeholder response.
   @GET
   @Produces(MediaType.APPLICATION_JSON)
-  public Map<String, Object> get(
+  public StackHeadDto get(
       @PathParam("org") String org,
       @PathParam("project") String project,
       @PathParam("stack") String stack) {
-    StackRef ref =
-        resolver
-            .resolve(org, project, stack)
+    StackHead head =
+        finder
+            .find(org, project, stack)
             // Tenant guard: cross-org reads collapse to 404 (per db-schema.md), never 403 —
             // a 403 would confirm the target stack exists in another org.
-            .filter(r -> r.orgId().equals(currentPrincipal.get().orgId()))
+            .filter(h -> h.orgId().equals(currentPrincipal.get().orgId()))
             .orElseThrow(() -> new StackNotFoundException(org, project, stack));
-    return Map.of(
-        "orgName", ref.orgName(),
-        "projectName", ref.projectName(),
-        "stackName", ref.stackName());
+    return new StackHeadDto(
+        head.activeUpdate(), head.orgName(), head.projectName(), head.stackName(), head.tags());
+  }
+
+  @JsonInclude(JsonInclude.Include.ALWAYS)
+  public record StackHeadDto(
+      @JsonProperty("activeUpdate") String activeUpdate,
+      @JsonProperty("currentOperation") Object currentOperation,
+      @JsonProperty("orgName") String orgName,
+      @JsonProperty("projectName") String projectName,
+      @JsonProperty("stackName") String stackName,
+      @JsonProperty("tags") Map<String, String> tags) {
+    public StackHeadDto(
+        String activeUpdate,
+        String orgName,
+        String projectName,
+        String stackName,
+        Map<String, String> tags) {
+      this(activeUpdate, null, orgName, projectName, stackName, tags);
+    }
   }
 }

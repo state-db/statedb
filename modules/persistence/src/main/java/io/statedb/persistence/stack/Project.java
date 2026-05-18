@@ -1,8 +1,12 @@
 package io.statedb.persistence.stack;
 
 import io.statedb.persistence.TimestampedEntity;
+import io.statedb.persistence.identity.Organization;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
+import jakarta.persistence.FetchType;
+import jakarta.persistence.JoinColumn;
+import jakarta.persistence.ManyToOne;
 import jakarta.persistence.Table;
 import jakarta.persistence.UniqueConstraint;
 import java.util.UUID;
@@ -16,4 +20,10 @@ public class Project extends TimestampedEntity {
 
   @Column(nullable = false)
   public String name;
+
+  // Read-only navigation: writers set orgId directly so the DB FK / UNIQUE constraints
+  // (and the composite FK targets in V002) remain the source of truth.
+  @ManyToOne(fetch = FetchType.LAZY)
+  @JoinColumn(name = "org_id", insertable = false, updatable = false)
+  public Organization organization;
 }

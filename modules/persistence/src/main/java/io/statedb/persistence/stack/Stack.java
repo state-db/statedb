@@ -3,6 +3,9 @@ package io.statedb.persistence.stack;
 import io.statedb.persistence.TimestampedEntity;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
+import jakarta.persistence.FetchType;
+import jakarta.persistence.JoinColumn;
+import jakarta.persistence.ManyToOne;
 import jakarta.persistence.Table;
 import jakarta.persistence.UniqueConstraint;
 import java.util.Map;
@@ -37,4 +40,10 @@ public class Stack extends TimestampedEntity {
   @JdbcTypeCode(SqlTypes.JSON)
   @Column(columnDefinition = "jsonb")
   public Map<String, String> tags;
+
+  // Read-only navigation: writers set projectId directly so the DB UNIQUE constraint
+  // on (project_id, name) and the composite FK targets in V002 remain the source of truth.
+  @ManyToOne(fetch = FetchType.LAZY)
+  @JoinColumn(name = "project_id", insertable = false, updatable = false)
+  public Project project;
 }
