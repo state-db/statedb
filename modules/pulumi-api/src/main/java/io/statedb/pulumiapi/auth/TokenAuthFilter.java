@@ -42,7 +42,7 @@ public class TokenAuthFilter implements ContainerRequestFilter {
   @Override
   public void filter(ContainerRequestContext ctx) {
     String path = normalize(ctx.getUriInfo().getPath());
-    if (!requiresAuth(path)) {
+    if (!requiresAuth(ctx.getMethod(), path)) {
       return;
     }
 
@@ -71,8 +71,12 @@ public class TokenAuthFilter implements ContainerRequestFilter {
     return path.startsWith("/") ? path : "/" + path;
   }
 
-  static boolean requiresAuth(String path) {
+  static boolean requiresAuth(String method, String path) {
     if (!path.startsWith(PULUMI_API_PREFIX)) {
+      return false;
+    }
+    if (LeaseRouteMatcher.isLeaseScoped(method, path)) {
+      // Lease-scoped routes authenticate via Authorization: update-token in LeaseTokenFilter.
       return false;
     }
     return PUBLIC_PATHS.stream().noneMatch(path::startsWith);
