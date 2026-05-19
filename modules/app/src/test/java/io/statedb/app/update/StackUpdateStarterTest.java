@@ -1,0 +1,168 @@
+package io.statedb.app.update;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+
+import io.quarkus.narayana.jta.QuarkusTransaction;
+import io.quarkus.test.junit.QuarkusTest;
+import io.statedb.persistence.identity.Organization;
+import io.statedb.persistence.stack.StackCreator;
+import io.statedb.persistence.stack.StackRef;
+import io.statedb.persistence.update.StackUpdate;
+import io.statedb.persistence.update.StackUpdateStarter;
+import io.statedb.persistence.update.StartUpdateRequest;
+import io.statedb.persistence.update.StartedUpdate;
+import jakarta.inject.Inject;
+import jakarta.persistence.EntityManager;
+import jakarta.persistence.PersistenceException;
+import java.util.Map;
+import java.util.UUID;
+import java.util.concurrent.Callable;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+
+@QuarkusTest
+class StackUpdateStarterTest {
+
+  private static final String ORG_NAME = "starter-org";
+
+  @Inject StackCreator stackCreator;
+  @Inject StackUpdateStarter starter;
+  @Inject EntityManager em;
+
+  private UUID stackId;
+
+  @BeforeEach
+  void seed() {
+    stackId =
+        QuarkusTransaction.requiringNew()
+            .call(
+                () -> {
+                  Organization org = new Organization();
+                  org.name = ORG_NAME;
+                  org.displayName = "Starter Test";
+                  org.persistAndFlush();
+                  StackRef ref = stackCreator.create(org.id, ORG_NAME, "proj", "dev", Map.of());
+                  return ref.stackId();
+                });
+  }
+
+  @AfterEach
+  void cleanup() {
+    QuarkusTransaction.requiringNew()
+        .run(
+            () ->
+                em.createNativeQuery("DELETE FROM organizations WHERE name = ?1")
+                    .setParameter(1, ORG_NAME)
+                    .executeUpdate());
+  }
+
+  @Test
+  void distinctKeysProduceMonotonicVersions() {
+    StartedUpdate a = starter.start(stackId, StackUpdate.Kind.PREVIEW, "k-a", req());
+    StartedUpdate b = starter.start(stackId, StackUpdate.Kind.UPDATE, "k-b", req());
+    assertEquals(1, a.version());
+    assertEquals(2, b.version());
+    assertNotEquals(a.updateId(), b.updateId());
+  }
+
+  @Test
+  void sameKeyReplayReturnsExistingRow() {
+    StartedUpdate first = starter.start(stackId, StackUpdate.Kind.PREVIEW, "dup-key", req());
+    StartedUpdate replay = starter.start(stackId, StackUpdate.Kind.PREVIEW, "dup-key", req());
+    assertEquals(first.updateId(), replay.updateId());
+    assertEquals(first.version(), replay.version());
+
+    QuarkusTransaction.requiringNew()
+        .run(
+            () -> {
+              Number n =
+                  (Number)
+                      em.createNativeQuery(
+                              "SELECT count(*) FROM stack_updates WHERE stack_id = ?1"
+                                  + " AND client_request_id = ?2")
+                          .setParameter(1, stackId)
+                          .setParameter(2, "dup-key")
+                          .getSingleResult();
+              assertEquals(1L, n.longValue());
+            });
+  }
+
+  @Test
+  void nullKeyDoesNotDeduplicate() {
+    StartedUpdate a = starter.start(stackId, StackUpdate.Kind.PREVIEW, null, req());
+    StartedUpdate b = starter.start(stackId, StackUpdate.Kind.PREVIEW, null, req());
+    assertEquals(1, a.version());
+    assertEquals(2, b.version());
+    assertNotEquals(a.updateId(), b.updateId());
+  }
+
+  @Test
+  void concurrentStartsSerializeViaForUpdate() throws Exception {
+    ExecutorService pool = Executors.newFixedThreadPool(2);
+    try {
+      Callable<StartedUpdate> task1 =
+          () -> starter.start(stackId, StackUpdate.Kind.PREVIEW, "c-1", req());
+      Callable<StartedUpdate> task2 =
+          () -> starter.start(stackId, StackUpdate.Kind.PREVIEW, "c-2", req());
+      Future<StartedUpdate> f1 = pool.submit(task1);
+      Future<StartedUpdate> f2 = pool.submit(task2);
+      StartedUpdate r1 = f1.get(10, TimeUnit.SECONDS);
+      StartedUpdate r2 = f2.get(10, TimeUnit.SECONDS);
+
+      // Versions are 1 and 2 in some order, never duplicates.
+      int min = Math.min(r1.version(), r2.version());
+      int max = Math.max(r1.version(), r2.version());
+      assertEquals(1, min);
+      assertEquals(2, max);
+    } finally {
+      pool.shutdownNow();
+    }
+  }
+
+  @Test
+  void terminalStatusGuardRejectsRevert() {
+    StartedUpdate s = starter.start(stackId, StackUpdate.Kind.UPDATE, "term", req());
+
+    QuarkusTransaction.requiringNew()
+        .run(
+            () ->
+                em.createNativeQuery("UPDATE stack_updates SET status = 'succeeded' WHERE id = ?1")
+                    .setParameter(1, s.updateId())
+                    .executeUpdate());
+
+    PersistenceException ex =
+        assertThrows(
+            PersistenceException.class,
+            () ->
+                QuarkusTransaction.requiringNew()
+                    .run(
+                        () ->
+                            em.createNativeQuery(
+                                    "UPDATE stack_updates SET status = 'in-progress' WHERE id = ?1")
+                                .setParameter(1, s.updateId())
+                                .executeUpdate()));
+    String msg = rootMessage(ex);
+    assertTrue(
+        msg.contains("terminal") || msg.contains("Cannot revert"),
+        "expected trigger message, got: " + msg);
+  }
+
+  private static StartUpdateRequest req() {
+    return new StartUpdateRequest(
+        Map.of(), Map.of(), Map.of(), "desc", "yaml", "v3.234.0", "msg");
+  }
+
+  private static String rootMessage(Throwable t) {
+    Throwable c = t;
+    while (c.getCause() != null) c = c.getCause();
+    return c.getMessage() == null ? "" : c.getMessage();
+  }
+}
