@@ -1,8 +1,8 @@
 {
-  "seq": 10,
+  "seq": 9,
   "command": "03-preview",
   "cmd_seq": 4,
-  "timestamp": "2026-05-04T02:12:59.878261006Z",
+  "timestamp": "2026-05-19T23:33:43.51818021Z",
   "method": "GET",
   "path": "/api/capabilities",
   "headers": {
@@ -10,7 +10,7 @@
     "Accept-Encoding": "gzip",
     "Authorization": "REDACTED",
     "Content-Type": "application/json",
-    "User-Agent": "pulumi-cli/1 (v3.234.0; linux)"
+    "User-Agent": "pulumi-cli/1 (v3.242.0; linux; cmd=preview)"
   },
   "status_code": 200,
   "response": {

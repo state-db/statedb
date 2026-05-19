@@ -1,8 +1,8 @@
 {
-  "seq": 40,
+  "seq": 47,
   "command": "06-stack-export",
   "cmd_seq": 1,
-  "timestamp": "2026-05-04T02:13:00.196733131Z",
+  "timestamp": "2026-05-19T23:34:06.137580596Z",
   "method": "GET",
   "path": "/api/user/organizations/default",
   "headers": {
@@ -10,7 +10,7 @@
     "Accept-Encoding": "gzip",
     "Authorization": "REDACTED",
     "Content-Type": "application/json",
-    "User-Agent": "pulumi-cli/1 (v3.234.0; linux)"
+    "User-Agent": "pulumi-cli/1 (v3.242.0; linux; cmd=stack-export)"
   },
   "status_code": 200,
   "response": {

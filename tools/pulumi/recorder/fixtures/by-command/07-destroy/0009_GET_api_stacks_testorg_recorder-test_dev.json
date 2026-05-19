@@ -1,8 +1,8 @@
 {
-  "seq": 52,
+  "seq": 59,
   "command": "07-destroy",
   "cmd_seq": 9,
-  "timestamp": "2026-05-04T02:13:00.276610048Z",
+  "timestamp": "2026-05-19T23:34:06.220276013Z",
   "method": "GET",
   "path": "/api/stacks/testorg/recorder-test/dev",
   "headers": {
@@ -10,7 +10,7 @@
     "Accept-Encoding": "gzip",
     "Authorization": "REDACTED",
     "Content-Type": "application/json",
-    "User-Agent": "pulumi-cli/1 (v3.234.0; linux)"
+    "User-Agent": "pulumi-cli/1 (v3.242.0; linux; cmd=destroy)"
   },
   "status_code": 200,
   "response": {
@@ -20,7 +20,7 @@
     "projectName": "recorder-test",
     "stackName": "dev",
     "tags": {
-      "pulumi:description": "Minimal Pulumi project for API recording — no resources, no providers.",
+      "pulumi:description": "Minimal Pulumi project for API recording. Uses the `random` provider so `pulumi up`/`destroy` exercise the journal/checkpoint write paths with real resource state.",
       "pulumi:project": "recorder-test",
       "pulumi:runtime": "yaml"
     }

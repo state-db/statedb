@@ -1,0 +1,44 @@
+{
+  "seq": 66,
+  "command": "07-destroy",
+  "cmd_seq": 16,
+  "timestamp": "2026-05-19T23:34:06.257622346Z",
+  "method": "POST",
+  "path": "/api/stacks/testorg/recorder-test/dev/update/destroy-0005/events/batch",
+  "headers": {
+    "Accept": "application/vnd.pulumi+9",
+    "Accept-Encoding": "gzip",
+    "Authorization": "REDACTED",
+    "Content-Encoding": "gzip",
+    "Content-Length": "191",
+    "Content-Type": "application/json",
+    "User-Agent": "pulumi-cli/1 (v3.242.0; linux; cmd=destroy)"
+  },
+  "body": {
+    "events": [
+      {
+        "preludeEvent": {
+          "config": {}
+        },
+        "sequence": 0,
+        "timestamp": 1779233646
+      },
+      {
+        "sequence": 1,
+        "summaryEvent": {
+          "PolicyPacks": {},
+          "durationSeconds": 1,
+          "isPreview": false,
+          "maybeCorrupt": false,
+          "resourceChanges": {},
+          "result": "succeeded"
+        },
+        "timestamp": 1779233646
+      }
+    ]
+  },
+  "body_b64": "H4sIAAAAAAAA/3TNwUoDMRjE8XeZcw7WSou5Fu8LHsVDTKY1uEnW70sqS8i7S0UWL14H5vfv4JW5KuxLh/KzMXvC3hnUmKjVpQV2dzw+3u/3h4eDwSKcW+DT7QXb4Us+xwtsH2OYv8TuX0JbSk7WjUhufeOpiLSlwp7drDQITVyNJT/Tlxz0xxNqaeJ5enf5Qr1FDaYyR79Ozn/8DlEn4TXya7OE2uYKC23ek4EBY7yO7wAAAP//7+28//wAAAA=",
+  "body_gzip": true,
+  "status_code": 200,
+  "response": {}
+}

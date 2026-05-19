@@ -1,8 +1,8 @@
 {
-  "seq": 20,
+  "seq": 19,
   "command": "04-up",
   "cmd_seq": 4,
-  "timestamp": "2026-05-04T02:12:59.988240506Z",
+  "timestamp": "2026-05-19T23:34:05.542987512Z",
   "method": "GET",
   "path": "/api/capabilities",
   "headers": {
@@ -10,7 +10,7 @@
     "Accept-Encoding": "gzip",
     "Authorization": "REDACTED",
     "Content-Type": "application/json",
-    "User-Agent": "pulumi-cli/1 (v3.234.0; linux)"
+    "User-Agent": "pulumi-cli/1 (v3.242.0; linux; cmd=up)"
   },
   "status_code": 200,
   "response": {

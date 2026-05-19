@@ -6,6 +6,7 @@ import (
 	"strings"
 	"sync"
 	"sync/atomic"
+	"time"
 )
 
 var opCounter int64
@@ -183,13 +184,25 @@ func (rt *router) routeStacks(method string, parts []string, n int, body []byte)
 			if method == "POST" {
 				return rt.createOp(op)
 			}
+		case "encrypt":
+			if method == "POST" {
+				return rt.encryptValue(body)
+			}
+		case "decrypt":
+			if method == "POST" {
+				return rt.decryptValue(body)
+			}
+		case "batch-decrypt":
+			if method == "POST" {
+				return rt.batchDecrypt(body)
+			}
 		}
 
 	// Start an operation / status: /api/stacks/{org}/{proj}/{stack}/{kind}/{updateID}
 	case n == 7:
 		switch method {
 		case "POST":
-			return rt.startOp(updateID)
+			return rt.startOp(updateID, body)
 		case "GET":
 			return 200, map[string]interface{}{"status": "running", "updateID": updateID}
 		}
@@ -296,7 +309,7 @@ func (rt *router) createOp(kind string) (int, interface{}) {
 	}
 }
 
-func (rt *router) startOp(updateID string) (int, interface{}) {
+func (rt *router) startOp(updateID string, body []byte) (int, interface{}) {
 	rt.mu.Lock()
 	state, ok := rt.ops[updateID]
 	rt.mu.Unlock()
@@ -306,9 +319,24 @@ func (rt *router) startOp(updateID string) (int, interface{}) {
 		// Unknown updateID — return a token anyway so the CLI can proceed.
 		token = fmt.Sprintf("lease-fallback-%s", updateID)
 	}
+
+	// Echo back the maximum journal version the client asked for so the CLI uses the
+	// POST .../journalentries path instead of falling back to PATCH .../checkpoint.
+	// Per AppStartUpdateRequest/Response: 0 disables journaling; anything >=1 enables it.
+	var req struct {
+		JournalVersion int64 `json:"journalVersion"`
+	}
+	json.Unmarshal(body, &req) //nolint:errcheck
+	journalVersion := req.JournalVersion
+	if journalVersion == 0 {
+		journalVersion = 1
+	}
+
 	return 200, map[string]interface{}{
-		"token":    token,
-		"duration": 3600,
+		"token":           token,
+		"tokenExpiration": time.Now().Add(time.Hour).Unix(),
+		"version":         1,
+		"journalVersion":  journalVersion,
 	}
 }
 
@@ -318,6 +346,39 @@ func (rt *router) renewLease() (int, interface{}) {
 		"token":    fmt.Sprintf("renewed-%04d", n),
 		"duration": 3600,
 	}
+}
+
+// Secrets stubs: identity passthrough. The service's "encrypt" wraps a plaintext
+// value into an opaque ciphertext blob; the engine sends it back to "decrypt"
+// later. For recording purposes we just echo the bytes — the wire shape is what
+// we care about, not real encryption.
+func (rt *router) encryptValue(body []byte) (int, interface{}) {
+	var req struct {
+		Plaintext string `json:"plaintext"`
+	}
+	json.Unmarshal(body, &req) //nolint:errcheck
+	return 200, map[string]interface{}{"ciphertext": req.Plaintext}
+}
+
+func (rt *router) decryptValue(body []byte) (int, interface{}) {
+	var req struct {
+		Ciphertext string `json:"ciphertext"`
+	}
+	json.Unmarshal(body, &req) //nolint:errcheck
+	return 200, map[string]interface{}{"plaintext": req.Ciphertext}
+}
+
+func (rt *router) batchDecrypt(body []byte) (int, interface{}) {
+	var req struct {
+		Ciphertexts []string `json:"ciphertexts"`
+	}
+	json.Unmarshal(body, &req) //nolint:errcheck
+	// Response shape: map of ciphertext → plaintext (best guess; revise if 4xx).
+	out := make(map[string]string, len(req.Ciphertexts))
+	for _, c := range req.Ciphertexts {
+		out[c] = c
+	}
+	return 200, map[string]interface{}{"plaintexts": out}
 }
 
 func errBody(msg, detail string) map[string]interface{} {

@@ -1,8 +1,8 @@
 {
-  "seq": 25,
+  "seq": 24,
   "command": "04-up",
   "cmd_seq": 9,
-  "timestamp": "2026-05-04T02:13:00.024792881Z",
+  "timestamp": "2026-05-19T23:34:05.603861846Z",
   "method": "POST",
   "path": "/api/stacks/testorg/recorder-test/dev/update/update-0002/events/batch",
   "headers": {
@@ -10,11 +10,250 @@
     "Accept-Encoding": "gzip",
     "Authorization": "REDACTED",
     "Content-Encoding": "gzip",
-    "Content-Length": "354",
+    "Content-Length": "642",
     "Content-Type": "application/json",
-    "User-Agent": "pulumi-cli/1 (v3.234.0; linux)"
+    "User-Agent": "pulumi-cli/1 (v3.242.0; linux; cmd=up)"
   },
-  "body_raw": "\u001f\ufffd\b\u0000\u0000\u0000\u0000\u0000\u0000\ufffd\ufffd\ufffdA\ufffd\u00141\u0010\ufffd\ufffd\ufffd;gaF\ufffdY\ufffd\ufffdzv`\ufffd\ufffd\ufffdLjڰ\ufffd$V\ufffd\ufffd\ufffd\ufffd\ufffd.\ufffd\ufffdadu\ufffd\ufffdAa/I\ufffdzU\ufffd\ufffd\u0007\ufffd@\u0026\ufffd\ufffd\ufffd\u003e/(\ufffd\ufffdI\ufffd\u0002\ufffd\u0019T?J\ufffd\u003cf\ufffd\ufffdp8ܾ\ufffd\u001dnw\u0006Y%4'\u001f{\u0015h\ufffdM\ufffd\ufffd\u0007в\ufffd\ufffd\ufffd\ufffd\ufffd\ufffd\ufffd\u0016*%5\ufffdr\ufffdk\ufffdQ*;\ufffd\ufffd\ufffd\ufffdA\ufffd*\\\u0005\u0006M#\ufffd\ufffd\ufffd[h\ufffd''\u0013\ufffd\ufffdM\ufffdDo\ufffd\ufffdJ\ufffd\ufffd\ufffdu_\ufffd\u003e\u003c\ufffd\ufffd8\ufffd`P\ufffd, \ufffdA\u000f\ufffd\u0014\u001c(\ufffd\u0010\f\ufffd\ufffd\ufffdV^\ufffd\ufffd]gށ\u0000\ufffd\ufffdz\ufffd\ufffd\u001e\ufffd\ufffd[g\ufffd\ufffd\u0006\ufffd\ufffd\ufffd#k\ufffd\ufffd\u0013\ufffd\ufffd\ufffd\ufffdIe\u001f\ufffd}\ufffd\ufffd\ufffde\ufffd\ufffd\u0006o9\ufffd\ufffd6\ufffd\ufffd\"\u0007\ufffd\ufffd\ufffdaK?A\ufffd\ufffd%t\ufffd6\u001f\ufffd\ufffd\ufffdEro_\ufffd\ufffd\ufffd\ufffd\ufffd=K\ufffd\ufffdqd\ufffd\ufffd\ufffdx\ufffd*wI\ufffd\ufffd\n:q(b\ufffd\ufffdr\ufffd)ދMѕ\ufffd\ufffd\ufffd\ufffdٻo\u001c\u0007)\ufffdm\ufffd\u0011\ufffd\ufffdjpL\ufffd\ufffd\ufffd\ufffd\ufffd\ufffdq@_\ufffd*\ufffd\ufffd\u00146\ufffd_֟\u0001\u0000\u0000\ufffd\ufffdU\ufffd\ufffdZ\u001f\u0006\u0000\u0000",
+  "body": {
+    "events": [
+      {
+        "preludeEvent": {
+          "config": {}
+        },
+        "sequence": 0,
+        "timestamp": 1779233645
+      },
+      {
+        "resourcePreEvent": {
+          "metadata": {
+            "detailedDiff": null,
+            "logical": true,
+            "new": {
+              "id": "",
+              "inputs": {},
+              "outputs": {},
+              "parent": "",
+              "provider": "",
+              "type": "pulumi:pulumi:Stack",
+              "urn": "urn:pulumi:dev::recorder-test::pulumi:pulumi:Stack::recorder-test-dev"
+            },
+            "old": null,
+            "op": "create",
+            "provider": "",
+            "type": "pulumi:pulumi:Stack",
+            "urn": "urn:pulumi:dev::recorder-test::pulumi:pulumi:Stack::recorder-test-dev"
+          },
+          "planning": true
+        },
+        "sequence": 1,
+        "timestamp": 1779233645
+      },
+      {
+        "resOutputsEvent": {
+          "metadata": {
+            "detailedDiff": null,
+            "logical": true,
+            "new": {
+              "id": "",
+              "inputs": {},
+              "outputs": {},
+              "parent": "",
+              "provider": "",
+              "type": "pulumi:pulumi:Stack",
+              "urn": "urn:pulumi:dev::recorder-test::pulumi:pulumi:Stack::recorder-test-dev"
+            },
+            "old": null,
+            "op": "create",
+            "provider": "",
+            "type": "pulumi:pulumi:Stack",
+            "urn": "urn:pulumi:dev::recorder-test::pulumi:pulumi:Stack::recorder-test-dev"
+          },
+          "planning": true
+        },
+        "sequence": 2,
+        "timestamp": 1779233645
+      },
+      {
+        "resourcePreEvent": {
+          "metadata": {
+            "detailedDiff": null,
+            "logical": true,
+            "new": {
+              "custom": true,
+              "id": "",
+              "inputs": {
+                "length": 8,
+                "special": false,
+                "upper": false
+              },
+              "outputs": {},
+              "parent": "urn:pulumi:dev::recorder-test::pulumi:pulumi:Stack::recorder-test-dev",
+              "provider": "urn:pulumi:dev::recorder-test::pulumi:providers:random::default::04da6b54-80e4-46f7-96ec-b56ff0331ba9",
+              "type": "random:index/randomString:RandomString",
+              "urn": "urn:pulumi:dev::recorder-test::random:index/randomString:RandomString::word"
+            },
+            "old": null,
+            "op": "create",
+            "provider": "urn:pulumi:dev::recorder-test::pulumi:providers:random::default::04da6b54-80e4-46f7-96ec-b56ff0331ba9",
+            "type": "random:index/randomString:RandomString",
+            "urn": "urn:pulumi:dev::recorder-test::random:index/randomString:RandomString::word"
+          },
+          "planning": true
+        },
+        "sequence": 3,
+        "timestamp": 1779233645
+      },
+      {
+        "resourcePreEvent": {
+          "metadata": {
+            "detailedDiff": null,
+            "logical": true,
+            "new": {
+              "custom": true,
+              "id": "",
+              "inputs": {
+                "length": 2,
+                "separator": "-"
+              },
+              "outputs": {},
+              "parent": "urn:pulumi:dev::recorder-test::pulumi:pulumi:Stack::recorder-test-dev",
+              "provider": "urn:pulumi:dev::recorder-test::pulumi:providers:random::default::04da6b54-80e4-46f7-96ec-b56ff0331ba9",
+              "type": "random:index/randomPet:RandomPet",
+              "urn": "urn:pulumi:dev::recorder-test::random:index/randomPet:RandomPet::pet"
+            },
+            "old": null,
+            "op": "create",
+            "provider": "urn:pulumi:dev::recorder-test::pulumi:providers:random::default::04da6b54-80e4-46f7-96ec-b56ff0331ba9",
+            "type": "random:index/randomPet:RandomPet",
+            "urn": "urn:pulumi:dev::recorder-test::random:index/randomPet:RandomPet::pet"
+          },
+          "planning": true
+        },
+        "sequence": 4,
+        "timestamp": 1779233645
+      },
+      {
+        "resOutputsEvent": {
+          "metadata": {
+            "detailedDiff": null,
+            "logical": true,
+            "new": {
+              "custom": true,
+              "id": "",
+              "inputs": {
+                "length": 2,
+                "separator": "-"
+              },
+              "outputs": {
+                "id": "04da6b54-80e4-46f7-96ec-b56ff0331ba9",
+                "length": 2,
+                "separator": "-"
+              },
+              "parent": "urn:pulumi:dev::recorder-test::pulumi:pulumi:Stack::recorder-test-dev",
+              "provider": "urn:pulumi:dev::recorder-test::pulumi:providers:random::default::04da6b54-80e4-46f7-96ec-b56ff0331ba9",
+              "type": "random:index/randomPet:RandomPet",
+              "urn": "urn:pulumi:dev::recorder-test::random:index/randomPet:RandomPet::pet"
+            },
+            "old": null,
+            "op": "create",
+            "provider": "urn:pulumi:dev::recorder-test::pulumi:providers:random::default::04da6b54-80e4-46f7-96ec-b56ff0331ba9",
+            "type": "random:index/randomPet:RandomPet",
+            "urn": "urn:pulumi:dev::recorder-test::random:index/randomPet:RandomPet::pet"
+          },
+          "planning": true
+        },
+        "sequence": 5,
+        "timestamp": 1779233645
+      },
+      {
+        "resOutputsEvent": {
+          "metadata": {
+            "detailedDiff": null,
+            "logical": true,
+            "new": {
+              "custom": true,
+              "id": "",
+              "inputs": {
+                "length": 8,
+                "special": false,
+                "upper": false
+              },
+              "outputs": {
+                "id": "04da6b54-80e4-46f7-96ec-b56ff0331ba9",
+                "length": 8,
+                "lower": true,
+                "minLower": 0,
+                "minNumeric": 0,
+                "minSpecial": 0,
+                "minUpper": 0,
+                "number": true,
+                "numeric": true,
+                "result": "04da6b54-80e4-46f7-96ec-b56ff0331ba9",
+                "special": false,
+                "upper": false
+              },
+              "parent": "urn:pulumi:dev::recorder-test::pulumi:pulumi:Stack::recorder-test-dev",
+              "provider": "urn:pulumi:dev::recorder-test::pulumi:providers:random::default::04da6b54-80e4-46f7-96ec-b56ff0331ba9",
+              "type": "random:index/randomString:RandomString",
+              "urn": "urn:pulumi:dev::recorder-test::random:index/randomString:RandomString::word"
+            },
+            "old": null,
+            "op": "create",
+            "provider": "urn:pulumi:dev::recorder-test::pulumi:providers:random::default::04da6b54-80e4-46f7-96ec-b56ff0331ba9",
+            "type": "random:index/randomString:RandomString",
+            "urn": "urn:pulumi:dev::recorder-test::random:index/randomString:RandomString::word"
+          },
+          "planning": true
+        },
+        "sequence": 6,
+        "timestamp": 1779233645
+      },
+      {
+        "resOutputsEvent": {
+          "metadata": {
+            "detailedDiff": null,
+            "logical": true,
+            "new": {
+              "id": "",
+              "inputs": {},
+              "outputs": {
+                "petName": "04da6b54-80e4-46f7-96ec-b56ff0331ba9",
+                "word": "04da6b54-80e4-46f7-96ec-b56ff0331ba9"
+              },
+              "parent": "",
+              "provider": "",
+              "type": "pulumi:pulumi:Stack",
+              "urn": "urn:pulumi:dev::recorder-test::pulumi:pulumi:Stack::recorder-test-dev"
+            },
+            "old": null,
+            "op": "create",
+            "provider": "",
+            "type": "pulumi:pulumi:Stack",
+            "urn": "urn:pulumi:dev::recorder-test::pulumi:pulumi:Stack::recorder-test-dev"
+          },
+          "planning": true
+        },
+        "sequence": 7,
+        "timestamp": 1779233645
+      },
+      {
+        "sequence": 8,
+        "summaryEvent": {
+          "PolicyPacks": {},
+          "durationSeconds": 1,
+          "isPreview": true,
+          "maybeCorrupt": false,
+          "resourceChanges": {
+            "create": 3
+          },
+          "result": "succeeded"
+        },
+        "timestamp": 1779233645
+      }
+    ]
+  },
+  "body_b64": "H4sIAAAAAAAA/+xYTW8aMRD9L3P2qiR8xte0typFRT1VPRh7lljxV/1BitD+98osW1LSbDdRAjnsBTzamdGz33tmhy3gGk0MQL9vIeDPhIYj0AGBKDWGyLQDejGdXl0Oh5PRmIDzqJLAT7kK6Ba4NaVcAd1WVUUetrh4soXHYJPnOPeHNhojEyyyvLYOKHCPLCIQSN4AzZ/UJZW0pALXlHrk1gv0RcQQafNo/7WIjN8d5RQC10AgbhwChX/kAwGrBFCTlCJg8D5DaU1/XWRSAAUg4JjfnUleS+NS5mZbEbApHgLn7VoK9DmtIiAwMqlQfJRl2exA2ZXkTAGNPuGjCqeYMdKs6sdH1F22UfelxtEz9x6ZG57SdJ4ZYTWVRuCvD3WwiF6aFf36MKD31osDgd2q2jjt3OEtdsFTiFY33Dyi/tU01egHFJpVvAU6IxAccpmFUTIVkEByLstiF7XorCOmfUFoToQKLFlSkdLBSLDJcjwqZgMcFaNJOS2uJsiL5XhSloPh8GLJrp4v5pPBanXM6MyOmWPcCy2vqMPYapW/0p9pkuPaV4V8Nl9cEgjomGfRZlUV0DvhZU4Yn/BXvzfCqY1QI+kkFNLasrdTNztNzmun/k3sXbyJvch2s6zu+9yw3puW5nMdD3bBTdLoJW/CRQOmDr/VWAYETNLLQxfTVNWhx5BU7A7uP1vur4Vu18K0n63fZrYGh/GGaeyu6N090jH7zSf32ZO6CElr5jcHUbDNEq+t98nFP24UybMorVkgt0aE3d9vzQBzfcvMCndntNcPHVYE5lZJvpkzfrc/SxnmHtcyc3x0RYTEOaJAAVX1o/odAAD//x9f9NE0FAAA",
+  "body_gzip": true,
   "status_code": 200,
   "response": {}
 }

@@ -1,0 +1,58 @@
+{
+  "seq": 55,
+  "command": "07-destroy",
+  "cmd_seq": 5,
+  "timestamp": "2026-05-19T23:34:06.218610471Z",
+  "method": "POST",
+  "path": "/api/stacks/testorg/recorder-test/dev/destroy",
+  "headers": {
+    "Accept": "application/vnd.pulumi+9",
+    "Accept-Encoding": "gzip",
+    "Authorization": "REDACTED",
+    "Content-Length": "864",
+    "Content-Type": "application/json",
+    "User-Agent": "pulumi-cli/1 (v3.242.0; linux; cmd=destroy)"
+  },
+  "body": {
+    "config": {},
+    "description": "Minimal Pulumi project for API recording. Uses the `random` provider so `pulumi up`/`destroy` exercise the journal/checkpoint write paths with real resource state.",
+    "main": "",
+    "metadata": {
+      "environment": {
+        "exec.kind": "cli",
+        "pulumi.arch": "arm64",
+        "pulumi.env.PULUMI_ACCESS_TOKEN": "set",
+        "pulumi.env.PULUMI_BACKEND_URL": "set",
+        "pulumi.env.PULUMI_CONFIG_PASSPHRASE": "set",
+        "pulumi.env.PULUMI_HOME": "set",
+        "pulumi.env.PULUMI_SKIP_CONFIRMATIONS": "true",
+        "pulumi.env.PULUMI_SKIP_UPDATE_CHECK": "true",
+        "pulumi.flag.yes": "true",
+        "pulumi.os": "linux",
+        "pulumi.version": "v3.242.0",
+        "stack.environments": "[]",
+        "updatePlan": "false"
+      },
+      "message": ""
+    },
+    "name": "recorder-test",
+    "options": {
+      "color": "raw",
+      "debug": false,
+      "dryRun": true,
+      "localPolicyPackPaths": [],
+      "parallel": 40,
+      "showConfig": false,
+      "showNames": false,
+      "showReplacementSteps": false,
+      "summary": false
+    },
+    "runtime": "yaml"
+  },
+  "body_b64": "eyJuYW1lIjoicmVjb3JkZXItdGVzdCIsInJ1bnRpbWUiOiJ5YW1sIiwibWFpbiI6IiIsImRlc2NyaXB0aW9uIjoiTWluaW1hbCBQdWx1bWkgcHJvamVjdCBmb3IgQVBJIHJlY29yZGluZy4gVXNlcyB0aGUgYHJhbmRvbWAgcHJvdmlkZXIgc28gYHB1bHVtaSB1cGAvYGRlc3Ryb3lgIGV4ZXJjaXNlIHRoZSBqb3VybmFsL2NoZWNrcG9pbnQgd3JpdGUgcGF0aHMgd2l0aCByZWFsIHJlc291cmNlIHN0YXRlLiIsIm9wdGlvbnMiOnsibG9jYWxQb2xpY3lQYWNrUGF0aHMiOltdLCJjb2xvciI6InJhdyIsImRyeVJ1biI6dHJ1ZSwicGFyYWxsZWwiOjQwLCJzaG93Q29uZmlnIjpmYWxzZSwic2hvd1JlcGxhY2VtZW50U3RlcHMiOmZhbHNlLCJzaG93TmFtZXMiOmZhbHNlLCJzdW1tYXJ5IjpmYWxzZSwiZGVidWciOmZhbHNlfSwiY29uZmlnIjp7fSwibWV0YWRhdGEiOnsibWVzc2FnZSI6IiIsImVudmlyb25tZW50Ijp7ImV4ZWMua2luZCI6ImNsaSIsInB1bHVtaS5hcmNoIjoiYXJtNjQiLCJwdWx1bWkuZW52LlBVTFVNSV9BQ0NFU1NfVE9LRU4iOiJzZXQiLCJwdWx1bWkuZW52LlBVTFVNSV9CQUNLRU5EX1VSTCI6InNldCIsInB1bHVtaS5lbnYuUFVMVU1JX0NPTkZJR19QQVNTUEhSQVNFIjoic2V0IiwicHVsdW1pLmVudi5QVUxVTUlfSE9NRSI6InNldCIsInB1bHVtaS5lbnYuUFVMVU1JX1NLSVBfQ09ORklSTUFUSU9OUyI6InRydWUiLCJwdWx1bWkuZW52LlBVTFVNSV9TS0lQX1VQREFURV9DSEVDSyI6InRydWUiLCJwdWx1bWkuZmxhZy55ZXMiOiJ0cnVlIiwicHVsdW1pLm9zIjoibGludXgiLCJwdWx1bWkudmVyc2lvbiI6InYzLjI0Mi4wIiwic3RhY2suZW52aXJvbm1lbnRzIjoiW10iLCJ1cGRhdGVQbGFuIjoiZmFsc2UifX19",
+  "status_code": 200,
+  "response": {
+    "updateID": "destroy-0004",
+    "version": 1
+  }
+}

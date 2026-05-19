@@ -1,0 +1,86 @@
+{
+  "seq": 40,
+  "command": "04-up",
+  "cmd_seq": 25,
+  "timestamp": "2026-05-19T23:34:05.972893762Z",
+  "method": "PATCH",
+  "path": "/api/stacks/testorg/recorder-test/dev/update/update-0003/journalentries",
+  "headers": {
+    "Accept": "application/vnd.pulumi+9",
+    "Accept-Encoding": "gzip",
+    "Authorization": "REDACTED",
+    "Content-Encoding": "gzip",
+    "Content-Length": "570",
+    "Content-Type": "application/json",
+    "User-Agent": "pulumi-cli/1 (v3.242.0; linux; cmd=up)"
+  },
+  "body": {
+    "entries": [
+      {
+        "kind": 4,
+        "operationID": 5,
+        "removeNew": 1,
+        "removeOld": null,
+        "sequenceID": 10,
+        "state": {
+          "created": "2026-05-19T23:34:05.659236679Z",
+          "custom": false,
+          "modified": "2026-05-19T23:34:05.659236679Z",
+          "outputs": {
+            "petName": "supreme-ram",
+            "word": "jdd2u2x0"
+          },
+          "sourcePosition": "project:///../home/runner/work/pulumi-yaml/pulumi-yaml/pkg/server/server.go#326",
+          "stackTrace": [
+            {
+              "sourcePosition": "project:///../home/runner/work/pulumi-yaml/pulumi-yaml/pkg/server/server.go#326"
+            },
+            {
+              "sourcePosition": "project:///../home/runner/go/pkg/mod/github.com/pulumi/pulumi/sdk/v3@v3.237.0/proto/go/language_grpc.pb.go#588"
+            },
+            {
+              "sourcePosition": "project:///../home/runner/go/pkg/mod/github.com/pulumi/pulumi/sdk/v3@v3.237.0/go/common/util/rpcutil/interceptor.go#301"
+            },
+            {
+              "sourcePosition": "project:///../home/runner/go/pkg/mod/google.golang.org/grpc@v1.81.0/server.go#1243"
+            },
+            {
+              "sourcePosition": "project:///../home/runner/go/pkg/mod/github.com/grpc-ecosystem/grpc-opentracing@v0.0.0-20180507213350-8e809c8a8645/go/otgrpc/server.go#57"
+            },
+            {
+              "sourcePosition": "project:///../home/runner/go/pkg/mod/google.golang.org/grpc@v1.81.0/server.go#1243"
+            },
+            {
+              "sourcePosition": "project:///../home/runner/go/pkg/mod/github.com/pulumi/pulumi/sdk/v3@v3.237.0/go/common/util/rpcutil/interceptor.go#228"
+            },
+            {
+              "sourcePosition": "project:///../home/runner/go/pkg/mod/google.golang.org/grpc@v1.81.0/server.go#1234"
+            },
+            {
+              "sourcePosition": "project:///../home/runner/go/pkg/mod/github.com/pulumi/pulumi/sdk/v3@v3.237.0/proto/go/language_grpc.pb.go#590"
+            },
+            {
+              "sourcePosition": "project:///../home/runner/go/pkg/mod/google.golang.org/grpc@v1.81.0/server.go#1430"
+            },
+            {
+              "sourcePosition": "project:///../home/runner/go/pkg/mod/google.golang.org/grpc@v1.81.0/server.go#1856"
+            },
+            {
+              "sourcePosition": "project:///../home/runner/go/pkg/mod/google.golang.org/grpc@v1.81.0/server.go#1065"
+            },
+            {
+              "sourcePosition": "project:///../opt/hostedtoolcache/go/1.25.9/x64/src/runtime/asm_arm64.s#1268"
+            }
+          ],
+          "type": "pulumi:pulumi:Stack",
+          "urn": "urn:pulumi:dev::recorder-test::pulumi:pulumi:Stack::recorder-test-dev"
+        },
+        "version": 1
+      }
+    ]
+  },
+  "body_b64": "H4sIAAAAAAAA/9RUS0/cMBD+L8M1sR3nsVmfOPTSC61UTq0QMs6QDRtnUj8CCO1/r7wsEq162Aq6VS+ZZDIz38PJPAFOwQ3oQX17ggWdH2gCVWSwHaYOVJWBx+8RJ4MfP4AqRAY0o9NhoCkl6gwcWlrw09iBmuI4viQu8H4/xwcdENQTRDeBSlc1xzHaQXW4KOXQkOvQ5QF9UC+vDuFL0Gb7S03e4QIZmOgDWVC3evSYQXicERT8ph0yoBjmGHwiMWO40DaV+jg7tJg7bSGDe3IdKLjrOhnlg4BdBsahDpiyUsgmF3VerC9lqcpKiZo19VqWTbNaf4UMLHXD7XBcrafoDH4mP4S91TA7ukMTFOecMb4hi9zFaULH78lt+bOW/FHb8ef7bc89ugXdIbCezkrZwN5ys7102uD+VP864i77I5Ce9qMsdbwfwibeMEP2gPQSfLflS3m+lEyWKyb47ChQ6hz11Efd43XvZsPmm8ShbttTcOiJG7KWJh7DMHI3m30cpoDO4Bzo2RBRvIUMUT8i6ynpZOR6nnSeLwVrCyZe+V7Iqnwf0QkgR0P+0Qc8PNKc1oI2w9SfL4IJJnIpilbUYiWLsqxF3mIr1qbVbVPVaTCF1PiKYL36v2x4j7OX8k0f4vGiy+rf/3RrcRKtVXkanLZ+0yI7Gkc09TE4NAe+IR+wC0Sj0WaDCa9gsmZr/tBU3DuTiITBItfeXmtnm4r5s0I2Leyudrur3Y8AAAD//wxFNVfeBwAA",
+  "body_gzip": true,
+  "status_code": 200,
+  "response": {}
+}

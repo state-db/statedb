@@ -1,6 +1,9 @@
 package main
 
 import (
+	"bytes"
+	"compress/gzip"
+	"encoding/base64"
 	"encoding/json"
 	"flag"
 	"fmt"
@@ -38,7 +41,9 @@ type fixture struct {
 	Query      string            `json:"query,omitempty"`
 	Headers    map[string]string `json:"headers"`
 	Body       interface{}       `json:"body,omitempty"`
-	BodyRaw    string            `json:"body_raw,omitempty"`
+	BodyB64    string            `json:"body_b64,omitempty"`     // raw request bytes, base64-encoded (binary-safe)
+	BodyGzip   bool              `json:"body_gzip,omitempty"`    // true if body_b64 is gzip-compressed
+	BodyRaw    string            `json:"body_raw,omitempty"`     // legacy: lossy UTF-8 of bytes — only set if not parseable as JSON and not gzip
 	StatusCode int               `json:"status_code"`
 	Response   interface{}       `json:"response"`
 }
@@ -70,8 +75,24 @@ func (s *server) handle(w http.ResponseWriter, r *http.Request) {
 	body, _ := io.ReadAll(r.Body)
 	r.Body.Close()
 
+	// Decompress gzip-encoded bodies (checkpoint, events/batch, journalentries) so the
+	// parsed JSON appears in `body`. Original bytes are preserved in `body_b64` so
+	// downstream tooling can verify byte-for-byte.
 	var bodyJSON interface{}
-	if len(body) > 0 {
+	var decompressed []byte
+	isGzip := strings.EqualFold(r.Header.Get("Content-Encoding"), "gzip")
+	if isGzip && len(body) > 0 {
+		if zr, err := gzip.NewReader(bytes.NewReader(body)); err == nil {
+			if buf, err := io.ReadAll(zr); err == nil {
+				decompressed = buf
+			}
+			zr.Close()
+		}
+	}
+	switch {
+	case decompressed != nil:
+		json.Unmarshal(decompressed, &bodyJSON) //nolint:errcheck
+	case len(body) > 0:
 		json.Unmarshal(body, &bodyJSON) //nolint:errcheck
 	}
 
@@ -108,8 +129,16 @@ func (s *server) handle(w http.ResponseWriter, r *http.Request) {
 	}
 	if bodyJSON != nil {
 		fix.Body = bodyJSON
-	} else if len(body) > 0 {
-		fix.BodyRaw = string(body)
+	}
+	if len(body) > 0 {
+		// Always preserve the wire bytes losslessly. base64 is small overhead and lets
+		// the contract harness assert byte-for-byte equality on gzip payloads.
+		fix.BodyB64 = base64.StdEncoding.EncodeToString(body)
+		fix.BodyGzip = isGzip
+		if bodyJSON == nil && !isGzip {
+			// Non-JSON, non-gzip — keep the legacy lossy view for human-readability only.
+			fix.BodyRaw = string(body)
+		}
 	}
 
 	s.writeFixture(n, cmd, cmdSeq, r.Method, r.URL.Path, fix)

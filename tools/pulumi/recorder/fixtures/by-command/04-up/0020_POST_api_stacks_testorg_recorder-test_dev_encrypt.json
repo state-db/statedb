@@ -1,0 +1,24 @@
+{
+  "seq": 35,
+  "command": "04-up",
+  "cmd_seq": 20,
+  "timestamp": "2026-05-19T23:34:05.873268262Z",
+  "method": "POST",
+  "path": "/api/stacks/testorg/recorder-test/dev/encrypt",
+  "headers": {
+    "Accept": "application/vnd.pulumi+9",
+    "Accept-Encoding": "gzip",
+    "Authorization": "REDACTED",
+    "Content-Length": "48",
+    "Content-Type": "application/json",
+    "User-Agent": "pulumi-cli/1 (v3.242.0; linux; cmd=up)"
+  },
+  "body": {
+    "plaintext": "eyJyZXBsYWNlIjp7InJhdyI6bnVsbH19"
+  },
+  "body_b64": "eyJwbGFpbnRleHQiOiJleUp5WlhCc1lXTmxJanA3SW5KaGR5STZiblZzYkgxOSJ9",
+  "status_code": 200,
+  "response": {
+    "ciphertext": "eyJyZXBsYWNlIjp7InJhdyI6bnVsbH19"
+  }
+}

@@ -1,0 +1,24 @@
+{
+  "seq": 3,
+  "command": "02-stack-init",
+  "cmd_seq": 2,
+  "timestamp": "2026-05-19T23:33:43.447831335Z",
+  "method": "GET",
+  "path": "/api/capabilities",
+  "headers": {
+    "Accept": "application/vnd.pulumi+9",
+    "Accept-Encoding": "gzip",
+    "Authorization": "REDACTED",
+    "Content-Type": "application/json",
+    "User-Agent": "pulumi-cli/1 (v3.242.0; linux; cmd=stack-init)"
+  },
+  "status_code": 200,
+  "response": {
+    "capabilities": [
+      {
+        "name": "delta-checkpoint-updates",
+        "version": 1
+      }
+    ]
+  }
+}

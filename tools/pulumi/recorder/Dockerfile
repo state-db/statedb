@@ -18,6 +18,11 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 RUN curl -fsSL https://get.pulumi.com | sh
 ENV PATH="/root/.pulumi/bin:${PATH}"
 
+# Pre-install the resource providers used by /testproject so `pulumi up` doesn't
+# spend time downloading them mid-recording (and so the recording is reproducible
+# offline once the image is built).
+RUN pulumi plugin install resource random
+
 COPY --from=builder /recorder/recorder /recorder/recorder
 COPY --from=builder /recorder/catalog /recorder/catalog
 COPY entrypoint.sh /entrypoint.sh

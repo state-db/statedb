@@ -1,3 +1,18 @@
 name: recorder-test
 runtime: yaml
-description: Minimal Pulumi project for API recording — no resources, no providers.
+description: Minimal Pulumi project for API recording. Uses the `random` provider so `pulumi up`/`destroy` exercise the journal/checkpoint write paths with real resource state.
+resources:
+  pet:
+    type: random:RandomPet
+    properties:
+      length: 2
+      separator: "-"
+  word:
+    type: random:RandomString
+    properties:
+      length: 8
+      special: false
+      upper: false
+outputs:
+  petName: ${pet.id}
+  word: ${word.result}

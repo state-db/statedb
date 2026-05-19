@@ -1,21 +1,21 @@
 {
-  "seq": 55,
+  "seq": 62,
   "command": "07-destroy",
   "cmd_seq": 12,
-  "timestamp": "2026-05-04T02:13:00.300254798Z",
+  "timestamp": "2026-05-19T23:34:06.240989429Z",
   "method": "POST",
   "path": "/api/stacks/testorg/recorder-test/dev/destroy",
   "headers": {
     "Accept": "application/vnd.pulumi+9",
     "Accept-Encoding": "gzip",
     "Authorization": "REDACTED",
-    "Content-Length": "774",
+    "Content-Length": "865",
     "Content-Type": "application/json",
-    "User-Agent": "pulumi-cli/1 (v3.234.0; linux)"
+    "User-Agent": "pulumi-cli/1 (v3.242.0; linux; cmd=destroy)"
   },
   "body": {
     "config": {},
-    "description": "Minimal Pulumi project for API recording — no resources, no providers.",
+    "description": "Minimal Pulumi project for API recording. Uses the `random` provider so `pulumi up`/`destroy` exercise the journal/checkpoint write paths with real resource state.",
     "main": "",
     "metadata": {
       "environment": {
@@ -29,7 +29,7 @@
         "pulumi.env.PULUMI_SKIP_UPDATE_CHECK": "true",
         "pulumi.flag.yes": "true",
         "pulumi.os": "linux",
-        "pulumi.version": "v3.234.0",
+        "pulumi.version": "v3.242.0",
         "stack.environments": "[]",
         "updatePlan": "false"
       },
@@ -49,6 +49,7 @@
     },
     "runtime": "yaml"
   },
+  "body_b64": "eyJuYW1lIjoicmVjb3JkZXItdGVzdCIsInJ1bnRpbWUiOiJ5YW1sIiwibWFpbiI6IiIsImRlc2NyaXB0aW9uIjoiTWluaW1hbCBQdWx1bWkgcHJvamVjdCBmb3IgQVBJIHJlY29yZGluZy4gVXNlcyB0aGUgYHJhbmRvbWAgcHJvdmlkZXIgc28gYHB1bHVtaSB1cGAvYGRlc3Ryb3lgIGV4ZXJjaXNlIHRoZSBqb3VybmFsL2NoZWNrcG9pbnQgd3JpdGUgcGF0aHMgd2l0aCByZWFsIHJlc291cmNlIHN0YXRlLiIsIm9wdGlvbnMiOnsibG9jYWxQb2xpY3lQYWNrUGF0aHMiOltdLCJjb2xvciI6InJhdyIsImRyeVJ1biI6ZmFsc2UsInBhcmFsbGVsIjo0MCwic2hvd0NvbmZpZyI6ZmFsc2UsInNob3dSZXBsYWNlbWVudFN0ZXBzIjpmYWxzZSwic2hvd05hbWVzIjpmYWxzZSwic3VtbWFyeSI6ZmFsc2UsImRlYnVnIjpmYWxzZX0sImNvbmZpZyI6e30sIm1ldGFkYXRhIjp7Im1lc3NhZ2UiOiIiLCJlbnZpcm9ubWVudCI6eyJleGVjLmtpbmQiOiJjbGkiLCJwdWx1bWkuYXJjaCI6ImFybTY0IiwicHVsdW1pLmVudi5QVUxVTUlfQUNDRVNTX1RPS0VOIjoic2V0IiwicHVsdW1pLmVudi5QVUxVTUlfQkFDS0VORF9VUkwiOiJzZXQiLCJwdWx1bWkuZW52LlBVTFVNSV9DT05GSUdfUEFTU1BIUkFTRSI6InNldCIsInB1bHVtaS5lbnYuUFVMVU1JX0hPTUUiOiJzZXQiLCJwdWx1bWkuZW52LlBVTFVNSV9TS0lQX0NPTkZJUk1BVElPTlMiOiJ0cnVlIiwicHVsdW1pLmVudi5QVUxVTUlfU0tJUF9VUERBVEVfQ0hFQ0siOiJ0cnVlIiwicHVsdW1pLmZsYWcueWVzIjoidHJ1ZSIsInB1bHVtaS5vcyI6ImxpbnV4IiwicHVsdW1pLnZlcnNpb24iOiJ2My4yNDIuMCIsInN0YWNrLmVudmlyb25tZW50cyI6IltdIiwidXBkYXRlUGxhbiI6ImZhbHNlIn19fQ==",
   "status_code": 200,
   "response": {
     "updateID": "destroy-0005",

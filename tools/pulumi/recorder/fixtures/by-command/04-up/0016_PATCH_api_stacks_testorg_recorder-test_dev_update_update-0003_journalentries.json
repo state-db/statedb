@@ -1,0 +1,82 @@
+{
+  "seq": 31,
+  "command": "04-up",
+  "cmd_seq": 16,
+  "timestamp": "2026-05-19T23:34:05.710244054Z",
+  "method": "PATCH",
+  "path": "/api/stacks/testorg/recorder-test/dev/update/update-0003/journalentries",
+  "headers": {
+    "Accept": "application/vnd.pulumi+9",
+    "Accept-Encoding": "gzip",
+    "Authorization": "REDACTED",
+    "Content-Encoding": "gzip",
+    "Content-Length": "534",
+    "Content-Type": "application/json",
+    "User-Agent": "pulumi-cli/1 (v3.242.0; linux; cmd=up)"
+  },
+  "body": {
+    "entries": [
+      {
+        "kind": 1,
+        "operationID": 1,
+        "removeNew": null,
+        "removeOld": null,
+        "sequenceID": 3,
+        "state": {
+          "created": "2026-05-19T23:34:05.659236679Z",
+          "custom": false,
+          "modified": "2026-05-19T23:34:05.659236679Z",
+          "sourcePosition": "project:///../home/runner/work/pulumi-yaml/pulumi-yaml/pkg/server/server.go#326",
+          "stackTrace": [
+            {
+              "sourcePosition": "project:///../home/runner/work/pulumi-yaml/pulumi-yaml/pkg/server/server.go#326"
+            },
+            {
+              "sourcePosition": "project:///../home/runner/go/pkg/mod/github.com/pulumi/pulumi/sdk/v3@v3.237.0/proto/go/language_grpc.pb.go#588"
+            },
+            {
+              "sourcePosition": "project:///../home/runner/go/pkg/mod/github.com/pulumi/pulumi/sdk/v3@v3.237.0/go/common/util/rpcutil/interceptor.go#301"
+            },
+            {
+              "sourcePosition": "project:///../home/runner/go/pkg/mod/google.golang.org/grpc@v1.81.0/server.go#1243"
+            },
+            {
+              "sourcePosition": "project:///../home/runner/go/pkg/mod/github.com/grpc-ecosystem/grpc-opentracing@v0.0.0-20180507213350-8e809c8a8645/go/otgrpc/server.go#57"
+            },
+            {
+              "sourcePosition": "project:///../home/runner/go/pkg/mod/google.golang.org/grpc@v1.81.0/server.go#1243"
+            },
+            {
+              "sourcePosition": "project:///../home/runner/go/pkg/mod/github.com/pulumi/pulumi/sdk/v3@v3.237.0/go/common/util/rpcutil/interceptor.go#228"
+            },
+            {
+              "sourcePosition": "project:///../home/runner/go/pkg/mod/google.golang.org/grpc@v1.81.0/server.go#1234"
+            },
+            {
+              "sourcePosition": "project:///../home/runner/go/pkg/mod/github.com/pulumi/pulumi/sdk/v3@v3.237.0/proto/go/language_grpc.pb.go#590"
+            },
+            {
+              "sourcePosition": "project:///../home/runner/go/pkg/mod/google.golang.org/grpc@v1.81.0/server.go#1430"
+            },
+            {
+              "sourcePosition": "project:///../home/runner/go/pkg/mod/google.golang.org/grpc@v1.81.0/server.go#1856"
+            },
+            {
+              "sourcePosition": "project:///../home/runner/go/pkg/mod/google.golang.org/grpc@v1.81.0/server.go#1065"
+            },
+            {
+              "sourcePosition": "project:///../opt/hostedtoolcache/go/1.25.9/x64/src/runtime/asm_arm64.s#1268"
+            }
+          ],
+          "type": "pulumi:pulumi:Stack",
+          "urn": "urn:pulumi:dev::recorder-test::pulumi:pulumi:Stack::recorder-test-dev"
+        },
+        "version": 1
+      }
+    ]
+  },
+  "body_b64": "H4sIAAAAAAAA/9RUTW/cLBD+L+RqAwbb6+WUw3t5L22l5tQqigieeOkaxgXsNIr2v1c4u1Ja9bBV0lS9+AE8w/OB8SMBn4KFSNTnR7JAiBY9UVVB9tb36yDC1xm8gf//I0oWBCcIOln0eV4VJIDDBd6PPVF+HsfTwju4Py3EpBMQ9Ujm4InKTzXN4+ys6mFRKoDB0EMoE8SkTq+O8DFps/+ppuxhIQUxc0zoiLrTY4SCpIcJiCK/aM+1AXSCnigiuGhL3pTV9kpIJWvFG9o2WyHbdrP9RArisLd39rzaiHMw8AGjTWtsZAr4BUxSjDFK2Q4dsDB7D4HdY9izJ1Xlg3bjj+P9wCKEBcIR6IAXUrRkDc/sr4I2sJ7QH2c8FL9FMuC6lcOeDTbt5ltq0B2ZThD7PVvk5SKpkBvK2RQwYe4ctR9mPcDNECZDp9usoem6t9AwIDPoHHo2JzuyMJkVrU8QDEwJnwLh1UvEIA4j0AGzT4phYNnn5VLRrqL8We6VqOXrmM4EJRiMDzHBcYpTvuLaWD9cLpxyykvBq443fCMqKRtedtDxrel019ZN3hhTbnwmsNn8WzG8xtkL8aIP8XzTsv77l27L38RrLd+Gp2te9CM7m4e3zTk8OCW2w5igT4ij0WYHma+ioqFb9q2tWQwmC0nWAdPR3ejg2prGi0q0HTlcHw7Xh+8BAAD//9LUP5qqBwAA",
+  "body_gzip": true,
+  "status_code": 200,
+  "response": {}
+}
