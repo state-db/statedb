@@ -4,6 +4,7 @@ import io.statedb.persistence.lock.Lease;
 import io.statedb.persistence.lock.LeaseContext;
 import io.statedb.persistence.lock.StackLockAcquirer;
 import io.statedb.persistence.lock.StackLockCanceller;
+import io.statedb.persistence.lock.StackLockRenewer;
 import io.statedb.persistence.lock.StackLockedException;
 import io.statedb.persistence.stack.StackNotFoundException;
 import io.statedb.persistence.stack.StackRef;
@@ -38,6 +39,8 @@ public class UpdateResource {
   @Inject StackLockAcquirer lockAcquirer;
 
   @Inject StackLockCanceller lockCanceller;
+
+  @Inject StackLockRenewer lockRenewer;
 
   @Inject CurrentPrincipal currentPrincipal;
 
@@ -111,6 +114,41 @@ public class UpdateResource {
     return new AcquireLockResponse(l.lockToken().toString(), l.duration().toSeconds());
   }
 
+  @POST
+  @Path("/update/{updateID}/renew_lease")
+  @Consumes(MediaType.APPLICATION_JSON)
+  @Produces(MediaType.APPLICATION_JSON)
+  public RenewLeaseResponse renewLease(
+      @PathParam("org") String org,
+      @PathParam("project") String project,
+      @PathParam("stack") String stack,
+      @PathParam("updateID") String updateID,
+      RenewLeaseRequest body) {
+    // LeaseTokenFilter has validated the update-token header against the live lock row and bound
+    // it to (stackId, updateId, lockToken). Re-check the path updateID and any body-supplied
+    // token as defense-in-depth.
+    LeaseContext ctx = leaseHolder.get();
+    UUID pathUpdateId = parseUpdateIdOr404(updateID, org, project, stack);
+    if (ctx == null || !pathUpdateId.equals(ctx.updateId())) {
+      throw new StackLockedException(ctx == null ? null : ctx.stackId());
+    }
+    if (body != null && body.token != null && !body.token.isBlank()) {
+      UUID bodyTok;
+      try {
+        bodyTok = UUID.fromString(body.token);
+      } catch (IllegalArgumentException e) {
+        throw new StackLockedException(ctx.stackId());
+      }
+      if (!bodyTok.equals(ctx.lockToken())) {
+        throw new StackLockedException(ctx.stackId());
+      }
+    }
+
+    Lease renewed = lockRenewer.renew(ctx.stackId(), ctx.updateId(), ctx.lockToken());
+    return new RenewLeaseResponse(
+        renewed.lockToken().toString(), renewed.expiresAt().getEpochSecond());
+  }
+
   @DELETE
   @Path("/update/{updateID}")
   public Response cancelUpdate(
@@ -126,7 +164,7 @@ public class UpdateResource {
     if (ctx == null || !pathUpdateId.equals(ctx.updateId())) {
       return Response.status(Response.Status.CONFLICT).build();
     }
-    lockCanceller.cancel(ctx.stackId(), ctx.updateId());
+    lockCanceller.cancel(ctx.stackId(), ctx.updateId(), ctx.lockToken());
     return Response.noContent().build();
   }
 

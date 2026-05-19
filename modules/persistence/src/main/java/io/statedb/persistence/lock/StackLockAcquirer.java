@@ -6,7 +6,6 @@ import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 import jakarta.persistence.EntityManager;
 import jakarta.transaction.Transactional;
-import java.time.Duration;
 import java.time.Instant;
 import java.time.OffsetDateTime;
 import java.util.List;
@@ -27,9 +26,9 @@ import java.util.UUID;
 @ApplicationScoped
 public class StackLockAcquirer {
 
-  public static final Duration LEASE_TTL = Duration.ofHours(1);
-
   @Inject EntityManager em;
+
+  @Inject LockConfig lockConfig;
 
   @Transactional
   public Optional<Lease> acquire(
@@ -41,7 +40,7 @@ public class StackLockAcquirer {
 
     UUID lockId = UUID.randomUUID();
     UUID lockToken = UUID.randomUUID();
-    long ttlSeconds = LEASE_TTL.toSeconds();
+    long ttlSeconds = lockConfig.leaseTtl().toSeconds();
 
     @SuppressWarnings("unchecked")
     List<Object[]> rows =
@@ -103,7 +102,7 @@ public class StackLockAcquirer {
       }
     }
 
-    return Optional.of(new Lease(returnedToken, LEASE_TTL, expiresAt));
+    return Optional.of(new Lease(returnedToken, lockConfig.leaseTtl(), expiresAt));
   }
 
   // Hibernate's native-query timestamptz mapping varies across versions; accept either.

@@ -21,6 +21,13 @@ quarkus:
   log:
     level: INFO
 
+state-db:
+  lock:
+    lease-ttl: 1h
+    # Advisory; no server-side behavior keys off this today. Exposed so operators can tune the
+    # CLI heartbeat cadence once the server starts surfacing it.
+    heartbeat-interval: 30s
+
 # In dev/test, no jdbc.url is set → Quarkus Dev Services starts an
 # ephemeral Postgres container (requires a reachable Docker daemon).
 # In prod, the URL/credentials must come from the environment.

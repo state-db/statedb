@@ -15,6 +15,6 @@ public class LeaseLookup {
     return StackLock
         .<StackLock>find("lockToken = ?1 and expiresAt > current_timestamp", lockToken)
         .firstResultOptional()
-        .map(l -> new LeaseContext(l.stackId, l.updateId));
+        .map(l -> new LeaseContext(l.stackId, l.updateId, l.lockToken));
   }
 }

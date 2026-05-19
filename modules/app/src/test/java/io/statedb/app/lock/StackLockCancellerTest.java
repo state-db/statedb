@@ -1,13 +1,17 @@
 package io.statedb.app.lock;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
 import io.quarkus.narayana.jta.QuarkusTransaction;
 import io.quarkus.test.junit.QuarkusTest;
 import io.statedb.persistence.identity.Organization;
+import io.statedb.persistence.lock.Lease;
 import io.statedb.persistence.lock.StackLockAcquirer;
 import io.statedb.persistence.lock.StackLockCanceller;
+import io.statedb.persistence.lock.StackLockedException;
 import io.statedb.persistence.stack.StackCreator;
 import io.statedb.persistence.stack.StackRef;
 import io.statedb.persistence.update.StackUpdate;
@@ -34,6 +38,7 @@ class StackLockCancellerTest {
 
   private UUID stackId;
   private UUID updateId;
+  private UUID lockToken;
 
   @BeforeEach
   void seed() {
@@ -57,7 +62,8 @@ class StackLockCancellerTest {
                 new StartUpdateRequest(
                     Map.of(), Map.of(), Map.of(), "d", "yaml", "v3.234.0", "m"))
             .updateId();
-    acquirer.acquire(stackId, updateId, "user:a", null, null).orElseThrow();
+    Lease lease = acquirer.acquire(stackId, updateId, "user:a", null, null).orElseThrow();
+    lockToken = lease.lockToken();
   }
 
   @AfterEach
@@ -72,7 +78,7 @@ class StackLockCancellerTest {
 
   @Test
   void cancelRemovesLockAndTransitionsUpdate() {
-    canceller.cancel(stackId, updateId);
+    canceller.cancel(stackId, updateId, lockToken);
 
     Number locks =
         (Number)
@@ -94,5 +100,64 @@ class StackLockCancellerTest {
                 .setParameter(1, stackId)
                 .getSingleResult();
     assertNull(active);
+  }
+
+  @Test
+  void cancelWithWrongTokenIsRejectedAndLeavesLockIntact() {
+    UUID wrongToken = UUID.randomUUID();
+    assertThrows(
+        StackLockedException.class, () -> canceller.cancel(stackId, updateId, wrongToken));
+
+    Number locks =
+        (Number)
+            em.createNativeQuery("SELECT count(*) FROM stack_locks WHERE stack_id = ?1")
+                .setParameter(1, stackId)
+                .getSingleResult();
+    assertEquals(1L, locks.longValue());
+
+    String status =
+        (String)
+            em.createNativeQuery("SELECT status FROM stack_updates WHERE id = ?1")
+                .setParameter(1, updateId)
+                .getSingleResult();
+    assertEquals("in-progress", status);
+
+    UUID active =
+        (UUID)
+            em.createNativeQuery("SELECT active_update_id FROM stacks WHERE id = ?1")
+                .setParameter(1, stackId)
+                .getSingleResult();
+    assertNotNull(active);
+  }
+
+  @Test
+  void cancelOnAlreadyTerminalUpdateRemovesLockButLeavesStatus() {
+    // Simulate a status that some other code path has already moved to a terminal value. The
+    // status flip is guarded on IN_PROGRESS, so cancel must still release the lock but leave
+    // the terminal status alone.
+    QuarkusTransaction.requiringNew()
+        .run(
+            () ->
+                em.createNativeQuery(
+                        "UPDATE stack_updates SET status = 'failed', ended_at = now()"
+                            + " WHERE id = ?1")
+                    .setParameter(1, updateId)
+                    .executeUpdate());
+
+    canceller.cancel(stackId, updateId, lockToken);
+
+    Number locks =
+        (Number)
+            em.createNativeQuery("SELECT count(*) FROM stack_locks WHERE stack_id = ?1")
+                .setParameter(1, stackId)
+                .getSingleResult();
+    assertEquals(0L, locks.longValue());
+
+    String status =
+        (String)
+            em.createNativeQuery("SELECT status FROM stack_updates WHERE id = ?1")
+                .setParameter(1, updateId)
+                .getSingleResult();
+    assertEquals("failed", status);
   }
 }

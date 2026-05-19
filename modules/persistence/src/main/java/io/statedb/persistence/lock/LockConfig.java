@@ -1,0 +1,15 @@
+package io.statedb.persistence.lock;
+
+import io.smallrye.config.ConfigMapping;
+import io.smallrye.config.WithDefault;
+import java.time.Duration;
+
+@ConfigMapping(prefix = "state-db.lock")
+public interface LockConfig {
+
+  @WithDefault("1h")
+  Duration leaseTtl();
+
+  @WithDefault("30s")
+  Duration heartbeatInterval();
+}
