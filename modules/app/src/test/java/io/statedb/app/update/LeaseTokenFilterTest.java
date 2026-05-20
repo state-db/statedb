@@ -168,14 +168,7 @@ class LeaseTokenFilterTest {
         .header("Authorization", "update-token " + token)
         .when()
         .delete(
-            "/pulumi/api/stacks/"
-                + ORG
-                + "/"
-                + PROJECT
-                + "/"
-                + OTHER_STACK
-                + "/update/"
-                + updateId)
+            "/pulumi/api/stacks/" + ORG + "/" + PROJECT + "/" + OTHER_STACK + "/update/" + updateId)
         .then()
         .statusCode(409);
   }
@@ -215,8 +208,7 @@ class LeaseTokenFilterTest {
 
     Number lockCount =
         (Number)
-            em.createNativeQuery(
-                    "SELECT count(*) FROM stack_locks WHERE lock_token = ?1")
+            em.createNativeQuery("SELECT count(*) FROM stack_locks WHERE lock_token = ?1")
                 .setParameter(1, UUID.fromString(token))
                 .getSingleResult();
     assertEquals(0L, lockCount.longValue());
@@ -248,8 +240,7 @@ class LeaseTokenFilterTest {
         .contentType("application/json")
         .body(Map.of("journalVersion", 1))
         .when()
-        .post(
-            "/pulumi/api/stacks/" + ORG + "/" + PROJECT + "/" + stackName + "/update/" + updateId)
+        .post("/pulumi/api/stacks/" + ORG + "/" + PROJECT + "/" + stackName + "/update/" + updateId)
         .then()
         .statusCode(200)
         .extract()

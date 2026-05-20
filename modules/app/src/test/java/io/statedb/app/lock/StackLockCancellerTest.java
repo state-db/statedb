@@ -50,17 +50,16 @@ class StackLockCancellerTest {
                   org.name = ORG_NAME;
                   org.displayName = "Canceller Test";
                   org.persistAndFlush();
-                  StackRef ref =
-                      stackCreator.create(org.id, ORG_NAME, "proj", "dev", Map.of());
+                  StackRef ref = stackCreator.create(org.id, ORG_NAME, "proj", "dev", Map.of());
                   return ref.stackId();
                 });
     updateId =
-        starter.start(
+        starter
+            .start(
                 stackId,
                 StackUpdate.Kind.PREVIEW,
                 "cancel-key",
-                new StartUpdateRequest(
-                    Map.of(), Map.of(), Map.of(), "d", "yaml", "v3.234.0", "m"))
+                new StartUpdateRequest(Map.of(), Map.of(), Map.of(), "d", "yaml", "v3.234.0", "m"))
             .updateId();
     Lease lease = acquirer.acquire(stackId, updateId, "user:a", null, null).orElseThrow();
     lockToken = lease.lockToken();
@@ -105,8 +104,7 @@ class StackLockCancellerTest {
   @Test
   void cancelWithWrongTokenIsRejectedAndLeavesLockIntact() {
     UUID wrongToken = UUID.randomUUID();
-    assertThrows(
-        StackLockedException.class, () -> canceller.cancel(stackId, updateId, wrongToken));
+    assertThrows(StackLockedException.class, () -> canceller.cancel(stackId, updateId, wrongToken));
 
     Number locks =
         (Number)

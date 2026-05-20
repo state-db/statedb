@@ -12,8 +12,7 @@ import java.util.UUID;
 public class LeaseLookup {
 
   public Optional<LeaseContext> findActive(UUID lockToken) {
-    return StackLock
-        .<StackLock>find("lockToken = ?1 and expiresAt > current_timestamp", lockToken)
+    return StackLock.<StackLock>find("lockToken = ?1 and expiresAt > current_timestamp", lockToken)
         .firstResultOptional()
         .map(l -> new LeaseContext(l.stackId, l.updateId, l.lockToken));
   }

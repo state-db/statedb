@@ -48,8 +48,7 @@ class StackLockAcquirerTest {
                   org.name = ORG_NAME;
                   org.displayName = "Acquirer Test";
                   org.persistAndFlush();
-                  StackRef ref =
-                      stackCreator.create(org.id, ORG_NAME, "proj", "dev", Map.of());
+                  StackRef ref = stackCreator.create(org.id, ORG_NAME, "proj", "dev", Map.of());
                   return ref.stackId();
                 });
   }
@@ -89,8 +88,7 @@ class StackLockAcquirerTest {
     // Acquire body persisted to stack_updates.
     Object[] row =
         (Object[])
-            em.createNativeQuery(
-                    "SELECT journal_version, tags FROM stack_updates WHERE id = ?1")
+            em.createNativeQuery("SELECT journal_version, tags FROM stack_updates WHERE id = ?1")
                 .setParameter(1, updateId)
                 .getSingleResult();
     assertEquals(1, ((Number) row[0]).intValue());
@@ -147,8 +145,7 @@ class StackLockAcquirerTest {
                     .executeUpdate());
 
     UUID secondUpdateId = startUpdate("k-stolen");
-    Lease second =
-        acquirer.acquire(stackId, secondUpdateId, "user:b", null, null).orElseThrow();
+    Lease second = acquirer.acquire(stackId, secondUpdateId, "user:b", null, null).orElseThrow();
     assertNotEquals(first.lockToken(), second.lockToken());
 
     UUID dbUpdate =
@@ -183,7 +180,8 @@ class StackLockAcquirerTest {
                 .getSingleResult();
     assertEquals(0L, n.longValue());
     Object stillThere =
-        em.createNativeQuery("SELECT id FROM stacks WHERE id = ?1")
+        em
+            .createNativeQuery("SELECT id FROM stacks WHERE id = ?1")
             .setParameter(1, stackId)
             .getResultList()
             .stream()
@@ -194,8 +192,7 @@ class StackLockAcquirerTest {
 
   private UUID startUpdate(String key) {
     StartUpdateRequest req =
-        new StartUpdateRequest(
-            Map.of(), Map.of(), Map.of(), "desc", "yaml", "v3.234.0", "msg");
+        new StartUpdateRequest(Map.of(), Map.of(), Map.of(), "desc", "yaml", "v3.234.0", "msg");
     StartedUpdate s = starter.start(stackId, StackUpdate.Kind.PREVIEW, key, req);
     return s.updateId();
   }

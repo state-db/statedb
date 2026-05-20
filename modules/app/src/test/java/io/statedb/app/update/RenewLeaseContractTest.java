@@ -108,7 +108,14 @@ class RenewLeaseContractTest {
             .body(Map.of("duration", 3600))
             .when()
             .post(
-                "/pulumi/api/stacks/" + ORG + "/" + PROJECT + "/" + STACK + "/update/" + updateId
+                "/pulumi/api/stacks/"
+                    + ORG
+                    + "/"
+                    + PROJECT
+                    + "/"
+                    + STACK
+                    + "/update/"
+                    + updateId
                     + "/renew_lease")
             .then()
             .statusCode(200)
@@ -134,7 +141,14 @@ class RenewLeaseContractTest {
         .body(Map.of("duration", 3600))
         .when()
         .post(
-            "/pulumi/api/stacks/" + ORG + "/" + PROJECT + "/" + STACK + "/update/" + updateId
+            "/pulumi/api/stacks/"
+                + ORG
+                + "/"
+                + PROJECT
+                + "/"
+                + STACK
+                + "/update/"
+                + updateId
                 + "/renew_lease")
         .then()
         .statusCode(409);
@@ -151,7 +165,14 @@ class RenewLeaseContractTest {
         .body(Map.of("duration", 3600, "token", UUID.randomUUID().toString()))
         .when()
         .post(
-            "/pulumi/api/stacks/" + ORG + "/" + PROJECT + "/" + STACK + "/update/" + updateId
+            "/pulumi/api/stacks/"
+                + ORG
+                + "/"
+                + PROJECT
+                + "/"
+                + STACK
+                + "/update/"
+                + updateId
                 + "/renew_lease")
         .then()
         .statusCode(409);
@@ -175,7 +196,14 @@ class RenewLeaseContractTest {
         .body(Map.of("duration", 3600))
         .when()
         .post(
-            "/pulumi/api/stacks/" + ORG + "/" + PROJECT + "/" + STACK + "/update/" + updateId
+            "/pulumi/api/stacks/"
+                + ORG
+                + "/"
+                + PROJECT
+                + "/"
+                + STACK
+                + "/update/"
+                + updateId
                 + "/renew_lease")
         .then()
         .statusCode(409);

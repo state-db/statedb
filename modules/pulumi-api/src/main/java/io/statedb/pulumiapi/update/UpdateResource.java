@@ -175,8 +175,7 @@ public class UpdateResource {
         .orElseThrow(() -> new StackNotFoundException(org, project, stack));
   }
 
-  private static UUID parseUpdateIdOr404(
-      String raw, String org, String project, String stack) {
+  private static UUID parseUpdateIdOr404(String raw, String org, String project, String stack) {
     try {
       return UUID.fromString(raw);
     } catch (IllegalArgumentException e) {

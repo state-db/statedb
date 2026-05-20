@@ -59,8 +59,7 @@ class StackLockRenewerTest {
                 stackId,
                 StackUpdate.Kind.PREVIEW,
                 "renew-key",
-                new StartUpdateRequest(
-                    Map.of(), Map.of(), Map.of(), "d", "yaml", "v3.234.0", "m"))
+                new StartUpdateRequest(Map.of(), Map.of(), Map.of(), "d", "yaml", "v3.234.0", "m"))
             .updateId();
     Lease lease = acquirer.acquire(stackId, updateId, "user:a", null, null).orElseThrow();
     lockToken = lease.lockToken();

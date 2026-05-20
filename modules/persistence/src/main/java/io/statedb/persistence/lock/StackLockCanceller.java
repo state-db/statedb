@@ -24,9 +24,7 @@ public class StackLockCanceller {
     }
 
     StackUpdate u = StackUpdate.findById(updateId);
-    if (u != null
-        && stackId.equals(u.stackId)
-        && u.status == StackUpdate.Status.IN_PROGRESS) {
+    if (u != null && stackId.equals(u.stackId) && u.status == StackUpdate.Status.IN_PROGRESS) {
       u.status = StackUpdate.Status.CANCELLED;
       u.endedAt = Instant.now();
     }

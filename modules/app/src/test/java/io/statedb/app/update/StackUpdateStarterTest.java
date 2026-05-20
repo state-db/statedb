@@ -156,8 +156,7 @@ class StackUpdateStarterTest {
   }
 
   private static StartUpdateRequest req() {
-    return new StartUpdateRequest(
-        Map.of(), Map.of(), Map.of(), "desc", "yaml", "v3.234.0", "msg");
+    return new StartUpdateRequest(Map.of(), Map.of(), Map.of(), "desc", "yaml", "v3.234.0", "msg");
   }
 
   private static String rootMessage(Throwable t) {

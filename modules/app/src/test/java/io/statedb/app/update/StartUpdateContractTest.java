@@ -198,8 +198,7 @@ class StartUpdateContractTest {
             () -> {
               Number n =
                   (Number)
-                      em.createNativeQuery(
-                              "SELECT count(*) FROM stack_updates WHERE stack_id = ?1")
+                      em.createNativeQuery("SELECT count(*) FROM stack_updates WHERE stack_id = ?1")
                           .setParameter(1, stackId(ORG))
                           .getSingleResult();
               assertEquals(1L, n.longValue());
@@ -233,22 +232,29 @@ class StartUpdateContractTest {
 
   private static Map<String, Object> programBody() {
     return Map.of(
-        "config", Map.of(),
-        "description", "Minimal Pulumi project for API recording.",
-        "main", "",
+        "config",
+        Map.of(),
+        "description",
+        "Minimal Pulumi project for API recording.",
+        "main",
+        "",
         "metadata",
+        Map.of(
+            "environment",
             Map.of(
-                "environment",
-                Map.of(
-                    "exec.kind", "cli",
-                    "pulumi.arch", "arm64",
-                    "pulumi.os", "linux",
-                    "pulumi.version", "v3.234.0",
-                    "runtime.name", "yaml"),
-                "message", ""),
-        "name", PROJECT,
-        "options", Map.of("color", "raw", "debug", false, "dryRun", true, "parallel", 40),
-        "runtime", "yaml");
+                "exec.kind", "cli",
+                "pulumi.arch", "arm64",
+                "pulumi.os", "linux",
+                "pulumi.version", "v3.234.0",
+                "runtime.name", "yaml"),
+            "message",
+            ""),
+        "name",
+        PROJECT,
+        "options",
+        Map.of("color", "raw", "debug", false, "dryRun", true, "parallel", 40),
+        "runtime",
+        "yaml");
   }
 
   private static String sha256Hex(String input) {
