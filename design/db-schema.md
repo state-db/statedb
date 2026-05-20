@@ -4,7 +4,7 @@
 
 This schema supports the Wave 1 HTTP state backend for Pulumi and the identity/membership tables that the Wave 2 console needs to authenticate users and mint API tokens. The Pulumi CLI speaks a REST-ish API when `PULUMI_BACKEND_URL` is set to a custom HTTP endpoint; this service implements that protocol. Wire-shape ground truth is the recorded fixture catalog at `tools/pulumi/recorder/fixtures/` (Pulumi CLI v3.242.0 against a stub backend); when fixtures and Pulumi documentation disagree, fixtures win.
 
-The design must support the `delta-checkpoint-updates` journaling protocol (capability version 1), which is what `journalVersion: 1` in the start-update request activates. Without journaling, the checkpoint PATCH contains a full snapshot; with journaling it contains incremental entries.
+The design must support the `delta-checkpoint-updates` journaling protocol (capability version 1), which is what `journalVersion: 1` in the start-update request activates. Without journaling, the checkpoint endpoints can carry full or delta snapshots; with journaling enabled, the Pulumi CLI sends gzip-compressed `{"entries":[...]}` batches to `/journalentries`.
 
 Forward compatibility for OpenTofu: the `workspaces` parent table provides type-erased identity from day one. Pulumi stacks are 1:1 with a `kind='pulumi'` workspace today. When Tofu support lands in Wave 3, a separate `tofu_workspaces` extension table joins to the same `workspaces` parent, leaving Pulumi-specific state tables untouched.
 
@@ -227,9 +227,9 @@ CREATE TABLE stacks (
 -- STATE STORAGE
 -- ============================================================================
 
--- Full DeploymentV3 checkpoints. Written on compaction or on a 'write' journal
--- entry (provider migrations). The checkpoint field stores the decompressed JSON
--- (incoming PATCH bodies are gzip-encoded and must be decompressed before insert).
+-- Full DeploymentV3 checkpoints. Written by compaction. A journal entry with
+-- kind=5 ('write') carries an inline newSnapshot and is replayed by the
+-- assembler; it does not create a snapshots row until a later compaction.
 CREATE TABLE snapshots (
     id                         UUID        PRIMARY KEY,
     stack_id                   UUID        NOT NULL REFERENCES stacks(id) ON DELETE CASCADE,
@@ -358,19 +358,35 @@ CREATE TABLE journal_entries (
     id           UUID    PRIMARY KEY,
     stack_id     UUID    NOT NULL REFERENCES stacks(id) ON DELETE CASCADE,
     update_id    UUID    NOT NULL,
-    sequence_id  BIGINT  NOT NULL,
-    operation_id UUID,             -- correlates begin/success/failure entries
+    sequence_id       BIGINT NOT NULL, -- server-assigned replay order, monotonic within a stack
+    wire_sequence_id  BIGINT NOT NULL, -- Pulumi sequenceID, monotonic within one update
 
-    entry_type     TEXT    NOT NULL CHECK (entry_type IN (
-                       'begin', 'success', 'failure', 'refresh_success',
-                       'outputs', 'write', 'rebuilt_base_state')),
-    format_version INTEGER NOT NULL DEFAULT 1,
-    payload        JSONB   NOT NULL,
-    resource_urn   TEXT,           -- denormalized; null for non-resource entries
+    kind         SMALLINT NOT NULL,  -- pinned to Pulumi CLI v3.242.0 kinds 0..7; validated in the handler so a new upstream kind surfaces as a 400, not a constraint violation
+    operation_id BIGINT,            -- wire operationID; 0 is used for sentinel entries
+    version      INTEGER NOT NULL DEFAULT 1,
+
+    -- Index-like wire fields used heavily by reconstruction. They are nullable
+    -- because each journal kind touches only the fields it needs.
+    remove_old              BIGINT,
+    remove_new              BIGINT,
+    delete_old              BIGINT,
+    delete_new              BIGINT,
+    pending_replacement_old BIGINT,
+    pending_replacement_new BIGINT,
+    is_refresh              BOOLEAN NOT NULL DEFAULT false,
+
+    -- Heavy nested fields stay together:
+    --   operation        (AppOperationV2 with a full ResourceV3)
+    --   state            (ResourceV3)
+    --   secretsProvider  (AppSecretsProvidersV1)
+    --   newSnapshot      (DeploymentV3)
+    payload      JSONB   NOT NULL,
+    resource_urn TEXT,              -- denormalized from payload.operation.resource.urn (Begin) or payload.state.urn (Success/RefreshSuccess/Outputs); null for SecretsManager, Write, Failure, and RebuiltBaseState
 
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
 
     UNIQUE (stack_id, sequence_id),
+    UNIQUE (update_id, wire_sequence_id),
 
     -- Enforces stack_id consistency: update_id must belong to this same stack.
     FOREIGN KEY (update_id, stack_id) REFERENCES stack_updates(id, stack_id)
@@ -419,13 +435,14 @@ CREATE INDEX idx_update_events_created   ON update_events USING BRIN (created_at
 -- ============================================================================
 
 -- Tracks resource operations started but not yet completed.
--- Populated on 'begin' journal entries; pruned on 'success'/'failure'.
+-- Populated on kind=0 (Begin) entries that include operation.resource; pruned
+-- on kind=1/2/3 terminal entries for the same update-local operationID.
 -- Same composite FK pattern as journal_entries to prevent cross-stack mismatches.
 CREATE TABLE pending_operations (
     id             UUID   PRIMARY KEY,
     stack_id       UUID   NOT NULL REFERENCES stacks(id) ON DELETE CASCADE,
     update_id      UUID   NOT NULL,
-    operation_id   UUID   NOT NULL,
+    operation_id   BIGINT NOT NULL,
     resource_urn   TEXT   NOT NULL,
     resource_type  TEXT   NOT NULL,
     operation_type TEXT   NOT NULL CHECK (operation_type IN (
@@ -433,7 +450,7 @@ CREATE TABLE pending_operations (
     begin_journal_seq BIGINT NOT NULL,
     created_at     TIMESTAMPTZ NOT NULL DEFAULT now(),
 
-    UNIQUE (stack_id, operation_id),
+    UNIQUE (update_id, operation_id),
 
     -- Enforces stack_id consistency.
     FOREIGN KEY (update_id, stack_id) REFERENCES stack_updates(id, stack_id)
@@ -451,8 +468,9 @@ CREATE INDEX idx_pending_ops_stack ON pending_operations (stack_id);
 --
 -- lock_token is returned in the lease response as `token`. The Pulumi CLI sends
 -- it as `Authorization: update-token <lock_token>` on lease-scoped operations:
--- PATCH /checkpoint, POST /events/batch, POST /complete, POST /renew_lease,
--- DELETE /update/{id}. Validation: token must match AND expires_at > now().
+-- PATCH /journalentries, POST /events/batch, POST /complete,
+-- POST /renew_lease, DELETE /update/{id}. Validation: token must match AND
+-- expires_at > now().
 -- Lease-token validation is a separate code path from api_tokens auth.
 --
 -- Stale lock recovery: any acquire can steal a lock where expires_at < now().
@@ -558,28 +576,41 @@ CREATE TRIGGER trg_journal_invalidates_cache
 | `GET /api/stacks/{org}/{project}/{stack}` | — | `stacks`, `projects`, `organizations` |
 | `DELETE /api/stacks/{org}/{project}/{stack}` | DELETE `workspaces` (cascades to `stacks` and all state) | `stack_state` (check resources == 0) |
 | `GET /api/stacks/{org}/{project}/{stack}/export` | — | `stack_state` → `snapshots` + `journal_entries` |
-| `POST .../update\|preview\|destroy` | INSERT `stack_updates` | `stacks` |
+| `POST .../update\|preview\|refresh\|destroy` | INSERT `stack_updates` | `stacks` |
 | `POST .../update/{updateID}` | INSERT `stack_locks`, UPDATE `stacks.active_update_id` | `stack_updates` |
-| `PATCH .../update/{updateID}/checkpoint` | INSERT `journal_entries` OR INSERT `snapshots` | `stack_locks` (validate token) |
+| `PATCH .../update/{updateID}/journalentries` | INSERT `journal_entries`, UPDATE `stack_state.journal_seq` | `stack_locks` (validate token) |
+| `PATCH .../update/{updateID}/checkpoint`, `/checkpointdelta`, `/checkpointverbatim` | 501 in Wave 1 when journaling is negotiated | `stack_locks` (validate token) |
 | `POST .../update/{updateID}/events/batch` | INSERT `update_events` (one row per decoded event) | `stack_locks` (validate token) |
 | `POST .../update/{updateID}/complete` | UPDATE `stack_updates.status`, DELETE `stack_locks`, UPDATE `stacks.version` + `active_update_id = null` | `stack_updates` |
+| `POST .../{stack}/encrypt`, `/decrypt`, `/batch-decrypt` | — | stack secret configuration; no schema table in Wave 1 |
 
 ---
 
 ## Journal Entry Payload Structures
 
-Each entry type uses the same row shape but different `payload` contents:
+Each entry uses the same row shape. The wire discriminator is numeric
+`kind`, not a text enum:
 
 ```
-begin            → { operation?: { resource: urn, type: string }, deleteOld?: int }
-success          → { removeOld?: int, removeNew?: uuid, pendingReplacement?: int,
-                     delete?: int, state?: ResourceState, elideWrite: bool, isRefresh: bool }
-failure          → {}
-refresh_success  → { removeOld?: int, removeNew?: uuid, state?: ResourceState }
-outputs          → { removeOld?: int, removeNew?: uuid, state?: ResourceState }
-write            → { newSnapshot: DeploymentV3 }   -- first entry only; used for provider migrations
-rebuilt_base_state → {}
+0 Begin            → payload.operation = { resource: ResourceV3, type: string }
+1 Success          → optional payload.state = ResourceV3; remove_* fields may be set
+2 Failure          → clears a pending operation; payload is usually empty
+3 RefreshSuccess   → payload.state = ResourceV3; is_refresh and remove_old are commonly set
+4 Outputs          → payload.state = synthetic pulumi:pulumi:Stack resource
+5 Write            → payload.newSnapshot = DeploymentV3
+6 SecretsManager   → payload.secretsProvider = AppSecretsProvidersV1; operation_id is 0
+7 RebuiltBaseState → dependency-rebuild marker; payload is usually empty
 ```
+
+The index fields are six distinct nullable int64s:
+`removeOld`, `removeNew`, `deleteOld`, `deleteNew`,
+`pendingReplacementOld`, and `pendingReplacementNew`. `removeNew` is an
+index into the reconstructed "new" resource list, not a UUID. Boolean fields
+such as `isRefresh` are omit-default-false on the wire.
+
+Pulumi's wire `sequenceID` resets for each update. It is stored as
+`wire_sequence_id`; the server-assigned `sequence_id` is the stack-global
+replay order used by export and compaction.
 
 ---
 
@@ -587,19 +618,23 @@ rebuilt_base_state → {}
 
 ```
 1. Load stack_state WHERE stack_id = $id
-2. Load snapshot WHERE id = stack_state.base_snapshot_id
+2. Load snapshot WHERE id = stack_state.base_snapshot_id, or start from an
+   empty DeploymentV3 if there is no base snapshot yet
 3. SELECT FROM journal_entries
       WHERE stack_id = $id
         AND sequence_id > COALESCE(snapshot.compacted_from_journal_seq, 0)
       ORDER BY sequence_id ASC
-4. Apply each entry to the snapshot's resource list:
-     begin             → record pending_operation at deleteOld index
-     success           → remove at removeOld/removeNew, append state; rebuild deps if isRefresh
-     failure           → remove pending_operation
-     refresh_success   → replace resource at same index
-     outputs           → replace resource outputs at same index
-     write             → replace entire snapshot (migrations only)
-     rebuilt_base_state → prune stale dependency references
+4. Replay with a port of Pulumi's journal-apply logic, not a hand-rolled
+   simplification:
+     Begin              → record a pending operation when operation.resource exists
+     Success            → clear pending op; apply removeOld/removeNew/delete*/pendingReplacement*;
+                          append state when present
+     Failure            → clear pending op without appending state
+     RefreshSuccess     → replace/remove the old indexed resource, then append refreshed state
+     Outputs            → mutate the synthetic pulumi:pulumi:Stack resource outputs
+     Write              → replace the whole working deployment with newSnapshot
+     SecretsManager     → update deployment secretsProvider
+     RebuiltBaseState   → prune stale dependency references
 5. Return { version: 3, deployment: <reconstructed DeploymentV3> }
 ```
 
@@ -627,8 +662,8 @@ The tables below split what the schema enforces from what application code must 
 |---|---------|----------------------|
 | 5 | Multi-table partial failure | Every write that touches multiple tables must run inside a single transaction (`BEGIN` / `COMMIT`). Notably: create update + set `stacks.active_update_id`; complete update + delete lock + increment `stacks.version`. |
 | 8 | Lost update / version races | `stacks.version` increment and `stack_updates.version` assignment must use `SELECT ... FOR UPDATE` on the `stacks` row. Since the lock prevents concurrent writers on the same stack, races only arise between the lock-acquire step and version increment — serialize these in the same transaction. |
-| 9 | Journal sequence ordering | Assign `sequence_id` by doing `SELECT stack_state.journal_seq + 1 FOR UPDATE`, then incrementing `stack_state.journal_seq` and inserting the journal entry — all in one transaction. The row lock serializes concurrent sequence allocation. |
-| 10 | Lease token validation | Lease-scoped operations (`PATCH .../checkpoint`, `POST .../events/batch`, `POST .../complete`, `POST .../renew_lease`, `DELETE .../update/{id}`) carry `Authorization: update-token <leaseTok>` instead of `token <apiTok>`. Verify the `<leaseTok>` matches `stack_locks.lock_token` AND `stack_locks.expires_at > now()`. Reject with 409 if mismatched or expired. The lease-token and api-token paths are independent and never overlap on the same request. |
+| 9 | Journal sequence ordering | Treat `journal_entries.sequence_id` as the server-assigned stack-global replay order. The Pulumi wire `sequenceID` resets per update — the first entry of an update is `sequenceID = 1`, subsequent entries increment by 1 with no gaps. Store it as `wire_sequence_id` and validate that the first batch for a fresh `update_id` starts at 1 and that every later batch picks up at `max(wire_sequence_id) + 1` for that update. Insert every entry from one `{"entries":[...]}` batch and advance `stack_state.journal_seq` in a single transaction holding `SELECT ... FOR UPDATE` on `stack_state`. |
+| 10 | Lease token validation | Lease-scoped operations (`PATCH .../journalentries`, `PATCH .../checkpoint*`, `POST .../events/batch`, `POST .../complete`, `POST .../renew_lease`, `DELETE .../update/{id}`) carry `Authorization: update-token <leaseTok>` instead of `token <apiTok>`. Verify the `<leaseTok>` matches `stack_locks.lock_token` AND `stack_locks.expires_at > now()`. Reject with 409 if mismatched or expired. The lease-token and api-token paths are independent and never overlap on the same request. |
 | 12 | Compaction races | The compactor must hold a `SELECT ... FOR UPDATE` on `stack_state` for the duration of its read → compute → commit cycle. This blocks concurrent journal appends (which also lock `stack_state`) and ensures `to_journal_seq` remains consistent at commit time. |
 | 14 | Tenant isolation | Every query that retrieves stacks or state must JOIN to `projects` / `organizations` (or filter by `stacks.project_id → projects.org_id`) to verify the org matches the authenticated token's `org_id`. Never accept a bare `stack_id` from external input without confirming ownership. |
 | 17 | Workspace lifecycle | Stack creation must `INSERT workspaces` then `INSERT stacks` (with `workspace_id` set) inside one transaction. Stack deletion must `DELETE FROM workspaces` (which cascades). Never `DELETE FROM stacks` directly — the workspace row would be orphaned. |
@@ -647,10 +682,10 @@ The tables below split what the schema enforces from what application code must 
 | Feature | Note |
 |---------|------|
 | Stack rename (`POST .../rename`) | Single-row `UPDATE stacks SET name = ?`; lookups always resolve through the JOIN, so no derived data to maintain |
-| Lease renewal (`POST .../renew_lease`) | Updates `stack_locks.expires_at`; needed for long deploys |
 | History endpoint (`GET .../updates`) | Reads `stack_updates`; no new table needed |
 | Stack config (`PUT .../config`) | Separate per-stack config storage not required for Wave 1 |
-| Secrets encryption | Delegated to user-configured secrets providers (AWS KMS, Azure Key Vault, etc.); stored opaquely inside checkpoint JSONB. Service never sees plaintext. |
+| Non-journal checkpoint writes | `/checkpoint`, `/checkpointdelta`, and `/checkpointverbatim` are real OpenAPI paths, but Wave 1 negotiates `journalVersion: 1` and returns 501 for those fallback paths |
+| Custom KMS-backed secrets providers | Wave 1 must implement the Pulumi service secrets endpoints for `type: service`; provider-specific delegation (AWS KMS, Azure Key Vault, etc.) can layer on later. Service-managed encryption necessarily receives plaintext on `/encrypt` and returns ciphertext stored opaquely inside checkpoint JSONB. |
 | OIDC identity linking | One user = one `(iss, sub)`. Linking multiple IdP identities to a single user (e.g., "I have Google and Okta accounts") is future work. |
 | `statedb-cli` companion | A small CLI helper to automate the daily OIDC re-auth and write the resulting token into `~/.pulumi/credentials.json` (AWS-SSO-style). Wave 1 ships console-paste only; helper is later UX polish. |
 | Tofu workspace extension | `workspaces` parent ships in Wave 1 so identity is stable from day one. Type-specific `tofu_workspaces` extension and Tofu state tables ship in Wave 3. |
@@ -662,7 +697,7 @@ The tables below split what the schema enforces from what application code must 
 
 1. `pulumi login http://localhost:<port>` → validates `/api/user`, `/api/user/organizations/default`
 2. `pulumi stack init dev` → `stacks` row inserted; `stack_state` row created; `(org, project, stack)` lookup returns the new stack
-3. `pulumi up` → full update lifecycle: 2× `stack_updates`, `stack_locks`, `journal_entries`; `stacks.version` increments; `cache_valid` reset to false after each journal insert
+3. `pulumi up` → full update lifecycle: preview + actual `stack_updates`, `stack_locks`, `journal_entries`, `/encrypt`; `stacks.version` increments after the actual update; `cache_valid` reset to false after each journal insert
 4. `pulumi stack export` → reconstructs checkpoint from `stack_state` + `journal_entries`; diff against expected output
 5. `pulumi destroy` → new `stack_updates` rows; `pending_operations` cleared; `stacks.version` increments
 6. `pulumi stack rm` → all rows cascade-deleted; verify nothing remains

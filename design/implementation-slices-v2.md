@@ -207,10 +207,10 @@ pulumi stack init dev   # in a Pulumi project pointed at the backend
 **Scope**
 
 - A new `persistence/stack/StackHeadFinder` returning the joined `{ orgName, projectName, stackName, tags, version, lastUpdate, resourceCount }` projection. Slice 29 (console drilldown) consumes the same finder behind a different wire DTO.
-- Pulumi-shaped resource maps `StackHeadFinder` output to the fixture payload (`currentOperation` null for now, `lastUpdate` null until Slice 12, `resourceCount` zero until Slice 17).
+- Pulumi-shaped resource maps `StackHeadFinder` output to the fixture payload (`currentOperation` null for now, `lastUpdate` null until Slice 12, `resourceCount` zero until Slice 17.5).
 - 404 collapse: if caller's org doesn't match the path, return 404 (not 403) — pre-Cedar; matches the design rule that cross-org reads collapse to 404.
 
-**Out of scope.** Resource count from snapshot/journal (Slice 17), `lastUpdate` (Slice 11), `currentOperation` (Slice 12).
+**Out of scope.** Resource count from snapshot/journal (Slice 17.5), `lastUpdate` (Slice 11), `currentOperation` (Slice 12).
 
 **Tests.** Fixture contract test for `GET /api/stacks/{org}/{project}/{stack}` post-stack-init (resource_count == 0).
 
@@ -300,14 +300,15 @@ pulumi stack ls
 
 ## Phase 5 — `pulumi up` end to end
 
-Each slice in this phase moves one step closer to a real `pulumi up` cycle succeeding. After Slice 17 the full lifecycle works on a single-resource program.
+Each slice in this phase moves one step closer to a real `pulumi up` cycle succeeding. After Slice 17.5 the full lifecycle works against the recorder's real resource program, including preview, refresh, destroy, secrets, journaling, completion, and export.
 
 ### Slice 12 · `stack_updates` + start-op endpoints
 
 **Scope**
 
 - Migration `V003__updates.sql`: `stack_updates` per `db-schema.md` (with `idx_updates_idempotency`, `idx_updates_in_progress`, terminal-status guard trigger). Adds composite-FK target.
-- `pulumi-api/update/UpdatesResource`: `POST .../update`, `POST .../preview`, `POST .../destroy`. Insert `stack_updates` row with `status='in-progress'`, return `{updateID, version}` (the lease token comes later, in Slice 13).
+- `pulumi-api/update/UpdatesResource`: `POST .../update`, `POST .../preview`, `POST .../refresh`, `POST .../destroy`. Insert `stack_updates` row with `status='in-progress'`, return `{updateID, version}`.
+- Store the requested `kind` accurately. The recorder shows refresh and destroy each run a preview phase and an actual phase; both actual phases reuse the same update-scoped machinery as `up`.
 - Idempotency: `INSERT ... ON CONFLICT (stack_id, client_request_id) DO NOTHING`; on conflict, SELECT the existing row.
 
 **Out of scope.** Lock acquire (next slice); `version` assignment is recorded but no `stacks.version` bump until complete.
@@ -329,10 +330,10 @@ Each slice in this phase moves one step closer to a real `pulumi up` cycle succe
 - `POST /api/stacks/{org}/{project}/{stack}/update/{updateID}`:
   - Single SQL: `INSERT ... ON CONFLICT (stack_id) DO UPDATE SET ... WHERE expires_at < now() RETURNING ...`.
   - Empty return → 409 (active lock held).
-  - Successful return → emit lease envelope `{token, expiresAt}`.
+  - Successful return → emit the recorded `AppStartUpdateResponse`: `{token, tokenExpiration, version, journalVersion}`. Echo `journalVersion: 1` when the request negotiated journaling; omitting it makes the CLI fall back to checkpoint writes.
   - Same tx: `UPDATE stacks SET active_update_id = ?`.
 - `DELETE /api/stacks/{org}/{project}/{stack}/update/{updateID}`: explicit cancel.
-- `LeaseTokenFilter` bound to lease-scoped routes (PATCH `/checkpoint`, POST `/events/batch`, POST `/complete`, POST `/renew_lease`, DELETE `/update/{id}`):
+- `LeaseTokenFilter` bound to lease-scoped routes (PATCH `/journalentries`, PATCH `/checkpoint*`, POST `/events/batch`, POST `/complete`, POST `/renew_lease`, DELETE `/update/{id}`):
   - Validates `Authorization: update-token` against `stack_locks.lock_token` AND `expires_at > now()`.
   - Verifies path's `{stack}` resolves to the lock's `stack_id`.
   - Sets `LeaseContext{stack_id, update_id}`. Does **not** invoke Cedar.
@@ -364,25 +365,60 @@ Each slice in this phase moves one step closer to a real `pulumi up` cycle succe
 
 ---
 
-### Slice 15 · `journal_entries` + `PATCH /checkpoint`
+### Slice 14.5 · Service secrets endpoints
 
 **Scope**
 
-- Migration `V005__journal.sql`: `journal_entries` (with composite FK to `stack_updates`) + `trg_journal_invalidates_cache`.
-- `PATCH /api/stacks/{org}/{project}/{stack}/update/{updateID}/checkpoint`:
-  - Lease filter has already validated; body is gzip'd JSON.
-  - Single tx:
-    1. `SELECT journal_seq FROM stack_state WHERE stack_id = ? FOR UPDATE`.
-    2. For each entry in the request body, INSERT `journal_entries` with `sequence_id = journal_seq + N`.
-    3. `UPDATE stack_state SET journal_seq = journal_seq + N, journal_entries_since_compaction = journal_entries_since_compaction + N`.
-  - Invalid gzip / invalid JSON → 400 with a clear error body.
+- Add the Pulumi service secrets endpoints for a stack:
+  - `POST /api/stacks/{org}/{project}/{stack}/encrypt`
+  - `POST /api/stacks/{org}/{project}/{stack}/decrypt`
+  - `POST /api/stacks/{org}/{project}/{stack}/batch-decrypt`
+- Request/response shapes pinned by fixtures:
+  - `/encrypt`: request `{plaintext}` → response `{ciphertext}`
+  - `/batch-decrypt`: request `{ciphertexts:[...]}` → response `{plaintexts:{ciphertext: plaintext}}`
+  - `/decrypt`: single-value counterpart for compatibility, even though the current recorder only exercised batch decrypt.
+- Implement a Wave 1 service-managed symmetric scheme. The exact crypto primitive belongs in the implementation PR, but the API must not be an identity passthrough outside the recorder.
+- The encryption key is stack-scoped (deterministic per `(org, project, stack)`): ciphertext written during one update must decrypt during a later update from the same stack, and must not decrypt under a different stack's key. The wire `secretsProvider.state` (`owner`, `project`, `stack`, `url`) identifies the provider; the key derivation must match that identity.
+- The stack's `SecretsManager` journal entry carries `secretsProvider: {type:"service", state:{owner, project, stack, url}}`; no new schema table is required for this slice.
 
-**Out of scope.** Snapshot writes (those come with compaction in Slice 21); `write`-type entries with `newSnapshot` are stored verbatim as journal entries — Slice 17's `/export` will treat them correctly.
+**Out of scope.** AWS KMS, Azure Key Vault, and other delegated providers.
 
 **Tests**
 
-- Single PATCH appends N entries with monotonically increasing `sequence_id`.
+- Fixture replay for `/encrypt` and `/batch-decrypt`.
+- Round-trip encrypt then decrypt returns the original plaintext.
+- Batch decrypt preserves one result per unique ciphertext.
+
+**Manual verification.** Run the recorder fixture sequence through the contract harness and confirm preview/refresh/destroy no longer fail at `batch-decrypt`.
+
+---
+
+### Slice 15 · `journal_entries` + `PATCH /journalentries`
+
+**Scope**
+
+- Migration `V005__journal.sql`: `journal_entries` per `db-schema.md` (numeric `kind`, BIGINT `operation_id`, replay index columns, composite FK to `stack_updates`) + `trg_journal_invalidates_cache`.
+- `PATCH /api/stacks/{org}/{project}/{stack}/update/{updateID}/journalentries`:
+  - Lease filter has already validated; body is gzip-compressed JSON shaped as `{"entries":[AppJournalEntry...]}`.
+  - A single PATCH may carry multiple entries; the first recorded `up`, `refresh`, and `destroy` batches each carry two entries.
+  - Current preview fixtures do not write journal entries; actual `up`, actual `refresh`, and actual `destroy` do.
+  - Single tx:
+    1. `SELECT journal_seq FROM stack_state WHERE stack_id = ? FOR UPDATE`.
+    2. Validate the request's wire `sequenceID` values are contiguous for the `update_id` and greater than the previous wire sequence for that update. The wire value resets per update, so do not use it as the stack-global replay key.
+    3. For each entry in order, INSERT `journal_entries` with `sequence_id = stack_state.journal_seq + N`, `wire_sequence_id = entry.sequenceID`, `kind`, `operationID`, `version`, nullable index fields, `isRefresh`, denormalized `resource_urn`, and remaining nested fields in `payload`.
+    4. Upsert/prune `pending_operations` for Begin/Success/Failure/RefreshSuccess entries where the wire entry supplies enough resource context.
+    5. `UPDATE stack_state SET journal_seq = journal_seq + N, journal_entries_since_compaction = journal_entries_since_compaction + N`.
+  - Invalid gzip / invalid JSON → 400 with a clear error body.
+- Return 501 for `/checkpoint`, `/checkpointdelta`, and `/checkpointverbatim` in Wave 1. The OpenAPI paths exist, but the recorder shows Pulumi v3.242.0 chooses `/journalentries` once `journalVersion: 1` is echoed by start-update.
+
+**Out of scope.** Snapshot writes (those come with compaction in Slice 21); `write`-kind entries with `newSnapshot` are stored verbatim as journal entries — Slice 17.5's `/export` will treat them correctly.
+
+**Tests**
+
+- Fixture replay for recorded `up`, actual `refresh`, and actual `destroy` journal batches.
+- Single PATCH appends N entries with monotonically increasing server `sequence_id` and preserves each entry's wire `sequenceID`.
 - Two concurrent PATCHes from two threads serialize on `FOR UPDATE`; sequence integrity preserved.
+- A skipped or duplicate wire `sequenceID` within the same update returns 409 and writes no rows.
 - Invalid gzip envelope returns 400.
 
 **Manual verification.** Send a recorded PATCH body via curl and inspect `journal_entries`.
@@ -408,33 +444,55 @@ Each slice in this phase moves one step closer to a real `pulumi up` cycle succe
 
 ---
 
-### Slice 17 · `POST /complete` + `GET /export`
-
-**Why combined.** `complete` and `export` are the two paths that close the loop: complete persists the terminal state of an update; export reads it back. Shipping them together lets one fixture run cover both.
+### Slice 17 · `POST /complete`
 
 **Scope**
 
 - `POST /complete`:
   - Single tx: mark `stack_updates.status` (`succeeded`/`failed`), DELETE `stack_locks`, UPDATE `stacks SET version = version + 1, active_update_id = NULL`. Preview never bumps `version`.
-- New `persistence/stack/StackAssembler` — pure persistence service that, given a `stackId`, reads the base snapshot from `stack_state` and replays `journal_entries WHERE sequence_id > base` per `db-schema.md` "State Reconstruction" rules (`begin`/`success`/`failure`/`refresh_success`/`outputs`/`write`/`rebuilt_base_state`). This is the *only* place reconstruction logic lives; Slice 21 (compaction worker) and Slice 29 (console stack drilldown) both call it. Drift between callers would produce different "current state" answers for the same stack — a correctness bug, not a cosmetic one.
-- `GET /api/stacks/{org}/{project}/{stack}/export`:
-  - Calls `StackAssembler.assemble(stackId)` and returns `{ version: 3, deployment: <reconstructed DeploymentV3> }`.
+- Set `stack_updates.end_journal_seq` from `stack_state.journal_seq` inside the same transaction.
+- Preview completion records terminal status and clears the lock, but does not bump `stacks.version`.
 
-**Out of scope.** Compaction (Slice 21); the assembler runs over the full journal every export until then.
+**Out of scope.** Export and reconstruction (next slice); compaction (Slice 21).
 
 **Tests**
 
 - `complete` is atomic: a forced failure mid-tx rolls back all three rows.
 - Preview completion leaves `stacks.version` unchanged.
-- `export` reconstructs a known fixture byte-for-byte (allowing field mask for timestamps).
-- Composite assembly: a `write` entry replaces the snapshot; subsequent `success` entries operate on the replaced resource list.
+
+**Manual verification.** `pulumi preview`, `pulumi up`, `pulumi refresh`, and `pulumi destroy` all reach `complete` and leave no active lock.
+
+---
+
+### Slice 17.5 · `StackAssembler` + `GET /export`
+
+**Scope**
+
+- New `persistence/stack/StackAssembler` — pure persistence service that, given a `stackId`, reads the base snapshot from `stack_state` and replays `journal_entries WHERE sequence_id > base` per `db-schema.md` "State Reconstruction" rules.
+- The reducer is a port of Pulumi's journal-apply behavior, not prose-derived logic. Reference implementation lives in `pulumi/pulumi` — search for `applyJournalEntry` / `AppJournalEntry` in `pkg/engine` and `pkg/backend/httpstate`. The port must handle all numeric kinds 0..7, `SecretsManager`, `removeOld`/`removeNew` as resource-list indexes, `deleteOld`/`deleteNew` for in-place deletion bookkeeping, `pendingReplacementOld`/`pendingReplacementNew` for the replace-then-delete pending list, Failure entries that clear a pending op without appending state, deletion Success entries with no `state`, `Outputs` mutating the synthetic stack resource, refresh replacement, and `Write` entries with `newSnapshot`.
+- `GET /api/stacks/{org}/{project}/{stack}/export`:
+  - Calls `StackAssembler.assemble(stackId)` and returns `{ version: 3, deployment: <reconstructed DeploymentV3> }`.
+- This is the only place reconstruction logic lives; Slice 21 (compaction worker) and Slice 29 (console stack drilldown) both call it. Drift between callers would produce different current-state answers for the same stack.
+
+**Out of scope.** Compaction (Slice 21); the assembler runs over the full journal every export until then.
+
+**Tests**
+
+- `export` reconstructs a hand-authored journal fixture byte-for-byte (allowing field masks for timestamps and encrypted values).
+- Fixture-derived setup: insert the recorded `up` journal entries, export and assert seven resources; then insert the recorded actual `destroy` journal entries, export and assert no deployment resources.
+- Refresh assembly covers the recorded actual refresh flow: Begin entries without `operation`, RefreshSuccess with `isRefresh=true`, and the final RebuiltBaseState marker.
+- Failure assembly: a Begin entry seeds a pending op; a subsequent kind=2 Failure entry clears it and leaves the resource list unchanged.
+- `pendingReplacement` assembly: a Success entry with `pendingReplacementOld`/`pendingReplacementNew` moves the indexed resource into the deployment's pending-replacement list rather than appending to the live resource list.
+- `delete` assembly: a Success entry with `deleteOld`/`deleteNew` (no `state`) removes the indexed resource without appending a replacement.
+- Composite assembly: a `Write` entry replaces the snapshot; subsequent Success entries operate on the replaced resource list.
 
 **Manual verification**
 
 ```
 pulumi up
 pulumi stack export | jq .
-# Compare against expected output.
+pulumi destroy --yes
+pulumi stack export | jq '.deployment.resources // []'
 ```
 
 ---
@@ -500,14 +558,14 @@ pulumi stack export | jq .
 
 - Migration `V007__compaction.sql`: `snapshots`, `compaction_jobs`, FK from `stack_state.base_snapshot_id`.
 - Enqueue trigger inside the `POST /complete` transaction when `journal_entries_since_compaction >= auto_compact_threshold`.
-- `persistence/stack/CompactionWorker` `@Scheduled`: polls for `status='pending'`, `SELECT ... FOR UPDATE` on `stack_state`, calls Slice 17's `StackAssembler` to build the snapshot (same code path as `/export` — drift here would split-brain compaction vs. read), INSERT `snapshots`, point `stack_state.base_snapshot_id` at it, reset `journal_entries_since_compaction`, mark job `completed`.
+- `persistence/stack/CompactionWorker` `@Scheduled`: polls for `status='pending'`, `SELECT ... FOR UPDATE` on `stack_state`, calls Slice 17.5's `StackAssembler` to build the snapshot (same code path as `/export` — drift here would split-brain compaction vs. read), INSERT `snapshots`, point `stack_state.base_snapshot_id` at it, reset `journal_entries_since_compaction`, mark job `completed`.
 - Failure path: mark `failed` with `error_message`, retry capped at 3 attempts (`attempts` column on the job table — add to migration).
 
 **Tests**
 
 - Threshold trigger enqueues exactly one job.
 - Compaction collapses N journal entries into one snapshot; `/export` after compaction returns the same bytes as before.
-- A worker holding `FOR UPDATE` blocks a concurrent PATCH `/checkpoint`; PATCH succeeds after compaction commits.
+- A worker holding `FOR UPDATE` blocks a concurrent PATCH `/journalentries`; PATCH succeeds after compaction commits.
 
 **Manual verification.** Set `auto_compact_threshold=5` in `application.yml`, run six `pulumi up` cycles, then `SELECT * FROM snapshots`.
 
@@ -640,7 +698,7 @@ pulumi stack export | jq .
 
 **Scope**
 
-- `GET /api/pulumi/stacks/{ref}`: reuses Slice 8's `StackHeadFinder` for the head and Slice 17's `StackAssembler` for the parsed resource list; console-api maps to its own DTO. No reconstruction logic in this module.
+- `GET /api/pulumi/stacks/{ref}`: reuses Slice 8's `StackHeadFinder` for the head and Slice 17.5's `StackAssembler` for the parsed resource list; console-api maps to its own DTO. No reconstruction logic in this module.
 - `GET /api/pulumi/stacks/{ref}/updates`: new `persistence/update/UpdateHistoryFinder` (will also back any Pulumi-side history endpoint that lands later) — paginated by `started_at`.
 - `GET /api/pulumi/stacks/{ref}/updates/{id}/events`: new `persistence/update/UpdateEventsFinder` paginating `update_events`.
 
@@ -657,7 +715,7 @@ pulumi stack export | jq .
 **Scope**
 
 - Promote the contract harness from per-endpoint replays to full command sequences:
-  `login → stack-init → preview → up → stack-ls → stack-export → destroy → stack-rm`.
+  `login → stack-init → up → preview → refresh → stack-ls → stack-export → destroy → stack-export-after-destroy → stack-rm`.
 - Each command's recorded sequence runs in order against one Quarkus instance.
 - Failure messages include a unified diff of expected vs actual response body, with field masks already applied.
 
