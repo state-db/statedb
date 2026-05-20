@@ -1,0 +1,1061 @@
+{
+  "seq": 71,
+  "command": "05-refresh",
+  "cmd_seq": 14,
+  "method": "POST",
+  "path": "/api/stacks/testorg/recorder-test/dev/update/refresh-0004/events/batch",
+  "headers": {
+    "Accept": "application/vnd.pulumi+9",
+    "Accept-Encoding": "gzip",
+    "Authorization": "REDACTED",
+    "Content-Encoding": "gzip",
+    "Content-Length": "1275",
+    "Content-Type": "application/json",
+    "User-Agent": "pulumi-cli/1 (v3.242.0; linux; cmd=refresh)"
+  },
+  "body": {
+    "events": [
+      {
+        "preludeEvent": {
+          "config": {}
+        },
+        "sequence": 0,
+        "timestamp": 0
+      },
+      {
+        "resourcePreEvent": {
+          "metadata": {
+            "detailedDiff": null,
+            "new": {
+              "id": "",
+              "inputs": {},
+              "outputs": {
+                "password": {
+                  "4dabf18193072939515e22adb298388d": "1b47061264138c4ac30d75fd1eb44270",
+                  "ciphertext": "[secret]"
+                },
+                "petName": "[pet-name]",
+                "pin": 42,
+                "tokenHex": "[hex]",
+                "word": "[word]"
+              },
+              "parent": "",
+              "provider": "",
+              "type": "pulumi:pulumi:Stack",
+              "urn": "urn:pulumi:dev::recorder-test::pulumi:pulumi:Stack::recorder-test-dev"
+            },
+            "old": {
+              "id": "",
+              "inputs": {},
+              "outputs": {
+                "password": {
+                  "4dabf18193072939515e22adb298388d": "1b47061264138c4ac30d75fd1eb44270",
+                  "ciphertext": "[secret]"
+                },
+                "petName": "[pet-name]",
+                "pin": 42,
+                "tokenHex": "[hex]",
+                "word": "[word]"
+              },
+              "parent": "",
+              "provider": "",
+              "type": "pulumi:pulumi:Stack",
+              "urn": "urn:pulumi:dev::recorder-test::pulumi:pulumi:Stack::recorder-test-dev"
+            },
+            "op": "refresh",
+            "provider": "",
+            "type": "pulumi:pulumi:Stack",
+            "urn": "urn:pulumi:dev::recorder-test::pulumi:pulumi:Stack::recorder-test-dev"
+          },
+          "planning": true
+        },
+        "sequence": 1,
+        "timestamp": 0
+      },
+      {
+        "resOutputsEvent": {
+          "metadata": {
+            "detailedDiff": null,
+            "new": {
+              "id": "",
+              "inputs": {},
+              "outputs": {
+                "password": {
+                  "4dabf18193072939515e22adb298388d": "1b47061264138c4ac30d75fd1eb44270",
+                  "ciphertext": "[secret]"
+                },
+                "petName": "[pet-name]",
+                "pin": 42,
+                "tokenHex": "[hex]",
+                "word": "[word]"
+              },
+              "parent": "",
+              "provider": "",
+              "type": "pulumi:pulumi:Stack",
+              "urn": "urn:pulumi:dev::recorder-test::pulumi:pulumi:Stack::recorder-test-dev"
+            },
+            "old": {
+              "id": "",
+              "inputs": {},
+              "outputs": {
+                "password": {
+                  "4dabf18193072939515e22adb298388d": "1b47061264138c4ac30d75fd1eb44270",
+                  "ciphertext": "[secret]"
+                },
+                "petName": "[pet-name]",
+                "pin": 42,
+                "tokenHex": "[hex]",
+                "word": "[word]"
+              },
+              "parent": "",
+              "provider": "",
+              "type": "pulumi:pulumi:Stack",
+              "urn": "urn:pulumi:dev::recorder-test::pulumi:pulumi:Stack::recorder-test-dev"
+            },
+            "op": "same",
+            "provider": "",
+            "type": "pulumi:pulumi:Stack",
+            "urn": "urn:pulumi:dev::recorder-test::pulumi:pulumi:Stack::recorder-test-dev"
+          },
+          "planning": true
+        },
+        "sequence": 2,
+        "timestamp": 0
+      },
+      {
+        "resourcePreEvent": {
+          "metadata": {
+            "detailedDiff": null,
+            "new": {
+              "custom": true,
+              "id": "[resource-id]",
+              "inputs": {
+                "length": 2,
+                "separator": "-"
+              },
+              "outputs": {
+                "__pulumi_raw_state_delta": {
+                  "obj": {
+                    "ps": {
+                      "keepers": {
+                        "4dabf18193072939515e22adb298388d": "1b47061264138c4ac30d75fd1eb44270",
+                        "ciphertext": "[secret]"
+                      },
+                      "prefix": {
+                        "4dabf18193072939515e22adb298388d": "1b47061264138c4ac30d75fd1eb44270",
+                        "ciphertext": "[secret]"
+                      }
+                    }
+                  }
+                },
+                "id": "[resource-id]",
+                "length": 2,
+                "separator": "-"
+              },
+              "parent": "urn:pulumi:dev::recorder-test::pulumi:pulumi:Stack::recorder-test-dev",
+              "provider": "urn:pulumi:dev::recorder-test::pulumi:providers:random::default::00000000-0000-0000-0000-000000000000",
+              "type": "random:index/randomPet:RandomPet",
+              "urn": "urn:pulumi:dev::recorder-test::random:index/randomPet:RandomPet::pet"
+            },
+            "old": {
+              "custom": true,
+              "id": "[resource-id]",
+              "inputs": {
+                "length": 2,
+                "separator": "-"
+              },
+              "outputs": {
+                "__pulumi_raw_state_delta": {
+                  "obj": {
+                    "ps": {
+                      "keepers": {
+                        "4dabf18193072939515e22adb298388d": "1b47061264138c4ac30d75fd1eb44270",
+                        "ciphertext": "[secret]"
+                      },
+                      "prefix": {
+                        "4dabf18193072939515e22adb298388d": "1b47061264138c4ac30d75fd1eb44270",
+                        "ciphertext": "[secret]"
+                      }
+                    }
+                  }
+                },
+                "id": "[resource-id]",
+                "length": 2,
+                "separator": "-"
+              },
+              "parent": "urn:pulumi:dev::recorder-test::pulumi:pulumi:Stack::recorder-test-dev",
+              "provider": "urn:pulumi:dev::recorder-test::pulumi:providers:random::default::00000000-0000-0000-0000-000000000000",
+              "type": "random:index/randomPet:RandomPet",
+              "urn": "urn:pulumi:dev::recorder-test::random:index/randomPet:RandomPet::pet"
+            },
+            "op": "refresh",
+            "provider": "urn:pulumi:dev::recorder-test::pulumi:providers:random::default::00000000-0000-0000-0000-000000000000",
+            "type": "random:index/randomPet:RandomPet",
+            "urn": "urn:pulumi:dev::recorder-test::random:index/randomPet:RandomPet::pet"
+          },
+          "planning": true
+        },
+        "sequence": 3,
+        "timestamp": 0
+      },
+      {
+        "resOutputsEvent": {
+          "metadata": {
+            "detailedDiff": null,
+            "new": {
+              "custom": true,
+              "id": "[resource-id]",
+              "inputs": {
+                "length": 2,
+                "separator": "-"
+              },
+              "outputs": {
+                "__pulumi_raw_state_delta": {
+                  "obj": {
+                    "ps": {
+                      "keepers": {
+                        "4dabf18193072939515e22adb298388d": "1b47061264138c4ac30d75fd1eb44270",
+                        "ciphertext": "[secret]"
+                      },
+                      "prefix": {
+                        "4dabf18193072939515e22adb298388d": "1b47061264138c4ac30d75fd1eb44270",
+                        "ciphertext": "[secret]"
+                      }
+                    }
+                  }
+                },
+                "id": "[resource-id]",
+                "length": 2,
+                "separator": "-"
+              },
+              "parent": "urn:pulumi:dev::recorder-test::pulumi:pulumi:Stack::recorder-test-dev",
+              "provider": "urn:pulumi:dev::recorder-test::pulumi:providers:random::default::00000000-0000-0000-0000-000000000000",
+              "type": "random:index/randomPet:RandomPet",
+              "urn": "urn:pulumi:dev::recorder-test::random:index/randomPet:RandomPet::pet"
+            },
+            "old": {
+              "custom": true,
+              "id": "[resource-id]",
+              "inputs": {
+                "length": 2,
+                "separator": "-"
+              },
+              "outputs": {
+                "__pulumi_raw_state_delta": {
+                  "obj": {
+                    "ps": {
+                      "keepers": {
+                        "4dabf18193072939515e22adb298388d": "1b47061264138c4ac30d75fd1eb44270",
+                        "ciphertext": "[secret]"
+                      },
+                      "prefix": {
+                        "4dabf18193072939515e22adb298388d": "1b47061264138c4ac30d75fd1eb44270",
+                        "ciphertext": "[secret]"
+                      }
+                    }
+                  }
+                },
+                "id": "[resource-id]",
+                "length": 2,
+                "separator": "-"
+              },
+              "parent": "urn:pulumi:dev::recorder-test::pulumi:pulumi:Stack::recorder-test-dev",
+              "provider": "urn:pulumi:dev::recorder-test::pulumi:providers:random::default::00000000-0000-0000-0000-000000000000",
+              "type": "random:index/randomPet:RandomPet",
+              "urn": "urn:pulumi:dev::recorder-test::random:index/randomPet:RandomPet::pet"
+            },
+            "op": "same",
+            "provider": "urn:pulumi:dev::recorder-test::pulumi:providers:random::default::00000000-0000-0000-0000-000000000000",
+            "type": "random:index/randomPet:RandomPet",
+            "urn": "urn:pulumi:dev::recorder-test::random:index/randomPet:RandomPet::pet"
+          },
+          "planning": true
+        },
+        "sequence": 4,
+        "timestamp": 0
+      },
+      {
+        "resourcePreEvent": {
+          "metadata": {
+            "detailedDiff": null,
+            "new": {
+              "custom": true,
+              "id": "[resource-id]",
+              "inputs": {
+                "length": 8,
+                "special": false,
+                "upper": false
+              },
+              "outputs": {
+                "__meta": "{\"schema_version\":\"2\"}",
+                "__pulumi_raw_state_delta": {
+                  "obj": {
+                    "ps": {
+                      "keepers": {
+                        "4dabf18193072939515e22adb298388d": "1b47061264138c4ac30d75fd1eb44270",
+                        "ciphertext": "[secret]"
+                      },
+                      "overrideSpecial": {
+                        "4dabf18193072939515e22adb298388d": "1b47061264138c4ac30d75fd1eb44270",
+                        "ciphertext": "[secret]"
+                      }
+                    }
+                  }
+                },
+                "id": "[resource-id]",
+                "length": 8,
+                "lower": true,
+                "minLower": 0,
+                "minNumeric": 0,
+                "minSpecial": 0,
+                "minUpper": 0,
+                "number": true,
+                "numeric": true,
+                "result": "[result]",
+                "special": false,
+                "upper": false
+              },
+              "parent": "urn:pulumi:dev::recorder-test::pulumi:pulumi:Stack::recorder-test-dev",
+              "provider": "urn:pulumi:dev::recorder-test::pulumi:providers:random::default::00000000-0000-0000-0000-000000000000",
+              "type": "random:index/randomString:RandomString",
+              "urn": "urn:pulumi:dev::recorder-test::random:index/randomString:RandomString::word"
+            },
+            "old": {
+              "custom": true,
+              "id": "[resource-id]",
+              "inputs": {
+                "length": 8,
+                "special": false,
+                "upper": false
+              },
+              "outputs": {
+                "__meta": "{\"schema_version\":\"2\"}",
+                "__pulumi_raw_state_delta": {
+                  "obj": {
+                    "ps": {
+                      "keepers": {
+                        "4dabf18193072939515e22adb298388d": "1b47061264138c4ac30d75fd1eb44270",
+                        "ciphertext": "[secret]"
+                      },
+                      "overrideSpecial": {
+                        "4dabf18193072939515e22adb298388d": "1b47061264138c4ac30d75fd1eb44270",
+                        "ciphertext": "[secret]"
+                      }
+                    }
+                  }
+                },
+                "id": "[resource-id]",
+                "length": 8,
+                "lower": true,
+                "minLower": 0,
+                "minNumeric": 0,
+                "minSpecial": 0,
+                "minUpper": 0,
+                "number": true,
+                "numeric": true,
+                "result": "[result]",
+                "special": false,
+                "upper": false
+              },
+              "parent": "urn:pulumi:dev::recorder-test::pulumi:pulumi:Stack::recorder-test-dev",
+              "provider": "urn:pulumi:dev::recorder-test::pulumi:providers:random::default::00000000-0000-0000-0000-000000000000",
+              "type": "random:index/randomString:RandomString",
+              "urn": "urn:pulumi:dev::recorder-test::random:index/randomString:RandomString::word"
+            },
+            "op": "refresh",
+            "provider": "urn:pulumi:dev::recorder-test::pulumi:providers:random::default::00000000-0000-0000-0000-000000000000",
+            "type": "random:index/randomString:RandomString",
+            "urn": "urn:pulumi:dev::recorder-test::random:index/randomString:RandomString::word"
+          },
+          "planning": true
+        },
+        "sequence": 5,
+        "timestamp": 0
+      },
+      {
+        "resOutputsEvent": {
+          "metadata": {
+            "detailedDiff": null,
+            "new": {
+              "custom": true,
+              "id": "[resource-id]",
+              "inputs": {
+                "length": 8,
+                "special": false,
+                "upper": false
+              },
+              "outputs": {
+                "__meta": "{\"schema_version\":\"2\"}",
+                "__pulumi_raw_state_delta": {
+                  "obj": {
+                    "ps": {
+                      "keepers": {
+                        "4dabf18193072939515e22adb298388d": "1b47061264138c4ac30d75fd1eb44270",
+                        "ciphertext": "[secret]"
+                      },
+                      "overrideSpecial": {
+                        "4dabf18193072939515e22adb298388d": "1b47061264138c4ac30d75fd1eb44270",
+                        "ciphertext": "[secret]"
+                      }
+                    }
+                  }
+                },
+                "id": "[resource-id]",
+                "length": 8,
+                "lower": true,
+                "minLower": 0,
+                "minNumeric": 0,
+                "minSpecial": 0,
+                "minUpper": 0,
+                "number": true,
+                "numeric": true,
+                "result": "[result]",
+                "special": false,
+                "upper": false
+              },
+              "parent": "urn:pulumi:dev::recorder-test::pulumi:pulumi:Stack::recorder-test-dev",
+              "provider": "urn:pulumi:dev::recorder-test::pulumi:providers:random::default::00000000-0000-0000-0000-000000000000",
+              "type": "random:index/randomString:RandomString",
+              "urn": "urn:pulumi:dev::recorder-test::random:index/randomString:RandomString::word"
+            },
+            "old": {
+              "custom": true,
+              "id": "[resource-id]",
+              "inputs": {
+                "length": 8,
+                "special": false,
+                "upper": false
+              },
+              "outputs": {
+                "__meta": "{\"schema_version\":\"2\"}",
+                "__pulumi_raw_state_delta": {
+                  "obj": {
+                    "ps": {
+                      "keepers": {
+                        "4dabf18193072939515e22adb298388d": "1b47061264138c4ac30d75fd1eb44270",
+                        "ciphertext": "[secret]"
+                      },
+                      "overrideSpecial": {
+                        "4dabf18193072939515e22adb298388d": "1b47061264138c4ac30d75fd1eb44270",
+                        "ciphertext": "[secret]"
+                      }
+                    }
+                  }
+                },
+                "id": "[resource-id]",
+                "length": 8,
+                "lower": true,
+                "minLower": 0,
+                "minNumeric": 0,
+                "minSpecial": 0,
+                "minUpper": 0,
+                "number": true,
+                "numeric": true,
+                "result": "[result]",
+                "special": false,
+                "upper": false
+              },
+              "parent": "urn:pulumi:dev::recorder-test::pulumi:pulumi:Stack::recorder-test-dev",
+              "provider": "urn:pulumi:dev::recorder-test::pulumi:providers:random::default::00000000-0000-0000-0000-000000000000",
+              "type": "random:index/randomString:RandomString",
+              "urn": "urn:pulumi:dev::recorder-test::random:index/randomString:RandomString::word"
+            },
+            "op": "same",
+            "provider": "urn:pulumi:dev::recorder-test::pulumi:providers:random::default::00000000-0000-0000-0000-000000000000",
+            "type": "random:index/randomString:RandomString",
+            "urn": "urn:pulumi:dev::recorder-test::random:index/randomString:RandomString::word"
+          },
+          "planning": true
+        },
+        "sequence": 6,
+        "timestamp": 0
+      },
+      {
+        "resourcePreEvent": {
+          "metadata": {
+            "detailedDiff": null,
+            "new": {
+              "custom": true,
+              "id": "[resource-id]",
+              "inputs": {
+                "max": 42,
+                "min": 42,
+                "seed": "recorder-pin"
+              },
+              "outputs": {
+                "__pulumi_raw_state_delta": {
+                  "obj": {
+                    "ps": {
+                      "keepers": {
+                        "4dabf18193072939515e22adb298388d": "1b47061264138c4ac30d75fd1eb44270",
+                        "ciphertext": "[secret]"
+                      }
+                    }
+                  }
+                },
+                "id": "[resource-id]",
+                "max": 42,
+                "min": 42,
+                "result": 42,
+                "seed": "recorder-pin"
+              },
+              "parent": "urn:pulumi:dev::recorder-test::pulumi:pulumi:Stack::recorder-test-dev",
+              "provider": "urn:pulumi:dev::recorder-test::pulumi:providers:random::default::00000000-0000-0000-0000-000000000000",
+              "type": "random:index/randomInteger:RandomInteger",
+              "urn": "urn:pulumi:dev::recorder-test::random:index/randomInteger:RandomInteger::pin"
+            },
+            "old": {
+              "custom": true,
+              "id": "[resource-id]",
+              "inputs": {
+                "max": 42,
+                "min": 42,
+                "seed": "recorder-pin"
+              },
+              "outputs": {
+                "__pulumi_raw_state_delta": {
+                  "obj": {
+                    "ps": {
+                      "keepers": {
+                        "4dabf18193072939515e22adb298388d": "1b47061264138c4ac30d75fd1eb44270",
+                        "ciphertext": "[secret]"
+                      }
+                    }
+                  }
+                },
+                "id": "[resource-id]",
+                "max": 42,
+                "min": 42,
+                "result": 42,
+                "seed": "recorder-pin"
+              },
+              "parent": "urn:pulumi:dev::recorder-test::pulumi:pulumi:Stack::recorder-test-dev",
+              "provider": "urn:pulumi:dev::recorder-test::pulumi:providers:random::default::00000000-0000-0000-0000-000000000000",
+              "type": "random:index/randomInteger:RandomInteger",
+              "urn": "urn:pulumi:dev::recorder-test::random:index/randomInteger:RandomInteger::pin"
+            },
+            "op": "refresh",
+            "provider": "urn:pulumi:dev::recorder-test::pulumi:providers:random::default::00000000-0000-0000-0000-000000000000",
+            "type": "random:index/randomInteger:RandomInteger",
+            "urn": "urn:pulumi:dev::recorder-test::random:index/randomInteger:RandomInteger::pin"
+          },
+          "planning": true
+        },
+        "sequence": 7,
+        "timestamp": 0
+      },
+      {
+        "resOutputsEvent": {
+          "metadata": {
+            "detailedDiff": null,
+            "new": {
+              "custom": true,
+              "id": "[resource-id]",
+              "inputs": {
+                "max": 42,
+                "min": 42,
+                "seed": "recorder-pin"
+              },
+              "outputs": {
+                "__pulumi_raw_state_delta": {
+                  "obj": {
+                    "ps": {
+                      "keepers": {
+                        "4dabf18193072939515e22adb298388d": "1b47061264138c4ac30d75fd1eb44270",
+                        "ciphertext": "[secret]"
+                      }
+                    }
+                  }
+                },
+                "id": "[resource-id]",
+                "max": 42,
+                "min": 42,
+                "result": 42,
+                "seed": "recorder-pin"
+              },
+              "parent": "urn:pulumi:dev::recorder-test::pulumi:pulumi:Stack::recorder-test-dev",
+              "provider": "urn:pulumi:dev::recorder-test::pulumi:providers:random::default::00000000-0000-0000-0000-000000000000",
+              "type": "random:index/randomInteger:RandomInteger",
+              "urn": "urn:pulumi:dev::recorder-test::random:index/randomInteger:RandomInteger::pin"
+            },
+            "old": {
+              "custom": true,
+              "id": "[resource-id]",
+              "inputs": {
+                "max": 42,
+                "min": 42,
+                "seed": "recorder-pin"
+              },
+              "outputs": {
+                "__pulumi_raw_state_delta": {
+                  "obj": {
+                    "ps": {
+                      "keepers": {
+                        "4dabf18193072939515e22adb298388d": "1b47061264138c4ac30d75fd1eb44270",
+                        "ciphertext": "[secret]"
+                      }
+                    }
+                  }
+                },
+                "id": "[resource-id]",
+                "max": 42,
+                "min": 42,
+                "result": 42,
+                "seed": "recorder-pin"
+              },
+              "parent": "urn:pulumi:dev::recorder-test::pulumi:pulumi:Stack::recorder-test-dev",
+              "provider": "urn:pulumi:dev::recorder-test::pulumi:providers:random::default::00000000-0000-0000-0000-000000000000",
+              "type": "random:index/randomInteger:RandomInteger",
+              "urn": "urn:pulumi:dev::recorder-test::random:index/randomInteger:RandomInteger::pin"
+            },
+            "op": "same",
+            "provider": "urn:pulumi:dev::recorder-test::pulumi:providers:random::default::00000000-0000-0000-0000-000000000000",
+            "type": "random:index/randomInteger:RandomInteger",
+            "urn": "urn:pulumi:dev::recorder-test::random:index/randomInteger:RandomInteger::pin"
+          },
+          "planning": true
+        },
+        "sequence": 8,
+        "timestamp": 0
+      },
+      {
+        "resourcePreEvent": {
+          "metadata": {
+            "detailedDiff": null,
+            "new": {
+              "custom": true,
+              "id": "[resource-id]",
+              "inputs": {
+                "length": 14,
+                "lower": true,
+                "minLower": 3,
+                "minNumeric": 2,
+                "minSpecial": 1,
+                "minUpper": 2,
+                "numeric": true,
+                "overrideSpecial": "_-",
+                "special": true,
+                "upper": true
+              },
+              "outputs": {
+                "__meta": "{\"schema_version\":\"3\"}",
+                "__pulumi_raw_state_delta": {
+                  "obj": {
+                    "ps": {
+                      "keepers": {
+                        "4dabf18193072939515e22adb298388d": "1b47061264138c4ac30d75fd1eb44270",
+                        "ciphertext": "[secret]"
+                      }
+                    }
+                  }
+                },
+                "bcryptHash": {
+                  "4dabf18193072939515e22adb298388d": "1b47061264138c4ac30d75fd1eb44270",
+                  "ciphertext": "[secret]"
+                },
+                "id": "[resource-id]",
+                "length": 14,
+                "lower": true,
+                "minLower": 3,
+                "minNumeric": 2,
+                "minSpecial": 1,
+                "minUpper": 2,
+                "number": true,
+                "numeric": true,
+                "overrideSpecial": "_-",
+                "result": {
+                  "4dabf18193072939515e22adb298388d": "1b47061264138c4ac30d75fd1eb44270",
+                  "ciphertext": "[secret]"
+                },
+                "special": true,
+                "upper": true
+              },
+              "parent": "urn:pulumi:dev::recorder-test::pulumi:pulumi:Stack::recorder-test-dev",
+              "provider": "urn:pulumi:dev::recorder-test::pulumi:providers:random::default::00000000-0000-0000-0000-000000000000",
+              "type": "random:index/randomPassword:RandomPassword",
+              "urn": "urn:pulumi:dev::recorder-test::random:index/randomPassword:RandomPassword::password"
+            },
+            "old": {
+              "custom": true,
+              "id": "[resource-id]",
+              "inputs": {
+                "length": 14,
+                "lower": true,
+                "minLower": 3,
+                "minNumeric": 2,
+                "minSpecial": 1,
+                "minUpper": 2,
+                "numeric": true,
+                "overrideSpecial": "_-",
+                "special": true,
+                "upper": true
+              },
+              "outputs": {
+                "__meta": "{\"schema_version\":\"3\"}",
+                "__pulumi_raw_state_delta": {
+                  "obj": {
+                    "ps": {
+                      "keepers": {
+                        "4dabf18193072939515e22adb298388d": "1b47061264138c4ac30d75fd1eb44270",
+                        "ciphertext": "[secret]"
+                      }
+                    }
+                  }
+                },
+                "bcryptHash": {
+                  "4dabf18193072939515e22adb298388d": "1b47061264138c4ac30d75fd1eb44270",
+                  "ciphertext": "[secret]"
+                },
+                "id": "[resource-id]",
+                "length": 14,
+                "lower": true,
+                "minLower": 3,
+                "minNumeric": 2,
+                "minSpecial": 1,
+                "minUpper": 2,
+                "number": true,
+                "numeric": true,
+                "overrideSpecial": "_-",
+                "result": {
+                  "4dabf18193072939515e22adb298388d": "1b47061264138c4ac30d75fd1eb44270",
+                  "ciphertext": "[secret]"
+                },
+                "special": true,
+                "upper": true
+              },
+              "parent": "urn:pulumi:dev::recorder-test::pulumi:pulumi:Stack::recorder-test-dev",
+              "provider": "urn:pulumi:dev::recorder-test::pulumi:providers:random::default::00000000-0000-0000-0000-000000000000",
+              "type": "random:index/randomPassword:RandomPassword",
+              "urn": "urn:pulumi:dev::recorder-test::random:index/randomPassword:RandomPassword::password"
+            },
+            "op": "refresh",
+            "provider": "urn:pulumi:dev::recorder-test::pulumi:providers:random::default::00000000-0000-0000-0000-000000000000",
+            "type": "random:index/randomPassword:RandomPassword",
+            "urn": "urn:pulumi:dev::recorder-test::random:index/randomPassword:RandomPassword::password"
+          },
+          "planning": true
+        },
+        "sequence": 9,
+        "timestamp": 0
+      },
+      {
+        "resOutputsEvent": {
+          "metadata": {
+            "detailedDiff": null,
+            "new": {
+              "custom": true,
+              "id": "[resource-id]",
+              "inputs": {
+                "length": 14,
+                "lower": true,
+                "minLower": 3,
+                "minNumeric": 2,
+                "minSpecial": 1,
+                "minUpper": 2,
+                "numeric": true,
+                "overrideSpecial": "_-",
+                "special": true,
+                "upper": true
+              },
+              "outputs": {
+                "__meta": "{\"schema_version\":\"3\"}",
+                "__pulumi_raw_state_delta": {
+                  "obj": {
+                    "ps": {
+                      "keepers": {
+                        "4dabf18193072939515e22adb298388d": "1b47061264138c4ac30d75fd1eb44270",
+                        "ciphertext": "[secret]"
+                      }
+                    }
+                  }
+                },
+                "bcryptHash": {
+                  "4dabf18193072939515e22adb298388d": "1b47061264138c4ac30d75fd1eb44270",
+                  "ciphertext": "[secret]"
+                },
+                "id": "[resource-id]",
+                "length": 14,
+                "lower": true,
+                "minLower": 3,
+                "minNumeric": 2,
+                "minSpecial": 1,
+                "minUpper": 2,
+                "number": true,
+                "numeric": true,
+                "overrideSpecial": "_-",
+                "result": {
+                  "4dabf18193072939515e22adb298388d": "1b47061264138c4ac30d75fd1eb44270",
+                  "ciphertext": "[secret]"
+                },
+                "special": true,
+                "upper": true
+              },
+              "parent": "urn:pulumi:dev::recorder-test::pulumi:pulumi:Stack::recorder-test-dev",
+              "provider": "urn:pulumi:dev::recorder-test::pulumi:providers:random::default::00000000-0000-0000-0000-000000000000",
+              "type": "random:index/randomPassword:RandomPassword",
+              "urn": "urn:pulumi:dev::recorder-test::random:index/randomPassword:RandomPassword::password"
+            },
+            "old": {
+              "custom": true,
+              "id": "[resource-id]",
+              "inputs": {
+                "length": 14,
+                "lower": true,
+                "minLower": 3,
+                "minNumeric": 2,
+                "minSpecial": 1,
+                "minUpper": 2,
+                "numeric": true,
+                "overrideSpecial": "_-",
+                "special": true,
+                "upper": true
+              },
+              "outputs": {
+                "__meta": "{\"schema_version\":\"3\"}",
+                "__pulumi_raw_state_delta": {
+                  "obj": {
+                    "ps": {
+                      "keepers": {
+                        "4dabf18193072939515e22adb298388d": "1b47061264138c4ac30d75fd1eb44270",
+                        "ciphertext": "[secret]"
+                      }
+                    }
+                  }
+                },
+                "bcryptHash": {
+                  "4dabf18193072939515e22adb298388d": "1b47061264138c4ac30d75fd1eb44270",
+                  "ciphertext": "[secret]"
+                },
+                "id": "[resource-id]",
+                "length": 14,
+                "lower": true,
+                "minLower": 3,
+                "minNumeric": 2,
+                "minSpecial": 1,
+                "minUpper": 2,
+                "number": true,
+                "numeric": true,
+                "overrideSpecial": "_-",
+                "result": {
+                  "4dabf18193072939515e22adb298388d": "1b47061264138c4ac30d75fd1eb44270",
+                  "ciphertext": "[secret]"
+                },
+                "special": true,
+                "upper": true
+              },
+              "parent": "urn:pulumi:dev::recorder-test::pulumi:pulumi:Stack::recorder-test-dev",
+              "provider": "urn:pulumi:dev::recorder-test::pulumi:providers:random::default::00000000-0000-0000-0000-000000000000",
+              "type": "random:index/randomPassword:RandomPassword",
+              "urn": "urn:pulumi:dev::recorder-test::random:index/randomPassword:RandomPassword::password"
+            },
+            "op": "same",
+            "provider": "urn:pulumi:dev::recorder-test::pulumi:providers:random::default::00000000-0000-0000-0000-000000000000",
+            "type": "random:index/randomPassword:RandomPassword",
+            "urn": "urn:pulumi:dev::recorder-test::random:index/randomPassword:RandomPassword::password"
+          },
+          "planning": true
+        },
+        "sequence": 10,
+        "timestamp": 0
+      },
+      {
+        "resourcePreEvent": {
+          "metadata": {
+            "detailedDiff": null,
+            "new": {
+              "custom": true,
+              "id": "[resource-id]",
+              "inputs": {
+                "byteLength": 6,
+                "keepers": {
+                  "project": "recorder-test",
+                  "purpose": "api-shape"
+                },
+                "prefix": "rec-"
+              },
+              "outputs": {
+                "__pulumi_raw_state_delta": {
+                  "obj": {
+                    "ps": {
+                      "keepers": {
+                        "map": {}
+                      }
+                    }
+                  }
+                },
+                "b64Std": "[b64-std]",
+                "b64Url": "[b64-url]",
+                "byteLength": 6,
+                "dec": "[decimal-id]",
+                "hex": "[hex]",
+                "id": "[resource-id]",
+                "keepers": {
+                  "project": "recorder-test",
+                  "purpose": "api-shape"
+                },
+                "prefix": "rec-"
+              },
+              "parent": "urn:pulumi:dev::recorder-test::pulumi:pulumi:Stack::recorder-test-dev",
+              "provider": "urn:pulumi:dev::recorder-test::pulumi:providers:random::default::00000000-0000-0000-0000-000000000000",
+              "type": "random:index/randomId:RandomId",
+              "urn": "urn:pulumi:dev::recorder-test::random:index/randomId:RandomId::token"
+            },
+            "old": {
+              "custom": true,
+              "id": "[resource-id]",
+              "inputs": {
+                "byteLength": 6,
+                "keepers": {
+                  "project": "recorder-test",
+                  "purpose": "api-shape"
+                },
+                "prefix": "rec-"
+              },
+              "outputs": {
+                "__pulumi_raw_state_delta": {
+                  "obj": {
+                    "ps": {
+                      "keepers": {
+                        "map": {}
+                      }
+                    }
+                  }
+                },
+                "b64Std": "[b64-std]",
+                "b64Url": "[b64-url]",
+                "byteLength": 6,
+                "dec": "[decimal-id]",
+                "hex": "[hex]",
+                "id": "[resource-id]",
+                "keepers": {
+                  "project": "recorder-test",
+                  "purpose": "api-shape"
+                },
+                "prefix": "rec-"
+              },
+              "parent": "urn:pulumi:dev::recorder-test::pulumi:pulumi:Stack::recorder-test-dev",
+              "provider": "urn:pulumi:dev::recorder-test::pulumi:providers:random::default::00000000-0000-0000-0000-000000000000",
+              "type": "random:index/randomId:RandomId",
+              "urn": "urn:pulumi:dev::recorder-test::random:index/randomId:RandomId::token"
+            },
+            "op": "refresh",
+            "provider": "urn:pulumi:dev::recorder-test::pulumi:providers:random::default::00000000-0000-0000-0000-000000000000",
+            "type": "random:index/randomId:RandomId",
+            "urn": "urn:pulumi:dev::recorder-test::random:index/randomId:RandomId::token"
+          },
+          "planning": true
+        },
+        "sequence": 11,
+        "timestamp": 0
+      },
+      {
+        "resOutputsEvent": {
+          "metadata": {
+            "detailedDiff": null,
+            "new": {
+              "custom": true,
+              "id": "[resource-id]",
+              "inputs": {
+                "byteLength": 6,
+                "keepers": {
+                  "project": "recorder-test",
+                  "purpose": "api-shape"
+                },
+                "prefix": "rec-"
+              },
+              "outputs": {
+                "__pulumi_raw_state_delta": {
+                  "obj": {
+                    "ps": {
+                      "keepers": {
+                        "map": {}
+                      }
+                    }
+                  }
+                },
+                "b64Std": "[b64-std]",
+                "b64Url": "[b64-url]",
+                "byteLength": 6,
+                "dec": "[decimal-id]",
+                "hex": "[hex]",
+                "id": "[resource-id]",
+                "keepers": {
+                  "project": "recorder-test",
+                  "purpose": "api-shape"
+                },
+                "prefix": "rec-"
+              },
+              "parent": "urn:pulumi:dev::recorder-test::pulumi:pulumi:Stack::recorder-test-dev",
+              "provider": "urn:pulumi:dev::recorder-test::pulumi:providers:random::default::00000000-0000-0000-0000-000000000000",
+              "type": "random:index/randomId:RandomId",
+              "urn": "urn:pulumi:dev::recorder-test::random:index/randomId:RandomId::token"
+            },
+            "old": {
+              "custom": true,
+              "id": "[resource-id]",
+              "inputs": {
+                "byteLength": 6,
+                "keepers": {
+                  "project": "recorder-test",
+                  "purpose": "api-shape"
+                },
+                "prefix": "rec-"
+              },
+              "outputs": {
+                "__pulumi_raw_state_delta": {
+                  "obj": {
+                    "ps": {
+                      "keepers": {
+                        "map": {}
+                      }
+                    }
+                  }
+                },
+                "b64Std": "[b64-std]",
+                "b64Url": "[b64-url]",
+                "byteLength": 6,
+                "dec": "[decimal-id]",
+                "hex": "[hex]",
+                "id": "[resource-id]",
+                "keepers": {
+                  "project": "recorder-test",
+                  "purpose": "api-shape"
+                },
+                "prefix": "rec-"
+              },
+              "parent": "urn:pulumi:dev::recorder-test::pulumi:pulumi:Stack::recorder-test-dev",
+              "provider": "urn:pulumi:dev::recorder-test::pulumi:providers:random::default::00000000-0000-0000-0000-000000000000",
+              "type": "random:index/randomId:RandomId",
+              "urn": "urn:pulumi:dev::recorder-test::random:index/randomId:RandomId::token"
+            },
+            "op": "same",
+            "provider": "urn:pulumi:dev::recorder-test::pulumi:providers:random::default::00000000-0000-0000-0000-000000000000",
+            "type": "random:index/randomId:RandomId",
+            "urn": "urn:pulumi:dev::recorder-test::random:index/randomId:RandomId::token"
+          },
+          "planning": true
+        },
+        "sequence": 12,
+        "timestamp": 0
+      },
+      {
+        "sequence": 13,
+        "summaryEvent": {
+          "PolicyPacks": {},
+          "durationSeconds": 1,
+          "isPreview": true,
+          "maybeCorrupt": false,
+          "resourceChanges": {
+            "same": 6
+          },
+          "result": "succeeded"
+        },
+        "timestamp": 0
+      }
+    ]
+  },
+  "body_b64": "H4sIAAAAAAAA/+xcW28aORT+L+d50HKZEOLX7kqNVHXRRn1KIuSxD+BmxuP1hYAQ/73yXBJoCE0LhCl1HmA8F+Nz/H3fsU/GXgLOUFoD5HYJSmPqOP7jzwBZAsvlWEyALFerCAz+71AyBNKOwIoMjaWZAtJeRUvQaHKnGQ7189MZWsqppf6Yo6UiRf63GI+BSJemEUh89JcEBwIQgZDK+XYsVxHkzlYFUNSYx1xzfxxzmow7g85Vr33ZvepdXXQusNulPOleDXqDga+ok8SX7X6n2487vQGLKeu1+eXFmHcwiePuZRsiYEJNUVucWyBwa5BptPewikCh/Uwz9GcV2pakGd5DBEpIIHE3Aps/oPyIc3/DFOf+WtkyuPXfZR1UF+Z7i5TOZ4KjLkt2oXzVyqUuE6T6urGUPUAETksg/rO+wHFGiEaWa466ZdFYQrY8+t09LY4z34o85cG1R3KtAgIaxxrN9KQNUSmVUsgJEKsdbhC0s5Wg/5Y9H/jZABAFfh6Vn8bb0lBydg8aPZkzNs/Kn4lKQN3W1bUEv19HF6QoJ3ZaNMGgopra3PumBZu4G41KC0eaPo6MpRZHHNOyKXnytYBmceMDokJt3gOfGsdifvQfWvmBzlYn7nLdE/APA58N3L6xyuoBQzSVPM8I4TimLrWEtKu/1paP+u+ZHNXjQnKc/1UWhmjJf/XRW5nyo3oIUWjXlDDAOMD4t4bxq6PCc7d8R6TrHXIYGhQiKMTvzJMQ6AKMzwHG26dX5272jigXn34+N4jAKGSCpkDGNDUYgVPKd0xR+l4tfFOAwPIODJtiRkcz1Ebk8g7IHXTvYAVREzUln6HWguNNberJxWUQQZo/ej+X3ZUJ+akst4vCZ5ehFqwuPjW8LH4pu6gdgXRZ8lyLrJ8qixqNS23VCpda34Af9PZ5C9yN1UJOKpKWhT34vqU2Qorc1p5BO5AykDKQ8hikbPBc+x3dsGNIcnHyiXcQvyB+QfzCiCSQMpDyDyBlU5MizRiO9E+XIcnovHyBIavfZDCIvBg/VtYqIZueTn1dYV6aV8vADlPPm/bX0uIEdYXSqrQH6LfWR0gNm18IxwGTAZNHxWSD58fv64kdMenyZFPkQP9A/xCSAib/KEw2dYLUmHg0OP1/kTvxq3mK3maeoruZp+is5ym6LzITLxIyMGqtJyfKu6rcROWYtyeieg1NRBVqlDC9UPYjNdN3SHztzEEdsnNfT0K90tW12h7dBTsxdd6CPqwWi9Qvr9RrR/Z4E2Z7jYQ8rUvZMx8dBCcIThCcIDg/JzgNzm6cyCU7hpVXJ38TIIh8EPkg8kHkw6gyCE4QnCA4DRWcpiYomzek7Bx2+5+f0vhkYfFTJQX9aF0Elc6/IrPreXzvAd+dTqvcePdSJVpmShWur1Dz9x9iQV1GVbFRUimY/fjGFqYk/bhlbGFG0o+/6LQ+6XRanNy0iCPzN3BkIqNpZf90Y9+NrS46qCfOW2Gua+Rf78OitVoIKXZH+dVxS8B0wHSjMd3ghMsx7d4VAg+6wVZQi6AWZ8OaEAEDps8O002dHJ4q/G3Zwm7tai8C47KM6sVTJBzmqWCLIWUP1S6H3GlqRS5vkOWSmyI/I8xQ40z4oFjldugiwQ+51k7ZpzUsNUU+TKmcYMGNomtIf7W2CMY4xhA5FpPZjbber74FAAD//9qPCAzzVgAA",
+  "body_gzip": true,
+  "status_code": 200,
+  "response": {}
+}

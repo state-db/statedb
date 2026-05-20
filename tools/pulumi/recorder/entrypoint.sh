@@ -51,22 +51,28 @@ run pulumi login "http://localhost:${PORT}"
 signal "02-stack-init"
 run pulumi stack init dev
 
-signal "03-preview"
-run pulumi preview --parallel 1
-
-signal "04-up"
+signal "03-up"
 run pulumi up --yes --parallel 1
 
-signal "05-stack-ls"
+signal "04-preview"
+run pulumi preview --parallel 1
+
+signal "05-refresh"
+run pulumi refresh --yes --parallel 1
+
+signal "06-stack-ls"
 run pulumi stack ls
 
-signal "06-stack-export"
+signal "07-stack-export"
 run pulumi stack export
 
-signal "07-destroy"
+signal "08-destroy"
 run pulumi destroy --yes --parallel 1
 
-signal "08-stack-rm"
+signal "09-stack-export-after-destroy"
+run pulumi stack export
+
+signal "10-stack-rm"
 run pulumi stack rm dev --yes
 
 echo ""

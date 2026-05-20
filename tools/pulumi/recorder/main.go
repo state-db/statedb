@@ -111,7 +111,11 @@ func (s *server) handle(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	status, resp := s.rt.route(r.Method, r.URL.Path, body)
+	routeBody := body
+	if decompressed != nil {
+		routeBody = decompressed
+	}
+	status, resp := s.rt.route(r.Method, r.URL.Path, routeBody)
 	fixtureResp := normalizeFixtureJSON(resp)
 
 	s.mu.Lock()
@@ -239,6 +243,10 @@ func normalizeFixtureJSONValue(key string, v interface{}) interface{} {
 	case map[string]interface{}:
 		out := make(map[string]interface{}, len(x))
 		for k, val := range x {
+			if key == "plaintexts" {
+				out["[secret]"] = "[secret]"
+				continue
+			}
 			switch k {
 			case "timestamp":
 				out[k] = float64(0)
@@ -248,6 +256,16 @@ func normalizeFixtureJSONValue(key string, v interface{}) interface{} {
 				continue
 			}
 			out[k] = normalizeFixtureJSONValue(k, val)
+		}
+		return out
+	case map[string]string:
+		out := make(map[string]interface{}, len(x))
+		for k, val := range x {
+			if key == "plaintexts" {
+				out["[secret]"] = "[secret]"
+				continue
+			}
+			out[k] = normalizeFixtureString(k, val)
 		}
 		return out
 	case []interface{}:
@@ -274,7 +292,7 @@ func normalizeFixtureString(key, value string) string {
 		if value != "" {
 			return "[b64-url]"
 		}
-	case "ciphertext", "password", "plaintext":
+	case "ciphertext", "ciphertexts", "password", "plaintext":
 		if value != "" {
 			return "[secret]"
 		}
@@ -310,11 +328,20 @@ func stabilizeConcurrentPulumiProbe(path string) {
 	if path == "/api/user/organizations/default" {
 		time.Sleep(15 * time.Millisecond)
 	}
+	if strings.HasSuffix(path, "/export") {
+		time.Sleep(20 * time.Millisecond)
+	}
+	if strings.HasSuffix(path, "/batch-decrypt") {
+		time.Sleep(40 * time.Millisecond)
+	}
 	parts := strings.Split(strings.Trim(path, "/"), "/")
 	if len(parts) == 6 && parts[0] == "api" && parts[1] == "stacks" {
 		switch parts[5] {
 		case "preview", "update", "destroy", "refresh":
 			time.Sleep(20 * time.Millisecond)
 		}
+	}
+	if len(parts) == 5 && parts[0] == "api" && parts[1] == "stacks" {
+		time.Sleep(30 * time.Millisecond)
 	}
 }

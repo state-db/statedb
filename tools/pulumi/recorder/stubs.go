@@ -11,16 +11,24 @@ import (
 var opCounter int64
 
 const stableTokenExpirationUnix = 4102444800 // 2100-01-01T00:00:00Z
+const pulumiVersion = "v3.242.0"
+const pulumiManifestMagic = "4ae265b5e36f43e09c7ff61ff9e23e82843496e0c1ad370c8f62bd2c5f0f4369"
 
 type opState struct {
-	token string
+	token      string
+	kind       string
+	stackKey   string
+	hasJournal bool
 }
 
 type stackInfo struct {
-	orgName     string
-	projectName string
-	stackName   string
-	tags        map[string]interface{}
+	orgName         string
+	projectName     string
+	stackName       string
+	tags            map[string]interface{}
+	resourceOrder   []string
+	resources       map[string]map[string]interface{}
+	secretsProvider map[string]interface{}
 }
 
 type router struct {
@@ -163,7 +171,7 @@ func (rt *router) routeStacks(method string, parts []string, n int, body []byte)
 		switch op {
 		case "export":
 			if method == "GET" {
-				return rt.exportStack()
+				return rt.exportStack(org, proj, stack)
 			}
 		case "import":
 			if method == "POST" {
@@ -183,7 +191,7 @@ func (rt *router) routeStacks(method string, parts []string, n int, body []byte)
 			}
 		case "preview", "update", "destroy", "refresh":
 			if method == "POST" {
-				return rt.createOp(op)
+				return rt.createOp(stackKey(org, proj, stack), op)
 			}
 		case "encrypt":
 			if method == "POST" {
@@ -212,13 +220,12 @@ func (rt *router) routeStacks(method string, parts []string, n int, body []byte)
 	case n >= 8:
 		switch subOp {
 		case "complete":
-			rt.mu.Lock()
-			delete(rt.ops, updateID)
-			rt.mu.Unlock()
-			return 200, map[string]interface{}{}
+			return rt.completeOp(updateID)
 		case "renew_lease":
 			return rt.renewLease()
-		case "checkpoint", "checkpointdelta", "checkpointverbatim", "journalentries":
+		case "journalentries":
+			return rt.recordJournalEntries(org, proj, stack, updateID, body)
+		case "checkpoint", "checkpointdelta", "checkpointverbatim":
 			return 200, map[string]interface{}{}
 		case "events":
 			return 200, map[string]interface{}{}
@@ -253,7 +260,13 @@ func (rt *router) createStack(org, proj string, body []byte) (int, interface{}) 
 	if tags == nil {
 		tags = map[string]interface{}{}
 	}
-	info := stackInfo{orgName: org, projectName: proj, stackName: stackName, tags: tags}
+	info := stackInfo{
+		orgName:     org,
+		projectName: proj,
+		stackName:   stackName,
+		tags:        tags,
+		resources:   map[string]map[string]interface{}{},
+	}
 	rt.mu.Lock()
 	rt.stacks[stackKey(org, proj, stackName)] = info
 	rt.mu.Unlock()
@@ -288,20 +301,46 @@ func (rt *router) stackBody(s stackInfo) map[string]interface{} {
 	}
 }
 
-func (rt *router) exportStack() (int, interface{}) {
+func (rt *router) exportStack(org, proj, stack string) (int, interface{}) {
+	rt.mu.Lock()
+	info, ok := rt.stacks[stackKey(org, proj, stack)]
+	rt.mu.Unlock()
+	if ok && len(info.resourceOrder) > 0 {
+		resources := make([]interface{}, 0, len(info.resourceOrder))
+		for _, urn := range info.resourceOrder {
+			if res := info.resources[urn]; res != nil {
+				resources = append(resources, res)
+			}
+		}
+		deployment := map[string]interface{}{
+			"manifest": map[string]interface{}{
+				"time":    "1970-01-01T00:00:00Z",
+				"magic":   pulumiManifestMagic,
+				"version": pulumiVersion,
+			},
+			"resources": resources,
+		}
+		if info.secretsProvider != nil {
+			deployment["secrets_providers"] = info.secretsProvider
+		}
+		return 200, map[string]interface{}{
+			"version":    3,
+			"deployment": deployment,
+		}
+	}
 	return 200, map[string]interface{}{
 		"version":    3,
 		"deployment": nil,
 	}
 }
 
-func (rt *router) createOp(kind string) (int, interface{}) {
+func (rt *router) createOp(key, kind string) (int, interface{}) {
 	n := atomic.AddInt64(&opCounter, 1)
 	updateID := fmt.Sprintf("%s-%04d", kind, n)
 	token := fmt.Sprintf("lease-%04d", n)
 
 	rt.mu.Lock()
-	rt.ops[updateID] = opState{token: token}
+	rt.ops[updateID] = opState{token: token, kind: kind, stackKey: key}
 	rt.mu.Unlock()
 
 	return 200, map[string]interface{}{
@@ -337,6 +376,96 @@ func (rt *router) startOp(updateID string, body []byte) (int, interface{}) {
 		resp["journalVersion"] = req.JournalVersion
 	}
 	return 200, resp
+}
+
+func (rt *router) completeOp(updateID string) (int, interface{}) {
+	rt.mu.Lock()
+	state, ok := rt.ops[updateID]
+	if ok && state.kind == "destroy" && state.hasJournal {
+		if info, exists := rt.stacks[state.stackKey]; exists {
+			info.resourceOrder = nil
+			info.resources = map[string]map[string]interface{}{}
+			rt.stacks[state.stackKey] = info
+		}
+	}
+	delete(rt.ops, updateID)
+	rt.mu.Unlock()
+	return 200, map[string]interface{}{}
+}
+
+func (rt *router) recordJournalEntries(org, proj, stack, updateID string, body []byte) (int, interface{}) {
+	var req struct {
+		Entries []map[string]interface{} `json:"entries"`
+	}
+	json.Unmarshal(body, &req) //nolint:errcheck
+
+	key := stackKey(org, proj, stack)
+	rt.mu.Lock()
+	defer rt.mu.Unlock()
+
+	op := rt.ops[updateID]
+	op.hasJournal = true
+	rt.ops[updateID] = op
+
+	info, ok := rt.stacks[key]
+	if !ok {
+		return 200, map[string]interface{}{}
+	}
+	if info.resources == nil {
+		info.resources = map[string]map[string]interface{}{}
+	}
+
+	for _, entry := range req.Entries {
+		if provider, ok := entry["secretsProvider"].(map[string]interface{}); ok {
+			info.secretsProvider = provider
+		}
+
+		state, ok := entry["state"].(map[string]interface{})
+		if !ok {
+			continue
+		}
+		urn, _ := state["urn"].(string)
+		if urn == "" {
+			continue
+		}
+		if shouldDeleteJournalResource(op.kind, entry) {
+			delete(info.resources, urn)
+			info.resourceOrder = removeURN(info.resourceOrder, urn)
+			continue
+		}
+		if _, exists := info.resources[urn]; !exists {
+			info.resourceOrder = append(info.resourceOrder, urn)
+		}
+		info.resources[urn] = state
+	}
+
+	rt.stacks[key] = info
+	return 200, map[string]interface{}{}
+}
+
+func shouldDeleteJournalResource(kind string, entry map[string]interface{}) bool {
+	if kind != "destroy" {
+		return false
+	}
+	if removeNew, ok := entry["removeNew"].(float64); ok && removeNew > 0 {
+		return true
+	}
+	if removeOld, ok := entry["removeOld"].(float64); ok && removeOld > 0 {
+		return true
+	}
+	if op, ok := entry["operation"].(map[string]interface{}); ok {
+		return op["type"] == "deleting" || op["type"] == "deleted"
+	}
+	return false
+}
+
+func removeURN(urns []string, target string) []string {
+	for i, urn := range urns {
+		if urn == target {
+			return append(urns[:i], urns[i+1:]...)
+		}
+	}
+	return urns
 }
 
 func (rt *router) renewLease() (int, interface{}) {

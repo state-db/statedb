@@ -1,0 +1,23 @@
+{
+  "seq": 86,
+  "command": "05-refresh",
+  "cmd_seq": 29,
+  "method": "POST",
+  "path": "/api/stacks/testorg/recorder-test/dev/encrypt",
+  "headers": {
+    "Accept": "application/vnd.pulumi+9",
+    "Accept-Encoding": "gzip",
+    "Authorization": "REDACTED",
+    "Content-Length": "24",
+    "Content-Type": "application/json",
+    "User-Agent": "pulumi-cli/1 (v3.242.0; linux; cmd=refresh)"
+  },
+  "body": {
+    "plaintext": "[secret]"
+  },
+  "body_b64": "eyJwbGFpbnRleHQiOiJbc2VjcmV0XSJ9",
+  "status_code": 200,
+  "response": {
+    "ciphertext": "[secret]"
+  }
+}

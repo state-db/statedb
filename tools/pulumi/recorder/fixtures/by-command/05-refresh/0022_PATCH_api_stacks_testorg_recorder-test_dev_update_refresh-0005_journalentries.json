@@ -1,0 +1,49 @@
+{
+  "seq": 79,
+  "command": "05-refresh",
+  "cmd_seq": 22,
+  "method": "PATCH",
+  "path": "/api/stacks/testorg/recorder-test/dev/update/refresh-0005/journalentries",
+  "headers": {
+    "Accept": "application/vnd.pulumi+9",
+    "Accept-Encoding": "gzip",
+    "Authorization": "REDACTED",
+    "Content-Encoding": "gzip",
+    "Content-Length": "209",
+    "Content-Type": "application/json",
+    "User-Agent": "pulumi-cli/1 (v3.242.0; linux; cmd=refresh)"
+  },
+  "body": {
+    "entries": [
+      {
+        "kind": 6,
+        "operationID": 0,
+        "removeNew": null,
+        "removeOld": null,
+        "secretsProvider": {
+          "state": {
+            "owner": "testorg",
+            "project": "recorder-test",
+            "stack": "dev",
+            "url": "http://localhost:8080"
+          },
+          "type": "service"
+        },
+        "sequenceID": 1,
+        "version": 1
+      },
+      {
+        "kind": 0,
+        "operationID": 1,
+        "removeNew": null,
+        "removeOld": null,
+        "sequenceID": 2,
+        "version": 1
+      }
+    ]
+  },
+  "body_b64": "H4sIAAAAAAAA/4yPMU/EMAxG/8s3B12PAZ08s7AAO2Ko0k9cuBAXx80JVf3vKEOFYGKznuUnvxUsbokV8rLiksoEuQvQmTZ60vJwDxkCjB/a+MgrpCw57+ApTzuojEavz6YtTTTIiuqjsw96LZ3AWV3tDQGz6TujQ2CMahPtpi8R+lG8QDCxIWCxDMHZfZbDIWsc81mry2k4DdgC/GsmBJXWUmQnlZ8LS2T/+xjQaDVpgRy3sOcNf/KO/8v78d7+8r5u3wEAAP//her8K0QBAAA=",
+  "body_gzip": true,
+  "status_code": 200,
+  "response": {}
+}

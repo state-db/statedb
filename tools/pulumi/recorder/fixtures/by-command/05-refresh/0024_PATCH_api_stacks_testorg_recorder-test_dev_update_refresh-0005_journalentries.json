@@ -1,0 +1,92 @@
+{
+  "seq": 81,
+  "command": "05-refresh",
+  "cmd_seq": 24,
+  "method": "PATCH",
+  "path": "/api/stacks/testorg/recorder-test/dev/update/refresh-0005/journalentries",
+  "headers": {
+    "Accept": "application/vnd.pulumi+9",
+    "Accept-Encoding": "gzip",
+    "Authorization": "REDACTED",
+    "Content-Encoding": "gzip",
+    "Content-Length": "660",
+    "Content-Type": "application/json",
+    "User-Agent": "pulumi-cli/1 (v3.242.0; linux; cmd=refresh)"
+  },
+  "body": {
+    "entries": [
+      {
+        "isRefresh": true,
+        "kind": 3,
+        "operationID": 1,
+        "removeNew": null,
+        "removeOld": 0,
+        "sequenceID": 3,
+        "state": {
+          "created": "1970-01-01T00:00:00Z",
+          "custom": false,
+          "modified": "1970-01-01T00:00:00Z",
+          "outputs": {
+            "password": {
+              "4dabf18193072939515e22adb298388d": "1b47061264138c4ac30d75fd1eb44270",
+              "ciphertext": "[secret]"
+            },
+            "petName": "[pet-name]",
+            "pin": 42,
+            "tokenHex": "[hex]",
+            "word": "[word]"
+          },
+          "sourcePosition": "project:///../home/runner/work/pulumi-yaml/pulumi-yaml/pkg/server/server.go#326",
+          "stackTrace": [
+            {
+              "sourcePosition": "project:///../home/runner/work/pulumi-yaml/pulumi-yaml/pkg/server/server.go#326"
+            },
+            {
+              "sourcePosition": "project:///../home/runner/go/pkg/mod/github.com/pulumi/pulumi/sdk/v3@v3.237.0/proto/go/language_grpc.pb.go#588"
+            },
+            {
+              "sourcePosition": "project:///../home/runner/go/pkg/mod/github.com/pulumi/pulumi/sdk/v3@v3.237.0/go/common/util/rpcutil/interceptor.go#301"
+            },
+            {
+              "sourcePosition": "project:///../home/runner/go/pkg/mod/google.golang.org/grpc@v1.81.0/server.go#1243"
+            },
+            {
+              "sourcePosition": "project:///../home/runner/go/pkg/mod/github.com/grpc-ecosystem/grpc-opentracing@v0.0.0-20180507213350-8e809c8a8645/go/otgrpc/server.go#57"
+            },
+            {
+              "sourcePosition": "project:///../home/runner/go/pkg/mod/google.golang.org/grpc@v1.81.0/server.go#1243"
+            },
+            {
+              "sourcePosition": "project:///../home/runner/go/pkg/mod/github.com/pulumi/pulumi/sdk/v3@v3.237.0/go/common/util/rpcutil/interceptor.go#228"
+            },
+            {
+              "sourcePosition": "project:///../home/runner/go/pkg/mod/google.golang.org/grpc@v1.81.0/server.go#1234"
+            },
+            {
+              "sourcePosition": "project:///../home/runner/go/pkg/mod/github.com/pulumi/pulumi/sdk/v3@v3.237.0/proto/go/language_grpc.pb.go#590"
+            },
+            {
+              "sourcePosition": "project:///../home/runner/go/pkg/mod/google.golang.org/grpc@v1.81.0/server.go#1430"
+            },
+            {
+              "sourcePosition": "project:///../home/runner/go/pkg/mod/google.golang.org/grpc@v1.81.0/server.go#1856"
+            },
+            {
+              "sourcePosition": "project:///../home/runner/go/pkg/mod/google.golang.org/grpc@v1.81.0/server.go#1065"
+            },
+            {
+              "sourcePosition": "project:///../opt/hostedtoolcache/go/1.25.9/x64/src/runtime/asm_arm64.s#1268"
+            }
+          ],
+          "type": "pulumi:pulumi:Stack",
+          "urn": "urn:pulumi:dev::recorder-test::pulumi:pulumi:Stack::recorder-test-dev"
+        },
+        "version": 1
+      }
+    ]
+  },
+  "body_b64": "H4sIAAAAAAAA/9RVTW/kNgz9L9yrrU97xtYphx7ay7Zo99QgWGhkjscd21Ql2UkQzH8v5EyAbVEUKbJNsYAByhLJ9x5pi0+AcwoDRjC3TzDEn/EYMJ7ApLBgAedh7sDoAshjsGmg+YfvwMgCAk604ke8BzMv4/iy8ePYgREFRPx9wdlh9tYFxGQTgnkCF9Am7MCAbPeiFLIU8pMQZnt+hQLcEhNNYI52jFjARN1wHP4pgJbklxRzcm9jvKfQ5XXV2cNRNrLVYq9a3dayRqVsd1Bto5tmS3io9mIn1a6SunGVdVp0+/rYSTxUldqLzGbwJwwJHxIYuI3oAqY7uBTgMX20E+Zdj6mc7YR3UIAfZjCVKiDRGefv8SE7nPAhnz0zg9tstxyRluDwJ4pDrisY8IF+Q5cM55wxfqIJeVjmGQO/p3DmfhmXaSgf7TT+eX3uecSwYrga1tMHrXaw1d2dPwXrcGvvf454Kf4VSE9bqok63g/ptByYo+mK9GJid+arvlk1U3rPBPeBEuXI0c79Ynv83AfvmD9kDnXTvAeHnrijaaKZL2kYefBus8OcMDj0iZ4LIuRbyBD1I7Kesk5GoedZ580qWSOZ+KLuUlX664jOACU6io8x4fWVfL4frBvm/mYVTDBRKiEbUYu9klrXomywEa1rbLOr6pyYUg78gmC9/7bK8DV6r9SbPsTXi9bV///TteJdtFb6fXCa+k0X2atxxK5+DQ75xE8UE3aJaHTWnTDjSaZq1vKHXcVjcJlIGibkNk6fbZh2FYsfpNo1cLkrID36PKqem2uu5pc8G6CAJWTMJcwvBx2uxgR0FDoMZcKYjPmb0L/4lB2ueaqtGOImQ17uLn8EAAD//5XEGjdeCAAA",
+  "body_gzip": true,
+  "status_code": 200,
+  "response": {}
+}

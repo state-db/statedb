@@ -19,7 +19,7 @@ class ContractReplayTest {
   enum Scenario {
     LOGIN("01-login", FixtureReplay::seedIdentity),
     STACK_INIT("02-stack-init", FixtureReplay::seedIdentity),
-    STACK_RM("08-stack-rm", FixtureReplay::seedIdentityWithStack);
+    STACK_RM("10-stack-rm", FixtureReplay::seedIdentityWithStack);
 
     final String command;
     final Consumer<EntityManager> seed;

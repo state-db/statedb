@@ -1,0 +1,40 @@
+{
+  "seq": 23,
+  "command": "03-up",
+  "cmd_seq": 18,
+  "method": "PATCH",
+  "path": "/api/stacks/testorg/recorder-test/dev/update/update-0002/journalentries",
+  "headers": {
+    "Accept": "application/vnd.pulumi+9",
+    "Accept-Encoding": "gzip",
+    "Authorization": "REDACTED",
+    "Content-Encoding": "gzip",
+    "Content-Length": "218",
+    "Content-Type": "application/json",
+    "User-Agent": "pulumi-cli/1 (v3.242.0; linux; cmd=up)"
+  },
+  "body": {
+    "entries": [
+      {
+        "kind": 1,
+        "operationID": 2,
+        "removeNew": null,
+        "removeOld": null,
+        "sequenceID": 5,
+        "state": {
+          "created": "1970-01-01T00:00:00Z",
+          "custom": true,
+          "id": "[resource-id]",
+          "modified": "1970-01-01T00:00:00Z",
+          "type": "pulumi:providers:random",
+          "urn": "urn:pulumi:dev::recorder-test::pulumi:providers:random::default"
+        },
+        "version": 1
+      }
+    ]
+  },
+  "body_b64": "H4sIAAAAAAAA/3yMMUvEQBCF/8urN5AIIk5tY6ONlccVIfsOFrM7cXY2IiH/XSJe6cEwxcf3vQ0sbokVctrwkUqEDAG60EZPWp6fIHcBxqwrX/gFKW2er+B1jldQ+dlYJh7BfUD10QnZMBlHZ4RgeHzou37o+uGt7+X33hEwteqaIW6NAekwT8aqzSZ2KZ4RkDWmS7o14t8LIVja3HKSxXRNkVbFxhI1I6BZgRxf/pzIVcQ4qUVa56wu8k8uEnkZ2+zYA1ZaTVogw37efwIAAP//T/wyLD4BAAA=",
+  "body_gzip": true,
+  "status_code": 200,
+  "response": {}
+}
