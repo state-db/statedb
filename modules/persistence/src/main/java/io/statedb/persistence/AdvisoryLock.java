@@ -29,6 +29,12 @@ public class AdvisoryLock {
   /** Guards {@link io.statedb.persistence.bootstrap.BootstrapProvisioner#provision}. */
   public static final long BOOTSTRAP_KEY = 0x5354415444425F31L;
 
+  /**
+   * Guards the one-shot seeding of the singleton {@code service_secrets_keyset} row. See {@code
+   * design/secrets.md} for why generation happens here and not in a Flyway migration.
+   */
+  public static final long SECRETS_KEYSET_BOOTSTRAP_KEY = 0x5354415444425F32L;
+
   @Inject EntityManager em;
 
   /**

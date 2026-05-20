@@ -3,6 +3,9 @@ quarkus:
     name: state-db
   http:
     port: 8080
+    # Pulumi's CLI gzips request bodies on `/batch-decrypt` (and may on other endpoints in
+    # future). Vert.x only decompresses when this is on; default is false.
+    enable-decompression: true
   datasource:
     db-kind: postgresql
   flyway:
