@@ -377,17 +377,21 @@ Each slice in this phase moves one step closer to a real `pulumi up` cycle succe
   - `/encrypt`: request `{plaintext}` → response `{ciphertext}`
   - `/batch-decrypt`: request `{ciphertexts:[...]}` → response `{plaintexts:{ciphertext: plaintext}}`
   - `/decrypt`: single-value counterpart for compatibility, even though the current recorder only exercised batch decrypt.
-- Implement a Wave 1 service-managed symmetric scheme. The exact crypto primitive belongs in the implementation PR, but the API must not be an identity passthrough outside the recorder.
-- The encryption key is stack-scoped (deterministic per `(org, project, stack)`): ciphertext written during one update must decrypt during a later update from the same stack, and must not decrypt under a different stack's key. The wire `secretsProvider.state` (`owner`, `project`, `stack`, `url`) identifies the provider; the key derivation must match that identity.
-- The stack's `SecretsManager` journal entry carries `secretsProvider: {type:"service", state:{owner, project, stack, url}}`; no new schema table is required for this slice.
+- Use [Google Tink](https://developers.google.com/tink) (`com.google.crypto.tink:tink`) for all cryptographic operations — `Aead` primitive with `AES256_GCM` parameters. No hand-rolled crypto, no JCA `Cipher` calls in our code. Full design in [`design/secrets.md`](secrets.md). The API must not be an identity passthrough outside the recorder.
+- Cross-stack isolation is enforced by passing the resolved `stack.id` (UUIDv7, 16 bytes) as the AAD to every `Aead.encrypt` / `Aead.decrypt` call. Tag failure on AAD mismatch is AES-GCM's defining guarantee; we rely on it rather than per-stack key derivation. Binding to `stack.id` (not the wire `(owner, project, stack, url)` tuple) survives `pulumi stack rename`, operator URL changes, and instance migration, and forbids reuse on delete-and-recreate of a same-named stack.
+- The stack's `SecretsManager` journal entry carries `secretsProvider: {type:"service", state:{owner, project, stack, url}}`. A singleton table `service_secrets_keyset (id, key_material, created_at)` holds a serialized Tink `AES256_GCM` keyset, seeded once by `BootstrapProvisioner` under advisory lock — no env-supplied or config-supplied keyset.
 
 **Out of scope.** AWS KMS, Azure Key Vault, and other delegated providers.
 
 **Tests**
 
-- Fixture replay for `/encrypt` and `/batch-decrypt`.
-- Round-trip encrypt then decrypt returns the original plaintext.
-- Batch decrypt preserves one result per unique ciphertext.
+- Fixture replay for `/encrypt` and `/batch-decrypt`. Recorder payloads are redacted (`[secret]`), so replay asserts HTTP shape and status only — crypto behavior is asserted by the unit/integration tests below.
+- Unit: round-trip encrypt then decrypt returns the original plaintext; two encrypts of the same plaintext yield distinct ciphertexts.
+- Unit: tampered base64 → decrypt 400; ciphertext encrypted under stack A's AAD fails 400 when decrypted under stack B's AAD.
+- Integration: ciphertext produced under stack A's path returns 400 when posted to stack B's `/decrypt` (cross-stack isolation via `stack.id` AAD).
+- Integration: `/batch-decrypt` deduplicates repeated input ciphertexts; any single bad entry fails the whole batch with 400.
+- Integration: bootstrap seeds exactly one `service_secrets_keyset` row; second boot is idempotent under the advisory lock.
+- Tink's own primitive correctness is not retested; we rely on upstream test coverage.
 
 **Manual verification.** Run the recorder fixture sequence through the contract harness and confirm preview/refresh/destroy no longer fail at `batch-decrypt`.
 

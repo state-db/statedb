@@ -51,6 +51,7 @@ Forward compatibility for OpenTofu: the `workspaces` parent table provides type-
 | `org_members` | User → org membership with role (owner/member/viewer) |
 | `workspaces` | Type-erased parent for state-managing entities (Pulumi stacks today, Tofu workspaces in Wave 3) |
 | `update_events` | Decoded events from `events/batch`; queryable per update; BRIN-indexed for time-based vacuum |
+| `service_secrets_keyset` | Singleton serialized Tink `AES256_GCM` keyset for the `service` secrets provider; seeded by `BootstrapProvisioner` on first start (see [`secrets.md`](secrets.md)) |
 
 ---
 
@@ -561,6 +562,17 @@ $$;
 CREATE TRIGGER trg_journal_invalidates_cache
     AFTER INSERT ON journal_entries
     FOR EACH ROW EXECUTE FUNCTION trg_invalidate_stack_cache();
+
+-- Singleton row holding a serialized Tink `AES256_GCM` keyset for the
+-- `service` secrets provider. Seeded once by `BootstrapProvisioner` (under
+-- advisory lock) on first start; contents are opaque to the schema — Tink
+-- owns the framing. The CHECK enforces the singleton at the DB level. Full
+-- design and threat model: `secrets.md`.
+CREATE TABLE service_secrets_keyset (
+    id            SMALLINT     PRIMARY KEY DEFAULT 1 CHECK (id = 1),
+    key_material  BYTEA        NOT NULL,
+    created_at    TIMESTAMPTZ  NOT NULL DEFAULT now()
+);
 ```
 
 ---
@@ -582,7 +594,7 @@ CREATE TRIGGER trg_journal_invalidates_cache
 | `PATCH .../update/{updateID}/checkpoint`, `/checkpointdelta`, `/checkpointverbatim` | 501 in Wave 1 when journaling is negotiated | `stack_locks` (validate token) |
 | `POST .../update/{updateID}/events/batch` | INSERT `update_events` (one row per decoded event) | `stack_locks` (validate token) |
 | `POST .../update/{updateID}/complete` | UPDATE `stack_updates.status`, DELETE `stack_locks`, UPDATE `stacks.version` + `active_update_id = null` | `stack_updates` |
-| `POST .../{stack}/encrypt`, `/decrypt`, `/batch-decrypt` | — | stack secret configuration; no schema table in Wave 1 |
+| `POST .../{stack}/encrypt`, `/decrypt`, `/batch-decrypt` | — | `service_secrets_keyset` (singleton master key, loaded at startup); per-request HKDF derivation against the resolved `stacks.id`. Full design: [`secrets.md`](secrets.md). |
 
 ---
 
