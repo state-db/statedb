@@ -9,7 +9,7 @@
     "Accept-Encoding": "gzip",
     "Authorization": "REDACTED",
     "Content-Encoding": "gzip",
-    "Content-Length": "667",
+    "Content-Length": "655",
     "Content-Type": "application/json",
     "User-Agent": "pulumi-cli/1 (v3.242.0; linux; cmd=up)"
   },
@@ -21,15 +21,13 @@
           "resource": {
             "custom": true,
             "inputs": {
-              "length": 8,
-              "special": false,
-              "upper": false
+              "length": 2,
+              "separator": "-"
             },
             "parent": "urn:pulumi:dev::recorder-test::pulumi:pulumi:Stack::recorder-test-dev",
             "propertyDependencies": {
               "length": [],
-              "special": [],
-              "upper": []
+              "separator": []
             },
             "provider": "urn:pulumi:dev::recorder-test::pulumi:providers:random::default::00000000-0000-0000-0000-000000000000",
             "sourcePosition": "project:///../home/runner/work/pulumi-yaml/pulumi-yaml/pkg/pulumiyaml/run.go#1020",
@@ -92,8 +90,8 @@
                 "sourcePosition": "project:///../opt/hostedtoolcache/go/1.25.9/x64/src/runtime/asm_arm64.s#1268"
               }
             ],
-            "type": "random:index/randomString:RandomString",
-            "urn": "urn:pulumi:dev::recorder-test::random:index/randomString:RandomString::word"
+            "type": "random:index/randomPet:RandomPet",
+            "urn": "urn:pulumi:dev::recorder-test::random:index/randomPet:RandomPet::pet"
           },
           "type": "creating"
         },
@@ -105,7 +103,7 @@
       }
     ]
   },
-  "body_b64": "H4sIAAAAAAAA/9RWTW/7Jhj/LvyvDuC31OHUQy+7bNO6WxRVFD91vNjAHsBtFPm7TzjOlk2TlrRZpL8PwT/Iw++FEDgQ0B5bcESsD2TX6poInhBjAaVvjSbiQBCcCaggvqvgvOmJ8BggIa22wbvY34Fu/JaIKiHOgmplR8Sb7BwkJFgLOKMxIVYiaE8ECaiFDV3oW1HDIASCMlgDLjw4L05Dc/Pspdr94zuLGgaSEItRrd8/gQVdg1aTm78krTdnmiKYBa0341Q8tHWEl+qZC5xAqWvTC1HDmwydF4LPz+JfPk4PScgxzJ+Na48BRw2/gfKCMUYp25oeGAatAdm7wR07Ei/2su/+/r5rZjxBDJo25lvKs4kk5vUryrhq68M9OMfkf6fJiuU9aPhqdQeaMitvzuIAB8C5iSR5Vl1L0phpqt7UrGn9NrxSZfqZ6dS4eseG/HHIaZY/UD7VHEdOGRbFPcxd/XP4jDmLxptY2UndBNnAS4NWUfs6rWJ1r4CV6XujWfBtx9CqqW21B1RgvTkGwtOviDGm6YA2JvqkBhsWfT4OKa1Sys9yT7Miv43pSLAAZdzeeZihsfFEkqrVzePAKad8kfG04iV/yNI8L/migoqvVCWrZVHGiY2PhWcCy4fvK4ZbrH32tZ1+uen86p19+023uvq4+ZTXIr8PT1V+6Y/sYh6+vOjIMdazrXEeam9Mp6TaQuRLaVbSFftYFsyhikJ82wOTrn+R2C8L6r6l2bIi4yYhfm+BCDJfkVpdwwc7gmePrW7EL2eAJPHu9d83sMtmE+LdYE3GP0UoBOkjzXh2r/3hiYg8IQi9GeBHeCdCh647dfzU1acOB78H0ApiwTIhA6CbMkvHzfhHAAAA//8bpz+/PQsAAA==",
+  "body_b64": "H4sIAAAAAAAA/9RWTXPbIBD9L+QqAfpyZE455NJLm2l783gyBG1l1RLQBSnxePzfO8hym3Q6EztxPVMOXnbx8t4+jNktAe2xAUfEYkvWja6I4BExFlD6xmgitgTBmR4VhLnqnTcdER57iEijbe9diLega78iIo2IAytReoNEkJjsImIlgvZEkB61sH3bd42oYBACQRmsAGMPzovD0mS+eKnWf3wnrmAgEbEY+PnNLVjQFWg18v9NYrF8wWKx3I05Q1MBHk9jSnACpa5MJ0QF32TfeiH4NOK/fBwGichetTvjmr2SgcN3UF4wxihlK9MBw15rQPZocM32wPFGdu3L+bqe/NHFXtPaXCU8HUGCTF9RhuNZbC+BuYv+OUyazy4Bw+fzC8AUaXF2FAc4AE4mgGRpeSpIbcatOlOxuvGr/oEq001IB+OqNRuymyGjaXZN+ZizXzlomOeXKO7kn8NbirNovAmZrdR1L2u4r9Eqah/GUywvJbAyXWc0633TMrRqtI32gAqsN3tBePIeMsbULdDahDqpwZqFOm+GhJYJ5c90T9I8O0/RASAGZdzGeZhcY8PTI1Wj65uBU055nPKk5AW/TpMsK3hcQsnnqpTlLC/CxsaHxGcEi+v/S4ZznH36vpt+fNHZyTf7/JdufvJz86Za8+wyOGXxrj+yo3H47Kgnx1jPVsZ5qLwxrZJqBQEvoWlB5+xpljOHKhDxTQdMuu5eYjfLqbtK0llJdsuI+I0FIsjUIjW6gie2d+7Ai8+HGYlC1/V67/XaPkJY8KGnnHAVgvSNrkPoV8/64ZaILCIInRngIzwSofu2PQQ+tdUh4OBHD1pBSJhFZAB0o0zJbrn7GQAA//9Y2LDZGQsAAA==",
   "body_gzip": true,
   "status_code": 200,
   "response": {}

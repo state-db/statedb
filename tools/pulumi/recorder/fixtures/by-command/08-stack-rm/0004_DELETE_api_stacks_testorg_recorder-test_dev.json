@@ -1,5 +1,5 @@
 {
-  "seq": 74,
+  "seq": 85,
   "command": "08-stack-rm",
   "cmd_seq": 4,
   "method": "DELETE",

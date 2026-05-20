@@ -1,5 +1,5 @@
 {
-  "seq": 49,
+  "seq": 60,
   "command": "06-stack-export",
   "cmd_seq": 1,
   "method": "GET",

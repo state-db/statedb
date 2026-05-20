@@ -1,5 +1,5 @@
 {
-  "seq": 48,
+  "seq": 59,
   "command": "05-stack-ls",
   "cmd_seq": 4,
   "method": "GET",

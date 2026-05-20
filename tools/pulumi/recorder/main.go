@@ -112,6 +112,7 @@ func (s *server) handle(w http.ResponseWriter, r *http.Request) {
 	}
 
 	status, resp := s.rt.route(r.Method, r.URL.Path, body)
+	fixtureResp := normalizeFixtureJSON(resp)
 
 	s.mu.Lock()
 	cmd := s.cmdName
@@ -130,7 +131,7 @@ func (s *server) handle(w http.ResponseWriter, r *http.Request) {
 		Query:      r.URL.RawQuery,
 		Headers:    headers,
 		StatusCode: status,
-		Response:   resp,
+		Response:   fixtureResp,
 	}
 	if bodyJSON != nil {
 		fix.Body = bodyJSON
@@ -265,6 +266,26 @@ func normalizeFixtureJSONValue(key string, v interface{}) interface{} {
 func normalizeFixtureString(key, value string) string {
 	value = uuidRe.ReplaceAllString(value, "00000000-0000-0000-0000-000000000000")
 	switch key {
+	case "b64Std":
+		if value != "" {
+			return "[b64-std]"
+		}
+	case "b64Url":
+		if value != "" {
+			return "[b64-url]"
+		}
+	case "ciphertext", "password", "plaintext":
+		if value != "" {
+			return "[secret]"
+		}
+	case "dec":
+		if value != "" {
+			return "[decimal-id]"
+		}
+	case "hex", "tokenHex":
+		if value != "" {
+			return "[hex]"
+		}
 	case "id":
 		if value != "" {
 			return "[resource-id]"
@@ -288,5 +309,12 @@ func normalizeFixtureString(key, value string) string {
 func stabilizeConcurrentPulumiProbe(path string) {
 	if path == "/api/user/organizations/default" {
 		time.Sleep(15 * time.Millisecond)
+	}
+	parts := strings.Split(strings.Trim(path, "/"), "/")
+	if len(parts) == 6 && parts[0] == "api" && parts[1] == "stacks" {
+		switch parts[5] {
+		case "preview", "update", "destroy", "refresh":
+			time.Sleep(20 * time.Millisecond)
+		}
 	}
 }

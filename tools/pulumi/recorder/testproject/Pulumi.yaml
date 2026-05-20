@@ -13,6 +13,48 @@ resources:
       length: 8
       special: false
       upper: false
+    options:
+      dependsOn:
+        - ${pet}
+  pin:
+    type: random:RandomInteger
+    properties:
+      min: 42
+      max: 42
+      seed: recorder-pin
+    options:
+      dependsOn:
+        - ${word}
+  password:
+    type: random:RandomPassword
+    properties:
+      length: 14
+      lower: true
+      upper: true
+      numeric: true
+      special: true
+      minLower: 3
+      minUpper: 2
+      minNumeric: 2
+      minSpecial: 1
+      overrideSpecial: "_-"
+    options:
+      dependsOn:
+        - ${pin}
+  token:
+    type: random:RandomId
+    properties:
+      byteLength: 6
+      prefix: rec-
+      keepers:
+        project: recorder-test
+        purpose: api-shape
+    options:
+      dependsOn:
+        - ${password}
 outputs:
   petName: ${pet.id}
   word: ${word.result}
+  pin: ${pin.result}
+  password: ${password.result}
+  tokenHex: ${token.hex}

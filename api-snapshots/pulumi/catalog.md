@@ -21,8 +21,8 @@
 | 9 | `POST` | `/api/stacks/{org}/{project}/{stack}/update/{updateID}/events/batch` | 5 | preview, up, destroy |
 | 10 | `POST` | `/api/stacks/{org}/{project}/{stack}/update/{updateID}/complete` | 5 | preview, up, destroy |
 | 11 | `POST` | `/api/stacks/{org}/{project}/{stack}/update` | 2 | up |
-| 12 | `PATCH` | `/api/stacks/{org}/{project}/{stack}/update/{updateID}/journalentries` | 10 | up, destroy |
-| 13 | `POST` | `/api/stacks/{org}/{project}/{stack}/encrypt` | 4 | up |
+| 12 | `PATCH` | `/api/stacks/{org}/{project}/{stack}/update/{updateID}/journalentries` | 16 | up, destroy |
+| 13 | `POST` | `/api/stacks/{org}/{project}/{stack}/encrypt` | 9 | up |
 | 14 | `GET` | `/api/user/stacks` | 1 | stack-ls |
 | 15 | `POST` | `/api/stacks/{org}/{project}/{stack}/destroy` | 2 | destroy |
 | 16 | `DELETE` | `/api/stacks/{org}/{project}/{stack}` | 1 | stack-rm |
@@ -90,6 +90,17 @@ PATCH /api/stacks/{org}/{project}/{stack}/update/{updateID}/journalentries
 POST /api/stacks/{org}/{project}/{stack}/encrypt
 POST /api/stacks/{org}/{project}/{stack}/encrypt
 PATCH /api/stacks/{org}/{project}/{stack}/update/{updateID}/journalentries
+PATCH /api/stacks/{org}/{project}/{stack}/update/{updateID}/journalentries
+POST /api/stacks/{org}/{project}/{stack}/encrypt
+PATCH /api/stacks/{org}/{project}/{stack}/update/{updateID}/journalentries
+PATCH /api/stacks/{org}/{project}/{stack}/update/{updateID}/journalentries
+POST /api/stacks/{org}/{project}/{stack}/encrypt
+POST /api/stacks/{org}/{project}/{stack}/encrypt
+POST /api/stacks/{org}/{project}/{stack}/encrypt
+PATCH /api/stacks/{org}/{project}/{stack}/update/{updateID}/journalentries
+PATCH /api/stacks/{org}/{project}/{stack}/update/{updateID}/journalentries
+PATCH /api/stacks/{org}/{project}/{stack}/update/{updateID}/journalentries
+POST /api/stacks/{org}/{project}/{stack}/encrypt
 PATCH /api/stacks/{org}/{project}/{stack}/update/{updateID}/journalentries
 POST /api/stacks/{org}/{project}/{stack}/update/{updateID}/events/batch
 POST /api/stacks/{org}/{project}/{stack}/update/{updateID}/complete
@@ -449,6 +460,68 @@ _Replay request body preserved in `body_b64` (273 bytes)._
             "custom": true,
             "id": "",
             "inputs": {
+              "length": 2,
+              "separator": "-"
+            },
+            "outputs": {},
+            "parent": "urn:pulumi:dev::recorder-test::pulumi:pulumi:Stack::recorder-test-dev",
+            "provider": "urn:pulumi:dev::recorder-test::pulumi:providers:random::default::00000000-0000-0000-0000-000000000000",
+            "type": "random:index/randomPet:RandomPet",
+            "urn": "urn:pulumi:dev::recorder-test::random:index/randomPet:RandomPet::pet"
+          },
+          "old": null,
+          "op": "create",
+          "provider": "urn:pulumi:dev::recorder-test::pulumi:providers:random::default::00000000-0000-0000-0000-000000000000",
+          "type": "random:index/randomPet:RandomPet",
+          "urn": "urn:pulumi:dev::recorder-test::random:index/randomPet:RandomPet::pet"
+        },
+        "planning": true
+      },
+      "sequence": 3,
+      "timestamp": 0
+    },
+    {
+      "resOutputsEvent": {
+        "metadata": {
+          "detailedDiff": null,
+          "logical": true,
+          "new": {
+            "custom": true,
+            "id": "",
+            "inputs": {
+              "length": 2,
+              "separator": "-"
+            },
+            "outputs": {
+              "id": "[resource-id]",
+              "length": 2,
+              "separator": "-"
+            },
+            "parent": "urn:pulumi:dev::recorder-test::pulumi:pulumi:Stack::recorder-test-dev",
+            "provider": "urn:pulumi:dev::recorder-test::pulumi:providers:random::default::00000000-0000-0000-0000-000000000000",
+            "type": "random:index/randomPet:RandomPet",
+            "urn": "urn:pulumi:dev::recorder-test::random:index/randomPet:RandomPet::pet"
+          },
+          "old": null,
+          "op": "create",
+          "provider": "urn:pulumi:dev::recorder-test::pulumi:providers:random::default::00000000-0000-0000-0000-000000000000",
+          "type": "random:index/randomPet:RandomPet",
+          "urn": "urn:pulumi:dev::recorder-test::random:index/randomPet:RandomPet::pet"
+        },
+        "planning": true
+      },
+      "sequence": 4,
+      "timestamp": 0
+    },
+    {
+      "resourcePreEvent": {
+        "metadata": {
+          "detailedDiff": null,
+          "logical": true,
+          "new": {
+            "custom": true,
+            "id": "",
+            "inputs": {
               "length": 8,
               "special": false,
               "upper": false
@@ -467,7 +540,7 @@ _Replay request body preserved in `body_b64` (273 bytes)._
         },
         "planning": true
       },
-      "sequence": 3,
+      "sequence": 5,
       "timestamp": 0
     },
     {
@@ -510,7 +583,7 @@ _Replay request body preserved in `body_b64` (273 bytes)._
         },
         "planning": true
       },
-      "sequence": 4,
+      "sequence": 6,
       "timestamp": 0
     },
     {
@@ -522,24 +595,25 @@ _Replay request body preserved in `body_b64` (273 bytes)._
             "custom": true,
             "id": "",
             "inputs": {
-              "length": 2,
-              "separator": "-"
+              "max": 42,
+              "min": 42,
+              "seed": "recorder-pin"
             },
             "outputs": {},
             "parent": "urn:pulumi:dev::recorder-test::pulumi:pulumi:Stack::recorder-test-dev",
             "provider": "urn:pulumi:dev::recorder-test::pulumi:providers:random::default::00000000-0000-0000-0000-000000000000",
-            "type": "random:index/randomPet:RandomPet",
-            "urn": "urn:pulumi:dev::recorder-test::random:index/randomPet:RandomPet::pet"
+            "type": "random:index/randomInteger:RandomInteger",
+            "urn": "urn:pulumi:dev::recorder-test::random:index/randomInteger:RandomInteger::pin"
           },
           "old": null,
           "op": "create",
           "provider": "urn:pulumi:dev::recorder-test::pulumi:providers:random::default::00000000-0000-0000-0000-000000000000",
-          "type": "random:index/randomPet:RandomPet",
-          "urn": "urn:pulumi:dev::recorder-test::random:index/randomPet:RandomPet::pet"
+          "type": "random:index/randomInteger:RandomInteger",
+          "urn": "urn:pulumi:dev::recorder-test::random:index/randomInteger:RandomInteger::pin"
         },
         "planning": true
       },
-      "sequence": 5,
+      "sequence": 7,
       "timestamp": 0
     },
     {
@@ -551,28 +625,204 @@ _Replay request body preserved in `body_b64` (273 bytes)._
             "custom": true,
             "id": "",
             "inputs": {
-              "length": 2,
-              "separator": "-"
+              "max": 42,
+              "min": 42,
+              "seed": "recorder-pin"
             },
             "outputs": {
               "id": "[resource-id]",
-              "length": 2,
-              "separator": "-"
+              "max": 42,
+              "min": 42,
+              "result": "[result]",
+              "seed": "recorder-pin"
             },
             "parent": "urn:pulumi:dev::recorder-test::pulumi:pulumi:Stack::recorder-test-dev",
             "provider": "urn:pulumi:dev::recorder-test::pulumi:providers:random::default::00000000-0000-0000-0000-000000000000",
-            "type": "random:index/randomPet:RandomPet",
-            "urn": "urn:pulumi:dev::recorder-test::random:index/randomPet:RandomPet::pet"
+            "type": "random:index/randomInteger:RandomInteger",
+            "urn": "urn:pulumi:dev::recorder-test::random:index/randomInteger:RandomInteger::pin"
           },
           "old": null,
           "op": "create",
           "provider": "urn:pulumi:dev::recorder-test::pulumi:providers:random::default::00000000-0000-0000-0000-000000000000",
-          "type": "random:index/randomPet:RandomPet",
-          "urn": "urn:pulumi:dev::recorder-test::random:index/randomPet:RandomPet::pet"
+          "type": "random:index/randomInteger:RandomInteger",
+          "urn": "urn:pulumi:dev::recorder-test::random:index/randomInteger:RandomInteger::pin"
         },
         "planning": true
       },
-      "sequence": 6,
+      "sequence": 8,
+      "timestamp": 0
+    },
+    {
+      "resourcePreEvent": {
+        "metadata": {
+          "detailedDiff": null,
+          "logical": true,
+          "new": {
+            "custom": true,
+            "id": "",
+            "inputs": {
+              "length": 14,
+              "lower": true,
+              "minLower": 3,
+              "minNumeric": 2,
+              "minSpecial": 1,
+              "minUpper": 2,
+              "numeric": true,
+              "overrideSpecial": "_-",
+              "special": true,
+              "upper": true
+            },
+            "outputs": {},
+            "parent": "urn:pulumi:dev::recorder-test::pulumi:pulumi:Stack::recorder-test-dev",
+            "provider": "urn:pulumi:dev::recorder-test::pulumi:providers:random::default::00000000-0000-0000-0000-000000000000",
+            "type": "random:index/randomPassword:RandomPassword",
+            "urn": "urn:pulumi:dev::recorder-test::random:index/randomPassword:RandomPassword::password"
+          },
+          "old": null,
+          "op": "create",
+          "provider": "urn:pulumi:dev::recorder-test::pulumi:providers:random::default::00000000-0000-0000-0000-000000000000",
+          "type": "random:index/randomPassword:RandomPassword",
+          "urn": "urn:pulumi:dev::recorder-test::random:index/randomPassword:RandomPassword::password"
+        },
+        "planning": true
+      },
+      "sequence": 9,
+      "timestamp": 0
+    },
+    {
+      "resOutputsEvent": {
+        "metadata": {
+          "detailedDiff": null,
+          "logical": true,
+          "new": {
+            "custom": true,
+            "id": "",
+            "inputs": {
+              "length": 14,
+              "lower": true,
+              "minLower": 3,
+              "minNumeric": 2,
+              "minSpecial": 1,
+              "minUpper": 2,
+              "numeric": true,
+              "overrideSpecial": "_-",
+              "special": true,
+              "upper": true
+            },
+            "outputs": {
+              "bcryptHash": {
+                "4dabf18193072939515e22adb298388d": "1b47061264138c4ac30d75fd1eb44270",
+                "ciphertext": "[secret]"
+              },
+              "id": "[resource-id]",
+              "length": 14,
+              "lower": true,
+              "minLower": 3,
+              "minNumeric": 2,
+              "minSpecial": 1,
+              "minUpper": 2,
+              "number": true,
+              "numeric": true,
+              "overrideSpecial": "_-",
+              "result": {
+                "4dabf18193072939515e22adb298388d": "1b47061264138c4ac30d75fd1eb44270",
+                "ciphertext": "[secret]"
+              },
+              "special": true,
+              "upper": true
+            },
+            "parent": "urn:pulumi:dev::recorder-test::pulumi:pulumi:Stack::recorder-test-dev",
+            "provider": "urn:pulumi:dev::recorder-test::pulumi:providers:random::default::00000000-0000-0000-0000-000000000000",
+            "type": "random:index/randomPassword:RandomPassword",
+            "urn": "urn:pulumi:dev::recorder-test::random:index/randomPassword:RandomPassword::password"
+          },
+          "old": null,
+          "op": "create",
+          "provider": "urn:pulumi:dev::recorder-test::pulumi:providers:random::default::00000000-0000-0000-0000-000000000000",
+          "type": "random:index/randomPassword:RandomPassword",
+          "urn": "urn:pulumi:dev::recorder-test::random:index/randomPassword:RandomPassword::password"
+        },
+        "planning": true
+      },
+      "sequence": 10,
+      "timestamp": 0
+    },
+    {
+      "resourcePreEvent": {
+        "metadata": {
+          "detailedDiff": null,
+          "logical": true,
+          "new": {
+            "custom": true,
+            "id": "",
+            "inputs": {
+              "byteLength": 6,
+              "keepers": {
+                "project": "recorder-test",
+                "purpose": "api-shape"
+              },
+              "prefix": "rec-"
+            },
+            "outputs": {},
+            "parent": "urn:pulumi:dev::recorder-test::pulumi:pulumi:Stack::recorder-test-dev",
+            "provider": "urn:pulumi:dev::recorder-test::pulumi:providers:random::default::00000000-0000-0000-0000-000000000000",
+            "type": "random:index/randomId:RandomId",
+            "urn": "urn:pulumi:dev::recorder-test::random:index/randomId:RandomId::token"
+          },
+          "old": null,
+          "op": "create",
+          "provider": "urn:pulumi:dev::recorder-test::pulumi:providers:random::default::00000000-0000-0000-0000-000000000000",
+          "type": "random:index/randomId:RandomId",
+          "urn": "urn:pulumi:dev::recorder-test::random:index/randomId:RandomId::token"
+        },
+        "planning": true
+      },
+      "sequence": 11,
+      "timestamp": 0
+    },
+    {
+      "resOutputsEvent": {
+        "metadata": {
+          "detailedDiff": null,
+          "logical": true,
+          "new": {
+            "custom": true,
+            "id": "",
+            "inputs": {
+              "byteLength": 6,
+              "keepers": {
+                "project": "recorder-test",
+                "purpose": "api-shape"
+              },
+              "prefix": "rec-"
+            },
+            "outputs": {
+              "b64Std": "[b64-std]",
+              "b64Url": "[b64-url]",
+              "byteLength": 6,
+              "dec": "[decimal-id]",
+              "hex": "[hex]",
+              "id": "[resource-id]",
+              "keepers": {
+                "project": "recorder-test",
+                "purpose": "api-shape"
+              },
+              "prefix": "rec-"
+            },
+            "parent": "urn:pulumi:dev::recorder-test::pulumi:pulumi:Stack::recorder-test-dev",
+            "provider": "urn:pulumi:dev::recorder-test::pulumi:providers:random::default::00000000-0000-0000-0000-000000000000",
+            "type": "random:index/randomId:RandomId",
+            "urn": "urn:pulumi:dev::recorder-test::random:index/randomId:RandomId::token"
+          },
+          "old": null,
+          "op": "create",
+          "provider": "urn:pulumi:dev::recorder-test::pulumi:providers:random::default::00000000-0000-0000-0000-000000000000",
+          "type": "random:index/randomId:RandomId",
+          "urn": "urn:pulumi:dev::recorder-test::random:index/randomId:RandomId::token"
+        },
+        "planning": true
+      },
+      "sequence": 12,
       "timestamp": 0
     },
     {
@@ -584,7 +834,10 @@ _Replay request body preserved in `body_b64` (273 bytes)._
             "id": "",
             "inputs": {},
             "outputs": {
+              "password": "[secret]",
               "petName": "[pet-name]",
+              "pin": "00000000-0000-0000-0000-000000000000",
+              "tokenHex": "[hex]",
               "word": "[word]"
             },
             "parent": "",
@@ -600,18 +853,18 @@ _Replay request body preserved in `body_b64` (273 bytes)._
         },
         "planning": true
       },
-      "sequence": 7,
+      "sequence": 13,
       "timestamp": 0
     },
     {
-      "sequence": 8,
+      "sequence": 14,
       "summaryEvent": {
         "PolicyPacks": {},
         "durationSeconds": 1,
         "isPreview": true,
         "maybeCorrupt": false,
         "resourceChanges": {
-          "create": 3
+          "create": 6
         },
         "result": "succeeded"
       },
@@ -621,7 +874,7 @@ _Replay request body preserved in `body_b64` (273 bytes)._
 }
 ```
 
-_Replay request body preserved in `body_b64` (616 gzip bytes)._
+_Replay request body preserved in `body_b64` (1047 gzip bytes)._
 
 **Response** (`200`):
 
@@ -715,7 +968,7 @@ _Replay request body preserved in `body_b64` (914 bytes)._
 
 ### 12. `PATCH /api/stacks/{org}/{project}/{stack}/update/{updateID}/journalentries`
 
-**Calls:** 10 &nbsp;·&nbsp; **Commands:** `04-up` `07-destroy`
+**Calls:** 16 &nbsp;·&nbsp; **Commands:** `04-up` `07-destroy`
 
 **Request body:**
 
@@ -813,23 +1066,23 @@ _Replay request body preserved in `body_b64` (591 gzip bytes)._
 
 ### 13. `POST /api/stacks/{org}/{project}/{stack}/encrypt`
 
-**Calls:** 4 &nbsp;·&nbsp; **Commands:** `04-up`
+**Calls:** 9 &nbsp;·&nbsp; **Commands:** `04-up`
 
 **Request body:**
 
 ```json
 {
-  "plaintext": "eyJyZXBsYWNlIjp7InJhdyI6bnVsbH19"
+  "plaintext": "[secret]"
 }
 ```
 
-_Replay request body preserved in `body_b64` (48 bytes)._
+_Replay request body preserved in `body_b64` (24 bytes)._
 
 **Response** (`200`):
 
 ```json
 {
-  "ciphertext": "eyJyZXBsYWNlIjp7InJhdyI6bnVsbH19"
+  "ciphertext": "[secret]"
 }
 ```
 
