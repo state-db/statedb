@@ -3,6 +3,7 @@
 package main
 
 import (
+	"encoding/base64"
 	"encoding/json"
 	"flag"
 	"fmt"
@@ -11,7 +12,6 @@ import (
 	"regexp"
 	"sort"
 	"strings"
-	"time"
 )
 
 var (
@@ -33,6 +33,8 @@ type rawFixture struct {
 	Query      string            `json:"query"`
 	Headers    map[string]string `json:"headers"`
 	Body       interface{}       `json:"body"`
+	BodyB64    string            `json:"body_b64"`
+	BodyGzip   bool              `json:"body_gzip"`
 	BodyRaw    string            `json:"body_raw"`
 	StatusCode int               `json:"status_code"`
 	Response   interface{}       `json:"response"`
@@ -79,7 +81,7 @@ func main() {
 	}
 
 	write("# Pulumi HTTP Backend — API Catalog\n\n")
-	write("> Generated %s from `%s/by-command/`\n", time.Now().UTC().Format("2006-01-02"), *fixtures)
+	write("> Generated from `%s/by-command/`\n", fixtureDisplayPath(*fixtures))
 	write(">\n")
 	write("> **Recording values:** org=`%s` · project=`%s` · stack=`%s`\n", *org, *project, *stack)
 	write(">\n")
@@ -117,8 +119,11 @@ func main() {
 		write("### %d. `%s %s%s`\n\n", i+1, e.key.Method, e.key.NormPath, q)
 		write("**Calls:** %d &nbsp;·&nbsp; **Commands:** %s\n\n", e.count, commandBadges(e.commands))
 
-		if e.example.Body != nil || e.example.BodyRaw != "" {
-			write("**Request body:**\n\n```json\n%s\n```\n\n", prettyJSON(e.example.Body, e.example.BodyRaw))
+		if hasRequestBody(e.example) {
+			write("**Request body:**\n\n```json\n%s\n```\n\n", prettyRequestBody(e.example))
+			if e.example.BodyB64 != "" {
+				write("%s\n\n", wireBodyNote(e.example))
+			}
 		}
 
 		write("**Response** (`%d`):\n\n```json\n%s\n```\n\n", e.example.StatusCode, prettyJSON(e.example.Response, ""))
@@ -134,6 +139,13 @@ func loadAllFixtures(byCmd string, order []string) map[string][]*rawFixture {
 		m[cmd] = sequenceForCommand(byCmd, cmd)
 	}
 	return m
+}
+
+func fixtureDisplayPath(path string) string {
+	if filepath.IsAbs(path) {
+		return filepath.Base(path)
+	}
+	return path
 }
 
 // collectEntries deduplicates by METHOD+path, ordered by first appearance.
@@ -232,6 +244,41 @@ func normalizePath(raw, orgVal, projectVal, stackVal string) string {
 	return "/" + strings.Join(parts, "/")
 }
 
+func hasRequestBody(fx *rawFixture) bool {
+	return fx.Body != nil || fx.BodyRaw != "" || fx.BodyB64 != ""
+}
+
+func prettyRequestBody(fx *rawFixture) string {
+	if fx.Body != nil || fx.BodyRaw != "" {
+		return prettyJSON(fx.Body, fx.BodyRaw)
+	}
+	if fx.BodyB64 == "" {
+		return "null"
+	}
+	b, err := base64.StdEncoding.DecodeString(fx.BodyB64)
+	if err != nil {
+		return "// body_b64 is not valid base64"
+	}
+	if fx.BodyGzip {
+		return fmt.Sprintf("// gzip-compressed binary payload (%d bytes) preserved in body_b64 for replay", len(b))
+	}
+	if !isPrintableBytes(b) {
+		return fmt.Sprintf("// binary payload (%d bytes) preserved in body_b64 for replay", len(b))
+	}
+	return string(b)
+}
+
+func wireBodyNote(fx *rawFixture) string {
+	b, err := base64.StdEncoding.DecodeString(fx.BodyB64)
+	if err != nil {
+		return "_Wire request body is present in `body_b64`, but it could not be decoded._"
+	}
+	if fx.BodyGzip {
+		return fmt.Sprintf("_Replay request body preserved in `body_b64` (%d gzip bytes)._", len(b))
+	}
+	return fmt.Sprintf("_Replay request body preserved in `body_b64` (%d bytes)._", len(b))
+}
+
 func prettyJSON(v interface{}, raw string) string {
 	if v == nil && raw == "" {
 		return "null"
@@ -251,9 +298,13 @@ func prettyJSON(v interface{}, raw string) string {
 }
 
 func isPrintable(s string) bool {
-	for i := 0; i < len(s) && i < 512; i++ {
-		b := s[i]
-		if b < 0x09 || (b > 0x0d && b < 0x20) || b == 0x7f {
+	return isPrintableBytes([]byte(s))
+}
+
+func isPrintableBytes(b []byte) bool {
+	for i := 0; i < len(b) && i < 512; i++ {
+		c := b[i]
+		if c < 0x09 || (c > 0x0d && c < 0x20) || c == 0x7f {
 			return false
 		}
 	}

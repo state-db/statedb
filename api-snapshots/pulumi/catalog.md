@@ -1,6 +1,6 @@
 # Pulumi HTTP Backend — API Catalog
 
-> Generated 2026-05-19 from `/fixtures/by-command/`
+> Generated from `fixtures/by-command/`
 >
 > **Recording values:** org=`testorg` · project=`recorder-test` · stack=`dev`
 >
@@ -11,22 +11,21 @@
 | # | Method | Path | Calls | Commands |
 |---|--------|------|-------|----------|
 | 1 | `GET` | `/api/user` | 1 | login |
-| 2 | `GET` | `/api/user/organizations/default` | 11 | login, stack-init, preview, up, stack-ls, stack-export, destroy, stack-rm |
-| 3 | `GET` | `/api/capabilities` | 14 | stack-init, preview, up, stack-ls, stack-export, destroy, stack-rm |
+| 2 | `GET` | `/api/capabilities` | 10 | stack-init, preview, up, stack-ls, stack-export, destroy, stack-rm |
+| 3 | `GET` | `/api/user/organizations/default` | 7 | stack-init, preview, up, stack-ls, stack-export, destroy, stack-rm |
 | 4 | `GET` | `/api/stacks/{org}/{project}/{stack}` | 12 | stack-init, preview, up, stack-ls, stack-export, destroy, stack-rm |
 | 5 | `POST` | `/api/stacks/{org}/{project}` | 1 | stack-init |
 | 6 | `POST` | `/api/stacks/{org}/{project}/{stack}/preview` | 1 | preview |
 | 7 | `POST` | `/api/stacks/{org}/{project}/{stack}/update/{updateID}` | 5 | preview, up, destroy |
 | 8 | `GET` | `/api/stacks/{org}/{project}/{stack}/export` | 7 | preview, up, stack-export, destroy |
-| 9 | `POST` | `/api/stacks/{org}/{project}/{stack}/update/{updateID}/events/batch` | 8 | preview, up, destroy |
-| 10 | `POST` | `/api/stacks/{org}/{project}/{stack}/update/{updateID}/complete` | 7 | preview, up, destroy |
+| 9 | `POST` | `/api/stacks/{org}/{project}/{stack}/update/{updateID}/events/batch` | 5 | preview, up, destroy |
+| 10 | `POST` | `/api/stacks/{org}/{project}/{stack}/update/{updateID}/complete` | 5 | preview, up, destroy |
 | 11 | `POST` | `/api/stacks/{org}/{project}/{stack}/update` | 2 | up |
-| 12 | `PATCH` | `/api/stacks/{org}/{project}/{stack}/update/{updateID}/checkpoint` | 4 | up, destroy |
-| 13 | `PATCH` | `/api/stacks/{org}/{project}/{stack}/update/{updateID}/journalentries` | 8 | up, destroy |
-| 14 | `POST` | `/api/stacks/{org}/{project}/{stack}/encrypt` | 4 | up |
-| 15 | `GET` | `/api/user/stacks` | 1 | stack-ls |
-| 16 | `POST` | `/api/stacks/{org}/{project}/{stack}/destroy` | 3 | destroy |
-| 17 | `DELETE` | `/api/stacks/{org}/{project}/{stack}` | 1 | stack-rm |
+| 12 | `PATCH` | `/api/stacks/{org}/{project}/{stack}/update/{updateID}/journalentries` | 10 | up, destroy |
+| 13 | `POST` | `/api/stacks/{org}/{project}/{stack}/encrypt` | 4 | up |
+| 14 | `GET` | `/api/user/stacks` | 1 | stack-ls |
+| 15 | `POST` | `/api/stacks/{org}/{project}/{stack}/destroy` | 2 | destroy |
+| 16 | `DELETE` | `/api/stacks/{org}/{project}/{stack}` | 1 | stack-rm |
 
 ---
 
@@ -36,14 +35,11 @@
 
 ```
 GET /api/user
-GET /api/user/organizations/default
 ```
 
 ### `stack-init`
 
 ```
-GET /api/capabilities
-GET /api/user/organizations/default
 GET /api/capabilities
 GET /api/user/organizations/default
 GET /api/stacks/{org}/{project}/{stack}
@@ -53,8 +49,6 @@ POST /api/stacks/{org}/{project}
 ### `preview`
 
 ```
-GET /api/capabilities
-GET /api/user/organizations/default
 GET /api/capabilities
 GET /api/user/organizations/default
 GET /api/stacks/{org}/{project}/{stack}
@@ -72,8 +66,6 @@ POST /api/stacks/{org}/{project}/{stack}/update/{updateID}/complete
 ```
 GET /api/capabilities
 GET /api/user/organizations/default
-GET /api/capabilities
-GET /api/user/organizations/default
 GET /api/stacks/{org}/{project}/{stack}
 GET /api/capabilities
 POST /api/stacks/{org}/{project}/{stack}/update
@@ -86,22 +78,17 @@ POST /api/stacks/{org}/{project}/{stack}/update
 POST /api/stacks/{org}/{project}/{stack}/update/{updateID}
 GET /api/stacks/{org}/{project}/{stack}/export
 GET /api/stacks/{org}/{project}/{stack}
-PATCH /api/stacks/{org}/{project}/{stack}/update/{updateID}/checkpoint
-PATCH /api/stacks/{org}/{project}/{stack}/update/{updateID}/journalentries
-PATCH /api/stacks/{org}/{project}/{stack}/update/{updateID}/checkpoint
-PATCH /api/stacks/{org}/{project}/{stack}/update/{updateID}/journalentries
-PATCH /api/stacks/{org}/{project}/{stack}/update/{updateID}/checkpoint
 PATCH /api/stacks/{org}/{project}/{stack}/update/{updateID}/journalentries
 PATCH /api/stacks/{org}/{project}/{stack}/update/{updateID}/journalentries
-POST /api/stacks/{org}/{project}/{stack}/update/{updateID}/events/batch
 PATCH /api/stacks/{org}/{project}/{stack}/update/{updateID}/journalentries
-POST /api/stacks/{org}/{project}/{stack}/update/{updateID}/complete
+PATCH /api/stacks/{org}/{project}/{stack}/update/{updateID}/journalentries
+PATCH /api/stacks/{org}/{project}/{stack}/update/{updateID}/journalentries
 POST /api/stacks/{org}/{project}/{stack}/encrypt
 POST /api/stacks/{org}/{project}/{stack}/encrypt
+PATCH /api/stacks/{org}/{project}/{stack}/update/{updateID}/journalentries
+PATCH /api/stacks/{org}/{project}/{stack}/update/{updateID}/journalentries
 POST /api/stacks/{org}/{project}/{stack}/encrypt
-POST /api/stacks/{org}/{project}/{stack}/update/{updateID}/events/batch
 POST /api/stacks/{org}/{project}/{stack}/encrypt
-POST /api/stacks/{org}/{project}/{stack}/update/{updateID}/complete
 PATCH /api/stacks/{org}/{project}/{stack}/update/{updateID}/journalentries
 PATCH /api/stacks/{org}/{project}/{stack}/update/{updateID}/journalentries
 POST /api/stacks/{org}/{project}/{stack}/update/{updateID}/events/batch
@@ -111,8 +98,8 @@ POST /api/stacks/{org}/{project}/{stack}/update/{updateID}/complete
 ### `stack-ls`
 
 ```
-GET /api/user/organizations/default
 GET /api/capabilities
+GET /api/user/organizations/default
 GET /api/stacks/{org}/{project}/{stack}
 GET /api/user/stacks?project=recorder-test
 ```
@@ -120,8 +107,8 @@ GET /api/user/stacks?project=recorder-test
 ### `stack-export`
 
 ```
-GET /api/user/organizations/default
 GET /api/capabilities
+GET /api/user/organizations/default
 GET /api/stacks/{org}/{project}/{stack}
 GET /api/stacks/{org}/{project}/{stack}/export
 ```
@@ -129,12 +116,10 @@ GET /api/stacks/{org}/{project}/{stack}/export
 ### `destroy`
 
 ```
-GET /api/user/organizations/default
 GET /api/capabilities
+GET /api/user/organizations/default
 GET /api/stacks/{org}/{project}/{stack}
 GET /api/stacks/{org}/{project}/{stack}/export
-GET /api/capabilities
-POST /api/stacks/{org}/{project}/{stack}/destroy
 GET /api/capabilities
 POST /api/stacks/{org}/{project}/{stack}/destroy
 POST /api/stacks/{org}/{project}/{stack}/update/{updateID}
@@ -146,18 +131,16 @@ POST /api/stacks/{org}/{project}/{stack}/destroy
 POST /api/stacks/{org}/{project}/{stack}/update/{updateID}
 GET /api/stacks/{org}/{project}/{stack}/export
 GET /api/stacks/{org}/{project}/{stack}
-PATCH /api/stacks/{org}/{project}/{stack}/update/{updateID}/checkpoint
 POST /api/stacks/{org}/{project}/{stack}/update/{updateID}/events/batch
 PATCH /api/stacks/{org}/{project}/{stack}/update/{updateID}/journalentries
-POST /api/stacks/{org}/{project}/{stack}/update/{updateID}/events/batch
 POST /api/stacks/{org}/{project}/{stack}/update/{updateID}/complete
 ```
 
 ### `stack-rm`
 
 ```
-GET /api/user/organizations/default
 GET /api/capabilities
+GET /api/user/organizations/default
 GET /api/stacks/{org}/{project}/{stack}
 DELETE /api/stacks/{org}/{project}/{stack}?force=false
 ```
@@ -188,26 +171,9 @@ DELETE /api/stacks/{org}/{project}/{stack}?force=false
 
 ---
 
-### 2. `GET /api/user/organizations/default`
+### 2. `GET /api/capabilities`
 
-**Calls:** 11 &nbsp;·&nbsp; **Commands:** `01-login` `02-stack-init` `03-preview` `04-up` `05-stack-ls` `06-stack-export` `07-destroy` `08-stack-rm`
-
-**Response** (`200`):
-
-```json
-{
-  "organization": {
-    "githubLogin": "testorg",
-    "name": "testorg"
-  }
-}
-```
-
----
-
-### 3. `GET /api/capabilities`
-
-**Calls:** 14 &nbsp;·&nbsp; **Commands:** `02-stack-init` `03-preview` `04-up` `05-stack-ls` `06-stack-export` `07-destroy` `08-stack-rm`
+**Calls:** 10 &nbsp;·&nbsp; **Commands:** `02-stack-init` `03-preview` `04-up` `05-stack-ls` `06-stack-export` `07-destroy` `08-stack-rm`
 
 **Response** (`200`):
 
@@ -219,6 +185,23 @@ DELETE /api/stacks/{org}/{project}/{stack}?force=false
       "version": 1
     }
   ]
+}
+```
+
+---
+
+### 3. `GET /api/user/organizations/default`
+
+**Calls:** 7 &nbsp;·&nbsp; **Commands:** `02-stack-init` `03-preview` `04-up` `05-stack-ls` `06-stack-export` `07-destroy` `08-stack-rm`
+
+**Response** (`200`):
+
+```json
+{
+  "organization": {
+    "githubLogin": "testorg",
+    "name": "testorg"
+  }
 }
 ```
 
@@ -264,6 +247,8 @@ DELETE /api/stacks/{org}/{project}/{stack}?force=false
 }
 ```
 
+_Replay request body preserved in `body_b64` (272 bytes)._
+
 **Response** (`200`):
 
 ```json
@@ -304,6 +289,7 @@ DELETE /api/stacks/{org}/{project}/{stack}?force=false
       "pulumi.env.PULUMI_HOME": "set",
       "pulumi.env.PULUMI_SKIP_CONFIRMATIONS": "true",
       "pulumi.env.PULUMI_SKIP_UPDATE_CHECK": "true",
+      "pulumi.flag.parallel": "set",
       "pulumi.os": "linux",
       "pulumi.version": "v3.242.0",
       "runtime.name": "yaml",
@@ -318,7 +304,7 @@ DELETE /api/stacks/{org}/{project}/{stack}?force=false
     "debug": false,
     "dryRun": true,
     "localPolicyPackPaths": [],
-    "parallel": 40,
+    "parallel": 1,
     "showConfig": false,
     "showNames": false,
     "showReplacementSteps": false,
@@ -327,6 +313,8 @@ DELETE /api/stacks/{org}/{project}/{stack}?force=false
   "runtime": "yaml"
 }
 ```
+
+_Replay request body preserved in `body_b64` (889 bytes)._
 
 **Response** (`200`):
 
@@ -356,13 +344,15 @@ DELETE /api/stacks/{org}/{project}/{stack}?force=false
 }
 ```
 
+_Replay request body preserved in `body_b64` (273 bytes)._
+
 **Response** (`200`):
 
 ```json
 {
   "journalVersion": 1,
   "token": "lease-0001",
-  "tokenExpiration": 1779237223,
+  "tokenExpiration": 4102444800,
   "version": 1
 }
 ```
@@ -386,7 +376,7 @@ DELETE /api/stacks/{org}/{project}/{stack}?force=false
 
 ### 9. `POST /api/stacks/{org}/{project}/{stack}/update/{updateID}/events/batch`
 
-**Calls:** 8 &nbsp;·&nbsp; **Commands:** `03-preview` `04-up` `07-destroy`
+**Calls:** 5 &nbsp;·&nbsp; **Commands:** `03-preview` `04-up` `07-destroy`
 
 **Request body:**
 
@@ -398,7 +388,7 @@ DELETE /api/stacks/{org}/{project}/{stack}?force=false
         "config": {}
       },
       "sequence": 0,
-      "timestamp": 1779233645
+      "timestamp": 0
     },
     {
       "resourcePreEvent": {
@@ -423,7 +413,7 @@ DELETE /api/stacks/{org}/{project}/{stack}?force=false
         "planning": true
       },
       "sequence": 1,
-      "timestamp": 1779233645
+      "timestamp": 0
     },
     {
       "resOutputsEvent": {
@@ -448,7 +438,7 @@ DELETE /api/stacks/{org}/{project}/{stack}?force=false
         "planning": true
       },
       "sequence": 2,
-      "timestamp": 1779233645
+      "timestamp": 0
     },
     {
       "resourcePreEvent": {
@@ -465,82 +455,20 @@ DELETE /api/stacks/{org}/{project}/{stack}?force=false
             },
             "outputs": {},
             "parent": "urn:pulumi:dev::recorder-test::pulumi:pulumi:Stack::recorder-test-dev",
-            "provider": "urn:pulumi:dev::recorder-test::pulumi:providers:random::default::04da6b54-80e4-46f7-96ec-b56ff0331ba9",
+            "provider": "urn:pulumi:dev::recorder-test::pulumi:providers:random::default::00000000-0000-0000-0000-000000000000",
             "type": "random:index/randomString:RandomString",
             "urn": "urn:pulumi:dev::recorder-test::random:index/randomString:RandomString::word"
           },
           "old": null,
           "op": "create",
-          "provider": "urn:pulumi:dev::recorder-test::pulumi:providers:random::default::04da6b54-80e4-46f7-96ec-b56ff0331ba9",
+          "provider": "urn:pulumi:dev::recorder-test::pulumi:providers:random::default::00000000-0000-0000-0000-000000000000",
           "type": "random:index/randomString:RandomString",
           "urn": "urn:pulumi:dev::recorder-test::random:index/randomString:RandomString::word"
         },
         "planning": true
       },
       "sequence": 3,
-      "timestamp": 1779233645
-    },
-    {
-      "resourcePreEvent": {
-        "metadata": {
-          "detailedDiff": null,
-          "logical": true,
-          "new": {
-            "custom": true,
-            "id": "",
-            "inputs": {
-              "length": 2,
-              "separator": "-"
-            },
-            "outputs": {},
-            "parent": "urn:pulumi:dev::recorder-test::pulumi:pulumi:Stack::recorder-test-dev",
-            "provider": "urn:pulumi:dev::recorder-test::pulumi:providers:random::default::04da6b54-80e4-46f7-96ec-b56ff0331ba9",
-            "type": "random:index/randomPet:RandomPet",
-            "urn": "urn:pulumi:dev::recorder-test::random:index/randomPet:RandomPet::pet"
-          },
-          "old": null,
-          "op": "create",
-          "provider": "urn:pulumi:dev::recorder-test::pulumi:providers:random::default::04da6b54-80e4-46f7-96ec-b56ff0331ba9",
-          "type": "random:index/randomPet:RandomPet",
-          "urn": "urn:pulumi:dev::recorder-test::random:index/randomPet:RandomPet::pet"
-        },
-        "planning": true
-      },
-      "sequence": 4,
-      "timestamp": 1779233645
-    },
-    {
-      "resOutputsEvent": {
-        "metadata": {
-          "detailedDiff": null,
-          "logical": true,
-          "new": {
-            "custom": true,
-            "id": "",
-            "inputs": {
-              "length": 2,
-              "separator": "-"
-            },
-            "outputs": {
-              "id": "04da6b54-80e4-46f7-96ec-b56ff0331ba9",
-              "length": 2,
-              "separator": "-"
-            },
-            "parent": "urn:pulumi:dev::recorder-test::pulumi:pulumi:Stack::recorder-test-dev",
-            "provider": "urn:pulumi:dev::recorder-test::pulumi:providers:random::default::04da6b54-80e4-46f7-96ec-b56ff0331ba9",
-            "type": "random:index/randomPet:RandomPet",
-            "urn": "urn:pulumi:dev::recorder-test::random:index/randomPet:RandomPet::pet"
-          },
-          "old": null,
-          "op": "create",
-          "provider": "urn:pulumi:dev::recorder-test::pulumi:providers:random::default::04da6b54-80e4-46f7-96ec-b56ff0331ba9",
-          "type": "random:index/randomPet:RandomPet",
-          "urn": "urn:pulumi:dev::recorder-test::random:index/randomPet:RandomPet::pet"
-        },
-        "planning": true
-      },
-      "sequence": 5,
-      "timestamp": 1779233645
+      "timestamp": 0
     },
     {
       "resOutputsEvent": {
@@ -556,7 +484,7 @@ DELETE /api/stacks/{org}/{project}/{stack}?force=false
               "upper": false
             },
             "outputs": {
-              "id": "04da6b54-80e4-46f7-96ec-b56ff0331ba9",
+              "id": "[resource-id]",
               "length": 8,
               "lower": true,
               "minLower": 0,
@@ -565,25 +493,87 @@ DELETE /api/stacks/{org}/{project}/{stack}?force=false
               "minUpper": 0,
               "number": true,
               "numeric": true,
-              "result": "04da6b54-80e4-46f7-96ec-b56ff0331ba9",
+              "result": "[result]",
               "special": false,
               "upper": false
             },
             "parent": "urn:pulumi:dev::recorder-test::pulumi:pulumi:Stack::recorder-test-dev",
-            "provider": "urn:pulumi:dev::recorder-test::pulumi:providers:random::default::04da6b54-80e4-46f7-96ec-b56ff0331ba9",
+            "provider": "urn:pulumi:dev::recorder-test::pulumi:providers:random::default::00000000-0000-0000-0000-000000000000",
             "type": "random:index/randomString:RandomString",
             "urn": "urn:pulumi:dev::recorder-test::random:index/randomString:RandomString::word"
           },
           "old": null,
           "op": "create",
-          "provider": "urn:pulumi:dev::recorder-test::pulumi:providers:random::default::04da6b54-80e4-46f7-96ec-b56ff0331ba9",
+          "provider": "urn:pulumi:dev::recorder-test::pulumi:providers:random::default::00000000-0000-0000-0000-000000000000",
           "type": "random:index/randomString:RandomString",
           "urn": "urn:pulumi:dev::recorder-test::random:index/randomString:RandomString::word"
         },
         "planning": true
       },
+      "sequence": 4,
+      "timestamp": 0
+    },
+    {
+      "resourcePreEvent": {
+        "metadata": {
+          "detailedDiff": null,
+          "logical": true,
+          "new": {
+            "custom": true,
+            "id": "",
+            "inputs": {
+              "length": 2,
+              "separator": "-"
+            },
+            "outputs": {},
+            "parent": "urn:pulumi:dev::recorder-test::pulumi:pulumi:Stack::recorder-test-dev",
+            "provider": "urn:pulumi:dev::recorder-test::pulumi:providers:random::default::00000000-0000-0000-0000-000000000000",
+            "type": "random:index/randomPet:RandomPet",
+            "urn": "urn:pulumi:dev::recorder-test::random:index/randomPet:RandomPet::pet"
+          },
+          "old": null,
+          "op": "create",
+          "provider": "urn:pulumi:dev::recorder-test::pulumi:providers:random::default::00000000-0000-0000-0000-000000000000",
+          "type": "random:index/randomPet:RandomPet",
+          "urn": "urn:pulumi:dev::recorder-test::random:index/randomPet:RandomPet::pet"
+        },
+        "planning": true
+      },
+      "sequence": 5,
+      "timestamp": 0
+    },
+    {
+      "resOutputsEvent": {
+        "metadata": {
+          "detailedDiff": null,
+          "logical": true,
+          "new": {
+            "custom": true,
+            "id": "",
+            "inputs": {
+              "length": 2,
+              "separator": "-"
+            },
+            "outputs": {
+              "id": "[resource-id]",
+              "length": 2,
+              "separator": "-"
+            },
+            "parent": "urn:pulumi:dev::recorder-test::pulumi:pulumi:Stack::recorder-test-dev",
+            "provider": "urn:pulumi:dev::recorder-test::pulumi:providers:random::default::00000000-0000-0000-0000-000000000000",
+            "type": "random:index/randomPet:RandomPet",
+            "urn": "urn:pulumi:dev::recorder-test::random:index/randomPet:RandomPet::pet"
+          },
+          "old": null,
+          "op": "create",
+          "provider": "urn:pulumi:dev::recorder-test::pulumi:providers:random::default::00000000-0000-0000-0000-000000000000",
+          "type": "random:index/randomPet:RandomPet",
+          "urn": "urn:pulumi:dev::recorder-test::random:index/randomPet:RandomPet::pet"
+        },
+        "planning": true
+      },
       "sequence": 6,
-      "timestamp": 1779233645
+      "timestamp": 0
     },
     {
       "resOutputsEvent": {
@@ -594,8 +584,8 @@ DELETE /api/stacks/{org}/{project}/{stack}?force=false
             "id": "",
             "inputs": {},
             "outputs": {
-              "petName": "04da6b54-80e4-46f7-96ec-b56ff0331ba9",
-              "word": "04da6b54-80e4-46f7-96ec-b56ff0331ba9"
+              "petName": "[pet-name]",
+              "word": "[word]"
             },
             "parent": "",
             "provider": "",
@@ -611,7 +601,7 @@ DELETE /api/stacks/{org}/{project}/{stack}?force=false
         "planning": true
       },
       "sequence": 7,
-      "timestamp": 1779233645
+      "timestamp": 0
     },
     {
       "sequence": 8,
@@ -625,11 +615,13 @@ DELETE /api/stacks/{org}/{project}/{stack}?force=false
         },
         "result": "succeeded"
       },
-      "timestamp": 1779233645
+      "timestamp": 0
     }
   ]
 }
 ```
+
+_Replay request body preserved in `body_b64` (616 gzip bytes)._
 
 **Response** (`200`):
 
@@ -641,7 +633,7 @@ DELETE /api/stacks/{org}/{project}/{stack}?force=false
 
 ### 10. `POST /api/stacks/{org}/{project}/{stack}/update/{updateID}/complete`
 
-**Calls:** 7 &nbsp;·&nbsp; **Commands:** `03-preview` `04-up` `07-destroy`
+**Calls:** 5 &nbsp;·&nbsp; **Commands:** `03-preview` `04-up` `07-destroy`
 
 **Request body:**
 
@@ -650,6 +642,8 @@ DELETE /api/stacks/{org}/{project}/{stack}?force=false
   "status": "succeeded"
 }
 ```
+
+_Replay request body preserved in `body_b64` (22 bytes)._
 
 **Response** (`200`):
 
@@ -680,6 +674,7 @@ DELETE /api/stacks/{org}/{project}/{stack}?force=false
       "pulumi.env.PULUMI_HOME": "set",
       "pulumi.env.PULUMI_SKIP_CONFIRMATIONS": "true",
       "pulumi.env.PULUMI_SKIP_UPDATE_CHECK": "true",
+      "pulumi.flag.parallel": "set",
       "pulumi.flag.yes": "true",
       "pulumi.os": "linux",
       "pulumi.version": "v3.242.0",
@@ -695,7 +690,7 @@ DELETE /api/stacks/{org}/{project}/{stack}?force=false
     "debug": false,
     "dryRun": true,
     "localPolicyPackPaths": [],
-    "parallel": 40,
+    "parallel": 1,
     "showConfig": false,
     "showNames": false,
     "showReplacementSteps": false,
@@ -704,6 +699,8 @@ DELETE /api/stacks/{org}/{project}/{stack}?force=false
   "runtime": "yaml"
 }
 ```
+
+_Replay request body preserved in `body_b64` (914 bytes)._
 
 **Response** (`200`):
 
@@ -716,27 +713,9 @@ DELETE /api/stacks/{org}/{project}/{stack}?force=false
 
 ---
 
-### 12. `PATCH /api/stacks/{org}/{project}/{stack}/update/{updateID}/checkpoint`
+### 12. `PATCH /api/stacks/{org}/{project}/{stack}/update/{updateID}/journalentries`
 
-**Calls:** 4 &nbsp;·&nbsp; **Commands:** `04-up` `07-destroy`
-
-**Request body:**
-
-```json
-// binary payload (1233 bytes) — likely gzip-compressed
-```
-
-**Response** (`200`):
-
-```json
-{}
-```
-
----
-
-### 13. `PATCH /api/stacks/{org}/{project}/{stack}/update/{updateID}/journalentries`
-
-**Calls:** 8 &nbsp;·&nbsp; **Commands:** `04-up` `07-destroy`
+**Calls:** 10 &nbsp;·&nbsp; **Commands:** `04-up` `07-destroy`
 
 **Request body:**
 
@@ -822,6 +801,8 @@ DELETE /api/stacks/{org}/{project}/{stack}?force=false
 }
 ```
 
+_Replay request body preserved in `body_b64` (591 gzip bytes)._
+
 **Response** (`200`):
 
 ```json
@@ -830,7 +811,7 @@ DELETE /api/stacks/{org}/{project}/{stack}?force=false
 
 ---
 
-### 14. `POST /api/stacks/{org}/{project}/{stack}/encrypt`
+### 13. `POST /api/stacks/{org}/{project}/{stack}/encrypt`
 
 **Calls:** 4 &nbsp;·&nbsp; **Commands:** `04-up`
 
@@ -842,6 +823,8 @@ DELETE /api/stacks/{org}/{project}/{stack}?force=false
 }
 ```
 
+_Replay request body preserved in `body_b64` (48 bytes)._
+
 **Response** (`200`):
 
 ```json
@@ -852,7 +835,7 @@ DELETE /api/stacks/{org}/{project}/{stack}?force=false
 
 ---
 
-### 15. `GET /api/user/stacks?project=recorder-test`
+### 14. `GET /api/user/stacks?project=recorder-test`
 
 **Calls:** 1 &nbsp;·&nbsp; **Commands:** `05-stack-ls`
 
@@ -866,9 +849,9 @@ DELETE /api/stacks/{org}/{project}/{stack}?force=false
 
 ---
 
-### 16. `POST /api/stacks/{org}/{project}/{stack}/destroy`
+### 15. `POST /api/stacks/{org}/{project}/{stack}/destroy`
 
-**Calls:** 3 &nbsp;·&nbsp; **Commands:** `07-destroy`
+**Calls:** 2 &nbsp;·&nbsp; **Commands:** `07-destroy`
 
 **Request body:**
 
@@ -887,6 +870,7 @@ DELETE /api/stacks/{org}/{project}/{stack}?force=false
       "pulumi.env.PULUMI_HOME": "set",
       "pulumi.env.PULUMI_SKIP_CONFIRMATIONS": "true",
       "pulumi.env.PULUMI_SKIP_UPDATE_CHECK": "true",
+      "pulumi.flag.parallel": "set",
       "pulumi.flag.yes": "true",
       "pulumi.os": "linux",
       "pulumi.version": "v3.242.0",
@@ -901,7 +885,7 @@ DELETE /api/stacks/{org}/{project}/{stack}?force=false
     "debug": false,
     "dryRun": true,
     "localPolicyPackPaths": [],
-    "parallel": 40,
+    "parallel": 1,
     "showConfig": false,
     "showNames": false,
     "showReplacementSteps": false,
@@ -910,6 +894,8 @@ DELETE /api/stacks/{org}/{project}/{stack}?force=false
   "runtime": "yaml"
 }
 ```
+
+_Replay request body preserved in `body_b64` (892 bytes)._
 
 **Response** (`200`):
 
@@ -922,7 +908,7 @@ DELETE /api/stacks/{org}/{project}/{stack}?force=false
 
 ---
 
-### 17. `DELETE /api/stacks/{org}/{project}/{stack}?force=false`
+### 16. `DELETE /api/stacks/{org}/{project}/{stack}?force=false`
 
 **Calls:** 1 &nbsp;·&nbsp; **Commands:** `08-stack-rm`
 

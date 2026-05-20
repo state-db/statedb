@@ -1,10 +1,9 @@
 {
-  "seq": 70,
+  "seq": 72,
   "command": "08-stack-rm",
   "cmd_seq": 2,
-  "timestamp": "2026-05-19T23:34:06.325394138Z",
   "method": "GET",
-  "path": "/api/capabilities",
+  "path": "/api/user/organizations/default",
   "headers": {
     "Accept": "application/vnd.pulumi+9",
     "Accept-Encoding": "gzip",
@@ -14,11 +13,9 @@
   },
   "status_code": 200,
   "response": {
-    "capabilities": [
-      {
-        "name": "delta-checkpoint-updates",
-        "version": 1
-      }
-    ]
+    "organization": {
+      "githubLogin": "testorg",
+      "name": "testorg"
+    }
   }
 }

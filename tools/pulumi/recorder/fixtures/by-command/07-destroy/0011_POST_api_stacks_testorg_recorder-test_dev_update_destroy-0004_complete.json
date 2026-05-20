@@ -1,8 +1,7 @@
 {
-  "seq": 61,
+  "seq": 63,
   "command": "07-destroy",
   "cmd_seq": 11,
-  "timestamp": "2026-05-19T23:34:06.240442013Z",
   "method": "POST",
   "path": "/api/stacks/testorg/recorder-test/dev/update/destroy-0004/complete",
   "headers": {

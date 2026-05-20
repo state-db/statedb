@@ -42,7 +42,7 @@ recorder/
 ├── entrypoint.sh        Runs inside container: signals command boundaries, drives pulumi commands
 ├── run.sh               Host-side entry point: docker build + run, mounts fixtures + snapshots
 ├── testproject/
-│   └── Pulumi.yaml      Minimal empty YAML program — no resources, no providers needed
+│   └── Pulumi.yaml      Minimal YAML program with random provider resources
 └── fixtures/
     ├── by-command/      One subdirectory per command, fixtures numbered by per-command sequence
     │   ├── 01-login/
@@ -76,8 +76,10 @@ Each JSON file has:
   "path": "/api/stacks/testorg/recorder-test/dev/preview",
   "query": "",
   "headers": { "Authorization": "REDACTED", ... },
-  "body": { ... },      // parsed JSON, or absent
-  "body_raw": "...",    // present instead of body when content is binary (e.g. gzip)
+  "body": { ... },      // parsed JSON; gzip bodies are decompressed before parsing
+  "body_b64": "...",    // replay bytes, base64-encoded
+  "body_gzip": true,    // true when body_b64 is gzip-compressed
+  "body_raw": "...",    // legacy fallback for non-JSON, non-gzip text/binary
   "status_code": 200,
   "response": { ... }   // what our stub returned
 }
@@ -112,9 +114,14 @@ parts live in `router`:
 Other discoveries:
 - `pulumi up` and `pulumi destroy` each run the full lifecycle **twice**: first pass
   is a preview (no checkpoint writes), second pass is the actual apply.
-- `PATCH .../checkpoint` is called 3× during a real `pulumi up` with resources.
-- The `events/batch` and `checkpoint` request bodies are **gzip-compressed** — not JSON.
-  Store as `body_raw`; treat as opaque blobs.
+- With `journalVersion: 1`, real resource changes are written through
+  `PATCH .../journalentries`; without journaling, the CLI falls back to
+  `PATCH .../checkpoint`.
+- The `events/batch`, `checkpoint`, and `journalentries` request bodies can be
+  gzip-compressed. Fixtures preserve replayable bytes in `body_b64`; when the
+  decompressed payload is JSON, it also appears in `body` for inspection. Volatile
+  JSON fields such as event/resource timestamps, generated provider IDs, and random
+  outputs are normalized to keep fixture diffs stable.
 - `DELETE /api/stacks/{org}/{project}/{stack}?force=false` — the `force` query param
   matters; passing `force=true` skips the "has resources" guard.
 
@@ -145,8 +152,8 @@ cat fixtures/by-command/09-stack-rename/0003_POST_api_stacks_testorg_recorder-te
 ### 3. Fix the stub
 
 The fixture's `.path` and `.body` tell you what the CLI sent.
-Check `api-snapshots/pulumi/v3.234.0/openapi-subset.yaml` for the expected
-response shape, or infer from the error the CLI prints.
+Check the versioned OpenAPI subset under `api-snapshots/pulumi/` for the
+expected response shape, or infer from the error the CLI prints.
 
 Edit `stubs.go`. The typical pattern is a new `case` inside `routeStacks()`:
 
@@ -185,14 +192,12 @@ Commands not yet captured (add these as state-db matures):
 - `pulumi stack rename` — exercises `POST .../rename`
 - `pulumi config set` / `get` — exercises `PUT .../config` and encrypt/decrypt
 - `pulumi stack tag set` — exercises `PATCH .../tags`
-- `pulumi up` with actual resources (e.g. `random` provider) — will show richer
-  checkpoint bodies, multiple `PATCH .../checkpoint` calls, and `renew_lease`
-  under a slow deploy
+- A slower `pulumi up` / `destroy` — may show `renew_lease`
 - `pulumi stack import` — exercises `POST .../import`
 - `pulumi whoami` — may hit additional `/api/user` sub-paths
 
-To capture these, add a provider to `testproject/Pulumi.yaml` (e.g. `random`)
-and add the `pulumi plugin install` step to the Dockerfile before running.
+When adding providers to `testproject/Pulumi.yaml`, pin the corresponding
+`pulumi plugin install` version in the Dockerfile before recording.
 
 ---
 

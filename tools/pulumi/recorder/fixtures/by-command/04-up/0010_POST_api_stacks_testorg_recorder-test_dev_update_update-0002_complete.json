@@ -2,7 +2,6 @@
   "seq": 25,
   "command": "04-up",
   "cmd_seq": 10,
-  "timestamp": "2026-05-19T23:34:05.604805596Z",
   "method": "POST",
   "path": "/api/stacks/testorg/recorder-test/dev/update/update-0002/complete",
   "headers": {

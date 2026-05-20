@@ -1,8 +1,7 @@
 {
-  "seq": 7,
-  "command": "03-preview",
-  "cmd_seq": 2,
-  "timestamp": "2026-05-19T23:33:43.516216752Z",
+  "seq": 71,
+  "command": "08-stack-rm",
+  "cmd_seq": 1,
   "method": "GET",
   "path": "/api/capabilities",
   "headers": {
@@ -10,7 +9,7 @@
     "Accept-Encoding": "gzip",
     "Authorization": "REDACTED",
     "Content-Type": "application/json",
-    "User-Agent": "pulumi-cli/1 (v3.242.0; linux; cmd=preview)"
+    "User-Agent": "pulumi-cli/1 (v3.242.0; linux; cmd=stack-rm)"
   },
   "status_code": 200,
   "response": {

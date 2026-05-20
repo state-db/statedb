@@ -2,7 +2,6 @@
   "seq": 35,
   "command": "04-up",
   "cmd_seq": 20,
-  "timestamp": "2026-05-19T23:34:05.873268262Z",
   "method": "POST",
   "path": "/api/stacks/testorg/recorder-test/dev/encrypt",
   "headers": {

@@ -2,7 +2,6 @@
   "seq": 28,
   "command": "04-up",
   "cmd_seq": 13,
-  "timestamp": "2026-05-19T23:34:05.606462721Z",
   "method": "GET",
   "path": "/api/stacks/testorg/recorder-test/dev/export",
   "headers": {

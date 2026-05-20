@@ -2,7 +2,6 @@
   "seq": 31,
   "command": "04-up",
   "cmd_seq": 16,
-  "timestamp": "2026-05-19T23:34:05.710244054Z",
   "method": "PATCH",
   "path": "/api/stacks/testorg/recorder-test/dev/update/update-0003/journalentries",
   "headers": {
@@ -10,7 +9,7 @@
     "Accept-Encoding": "gzip",
     "Authorization": "REDACTED",
     "Content-Encoding": "gzip",
-    "Content-Length": "534",
+    "Content-Length": "527",
     "Content-Type": "application/json",
     "User-Agent": "pulumi-cli/1 (v3.242.0; linux; cmd=up)"
   },
@@ -23,9 +22,9 @@
         "removeOld": null,
         "sequenceID": 3,
         "state": {
-          "created": "2026-05-19T23:34:05.659236679Z",
+          "created": "1970-01-01T00:00:00Z",
           "custom": false,
-          "modified": "2026-05-19T23:34:05.659236679Z",
+          "modified": "1970-01-01T00:00:00Z",
           "sourcePosition": "project:///../home/runner/work/pulumi-yaml/pulumi-yaml/pkg/server/server.go#326",
           "stackTrace": [
             {
@@ -75,7 +74,7 @@
       }
     ]
   },
-  "body_b64": "H4sIAAAAAAAA/9RUTW/cLBD+L+RqAwbb6+WUw3t5L22l5tQqigieeOkaxgXsNIr2v1c4u1Ja9bBV0lS9+AE8w/OB8SMBn4KFSNTnR7JAiBY9UVVB9tb36yDC1xm8gf//I0oWBCcIOln0eV4VJIDDBd6PPVF+HsfTwju4Py3EpBMQ9Ujm4InKTzXN4+ys6mFRKoDB0EMoE8SkTq+O8DFps/+ppuxhIQUxc0zoiLrTY4SCpIcJiCK/aM+1AXSCnigiuGhL3pTV9kpIJWvFG9o2WyHbdrP9RArisLd39rzaiHMw8AGjTWtsZAr4BUxSjDFK2Q4dsDB7D4HdY9izJ1Xlg3bjj+P9wCKEBcIR6IAXUrRkDc/sr4I2sJ7QH2c8FL9FMuC6lcOeDTbt5ltq0B2ZThD7PVvk5SKpkBvK2RQwYe4ctR9mPcDNECZDp9usoem6t9AwIDPoHHo2JzuyMJkVrU8QDEwJnwLh1UvEIA4j0AGzT4phYNnn5VLRrqL8We6VqOXrmM4EJRiMDzHBcYpTvuLaWD9cLpxyykvBq443fCMqKRtedtDxrel019ZN3hhTbnwmsNn8WzG8xtkL8aIP8XzTsv77l27L38RrLd+Gp2te9CM7m4e3zTk8OCW2w5igT4ij0WYHma+ioqFb9q2tWQwmC0nWAdPR3ejg2prGi0q0HTlcHw7Xh+8BAAD//9LUP5qqBwAA",
+  "body_b64": "H4sIAAAAAAAA/9SVT2+cPBDGv8vkCv4Dyy7rUw7v5b20lZpTqyhyzISlixk6NqRRtN+9Mt2V0qqqUiXdqhLSYMPM73nGGD8CDpE7DGA+PsK+GxowOgMakW3saPj/v2XM6GnGN3gPZpj6/jTxtm9OEwE/Tzg4TAllBiHaiGAewTHaiA0Y0NuNypXOlb5SyizXB8jATSGSB3Nn+4AZeGq6u+5XCYEmdviOQpcEgoGR6RO6aKSUQsgdeZQ8DQOyvCfey3HqJ9/lD9b339/vWxmQZ+RjEC1dlMUaFvVuf8XW4dKWP048ZL8FaWkp5amRbRd3061w5I+kUwjNXs7l5VyKotwIJUemSCmzt0M72RZvWh6dGG+Thqquz6GhJenIexrkFLte8uiW2A0R2eEY6VtDlH6JGKK2R9FS8imIW5l8Xs5a1FqoJ33Xxap8HdMJkKOj8BAiHoc0pn1lXTe0l7MSSqi8ULpWldoUuiwrlddYq62rbb1eVakwxZT4RGC1+bfa8BprXxQv+hCfb7pc/f1Nt1Vn8boqz8Opqxf9yJ7NUevqORwao9xRiNhEot5Zt8PE06KoxFZ+Wa9kYJeExM6jtMHfWPbrlQgXuljXcLjOID6MmOoui2uO4X06GyCDiRNz4uH0oMHZGEZH3CDnEUM05iepP7yTNzjDIYMZOSw29OH68DUAAP//SQDVHpYHAAA=",
   "body_gzip": true,
   "status_code": 200,
   "response": {}

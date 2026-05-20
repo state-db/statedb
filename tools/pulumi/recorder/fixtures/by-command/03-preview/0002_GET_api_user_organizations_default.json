@@ -2,7 +2,6 @@
   "seq": 7,
   "command": "03-preview",
   "cmd_seq": 2,
-  "timestamp": "2026-05-19T23:30:37.331396013Z",
   "method": "GET",
   "path": "/api/user/organizations/default",
   "headers": {

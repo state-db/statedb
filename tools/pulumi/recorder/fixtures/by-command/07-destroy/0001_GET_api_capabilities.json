@@ -1,8 +1,7 @@
 {
-  "seq": 44,
-  "command": "05-stack-ls",
-  "cmd_seq": 2,
-  "timestamp": "2026-05-19T23:34:06.055546346Z",
+  "seq": 53,
+  "command": "07-destroy",
+  "cmd_seq": 1,
   "method": "GET",
   "path": "/api/capabilities",
   "headers": {
@@ -10,7 +9,7 @@
     "Accept-Encoding": "gzip",
     "Authorization": "REDACTED",
     "Content-Type": "application/json",
-    "User-Agent": "pulumi-cli/1 (v3.242.0; linux; cmd=stack-ls)"
+    "User-Agent": "pulumi-cli/1 (v3.242.0; linux; cmd=destroy)"
   },
   "status_code": 200,
   "response": {

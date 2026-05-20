@@ -2,14 +2,13 @@
   "seq": 26,
   "command": "04-up",
   "cmd_seq": 11,
-  "timestamp": "2026-05-19T23:34:05.605388096Z",
   "method": "POST",
   "path": "/api/stacks/testorg/recorder-test/dev/update",
   "headers": {
     "Accept": "application/vnd.pulumi+9",
     "Accept-Encoding": "gzip",
     "Authorization": "REDACTED",
-    "Content-Length": "887",
+    "Content-Length": "915",
     "Content-Type": "application/json",
     "User-Agent": "pulumi-cli/1 (v3.242.0; linux; cmd=up)"
   },
@@ -27,6 +26,7 @@
         "pulumi.env.PULUMI_HOME": "set",
         "pulumi.env.PULUMI_SKIP_CONFIRMATIONS": "true",
         "pulumi.env.PULUMI_SKIP_UPDATE_CHECK": "true",
+        "pulumi.flag.parallel": "set",
         "pulumi.flag.yes": "true",
         "pulumi.os": "linux",
         "pulumi.version": "v3.242.0",
@@ -42,7 +42,7 @@
       "debug": false,
       "dryRun": false,
       "localPolicyPackPaths": [],
-      "parallel": 40,
+      "parallel": 1,
       "showConfig": false,
       "showNames": false,
       "showReplacementSteps": false,
@@ -50,7 +50,7 @@
     },
     "runtime": "yaml"
   },
-  "body_b64": "eyJuYW1lIjoicmVjb3JkZXItdGVzdCIsInJ1bnRpbWUiOiJ5YW1sIiwibWFpbiI6IiIsImRlc2NyaXB0aW9uIjoiTWluaW1hbCBQdWx1bWkgcHJvamVjdCBmb3IgQVBJIHJlY29yZGluZy4gVXNlcyB0aGUgYHJhbmRvbWAgcHJvdmlkZXIgc28gYHB1bHVtaSB1cGAvYGRlc3Ryb3lgIGV4ZXJjaXNlIHRoZSBqb3VybmFsL2NoZWNrcG9pbnQgd3JpdGUgcGF0aHMgd2l0aCByZWFsIHJlc291cmNlIHN0YXRlLiIsIm9wdGlvbnMiOnsibG9jYWxQb2xpY3lQYWNrUGF0aHMiOltdLCJjb2xvciI6InJhdyIsImRyeVJ1biI6ZmFsc2UsInBhcmFsbGVsIjo0MCwic2hvd0NvbmZpZyI6ZmFsc2UsInNob3dSZXBsYWNlbWVudFN0ZXBzIjpmYWxzZSwic2hvd05hbWVzIjpmYWxzZSwic3VtbWFyeSI6ZmFsc2UsImRlYnVnIjpmYWxzZX0sImNvbmZpZyI6e30sIm1ldGFkYXRhIjp7Im1lc3NhZ2UiOiIiLCJlbnZpcm9ubWVudCI6eyJleGVjLmtpbmQiOiJjbGkiLCJwdWx1bWkuYXJjaCI6ImFybTY0IiwicHVsdW1pLmVudi5QVUxVTUlfQUNDRVNTX1RPS0VOIjoic2V0IiwicHVsdW1pLmVudi5QVUxVTUlfQkFDS0VORF9VUkwiOiJzZXQiLCJwdWx1bWkuZW52LlBVTFVNSV9DT05GSUdfUEFTU1BIUkFTRSI6InNldCIsInB1bHVtaS5lbnYuUFVMVU1JX0hPTUUiOiJzZXQiLCJwdWx1bWkuZW52LlBVTFVNSV9TS0lQX0NPTkZJUk1BVElPTlMiOiJ0cnVlIiwicHVsdW1pLmVudi5QVUxVTUlfU0tJUF9VUERBVEVfQ0hFQ0siOiJ0cnVlIiwicHVsdW1pLmZsYWcueWVzIjoidHJ1ZSIsInB1bHVtaS5vcyI6ImxpbnV4IiwicHVsdW1pLnZlcnNpb24iOiJ2My4yNDIuMCIsInJ1bnRpbWUubmFtZSI6InlhbWwiLCJzdGFjay5lbnZpcm9ubWVudHMiOiJbXSIsInVwZGF0ZVBsYW4iOiJmYWxzZSJ9fX0=",
+  "body_b64": "eyJjb25maWciOnt9LCJkZXNjcmlwdGlvbiI6Ik1pbmltYWwgUHVsdW1pIHByb2plY3QgZm9yIEFQSSByZWNvcmRpbmcuIFVzZXMgdGhlIGByYW5kb21gIHByb3ZpZGVyIHNvIGBwdWx1bWkgdXBgL2BkZXN0cm95YCBleGVyY2lzZSB0aGUgam91cm5hbC9jaGVja3BvaW50IHdyaXRlIHBhdGhzIHdpdGggcmVhbCByZXNvdXJjZSBzdGF0ZS4iLCJtYWluIjoiIiwibWV0YWRhdGEiOnsiZW52aXJvbm1lbnQiOnsiZXhlYy5raW5kIjoiY2xpIiwicHVsdW1pLmFyY2giOiJhcm02NCIsInB1bHVtaS5lbnYuUFVMVU1JX0FDQ0VTU19UT0tFTiI6InNldCIsInB1bHVtaS5lbnYuUFVMVU1JX0JBQ0tFTkRfVVJMIjoic2V0IiwicHVsdW1pLmVudi5QVUxVTUlfQ09ORklHX1BBU1NQSFJBU0UiOiJzZXQiLCJwdWx1bWkuZW52LlBVTFVNSV9IT01FIjoic2V0IiwicHVsdW1pLmVudi5QVUxVTUlfU0tJUF9DT05GSVJNQVRJT05TIjoidHJ1ZSIsInB1bHVtaS5lbnYuUFVMVU1JX1NLSVBfVVBEQVRFX0NIRUNLIjoidHJ1ZSIsInB1bHVtaS5mbGFnLnBhcmFsbGVsIjoic2V0IiwicHVsdW1pLmZsYWcueWVzIjoidHJ1ZSIsInB1bHVtaS5vcyI6ImxpbnV4IiwicHVsdW1pLnZlcnNpb24iOiJ2My4yNDIuMCIsInJ1bnRpbWUubmFtZSI6InlhbWwiLCJzdGFjay5lbnZpcm9ubWVudHMiOiJbXSIsInVwZGF0ZVBsYW4iOiJmYWxzZSJ9LCJtZXNzYWdlIjoiIn0sIm5hbWUiOiJyZWNvcmRlci10ZXN0Iiwib3B0aW9ucyI6eyJjb2xvciI6InJhdyIsImRlYnVnIjpmYWxzZSwiZHJ5UnVuIjpmYWxzZSwibG9jYWxQb2xpY3lQYWNrUGF0aHMiOltdLCJwYXJhbGxlbCI6MSwic2hvd0NvbmZpZyI6ZmFsc2UsInNob3dOYW1lcyI6ZmFsc2UsInNob3dSZXBsYWNlbWVudFN0ZXBzIjpmYWxzZSwic3VtbWFyeSI6ZmFsc2V9LCJydW50aW1lIjoieWFtbCJ9",
   "status_code": 200,
   "response": {
     "updateID": "update-0003",

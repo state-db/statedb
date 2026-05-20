@@ -1,8 +1,7 @@
 {
-  "seq": 72,
+  "seq": 74,
   "command": "08-stack-rm",
   "cmd_seq": 4,
-  "timestamp": "2026-05-19T23:34:06.326404846Z",
   "method": "DELETE",
   "path": "/api/stacks/testorg/recorder-test/dev",
   "query": "force=false",

@@ -134,7 +134,7 @@ Everything else (CRUD on api_tokens, users, oidc_providers; reading stack metada
 
 ## Pulumi backend (Wave 1)
 
-The contract is captured in `tools/pulumi/recorder/fixtures/`. Each fixture is one (request, response) pair recorded against Pulumi CLI v3.234.0. The fixture catalog is the source of truth for wire shape; if a fixture and Pulumi documentation disagree, the fixture wins.
+The contract is captured in `tools/pulumi/recorder/fixtures/`. Each fixture is one (request, response) pair recorded against Pulumi CLI v3.242.0. The fixture catalog is the source of truth for wire shape; if a fixture and Pulumi documentation disagree, the fixture wins.
 
 ### Request lifecycle
 

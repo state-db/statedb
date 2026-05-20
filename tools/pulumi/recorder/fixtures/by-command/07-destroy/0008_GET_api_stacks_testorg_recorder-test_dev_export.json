@@ -1,8 +1,7 @@
 {
-  "seq": 58,
+  "seq": 60,
   "command": "07-destroy",
   "cmd_seq": 8,
-  "timestamp": "2026-05-19T23:34:06.219964638Z",
   "method": "GET",
   "path": "/api/stacks/testorg/recorder-test/dev/export",
   "headers": {

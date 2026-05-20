@@ -2,7 +2,6 @@
   "seq": 9,
   "command": "03-preview",
   "cmd_seq": 4,
-  "timestamp": "2026-05-19T23:33:43.51818021Z",
   "method": "GET",
   "path": "/api/capabilities",
   "headers": {

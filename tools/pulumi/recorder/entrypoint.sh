@@ -15,6 +15,7 @@ export PULUMI_SKIP_UPDATE_CHECK=true
 export PULUMI_SKIP_CONFIRMATIONS=true
 
 mkdir -p "$FIXTURE_DIR" "$PULUMI_HOME"
+rm -rf "$FIXTURE_DIR/by-command" "$FIXTURE_DIR/meta.json"
 
 echo "==> starting recorder on :${PORT}"
 /recorder/recorder -port "$PORT" -fixtures "$FIXTURE_DIR" &
@@ -51,10 +52,10 @@ signal "02-stack-init"
 run pulumi stack init dev
 
 signal "03-preview"
-run pulumi preview
+run pulumi preview --parallel 1
 
 signal "04-up"
-run pulumi up --yes
+run pulumi up --yes --parallel 1
 
 signal "05-stack-ls"
 run pulumi stack ls
@@ -63,7 +64,7 @@ signal "06-stack-export"
 run pulumi stack export
 
 signal "07-destroy"
-run pulumi destroy --yes
+run pulumi destroy --yes --parallel 1
 
 signal "08-stack-rm"
 run pulumi stack rm dev --yes
@@ -77,8 +78,7 @@ cat > "$FIXTURE_DIR/meta.json" <<EOF
 {
   "org": "testorg",
   "project": "recorder-test",
-  "stack": "dev",
-  "recorded_at": "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+  "stack": "dev"
 }
 EOF
 

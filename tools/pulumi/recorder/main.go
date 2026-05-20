@@ -12,6 +12,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -22,6 +23,8 @@ var (
 	port       = flag.Int("port", 8080, "port to listen on")
 	fixtureDir = flag.String("fixtures", "fixtures", "base directory for fixtures")
 )
+
+var uuidRe = regexp.MustCompile(`[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}`)
 
 type server struct {
 	rt        *router
@@ -35,15 +38,14 @@ type fixture struct {
 	Seq        int64             `json:"seq"`
 	Command    string            `json:"command,omitempty"`
 	CmdSeq     int64             `json:"cmd_seq,omitempty"`
-	Timestamp  string            `json:"timestamp"`
 	Method     string            `json:"method"`
 	Path       string            `json:"path"`
 	Query      string            `json:"query,omitempty"`
 	Headers    map[string]string `json:"headers"`
 	Body       interface{}       `json:"body,omitempty"`
-	BodyB64    string            `json:"body_b64,omitempty"`     // raw request bytes, base64-encoded (binary-safe)
-	BodyGzip   bool              `json:"body_gzip,omitempty"`    // true if body_b64 is gzip-compressed
-	BodyRaw    string            `json:"body_raw,omitempty"`     // legacy: lossy UTF-8 of bytes — only set if not parseable as JSON and not gzip
+	BodyB64    string            `json:"body_b64,omitempty"`  // replay request bytes, base64-encoded (binary-safe)
+	BodyGzip   bool              `json:"body_gzip,omitempty"` // true if body_b64 is gzip-compressed
+	BodyRaw    string            `json:"body_raw,omitempty"`  // legacy: lossy UTF-8 of bytes — only set if not parseable as JSON and not gzip
 	StatusCode int               `json:"status_code"`
 	Response   interface{}       `json:"response"`
 }
@@ -70,14 +72,15 @@ func (s *server) handle(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	stabilizeConcurrentPulumiProbe(r.URL.Path)
 	n := atomic.AddInt64(&s.globalSeq, 1)
 
 	body, _ := io.ReadAll(r.Body)
 	r.Body.Close()
 
 	// Decompress gzip-encoded bodies (checkpoint, events/batch, journalentries) so the
-	// parsed JSON appears in `body`. Original bytes are preserved in `body_b64` so
-	// downstream tooling can verify byte-for-byte.
+	// parsed JSON appears in `body`. Replay bytes are preserved in `body_b64` so the
+	// contract harness can send gzip payloads back to the app.
 	var bodyJSON interface{}
 	var decompressed []byte
 	isGzip := strings.EqualFold(r.Header.Get("Content-Encoding"), "gzip")
@@ -94,6 +97,9 @@ func (s *server) handle(w http.ResponseWriter, r *http.Request) {
 		json.Unmarshal(decompressed, &bodyJSON) //nolint:errcheck
 	case len(body) > 0:
 		json.Unmarshal(body, &bodyJSON) //nolint:errcheck
+	}
+	if bodyJSON != nil {
+		bodyJSON = normalizeFixtureJSON(bodyJSON)
 	}
 
 	headers := make(map[string]string, len(r.Header))
@@ -119,7 +125,6 @@ func (s *server) handle(w http.ResponseWriter, r *http.Request) {
 		Seq:        n,
 		Command:    cmd,
 		CmdSeq:     cmdSeq,
-		Timestamp:  time.Now().UTC().Format(time.RFC3339Nano),
 		Method:     r.Method,
 		Path:       r.URL.Path,
 		Query:      r.URL.RawQuery,
@@ -131,9 +136,12 @@ func (s *server) handle(w http.ResponseWriter, r *http.Request) {
 		fix.Body = bodyJSON
 	}
 	if len(body) > 0 {
-		// Always preserve the wire bytes losslessly. base64 is small overhead and lets
-		// the contract harness assert byte-for-byte equality on gzip payloads.
-		fix.BodyB64 = base64.StdEncoding.EncodeToString(body)
+		replayBody := replayBodyBytes(body, bodyJSON, isGzip)
+		headers["Content-Length"] = fmt.Sprintf("%d", len(replayBody))
+		// Preserve replay bytes losslessly. base64 is small overhead and lets the
+		// contract harness exercise gzip payload handling without diffing volatile
+		// timestamps from the CLI's event stream.
+		fix.BodyB64 = base64.StdEncoding.EncodeToString(replayBody)
 		fix.BodyGzip = isGzip
 		if bodyJSON == nil && !isGzip {
 			// Non-JSON, non-gzip — keep the legacy lossy view for human-readability only.
@@ -196,4 +204,89 @@ func filenameSlug(path string) string {
 		slug = slug[:120]
 	}
 	return slug
+}
+
+func replayBodyBytes(original []byte, bodyJSON interface{}, isGzip bool) []byte {
+	if bodyJSON == nil {
+		return original
+	}
+	data, err := json.Marshal(bodyJSON)
+	if err != nil {
+		return original
+	}
+	if !isGzip {
+		return data
+	}
+	var buf bytes.Buffer
+	zw := gzip.NewWriter(&buf)
+	if _, err := zw.Write(data); err != nil {
+		zw.Close() //nolint:errcheck
+		return original
+	}
+	if err := zw.Close(); err != nil {
+		return original
+	}
+	return buf.Bytes()
+}
+
+func normalizeFixtureJSON(v interface{}) interface{} {
+	return normalizeFixtureJSONValue("", v)
+}
+
+func normalizeFixtureJSONValue(key string, v interface{}) interface{} {
+	switch x := v.(type) {
+	case map[string]interface{}:
+		out := make(map[string]interface{}, len(x))
+		for k, val := range x {
+			switch k {
+			case "timestamp":
+				out[k] = float64(0)
+				continue
+			case "created", "modified":
+				out[k] = "1970-01-01T00:00:00Z"
+				continue
+			}
+			out[k] = normalizeFixtureJSONValue(k, val)
+		}
+		return out
+	case []interface{}:
+		out := make([]interface{}, len(x))
+		for i, val := range x {
+			out[i] = normalizeFixtureJSONValue(key, val)
+		}
+		return out
+	case string:
+		return normalizeFixtureString(key, x)
+	default:
+		return v
+	}
+}
+
+func normalizeFixtureString(key, value string) string {
+	value = uuidRe.ReplaceAllString(value, "00000000-0000-0000-0000-000000000000")
+	switch key {
+	case "id":
+		if value != "" {
+			return "[resource-id]"
+		}
+	case "result":
+		if value != "" && value != "succeeded" && value != "failed" && value != "cancelled" {
+			return "[result]"
+		}
+	case "petName":
+		if value != "" {
+			return "[pet-name]"
+		}
+	case "word":
+		if value != "" {
+			return "[word]"
+		}
+	}
+	return value
+}
+
+func stabilizeConcurrentPulumiProbe(path string) {
+	if path == "/api/user/organizations/default" {
+		time.Sleep(15 * time.Millisecond)
+	}
 }

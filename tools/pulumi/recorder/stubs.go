@@ -6,10 +6,11 @@ import (
 	"strings"
 	"sync"
 	"sync/atomic"
-	"time"
 )
 
 var opCounter int64
+
+const stableTokenExpirationUnix = 4102444800 // 2100-01-01T00:00:00Z
 
 type opState struct {
 	token string
@@ -24,7 +25,7 @@ type stackInfo struct {
 
 type router struct {
 	mu     sync.Mutex
-	ops    map[string]opState  // updateID → lease state
+	ops    map[string]opState   // updateID → lease state
 	stacks map[string]stackInfo // "org/proj/stack" → stack record
 }
 
@@ -320,24 +321,22 @@ func (rt *router) startOp(updateID string, body []byte) (int, interface{}) {
 		token = fmt.Sprintf("lease-fallback-%s", updateID)
 	}
 
-	// Echo back the maximum journal version the client asked for so the CLI uses the
-	// POST .../journalentries path instead of falling back to PATCH .../checkpoint.
-	// Per AppStartUpdateRequest/Response: 0 disables journaling; anything >=1 enables it.
+	// Echo back the journal version the client asked for so the recorder reflects
+	// protocol negotiation rather than forcing journaling on older clients.
 	var req struct {
 		JournalVersion int64 `json:"journalVersion"`
 	}
 	json.Unmarshal(body, &req) //nolint:errcheck
-	journalVersion := req.JournalVersion
-	if journalVersion == 0 {
-		journalVersion = 1
-	}
 
-	return 200, map[string]interface{}{
+	resp := map[string]interface{}{
 		"token":           token,
-		"tokenExpiration": time.Now().Add(time.Hour).Unix(),
+		"tokenExpiration": stableTokenExpirationUnix,
 		"version":         1,
-		"journalVersion":  journalVersion,
 	}
+	if req.JournalVersion > 0 {
+		resp["journalVersion"] = req.JournalVersion
+	}
+	return 200, resp
 }
 
 func (rt *router) renewLease() (int, interface{}) {

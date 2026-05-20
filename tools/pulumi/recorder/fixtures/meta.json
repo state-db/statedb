@@ -1,6 +1,5 @@
 {
   "org": "testorg",
   "project": "recorder-test",
-  "stack": "dev",
-  "recorded_at": "2026-05-19T23:34:06Z"
+  "stack": "dev"
 }

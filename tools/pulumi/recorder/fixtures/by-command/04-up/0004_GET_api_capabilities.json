@@ -2,7 +2,6 @@
   "seq": 19,
   "command": "04-up",
   "cmd_seq": 4,
-  "timestamp": "2026-05-19T23:34:05.542987512Z",
   "method": "GET",
   "path": "/api/capabilities",
   "headers": {

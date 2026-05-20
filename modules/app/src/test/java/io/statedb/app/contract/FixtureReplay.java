@@ -26,6 +26,7 @@ import java.io.InputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.Base64;
 import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
@@ -81,7 +82,9 @@ public final class FixtureReplay {
 
       RequestSpecification request = given();
       addHeaders(request, exchange.path("headers"));
-      if (exchange.has("body_raw")) {
+      if (exchange.has("body_b64")) {
+        request.body(Base64.getDecoder().decode(exchange.required("body_b64").asText()));
+      } else if (exchange.has("body_raw")) {
         request.body(exchange.required("body_raw").asText());
       } else if (exchange.has("body")) {
         request.body(JSON.writeValueAsString(exchange.required("body")));

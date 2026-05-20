@@ -2,7 +2,6 @@
   "seq": 13,
   "command": "03-preview",
   "cmd_seq": 8,
-  "timestamp": "2026-05-19T23:33:43.53472546Z",
   "method": "GET",
   "path": "/api/stacks/testorg/recorder-test/dev",
   "headers": {

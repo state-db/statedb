@@ -2,7 +2,7 @@
 
 ## Context
 
-This schema supports the Wave 1 HTTP state backend for Pulumi and the identity/membership tables that the Wave 2 console needs to authenticate users and mint API tokens. The Pulumi CLI speaks a REST-ish API when `PULUMI_BACKEND_URL` is set to a custom HTTP endpoint; this service implements that protocol. Wire-shape ground truth is the recorded fixture catalog at `tools/pulumi/recorder/fixtures/` (Pulumi CLI v3.234.0 against a stub backend); when fixtures and Pulumi documentation disagree, fixtures win.
+This schema supports the Wave 1 HTTP state backend for Pulumi and the identity/membership tables that the Wave 2 console needs to authenticate users and mint API tokens. The Pulumi CLI speaks a REST-ish API when `PULUMI_BACKEND_URL` is set to a custom HTTP endpoint; this service implements that protocol. Wire-shape ground truth is the recorded fixture catalog at `tools/pulumi/recorder/fixtures/` (Pulumi CLI v3.242.0 against a stub backend); when fixtures and Pulumi documentation disagree, fixtures win.
 
 The design must support the `delta-checkpoint-updates` journaling protocol (capability version 1), which is what `journalVersion: 1` in the start-update request activates. Without journaling, the checkpoint PATCH contains a full snapshot; with journaling it contains incremental entries.
 

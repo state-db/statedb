@@ -2,7 +2,6 @@
   "seq": 17,
   "command": "04-up",
   "cmd_seq": 2,
-  "timestamp": "2026-05-19T23:34:05.540747762Z",
   "method": "GET",
   "path": "/api/user/organizations/default",
   "headers": {

@@ -2,7 +2,6 @@
   "seq": 30,
   "command": "04-up",
   "cmd_seq": 15,
-  "timestamp": "2026-05-19T23:34:05.658807179Z",
   "method": "PATCH",
   "path": "/api/stacks/testorg/recorder-test/dev/update/update-0003/journalentries",
   "headers": {
@@ -10,7 +9,7 @@
     "Accept-Encoding": "gzip",
     "Authorization": "REDACTED",
     "Content-Encoding": "gzip",
-    "Content-Length": "587",
+    "Content-Length": "591",
     "Content-Type": "application/json",
     "User-Agent": "pulumi-cli/1 (v3.242.0; linux; cmd=up)"
   },
@@ -93,7 +92,7 @@
       }
     ]
   },
-  "body_b64": "H4sIAAAAAAAA/9SVT0/cPBDGv8twzdpOslmCTxzey3tpkdobQig4U6+7iScdO6Fole9eef8gQBy2glL1srO2M/M8v3FibwF9ZIcB9PUWJuTgyIPOM9g434JeZRDwx4je4P//7eZpQG6iI5/GKgPGnib83LWg/dh1x4lPeH+cCGgYY7himlyLDHoL8WFA0BCQJ2cQMgixiZhWRu5AwzrGQUvZkWm6NYWoa1UryIDufSoAEUMktpDBwPQdTQQNjIa4RV6kxX1JswENLU4wz3P2Gp56jle8wMtPwXvMSPYZA41sDigedPrVw9iNvdMtTlo/s6mPS4fwJXl+8cwiAWRgxhCpB/2t6QJmxw6+kp7Qdx6uKLi9r2OXtJRSCLmmHiWP3iPLe+KN3KcvHpq+e/5/Y2XaI+RDEJbOymJ17O5XbhLq9fbPK6b9+w0RS7tSPbXSurge74Sh/qB0DKHdyKm8nEpRlOdCyYEpUsrsGm/HxuKt5cGI4S55qOr6IzxYkob6nrwco+skD2YXnY/IBodI+4ao/C1miGyHwlLiFMRWJs7LKRd1LtSTvufFsnwf6CSwQEPhIUQ8DGlIR09jnLeXkxJKqEWh8lpV6rzIy7JSixprdWHqpl4tq1SYYkp8YrA6/7fa8B57XxRvehFPhy6Xf/+ju1AfwrosP0anrt50kJ2so1bVKTo0RJluV2wjUWcas8akl4uiEhfy52opA5tkJLoeZRP624b71VKEs7xY1TDfzI/3kGFsovMW5vlm/hUAAP//VaBLblUIAAA=",
+  "body_b64": "H4sIAAAAAAAA/9RVwW7bOBD9l8lVJinJchSectjLXnYDtLcgCBRqSrOWOOqQUhoY/veCttXERQ8ukqboaegZDt97Q1NvC+gjOwygb7ewcb4FvcqABuQmOvL//gNaZcDY04T/4SNoP3bdnPi/a+dEQMMYww3T5Fpk0FsIsYmYFvToUwYihkhsIYOB6TOaCBoYDXGLvEhFyFKT2YCGFifIYOQONKxjHLSUHZmmW1OIula1gl0G8WlA0BCQJ2cwZQJ+GdEbTLzzDCbk4MiDznfZLE+9kJfYMQYa2eyZmjFE6kF/arqAGRwKNxTcYfPMW0sphZBr6lHy6D2yfCTeyGHsxt4tnpq+O11vrEwkkY9BWLooi9Ws9yM3Cf92+/sR0xx+AcTS/qieWmldXI8PwlB/RJpDaDdyKq+nUhTlpVByYIqUOrvG27GxeG95MGJ4SByqun4PDpakob4nL8foOsmD2UfnI7LBIdJhICp/DRki26GwlHQKYiuTzuspF3Uu1Iu558WyfBvRCWCBhsJTiHj8SUN6wo1x3l5PSiihFoXKa1WpyyIvy0otaqzVlamberWs0sEUU+MLgtXl3zWGt7j7onjVH/F80eXyzz+6K/UuWpfl++DU1as+ZGfjqFV1Dg4NUSZfwjYSdaYxa0x4uSgqcSW/rpYysElEoutRNqG/b7hfLUW4yItVDbu77052uFx9DB/2XphcMGGO7OdCi5PWJ86p9U9af9izSJ767JqGsYnO25Q68fv8PL9/NtrixGjvdt8CAAD//7tSwmBVCAAA",
   "body_gzip": true,
   "status_code": 200,
   "response": {}

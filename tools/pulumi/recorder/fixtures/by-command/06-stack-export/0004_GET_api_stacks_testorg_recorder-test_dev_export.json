@@ -1,8 +1,7 @@
 {
-  "seq": 50,
+  "seq": 52,
   "command": "06-stack-export",
   "cmd_seq": 4,
-  "timestamp": "2026-05-19T23:34:06.140649013Z",
   "method": "GET",
   "path": "/api/stacks/testorg/recorder-test/dev/export",
   "headers": {

@@ -2,7 +2,6 @@
   "seq": 5,
   "command": "02-stack-init",
   "cmd_seq": 4,
-  "timestamp": "2026-05-19T23:33:43.44881996Z",
   "method": "POST",
   "path": "/api/stacks/testorg/recorder-test",
   "headers": {

@@ -10,18 +10,19 @@ RUN go build -o /recorder/recorder . && \
 # ---- runtime image ----
 FROM debian:bookworm-slim
 
+ARG PULUMI_VERSION=3.242.0
+ARG RANDOM_PROVIDER_VERSION=4.20.0
+
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates curl && \
     rm -rf /var/lib/apt/lists/*
 
-# Install Pulumi CLI.
-RUN curl -fsSL https://get.pulumi.com | sh
+# Install the Pulumi CLI and providers used by /testproject at fixed versions so
+# fixture refreshes are repeatable.
+RUN curl -fsSL https://get.pulumi.com | sh -s -- --version "${PULUMI_VERSION}"
 ENV PATH="/root/.pulumi/bin:${PATH}"
 
-# Pre-install the resource providers used by /testproject so `pulumi up` doesn't
-# spend time downloading them mid-recording (and so the recording is reproducible
-# offline once the image is built).
-RUN pulumi plugin install resource random
+RUN pulumi plugin install resource random "${RANDOM_PROVIDER_VERSION}"
 
 COPY --from=builder /recorder/recorder /recorder/recorder
 COPY --from=builder /recorder/catalog /recorder/catalog

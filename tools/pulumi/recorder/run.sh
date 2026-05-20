@@ -29,6 +29,10 @@ if [[ "$BUILD" -eq 1 ]]; then
   docker build -t "$IMAGE" .
 fi
 
+echo "==> cleaning previous capture"
+rm -rf "$FIXTURES_DIR/by-command" "$FIXTURES_DIR/meta.json"
+mkdir -p "$FIXTURES_DIR"
+
 echo "==> running capture  (fixtures → $FIXTURES_DIR)"
 echo "==>                  (catalog  → $SNAPSHOTS_DIR/catalog.md)"
 docker run --rm \

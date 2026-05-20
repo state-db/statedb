@@ -2,7 +2,6 @@
   "seq": 32,
   "command": "04-up",
   "cmd_seq": 17,
-  "timestamp": "2026-05-19T23:34:05.763671637Z",
   "method": "PATCH",
   "path": "/api/stacks/testorg/recorder-test/dev/update/update-0003/journalentries",
   "headers": {
@@ -10,7 +9,7 @@
     "Accept-Encoding": "gzip",
     "Authorization": "REDACTED",
     "Content-Encoding": "gzip",
-    "Content-Length": "188",
+    "Content-Length": "190",
     "Content-Type": "application/json",
     "User-Agent": "pulumi-cli/1 (v3.242.0; linux; cmd=up)"
   },
@@ -34,7 +33,7 @@
       }
     ]
   },
-  "body_b64": "H4sIAAAAAAAA/3SLsU7GMAyE3+XmIAFi8szCAg+AGKrkQBFpXBy7CFV9d9Sh3f7F8n133wZ2t8oBed+w0kbVDnlI+K69QO4TBn+CPfPlGfKUoAtt8qr9yI8JxllXvrUC6dHaCV75e4LLgGwwDg3LPP6wDjmuLNFirlK4ihizWqHdOYfLWS2may20ITb1orNI4ecUzZGQY7jOELdggv8thOCGh/1aZOPktX9h3z/2/wAAAP//Heh2KAkBAAA=",
+  "body_b64": "H4sIAAAAAAAA/3SPsUoGMRCE32XqCCpWU9vY6AOIxZGMEswl5yZ7Ise9u5z4X/c3y/KxHzuzQXVYVgdfN3zmmsDbgLbIppFbBTeYenOLOvbofbQZHOYKGD+LQCxefM5crK05yTptqqnNCHCr4DH5f5O0kqbYLMluhvogr+hk0vvkZWA/P0XTNHL9ONCZ8ekRvA8wzW3Vs77B6qVcwEtJF9D15apRh/AQsMr6X8W7/W3/DQAA///ONANPCQEAAA==",
   "body_gzip": true,
   "status_code": 200,
   "response": {}

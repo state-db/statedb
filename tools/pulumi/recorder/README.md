@@ -18,6 +18,7 @@ make pulumi-recorder-discover
 This will:
 - build and run the recorder container
 - execute the Pulumi command sequence
+- replace the previous recorded fixture set
 - write fixtures to `tools/pulumi/recorder/fixtures/by-command/`
 - regenerate `api-snapshots/pulumi/catalog.md`
 
@@ -44,5 +45,9 @@ make pulumi-recorder-verify
 ## Reproducibility Notes
 
 - The recorder uses fixed test values: org `testorg`, project `recorder-test`, stack `dev`.
-- `meta.json` stores recording metadata and timestamp.
+- The Dockerfile pins the Pulumi CLI and provider versions used for capture.
+- Resource operations run with `--parallel 1` so event ordering is deterministic.
+- `meta.json` stores the recording org, project, and stack values.
+- Volatile fixture values such as timestamps, generated IDs, and random outputs are
+  normalized so repeated captures produce reviewable diffs.
 - Command boundaries are explicit (`/meta/command`), so call ordering is stable across runs.
