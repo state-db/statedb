@@ -1,0 +1,526 @@
+package io.statedb.app.journal;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import io.quarkus.narayana.jta.QuarkusTransaction;
+import io.quarkus.test.junit.QuarkusTest;
+import io.statedb.persistence.identity.Organization;
+import io.statedb.persistence.journal.JournalAppender;
+import io.statedb.persistence.journal.JournalSequenceConflictException;
+import io.statedb.persistence.journal.JournalValidationException;
+import io.statedb.persistence.stack.StackCreator;
+import io.statedb.persistence.stack.StackRef;
+import io.statedb.persistence.update.StackUpdate;
+import io.statedb.persistence.update.StackUpdateStarter;
+import io.statedb.persistence.update.StartUpdateRequest;
+import io.statedb.persistence.update.StartedUpdate;
+import jakarta.inject.Inject;
+import jakarta.persistence.EntityManager;
+import java.util.List;
+import java.util.Map;
+import java.util.UUID;
+import java.util.concurrent.CyclicBarrier;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+
+@QuarkusTest
+class JournalAppenderTest {
+
+  private static final String ORG_NAME = "journal-org";
+  private static final ObjectMapper MAPPER = new ObjectMapper();
+
+  @Inject StackCreator stackCreator;
+  @Inject StackUpdateStarter starter;
+  @Inject JournalAppender appender;
+  @Inject EntityManager em;
+
+  private UUID stackId;
+  private UUID updateId;
+
+  @BeforeEach
+  void seed() {
+    stackId =
+        QuarkusTransaction.requiringNew()
+            .call(
+                () -> {
+                  Organization org = new Organization();
+                  org.name = ORG_NAME;
+                  org.displayName = "Journal Test";
+                  org.persistAndFlush();
+                  StackRef ref = stackCreator.create(org.id, ORG_NAME, "proj", "dev", Map.of());
+                  return ref.stackId();
+                });
+    StartedUpdate u =
+        starter.start(
+            stackId,
+            StackUpdate.Kind.UPDATE,
+            null,
+            null,
+            UUID.randomUUID().toString(),
+            new StartUpdateRequest(
+                Map.of(), Map.of(), Map.of(), "desc", "yaml", "v3.242.0", "msg"));
+    updateId = u.updateId();
+  }
+
+  @AfterEach
+  void cleanup() {
+    QuarkusTransaction.requiringNew()
+        .run(
+            () ->
+                em.createNativeQuery("DELETE FROM organizations WHERE name = ?1")
+                    .setParameter(1, ORG_NAME)
+                    .executeUpdate());
+  }
+
+  @Test
+  void singleBatchPersistsOffsetAndRows() {
+    appender.append(
+        stackId,
+        updateId,
+        List.of(
+            entry(
+                1,
+                0,
+                1L,
+                "{\"operation\":{\"resource\":{\"urn\":\"urn:a\",\"type\":\"t:a\"},\"type\":\"creating\"}}"),
+            entry(
+                2,
+                0,
+                2L,
+                "{\"operation\":{\"resource\":{\"urn\":\"urn:b\",\"type\":\"t:b\"},\"type\":\"creating\"}}"),
+            entry(3, 1, 1L, "{\"state\":{\"urn\":\"urn:a\"}}")));
+
+    QuarkusTransaction.requiringNew()
+        .run(
+            () -> {
+              Long offset =
+                  ((Number)
+                          em.createNativeQuery(
+                                  "SELECT start_journal_seq FROM stack_updates WHERE id = ?1")
+                              .setParameter(1, updateId)
+                              .getSingleResult())
+                      .longValue();
+              assertEquals(0L, offset);
+
+              List<?> rows =
+                  em.createNativeQuery(
+                          "SELECT sequence_id, wire_sequence_id, kind, resource_urn "
+                              + "FROM journal_entries WHERE update_id = ?1 ORDER BY sequence_id")
+                      .setParameter(1, updateId)
+                      .getResultList();
+              assertEquals(3, rows.size());
+
+              long stateSeq =
+                  ((Number)
+                          em.createNativeQuery(
+                                  "SELECT journal_seq FROM stack_state WHERE stack_id = ?1")
+                              .setParameter(1, stackId)
+                              .getSingleResult())
+                      .longValue();
+              assertEquals(4L, stateSeq);
+
+              // pending_operations: Begins persist, Success terminates op 1.
+              long pending =
+                  ((Number)
+                          em.createNativeQuery(
+                                  "SELECT count(*) FROM pending_operations WHERE update_id = ?1")
+                              .setParameter(1, updateId)
+                              .getSingleResult())
+                      .longValue();
+              assertEquals(1L, pending);
+            });
+  }
+
+  @Test
+  void outOfOrderWireIdsWithinBatchReplayCorrectly() {
+    // Entries arrive [6, 5, 7]; replay by sequence_id should be [5, 6, 7].
+    appender.append(
+        stackId,
+        updateId,
+        List.of(
+            entry(6, 1, 6L, "{\"state\":{\"urn\":\"urn:6\"}}"),
+            entry(5, 1, 5L, "{\"state\":{\"urn\":\"urn:5\"}}"),
+            entry(7, 1, 7L, "{\"state\":{\"urn\":\"urn:7\"}}")));
+
+    QuarkusTransaction.requiringNew()
+        .run(
+            () -> {
+              @SuppressWarnings("unchecked")
+              List<Object[]> rows =
+                  em.createNativeQuery(
+                          "SELECT wire_sequence_id, resource_urn FROM journal_entries "
+                              + "WHERE update_id = ?1 ORDER BY sequence_id")
+                      .setParameter(1, updateId)
+                      .getResultList();
+              assertEquals(3, rows.size());
+              assertEquals(5L, ((Number) rows.get(0)[0]).longValue());
+              assertEquals(6L, ((Number) rows.get(1)[0]).longValue());
+              assertEquals(7L, ((Number) rows.get(2)[0]).longValue());
+              assertEquals("urn:5", rows.get(0)[1]);
+            });
+  }
+
+  @Test
+  void outOfOrderAcrossPatchesReplayCorrectly() {
+    appender.append(
+        stackId,
+        updateId,
+        List.of(
+            entry(3, 1, 3L, "{\"state\":{\"urn\":\"urn:3\"}}"),
+            entry(5, 1, 5L, "{\"state\":{\"urn\":\"urn:5\"}}")));
+    appender.append(
+        stackId,
+        updateId,
+        List.of(
+            entry(4, 1, 4L, "{\"state\":{\"urn\":\"urn:4\"}}"),
+            entry(6, 1, 6L, "{\"state\":{\"urn\":\"urn:6\"}}")));
+
+    QuarkusTransaction.requiringNew()
+        .run(
+            () -> {
+              @SuppressWarnings("unchecked")
+              List<Number> wireSeqs =
+                  em.createNativeQuery(
+                          "SELECT wire_sequence_id FROM journal_entries WHERE update_id = ?1 "
+                              + "ORDER BY sequence_id")
+                      .setParameter(1, updateId)
+                      .getResultList();
+              assertEquals(
+                  List.of(3L, 4L, 5L, 6L), wireSeqs.stream().map(Number::longValue).toList());
+            });
+  }
+
+  @Test
+  void duplicateWireSequenceAcrossPatchesReturns409() {
+    appender.append(stackId, updateId, List.of(entry(1, 1, 1L, "{\"state\":{\"urn\":\"urn:1\"}}")));
+    assertThrows(
+        JournalSequenceConflictException.class,
+        () ->
+            appender.append(
+                stackId, updateId, List.of(entry(1, 1, 1L, "{\"state\":{\"urn\":\"urn:dup\"}}"))));
+
+    QuarkusTransaction.requiringNew()
+        .run(
+            () -> {
+              long count =
+                  ((Number)
+                          em.createNativeQuery(
+                                  "SELECT count(*) FROM journal_entries WHERE update_id = ?1")
+                              .setParameter(1, updateId)
+                              .getSingleResult())
+                      .longValue();
+              assertEquals(1L, count);
+            });
+  }
+
+  @Test
+  void invalidKindRejectedWithNoWrites() {
+    assertThrows(
+        JournalValidationException.class,
+        () -> appender.append(stackId, updateId, List.of(entry(1, 8, null, "{}"))));
+
+    QuarkusTransaction.requiringNew()
+        .run(
+            () -> {
+              long count =
+                  ((Number)
+                          em.createNativeQuery(
+                                  "SELECT count(*) FROM journal_entries WHERE update_id = ?1")
+                              .setParameter(1, updateId)
+                              .getSingleResult())
+                      .longValue();
+              assertEquals(0L, count);
+            });
+  }
+
+  @Test
+  void nonPositiveSequenceRejected() {
+    assertThrows(
+        JournalValidationException.class,
+        () -> appender.append(stackId, updateId, List.of(entry(0, 0, 1L, "{}"))));
+  }
+
+  @Test
+  void beginPersistsPendingOpsAndSuccessPrunes() {
+    appender.append(
+        stackId,
+        updateId,
+        List.of(
+            entry(
+                1,
+                0,
+                42L,
+                "{\"operation\":{\"resource\":{\"urn\":\"urn:r\",\"type\":\"aws:s3:Bucket\"},\"type\":\"updating\"}}")));
+
+    QuarkusTransaction.requiringNew()
+        .run(
+            () -> {
+              Object[] row =
+                  (Object[])
+                      em.createNativeQuery(
+                              "SELECT resource_urn, resource_type, operation_type, begin_journal_seq "
+                                  + "FROM pending_operations "
+                                  + "WHERE update_id = ?1 AND operation_id = ?2")
+                          .setParameter(1, updateId)
+                          .setParameter(2, 42L)
+                          .getSingleResult();
+              assertEquals("urn:r", row[0]);
+              assertEquals("aws:s3:Bucket", row[1]);
+              assertEquals("updating", row[2]);
+              assertEquals(1L, ((Number) row[3]).longValue());
+            });
+
+    appender.append(
+        stackId, updateId, List.of(entry(2, 1, 42L, "{\"state\":{\"urn\":\"urn:r\"}}")));
+
+    QuarkusTransaction.requiringNew()
+        .run(
+            () -> {
+              long pending =
+                  ((Number)
+                          em.createNativeQuery(
+                                  "SELECT count(*) FROM pending_operations WHERE update_id = ?1")
+                              .setParameter(1, updateId)
+                              .getSingleResult())
+                      .longValue();
+              assertEquals(0L, pending);
+            });
+  }
+
+  @Test
+  void invalidOperationTypeSkipsPendingOpsButPersistsJournalRow() {
+    // operation_type "bogus" is not in the CHECK set — pending_operations is silently skipped,
+    // but the journal_entries row still lands.
+    appender.append(
+        stackId,
+        updateId,
+        List.of(
+            entry(
+                1,
+                0,
+                7L,
+                "{\"operation\":{\"resource\":{\"urn\":\"urn:r\",\"type\":\"t:x\"},\"type\":\"bogus\"}}")));
+
+    QuarkusTransaction.requiringNew()
+        .run(
+            () -> {
+              long je =
+                  ((Number)
+                          em.createNativeQuery(
+                                  "SELECT count(*) FROM journal_entries WHERE update_id = ?1")
+                              .setParameter(1, updateId)
+                              .getSingleResult())
+                      .longValue();
+              long pending =
+                  ((Number)
+                          em.createNativeQuery(
+                                  "SELECT count(*) FROM pending_operations WHERE update_id = ?1")
+                              .setParameter(1, updateId)
+                              .getSingleResult())
+                      .longValue();
+              assertEquals(1L, je);
+              assertEquals(0L, pending);
+            });
+  }
+
+  @Test
+  void payloadStoredWithoutPromotedFields() {
+    appender.append(
+        stackId,
+        updateId,
+        List.of(
+            entry(1, 3, 9L, "{\"state\":{\"urn\":\"urn:s\"},\"isRefresh\":true,\"removeOld\":5}")));
+
+    QuarkusTransaction.requiringNew()
+        .run(
+            () -> {
+              String payloadJson =
+                  (String)
+                      em.createNativeQuery(
+                              "SELECT payload::text FROM journal_entries WHERE update_id = ?1")
+                          .setParameter(1, updateId)
+                          .getSingleResult();
+              JsonNode payload;
+              try {
+                payload = MAPPER.readTree(payloadJson);
+              } catch (Exception e) {
+                throw new RuntimeException(e);
+              }
+              // state remains in payload; promoted columns are removed.
+              assertNotNull(payload.get("state"));
+              assertNull(payload.get("isRefresh"));
+              assertNull(payload.get("removeOld"));
+              assertNull(payload.get("sequenceID"));
+              assertNull(payload.get("kind"));
+
+              Boolean isRefresh =
+                  (Boolean)
+                      em.createNativeQuery(
+                              "SELECT is_refresh FROM journal_entries WHERE update_id = ?1")
+                          .setParameter(1, updateId)
+                          .getSingleResult();
+              assertTrue(isRefresh);
+
+              Number removeOld =
+                  (Number)
+                      em.createNativeQuery(
+                              "SELECT remove_old FROM journal_entries WHERE update_id = ?1")
+                          .setParameter(1, updateId)
+                          .getSingleResult();
+              assertEquals(5L, removeOld.longValue());
+            });
+  }
+
+  @Test
+  void cacheInvalidationTriggerFiresOnInsert() {
+    // Seed cache_valid = true so we can observe the trigger flip it.
+    QuarkusTransaction.requiringNew()
+        .run(
+            () ->
+                em.createNativeQuery(
+                        "UPDATE stack_state SET cache_valid = true WHERE stack_id = ?1")
+                    .setParameter(1, stackId)
+                    .executeUpdate());
+
+    appender.append(stackId, updateId, List.of(entry(1, 1, 1L, "{\"state\":{\"urn\":\"urn:x\"}}")));
+
+    QuarkusTransaction.requiringNew()
+        .run(
+            () -> {
+              Boolean valid =
+                  (Boolean)
+                      em.createNativeQuery(
+                              "SELECT cache_valid FROM stack_state WHERE stack_id = ?1")
+                          .setParameter(1, stackId)
+                          .getSingleResult();
+              assertFalse(valid);
+            });
+  }
+
+  @Test
+  void concurrentAppendsSerializeAndPreserveIntegrity() throws Exception {
+    // Two PATCHes for the same update arriving on different threads/pods. FOR UPDATE on
+    // stack_state must serialize them so both succeed and all rows persist.
+    ExecutorService pool = Executors.newFixedThreadPool(2);
+    CyclicBarrier start = new CyclicBarrier(2);
+    try {
+      Future<?> f1 =
+          pool.submit(
+              (Runnable)
+                  () -> {
+                    try {
+                      start.await(5, TimeUnit.SECONDS);
+                    } catch (Exception e) {
+                      throw new RuntimeException(e);
+                    }
+                    appender.append(
+                        stackId,
+                        updateId,
+                        List.of(entry(1, 1, 1L, "{\"state\":{\"urn\":\"u:1\"}}")));
+                  });
+      Future<?> f2 =
+          pool.submit(
+              (Runnable)
+                  () -> {
+                    try {
+                      start.await(5, TimeUnit.SECONDS);
+                    } catch (Exception e) {
+                      throw new RuntimeException(e);
+                    }
+                    appender.append(
+                        stackId,
+                        updateId,
+                        List.of(entry(2, 1, 2L, "{\"state\":{\"urn\":\"u:2\"}}")));
+                  });
+      f1.get(10, TimeUnit.SECONDS);
+      f2.get(10, TimeUnit.SECONDS);
+
+      QuarkusTransaction.requiringNew()
+          .run(
+              () -> {
+                long count =
+                    ((Number)
+                            em.createNativeQuery(
+                                    "SELECT count(*) FROM journal_entries WHERE update_id = ?1")
+                                .setParameter(1, updateId)
+                                .getSingleResult())
+                        .longValue();
+                assertEquals(2L, count);
+              });
+    } finally {
+      pool.shutdownNow();
+    }
+  }
+
+  @Test
+  void secondUpdateContinuesGlobalSequence() {
+    appender.append(
+        stackId,
+        updateId,
+        List.of(
+            entry(1, 1, 1L, "{\"state\":{\"urn\":\"u:1\"}}"),
+            entry(2, 1, 2L, "{\"state\":{\"urn\":\"u:2\"}}")));
+
+    StartedUpdate u2 =
+        starter.start(
+            stackId,
+            StackUpdate.Kind.UPDATE,
+            null,
+            null,
+            UUID.randomUUID().toString(),
+            new StartUpdateRequest(Map.of(), Map.of(), Map.of(), null, null, null, null));
+
+    appender.append(
+        stackId, u2.updateId(), List.of(entry(1, 1, 1L, "{\"state\":{\"urn\":\"u:2-1\"}}")));
+
+    QuarkusTransaction.requiringNew()
+        .run(
+            () -> {
+              Long offset2 =
+                  ((Number)
+                          em.createNativeQuery(
+                                  "SELECT start_journal_seq FROM stack_updates WHERE id = ?1")
+                              .setParameter(1, u2.updateId())
+                              .getSingleResult())
+                      .longValue();
+              // First update wrote sequence_id 1 and 2; journal_seq = 3 when update 2's first PATCH
+              // arrives, so its offset is 3 and its first entry lands at sequence_id 4.
+              assertEquals(3L, offset2);
+
+              long seq =
+                  ((Number)
+                          em.createNativeQuery(
+                                  "SELECT sequence_id FROM journal_entries WHERE update_id = ?1")
+                              .setParameter(1, u2.updateId())
+                              .getSingleResult())
+                      .longValue();
+              assertEquals(4L, seq);
+            });
+  }
+
+  private static JsonNode entry(long wireSeq, int kind, Long operationId, String payloadJson) {
+    try {
+      JsonNode payload = MAPPER.readTree(payloadJson);
+      com.fasterxml.jackson.databind.node.ObjectNode node =
+          (com.fasterxml.jackson.databind.node.ObjectNode) payload;
+      node.put("sequenceID", wireSeq);
+      node.put("kind", kind);
+      if (operationId != null) node.put("operationID", operationId);
+      return node;
+    } catch (Exception e) {
+      throw new RuntimeException(e);
+    }
+  }
+}

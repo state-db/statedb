@@ -311,6 +311,11 @@ CREATE TABLE stack_updates (
     -- Journaling state
     journal_version       INTEGER,  -- 1 = delta-checkpoint-updates active
     base_snapshot_version INTEGER,
+    -- Per-update offset captured atomically on the update's first journal PATCH:
+    -- start_journal_seq := stack_state.journal_seq at the moment the first batch arrives.
+    -- Every entry's server sequence_id is then start_journal_seq + wire_sequenceID, which
+    -- keeps `ORDER BY sequence_id` correct even when wire IDs arrive at the server out of
+    -- order across PATCHes (see invariant #9 and the journal_entries comment block).
     start_journal_seq     BIGINT,
     end_journal_seq       BIGINT,   -- set on completion
 
@@ -361,8 +366,8 @@ CREATE TABLE journal_entries (
     id           UUID    PRIMARY KEY,
     stack_id     UUID    NOT NULL REFERENCES stacks(id) ON DELETE CASCADE,
     update_id    UUID    NOT NULL,
-    sequence_id       BIGINT NOT NULL, -- server-assigned replay order, monotonic within a stack
-    wire_sequence_id  BIGINT NOT NULL, -- Pulumi sequenceID, monotonic within one update
+    sequence_id       BIGINT NOT NULL, -- server-assigned replay order, monotonic within a stack; = stack_updates.start_journal_seq + wire_sequence_id
+    wire_sequence_id  BIGINT NOT NULL, -- Pulumi sequenceID, unique within one update; assigned by the CLI from a monotonic counter but may arrive at the server out of order under resource parallelism
 
     kind         SMALLINT NOT NULL,  -- pinned to Pulumi CLI v3.242.0 kinds 0..7; validated in the handler so a new upstream kind surfaces as a 400, not a constraint violation
     operation_id BIGINT,            -- wire operationID; 0 is used for sentinel entries
@@ -637,6 +642,18 @@ Pulumi's wire `sequenceID` resets for each update. It is stored as
 `wire_sequence_id`; the server-assigned `sequence_id` is the stack-global
 replay order used by export and compaction.
 
+The CLI assigns `wire_sequenceID` from a single atomic counter at entry-creation
+time, but concurrent resource workers (under `--parallel > 1`, the default) may
+push entries to the journal channel out of counter order. Across PATCHes a
+later batch can therefore carry a wire ID lower than the previous batch's max.
+To keep `ORDER BY sequence_id` consistent with the CLI's intended replay order,
+the server records a per-update offset on `stack_updates.start_journal_seq` —
+captured atomically on the update's first PATCH as the current value of
+`stack_state.journal_seq` — and assigns each entry's server `sequence_id` as
+`start_journal_seq + wire_sequenceID`. Replay then sorts by `sequence_id` and
+gets back the wire order regardless of arrival order. Duplicate wire IDs are
+caught by `UNIQUE (update_id, wire_sequence_id)` and surface as a 409.
+
 ---
 
 ## State Reconstruction (for `GET /export`)
@@ -687,7 +704,7 @@ The tables below split what the schema enforces from what application code must 
 |---|---------|----------------------|
 | 5 | Multi-table partial failure | Every write that touches multiple tables must run inside a single transaction (`BEGIN` / `COMMIT`). Notably: create update + set `stacks.active_update_id`; complete update + delete lock + increment `stacks.version`. |
 | 8 | Lost update / version races | `stacks.version` increment and `stack_updates.version` assignment must use `SELECT ... FOR UPDATE` on the `stacks` row. Since the lock prevents concurrent writers on the same stack, races only arise between the lock-acquire step and version increment — serialize these in the same transaction. |
-| 9 | Journal sequence ordering | Treat `journal_entries.sequence_id` as the server-assigned stack-global replay order. The Pulumi wire `sequenceID` resets per update — the first entry of an update is `sequenceID = 1`, subsequent entries increment by 1 with no gaps. Store it as `wire_sequence_id` and validate that the first batch for a fresh `update_id` starts at 1 and that every later batch picks up at `max(wire_sequence_id) + 1` for that update. Insert every entry from one `{"entries":[...]}` batch and advance `stack_state.journal_seq` in a single transaction holding `SELECT ... FOR UPDATE` on `stack_state`. |
+| 9 | Journal sequence ordering | Treat `journal_entries.sequence_id` as the server-assigned stack-global replay order, computed as `stack_updates.start_journal_seq + wire_sequenceID`. The Pulumi wire `sequenceID` resets per update. On the update's first PATCH, atomically capture the offset (`UPDATE stack_updates SET start_journal_seq = (SELECT journal_seq FROM stack_state ...) WHERE id = ? AND start_journal_seq IS NULL`); every subsequent PATCH for that update reads the captured offset. The CLI assigns wire IDs from a monotonic counter but parallel resource workers may push them to the channel out of order, so do not enforce contiguity or across-PATCH monotonicity on `wire_sequence_id` — uniqueness is the only invariant (`UNIQUE (update_id, wire_sequence_id)` catches duplicate retries as 409). Insert every entry from one `{"entries":[...]}` batch and advance `stack_state.journal_seq` to `GREATEST(journal_seq, offset + max(wire_sequenceID) + 1)` in a single transaction holding `SELECT ... FOR UPDATE` on `stack_state` — the lock serializes appenders across pods so the offset capture is consistent. |
 | 10 | Lease token validation | Lease-scoped operations (`PATCH .../journalentries`, `PATCH .../checkpoint*`, `POST .../events/batch`, `POST .../complete`, `POST .../renew_lease`, `DELETE .../update/{id}`) carry `Authorization: update-token <leaseTok>` instead of `token <apiTok>`. Verify by hashing `<leaseTok>` (SHA-256 of its canonical UUID string) and matching against `stack_locks.lock_token_hash` AND `stack_locks.expires_at > now()`. Reject with 409 if mismatched or expired. Inside lease-scoped mutating transactions, re-check the lease with `FOR UPDATE` + `clock_timestamp()` after taking the primary row lock — the filter's check cannot prevent expiry or cancel during the dispatch gap. Renewal rotates the bearer. The lease-token and api-token paths are independent and never overlap on the same request. |
 | 12 | Compaction races | The compactor must hold a `SELECT ... FOR UPDATE` on `stack_state` for the duration of its read → compute → commit cycle. This blocks concurrent journal appends (which also lock `stack_state`) and ensures `to_journal_seq` remains consistent at commit time. |
 | 14 | Tenant isolation | Every query that retrieves stacks or state must JOIN to `projects` / `organizations` (or filter by `stacks.project_id → projects.org_id`) to verify the org matches the authenticated token's `org_id`. Never accept a bare `stack_id` from external input without confirming ownership. |
