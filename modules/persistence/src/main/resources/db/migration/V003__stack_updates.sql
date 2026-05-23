@@ -29,6 +29,16 @@ CREATE TABLE stack_updates (
 
     message TEXT,
 
+    -- Durable principal attribution. Captured at start (POST .../update), where
+    -- the API token is authenticated, so the record survives lock acquisition
+    -- failing, the lock later being stolen on expiry, and the lock row being
+    -- deleted on complete. ON DELETE SET NULL keeps the existing
+    -- api_tokens / users cascade lifecycle (V001) intact — when the principal
+    -- is later removed the columns become tombstones rather than blocking
+    -- deletion.
+    started_by_user_id      UUID REFERENCES users(id)      ON DELETE SET NULL,
+    started_by_api_token_id UUID REFERENCES api_tokens(id) ON DELETE SET NULL,
+
     started_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     ended_at   TIMESTAMPTZ,
 
@@ -48,6 +58,11 @@ CREATE UNIQUE INDEX idx_updates_idempotency
 CREATE INDEX idx_updates_stack_status ON stack_updates (stack_id, status);
 CREATE INDEX idx_updates_in_progress  ON stack_updates (stack_id)
     WHERE status = 'in-progress';
+
+-- FK index pair: without these, deletion of a user or api_token would seq-scan
+-- stack_updates to find tombstones to NULL out.
+CREATE INDEX idx_updates_started_by_user  ON stack_updates (started_by_user_id);
+CREATE INDEX idx_updates_started_by_token ON stack_updates (started_by_api_token_id);
 
 -- Promote the deferred stacks.active_update_id FK now that stack_updates exists.
 ALTER TABLE stacks

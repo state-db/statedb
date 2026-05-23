@@ -7,18 +7,21 @@ import jakarta.transaction.Transactional;
 import java.time.Instant;
 import java.util.UUID;
 
-/** Releases the lock, transitions the update to {@code cancelled}, and clears active_update_id. */
+/**
+ * Releases the lock, transitions the update to {@code cancelled}, and clears active_update_id.
+ *
+ * <p>Predicate is the surrogate {@code (id, stack_id, update_id)} tuple. {@link LeaseTokenFilter}
+ * has already authenticated the caller by token-hash; once we hold the lease id we name the row
+ * directly. The tuple guards against a caller smuggling a leaseId for a different stack/update —
+ * defense in depth on top of the filter, which already cross-checks the path against the lock row.
+ */
 @ApplicationScoped
 public class StackLockCanceller {
 
   @Transactional
-  public void cancel(UUID stackId, UUID updateId, UUID lockToken) {
-    // Predicate on the full lease tuple, not stack_id alone: between LeaseTokenFilter's check and
-    // this transaction, a token can expire and a fresh acquire can take the stack with a new
-    // token. Deleting by stack_id alone would release that new lease. Empty rowcount → 409.
+  public void cancel(UUID leaseId, UUID stackId, UUID updateId) {
     long deleted =
-        StackLock.delete(
-            "stackId = ?1 and updateId = ?2 and lockToken = ?3", stackId, updateId, lockToken);
+        StackLock.delete("id = ?1 and stackId = ?2 and updateId = ?3", leaseId, stackId, updateId);
     if (deleted == 0) {
       throw new StackLockedException(stackId);
     }

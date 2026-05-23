@@ -38,7 +38,7 @@ class StackLockCancellerTest {
 
   private UUID stackId;
   private UUID updateId;
-  private UUID lockToken;
+  private UUID leaseId;
 
   @BeforeEach
   void seed() {
@@ -58,11 +58,13 @@ class StackLockCancellerTest {
             .start(
                 stackId,
                 StackUpdate.Kind.PREVIEW,
+                null,
+                null,
                 "cancel-key",
                 new StartUpdateRequest(Map.of(), Map.of(), Map.of(), "d", "yaml", "v3.234.0", "m"))
             .updateId();
     Lease lease = acquirer.acquire(stackId, updateId, "user:a", null, null).orElseThrow();
-    lockToken = lease.lockToken();
+    leaseId = lease.leaseId();
   }
 
   @AfterEach
@@ -77,7 +79,7 @@ class StackLockCancellerTest {
 
   @Test
   void cancelRemovesLockAndTransitionsUpdate() {
-    canceller.cancel(stackId, updateId, lockToken);
+    canceller.cancel(leaseId, stackId, updateId);
 
     Number locks =
         (Number)
@@ -102,9 +104,9 @@ class StackLockCancellerTest {
   }
 
   @Test
-  void cancelWithWrongTokenIsRejectedAndLeavesLockIntact() {
-    UUID wrongToken = UUID.randomUUID();
-    assertThrows(StackLockedException.class, () -> canceller.cancel(stackId, updateId, wrongToken));
+  void cancelWithWrongLeaseIdIsRejectedAndLeavesLockIntact() {
+    UUID wrong = UUID.randomUUID();
+    assertThrows(StackLockedException.class, () -> canceller.cancel(wrong, stackId, updateId));
 
     Number locks =
         (Number)
@@ -142,7 +144,7 @@ class StackLockCancellerTest {
                     .setParameter(1, updateId)
                     .executeUpdate());
 
-    canceller.cancel(stackId, updateId, lockToken);
+    canceller.cancel(leaseId, stackId, updateId);
 
     Number locks =
         (Number)

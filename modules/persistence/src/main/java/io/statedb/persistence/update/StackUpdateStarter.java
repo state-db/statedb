@@ -22,7 +22,12 @@ public class StackUpdateStarter {
 
   @Transactional
   public StartedUpdate start(
-      UUID stackId, StackUpdate.Kind kind, String clientRequestId, StartUpdateRequest req) {
+      UUID stackId,
+      StackUpdate.Kind kind,
+      UUID startedByUserId,
+      UUID startedByApiTokenId,
+      String clientRequestId,
+      StartUpdateRequest req) {
 
     em.createNativeQuery("SELECT 1 FROM stacks WHERE id = ?1 FOR UPDATE")
         .setParameter(1, stackId)
@@ -63,6 +68,8 @@ public class StackUpdateStarter {
     u.runtime = req.runtime();
     u.pulumiVersion = req.pulumiVersion();
     u.message = req.message();
+    u.startedByUserId = startedByUserId;
+    u.startedByApiTokenId = startedByApiTokenId;
     u.startedAt = Instant.now();
     u.persistAndFlush();
 

@@ -13,6 +13,10 @@ import org.hibernate.annotations.UuidGenerator;
  * Per-stack distributed lock. Does not extend {@link io.statedb.persistence.BaseEntity} because the
  * canonical {@code stack_locks} schema in {@code design/db-schema.md} has no {@code created_at}
  * column — {@code locked_at} is the equivalent.
+ *
+ * <p>{@code lockTokenHash} is the SHA-256 of the canonical UUID string of the bearer token. The
+ * plaintext is returned exactly once at acquire/renew and is never persisted. See {@link
+ * LeaseTokenHasher}.
  */
 @Entity
 @Table(name = "stack_locks")
@@ -31,14 +35,17 @@ public class StackLock extends PanacheEntityBase {
   @Column(name = "locked_by", nullable = false)
   public String lockedBy;
 
-  @Column(name = "lock_token", nullable = false)
-  public UUID lockToken;
+  @Column(name = "lock_token_hash", nullable = false)
+  public byte[] lockTokenHash;
 
   @Column(name = "locked_at", nullable = false)
   public Instant lockedAt;
 
   @Column(name = "expires_at", nullable = false)
   public Instant expiresAt;
+
+  @Column(name = "max_expires_at", nullable = false)
+  public Instant maxExpiresAt;
 
   @Column(name = "heartbeat_at", nullable = false)
   public Instant heartbeatAt;

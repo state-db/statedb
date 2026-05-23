@@ -69,7 +69,7 @@ class StackLockAcquirerTest {
     Optional<Lease> lease =
         acquirer.acquire(stackId, updateId, "user:test", 1, Map.of("foo", "bar"));
     assertTrue(lease.isPresent());
-    assertNotNull(lease.get().lockToken());
+    assertNotNull(lease.get().plaintextToken());
 
     Number lockCount =
         (Number)
@@ -146,7 +146,7 @@ class StackLockAcquirerTest {
 
     UUID secondUpdateId = startUpdate("k-stolen");
     Lease second = acquirer.acquire(stackId, secondUpdateId, "user:b", null, null).orElseThrow();
-    assertNotEquals(first.lockToken(), second.lockToken());
+    assertNotEquals(first.plaintextToken(), second.plaintextToken());
 
     UUID dbUpdate =
         (UUID)
@@ -193,7 +193,7 @@ class StackLockAcquirerTest {
   private UUID startUpdate(String key) {
     StartUpdateRequest req =
         new StartUpdateRequest(Map.of(), Map.of(), Map.of(), "desc", "yaml", "v3.234.0", "msg");
-    StartedUpdate s = starter.start(stackId, StackUpdate.Kind.PREVIEW, key, req);
+    StartedUpdate s = starter.start(stackId, StackUpdate.Kind.PREVIEW, null, null, key, req);
     return s.updateId();
   }
 }

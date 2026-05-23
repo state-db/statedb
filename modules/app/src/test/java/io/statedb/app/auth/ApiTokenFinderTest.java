@@ -37,6 +37,7 @@ class ApiTokenFinderTest {
     assertEquals(f.org.id, p.orgId());
     assertEquals(f.org.name, p.orgName());
     assertEquals(ApiToken.Kind.service_account, p.kind());
+    assertEquals(f.tokenId(), p.apiTokenId());
   }
 
   @Test
@@ -100,6 +101,7 @@ class ApiTokenFinderTest {
     final Organization org;
     final User user;
     final String tokenHash;
+    ApiToken token;
 
     Fixture(Organization org, User user, String tokenHash) {
       this.org = org;
@@ -116,6 +118,11 @@ class ApiTokenFinderTest {
       t.description = "finder-test";
       t.expiresAt = expiresAt;
       t.persistAndFlush();
+      this.token = t;
+    }
+
+    java.util.UUID tokenId() {
+      return token.id;
     }
   }
 }

@@ -66,8 +66,8 @@ class StackUpdateStarterTest {
 
   @Test
   void distinctKeysProduceMonotonicVersions() {
-    StartedUpdate a = starter.start(stackId, StackUpdate.Kind.PREVIEW, "k-a", req());
-    StartedUpdate b = starter.start(stackId, StackUpdate.Kind.UPDATE, "k-b", req());
+    StartedUpdate a = starter.start(stackId, StackUpdate.Kind.PREVIEW, null, null, "k-a", req());
+    StartedUpdate b = starter.start(stackId, StackUpdate.Kind.UPDATE, null, null, "k-b", req());
     assertEquals(1, a.version());
     assertEquals(2, b.version());
     assertNotEquals(a.updateId(), b.updateId());
@@ -75,8 +75,10 @@ class StackUpdateStarterTest {
 
   @Test
   void sameKeyReplayReturnsExistingRow() {
-    StartedUpdate first = starter.start(stackId, StackUpdate.Kind.PREVIEW, "dup-key", req());
-    StartedUpdate replay = starter.start(stackId, StackUpdate.Kind.PREVIEW, "dup-key", req());
+    StartedUpdate first =
+        starter.start(stackId, StackUpdate.Kind.PREVIEW, null, null, "dup-key", req());
+    StartedUpdate replay =
+        starter.start(stackId, StackUpdate.Kind.PREVIEW, null, null, "dup-key", req());
     assertEquals(first.updateId(), replay.updateId());
     assertEquals(first.version(), replay.version());
 
@@ -97,8 +99,8 @@ class StackUpdateStarterTest {
 
   @Test
   void nullKeyDoesNotDeduplicate() {
-    StartedUpdate a = starter.start(stackId, StackUpdate.Kind.PREVIEW, null, req());
-    StartedUpdate b = starter.start(stackId, StackUpdate.Kind.PREVIEW, null, req());
+    StartedUpdate a = starter.start(stackId, StackUpdate.Kind.PREVIEW, null, null, null, req());
+    StartedUpdate b = starter.start(stackId, StackUpdate.Kind.PREVIEW, null, null, null, req());
     assertEquals(1, a.version());
     assertEquals(2, b.version());
     assertNotEquals(a.updateId(), b.updateId());
@@ -109,9 +111,9 @@ class StackUpdateStarterTest {
     ExecutorService pool = Executors.newFixedThreadPool(2);
     try {
       Callable<StartedUpdate> task1 =
-          () -> starter.start(stackId, StackUpdate.Kind.PREVIEW, "c-1", req());
+          () -> starter.start(stackId, StackUpdate.Kind.PREVIEW, null, null, "c-1", req());
       Callable<StartedUpdate> task2 =
-          () -> starter.start(stackId, StackUpdate.Kind.PREVIEW, "c-2", req());
+          () -> starter.start(stackId, StackUpdate.Kind.PREVIEW, null, null, "c-2", req());
       Future<StartedUpdate> f1 = pool.submit(task1);
       Future<StartedUpdate> f2 = pool.submit(task2);
       StartedUpdate r1 = f1.get(10, TimeUnit.SECONDS);
@@ -129,7 +131,7 @@ class StackUpdateStarterTest {
 
   @Test
   void terminalStatusGuardRejectsRevert() {
-    StartedUpdate s = starter.start(stackId, StackUpdate.Kind.UPDATE, "term", req());
+    StartedUpdate s = starter.start(stackId, StackUpdate.Kind.UPDATE, null, null, "term", req());
 
     QuarkusTransaction.requiringNew()
         .run(

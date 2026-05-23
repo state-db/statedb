@@ -19,9 +19,8 @@ import java.util.UUID;
  * {@code RETURNING} empty (caller maps to 409), an expired lock is stolen in place. Native SQL is
  * the justified escape hatch — {@code ON CONFLICT} is not expressible in HQL.
  *
- * <p>The same transaction also (a) advances {@code stacks.active_update_id} and (b) persists the
- * acquire-body fields onto the corresponding {@code stack_updates} row, since {@code
- * journal_version} and {@code tags} are sourced from this endpoint per db-schema.md.
+ * <p>The same transaction also advances {@code stacks.active_update_id} and persists the
+ * acquire-body fields onto the corresponding {@code stack_updates} row.
  */
 @ApplicationScoped
 public class StackLockAcquirer {
@@ -39,8 +38,15 @@ public class StackLockAcquirer {
       Map<String, Object> tags) {
 
     UUID lockId = UUID.randomUUID();
-    UUID lockToken = UUID.randomUUID();
+    // 122 random bits from SecureRandom. The bearer is a short-lived secret
+    // (≤ leaseTtl, hard-capped by maxLeaseLifetime) and is rotated on every
+    // /renew_lease, so 122 bits is well past brute-force range for this
+    // threat model — a 256-bit bearer would change the wire shape without
+    // any practical security gain.
+    UUID plaintextToken = UUID.randomUUID();
+    byte[] tokenHash = LeaseTokenHasher.hash(plaintextToken);
     long ttlSeconds = lockConfig.leaseTtl().toSeconds();
+    long maxLifetimeSeconds = lockConfig.maxLeaseLifetime().toSeconds();
 
     @SuppressWarnings("unchecked")
     List<Object[]> rows =
@@ -48,25 +54,33 @@ public class StackLockAcquirer {
                 """
                 INSERT INTO stack_locks (
                     id, stack_id, update_id, locked_by,
-                    lock_token, locked_at, expires_at, heartbeat_at)
-                VALUES (?1, ?2, ?3, ?4, ?5, now(), now() + (?6 || ' seconds')::interval, now())
+                    lock_token_hash, locked_at, expires_at, max_expires_at, heartbeat_at)
+                VALUES (?1, ?2, ?3, ?4, ?5,
+                        now(),
+                        LEAST(
+                            now() + (?6 || ' seconds')::interval,
+                            now() + (?7 || ' seconds')::interval),
+                        now() + (?7 || ' seconds')::interval,
+                        now())
                 ON CONFLICT (stack_id) DO UPDATE
                    SET id = EXCLUDED.id,
                        update_id = EXCLUDED.update_id,
                        locked_by = EXCLUDED.locked_by,
-                       lock_token = EXCLUDED.lock_token,
+                       lock_token_hash = EXCLUDED.lock_token_hash,
                        locked_at = EXCLUDED.locked_at,
                        expires_at = EXCLUDED.expires_at,
+                       max_expires_at = EXCLUDED.max_expires_at,
                        heartbeat_at = EXCLUDED.heartbeat_at
                  WHERE stack_locks.expires_at < now()
-                RETURNING lock_token, expires_at
+                RETURNING id, expires_at
                 """)
             .setParameter(1, lockId)
             .setParameter(2, stackId)
             .setParameter(3, updateId)
             .setParameter(4, lockedBy)
-            .setParameter(5, lockToken)
+            .setParameter(5, tokenHash)
             .setParameter(6, String.valueOf(ttlSeconds))
+            .setParameter(7, String.valueOf(maxLifetimeSeconds))
             .getResultList();
 
     if (rows.isEmpty()) {
@@ -85,7 +99,7 @@ public class StackLockAcquirer {
     }
 
     Object[] row = rows.get(0);
-    UUID returnedToken = (UUID) row[0];
+    UUID returnedLeaseId = (UUID) row[0];
     Instant expiresAt = toInstant(row[1]);
 
     Stack.update("activeUpdateId = ?1 where id = ?2", updateId, stackId);
@@ -102,7 +116,8 @@ public class StackLockAcquirer {
       }
     }
 
-    return Optional.of(new Lease(returnedToken, lockConfig.leaseTtl(), expiresAt));
+    return Optional.of(
+        new Lease(returnedLeaseId, plaintextToken, lockConfig.leaseTtl(), expiresAt));
   }
 
   // Hibernate's native-query timestamptz mapping varies across versions; accept either.

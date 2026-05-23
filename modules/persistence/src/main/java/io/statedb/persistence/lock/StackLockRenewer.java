@@ -10,10 +10,11 @@ import java.util.List;
 import java.util.UUID;
 
 /**
- * Extends a live lease by {@code lease-ttl} and bumps {@code heartbeat_at}. The {@code WHERE}
- * predicate names {@code (stack_id, update_id, lock_token, expires_at &gt; now())} so a token that
- * expired between {@link LeaseTokenFilter} validation and this UPDATE — possibly stolen by a fresh
- * acquire — cannot have its successor renewed. Empty rowcount → {@link StackLockedException}.
+ * Extends a live lease and rotates its token. Rotation bounds the replay window of any leaked token
+ * to a single lease window — once this commits, the previous plaintext is unrecoverable.
+ *
+ * <p>The {@code expires_at &gt; now()} predicate is the in-statement TOCTOU close: filter-time
+ * validation can admit a lease that expired by the time this UPDATE runs.
  */
 @ApplicationScoped
 public class StackLockRenewer {
@@ -23,35 +24,45 @@ public class StackLockRenewer {
   @Inject LockConfig lockConfig;
 
   @Transactional
-  public Lease renew(UUID stackId, UUID updateId, UUID lockToken) {
+  public Lease renew(UUID leaseId) {
     long ttlSeconds = lockConfig.leaseTtl().toSeconds();
+    // 122 random bits from SecureRandom; see StackLockAcquirer for the
+    // entropy rationale.
+    UUID newPlaintext = UUID.randomUUID();
+    byte[] newHash = LeaseTokenHasher.hash(newPlaintext);
 
+    // expires_at is clamped to max_expires_at (set at acquire) so a bearer
+    // that has been continuously renewed past the hard ceiling can't be kept
+    // alive indefinitely. The predicate also rejects when the ceiling itself
+    // has passed — even if the previous expires_at is still in the future,
+    // renew refuses once we're past the cap.
     @SuppressWarnings("unchecked")
     List<Object[]> rows =
         em.createNativeQuery(
                 """
                 UPDATE stack_locks
-                   SET expires_at = now() + (?4 || ' seconds')::interval,
-                       heartbeat_at = now()
-                 WHERE stack_id = ?1
-                   AND update_id = ?2
-                   AND lock_token = ?3
+                   SET expires_at = LEAST(
+                           now() + (?2 || ' seconds')::interval,
+                           max_expires_at),
+                       heartbeat_at = now(),
+                       lock_token_hash = ?3
+                 WHERE id = ?1
                    AND expires_at > now()
-                RETURNING lock_token, expires_at
+                   AND max_expires_at > now()
+                RETURNING id, expires_at
                 """)
-            .setParameter(1, stackId)
-            .setParameter(2, updateId)
-            .setParameter(3, lockToken)
-            .setParameter(4, String.valueOf(ttlSeconds))
+            .setParameter(1, leaseId)
+            .setParameter(2, String.valueOf(ttlSeconds))
+            .setParameter(3, newHash)
             .getResultList();
 
     if (rows.isEmpty()) {
-      throw new StackLockedException(stackId);
+      throw new LeaseExpiredException(leaseId);
     }
     Object[] row = rows.get(0);
-    UUID returnedToken = (UUID) row[0];
+    UUID returnedLeaseId = (UUID) row[0];
     Instant expiresAt = toInstant(row[1]);
-    return new Lease(returnedToken, lockConfig.leaseTtl(), expiresAt);
+    return new Lease(returnedLeaseId, newPlaintext, lockConfig.leaseTtl(), expiresAt);
   }
 
   private static Instant toInstant(Object value) {

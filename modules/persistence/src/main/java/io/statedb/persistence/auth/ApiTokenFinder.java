@@ -20,7 +20,7 @@ public class ApiTokenFinder {
           (Object[])
               em.createNativeQuery(
                       """
-                      SELECT t.user_id, t.org_id, o.name, t.kind
+                      SELECT t.user_id, t.org_id, o.name, t.kind, t.id
                       FROM api_tokens t
                       JOIN organizations o ON o.id = t.org_id
                       JOIN org_members m
@@ -35,7 +35,8 @@ public class ApiTokenFinder {
               (UUID) row[0],
               (UUID) row[1],
               (String) row[2],
-              ApiToken.Kind.valueOf((String) row[3])));
+              ApiToken.Kind.valueOf((String) row[3]),
+              (UUID) row[4]));
     } catch (NoResultException e) {
       return Optional.empty();
     }

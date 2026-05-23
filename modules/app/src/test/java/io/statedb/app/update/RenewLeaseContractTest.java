@@ -3,6 +3,8 @@ package io.statedb.app.update;
 import static io.restassured.RestAssured.given;
 import static org.hamcrest.Matchers.equalTo;
 import static org.hamcrest.Matchers.greaterThan;
+import static org.hamcrest.Matchers.not;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import io.quarkus.narayana.jta.QuarkusTransaction;
@@ -11,6 +13,7 @@ import io.statedb.persistence.auth.ApiToken;
 import io.statedb.persistence.identity.OrgMember;
 import io.statedb.persistence.identity.Organization;
 import io.statedb.persistence.identity.User;
+import io.statedb.persistence.lock.LeaseTokenHasher;
 import io.statedb.persistence.stack.StackCreator;
 import jakarta.inject.Inject;
 import jakarta.persistence.EntityManager;
@@ -96,12 +99,12 @@ class RenewLeaseContractTest {
             () ->
                 em.createNativeQuery(
                         "UPDATE stack_locks SET expires_at = now() + interval '5 minutes'"
-                            + " WHERE lock_token = ?1")
-                    .setParameter(1, UUID.fromString(token))
+                            + " WHERE lock_token_hash = ?1")
+                    .setParameter(1, LeaseTokenHasher.hash(UUID.fromString(token)))
                     .executeUpdate());
     Instant before = readExpiresAt(token);
 
-    Number tokenExpirationRaw =
+    var response =
         given()
             .header("Authorization", "update-token " + token)
             .contentType("application/json")
@@ -119,13 +122,14 @@ class RenewLeaseContractTest {
                     + "/renew_lease")
             .then()
             .statusCode(200)
-            .body("token", equalTo(token))
+            .body("token", not(equalTo(token)))
             .body("tokenExpiration", greaterThan(0))
-            .extract()
-            .path("tokenExpiration");
-    long tokenExpiration = tokenExpirationRaw.longValue();
+            .extract();
+    String rotated = response.path("token");
+    long tokenExpiration = ((Number) response.path("tokenExpiration")).longValue();
 
-    Instant after = readExpiresAt(token);
+    assertNotEquals(token, rotated, "renew must rotate the token");
+    Instant after = readExpiresAt(rotated);
     assertTrue(after.isAfter(before), "expires_at should advance");
     assertTrue(tokenExpiration >= after.getEpochSecond() - 2, "response should pin to db row");
   }
@@ -237,8 +241,8 @@ class RenewLeaseContractTest {
 
   private Instant readExpiresAt(String token) {
     Object raw =
-        em.createNativeQuery("SELECT expires_at FROM stack_locks WHERE lock_token = ?1")
-            .setParameter(1, UUID.fromString(token))
+        em.createNativeQuery("SELECT expires_at FROM stack_locks WHERE lock_token_hash = ?1")
+            .setParameter(1, LeaseTokenHasher.hash(UUID.fromString(token)))
             .getSingleResult();
     if (raw instanceof Instant i) return i;
     if (raw instanceof java.time.OffsetDateTime o) return o.toInstant();

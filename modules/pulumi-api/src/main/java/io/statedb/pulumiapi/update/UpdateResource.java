@@ -2,6 +2,7 @@ package io.statedb.pulumiapi.update;
 
 import io.statedb.persistence.lock.Lease;
 import io.statedb.persistence.lock.LeaseContext;
+import io.statedb.persistence.lock.LeaseLookup;
 import io.statedb.persistence.lock.StackLockAcquirer;
 import io.statedb.persistence.lock.StackLockCanceller;
 import io.statedb.persistence.lock.StackLockRenewer;
@@ -41,6 +42,8 @@ public class UpdateResource {
   @Inject StackLockCanceller lockCanceller;
 
   @Inject StackLockRenewer lockRenewer;
+
+  @Inject LeaseLookup leaseLookup;
 
   @Inject CurrentPrincipal currentPrincipal;
 
@@ -111,7 +114,7 @@ public class UpdateResource {
             existing.stackId, existing.id, lockedBy, safe.journalVersion, safe.tags);
 
     Lease l = lease.orElseThrow(() -> new StackLockedException(existing.stackId));
-    return new AcquireLockResponse(l.lockToken().toString(), l.duration().toSeconds());
+    return new AcquireLockResponse(l.plaintextToken().toString(), l.duration().toSeconds());
   }
 
   @POST
@@ -124,9 +127,8 @@ public class UpdateResource {
       @PathParam("stack") String stack,
       @PathParam("updateID") String updateID,
       RenewLeaseRequest body) {
-    // LeaseTokenFilter has validated the update-token header against the live lock row and bound
-    // it to (stackId, updateId, lockToken). Re-check the path updateID and any body-supplied
-    // token as defense-in-depth.
+    // The body-token check goes through LeaseLookup so the comparison is constant-time on the
+    // stored hash, not on plaintext UUIDs.
     LeaseContext ctx = leaseHolder.get();
     UUID pathUpdateId = parseUpdateIdOr404(updateID, org, project, stack);
     if (ctx == null || !pathUpdateId.equals(ctx.updateId())) {
@@ -139,14 +141,14 @@ public class UpdateResource {
       } catch (IllegalArgumentException e) {
         throw new StackLockedException(ctx.stackId());
       }
-      if (!bodyTok.equals(ctx.lockToken())) {
+      if (!leaseLookup.tokenMatches(ctx.leaseId(), bodyTok)) {
         throw new StackLockedException(ctx.stackId());
       }
     }
 
-    Lease renewed = lockRenewer.renew(ctx.stackId(), ctx.updateId(), ctx.lockToken());
+    Lease renewed = lockRenewer.renew(ctx.leaseId());
     return new RenewLeaseResponse(
-        renewed.lockToken().toString(), renewed.expiresAt().getEpochSecond());
+        renewed.plaintextToken().toString(), renewed.expiresAt().getEpochSecond());
   }
 
   @DELETE
@@ -164,7 +166,7 @@ public class UpdateResource {
     if (ctx == null || !pathUpdateId.equals(ctx.updateId())) {
       return Response.status(Response.Status.CONFLICT).build();
     }
-    lockCanceller.cancel(ctx.stackId(), ctx.updateId(), ctx.lockToken());
+    lockCanceller.cancel(ctx.leaseId(), ctx.stackId(), ctx.updateId());
     return Response.noContent().build();
   }
 
@@ -208,7 +210,14 @@ public class UpdateResource {
             pulumiVersion(safe.metadata),
             message(safe.metadata));
 
-    StartedUpdate started = starter.start(ref.stackId(), kind, idempotencyKey, req);
+    StartedUpdate started =
+        starter.start(
+            ref.stackId(),
+            kind,
+            currentPrincipal.get().userId(),
+            currentPrincipal.get().apiTokenId(),
+            idempotencyKey,
+            req);
     return new StartUpdateResponse(started.updateId().toString(), started.version());
   }
 

@@ -9,6 +9,7 @@ import io.statedb.persistence.auth.ApiToken;
 import io.statedb.persistence.identity.OrgMember;
 import io.statedb.persistence.identity.Organization;
 import io.statedb.persistence.identity.User;
+import io.statedb.persistence.lock.LeaseTokenHasher;
 import io.statedb.persistence.stack.StackCreator;
 import jakarta.inject.Inject;
 import jakarta.persistence.EntityManager;
@@ -146,8 +147,8 @@ class LeaseTokenFilterTest {
             () ->
                 em.createNativeQuery(
                         "UPDATE stack_locks SET expires_at = now() - interval '1 second'"
-                            + " WHERE lock_token = ?1")
-                    .setParameter(1, UUID.fromString(token))
+                            + " WHERE lock_token_hash = ?1")
+                    .setParameter(1, LeaseTokenHasher.hash(UUID.fromString(token)))
                     .executeUpdate());
 
     given()
@@ -208,8 +209,8 @@ class LeaseTokenFilterTest {
 
     Number lockCount =
         (Number)
-            em.createNativeQuery("SELECT count(*) FROM stack_locks WHERE lock_token = ?1")
-                .setParameter(1, UUID.fromString(token))
+            em.createNativeQuery("SELECT count(*) FROM stack_locks WHERE lock_token_hash = ?1")
+                .setParameter(1, LeaseTokenHasher.hash(UUID.fromString(token)))
                 .getSingleResult();
     assertEquals(0L, lockCount.longValue());
 

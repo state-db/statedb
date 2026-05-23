@@ -109,6 +109,12 @@ public class StackUpdate extends TimestampedEntity {
   @Column(name = "ended_at")
   public Instant endedAt;
 
+  @Column(name = "started_by_user_id")
+  public UUID startedByUserId;
+
+  @Column(name = "started_by_api_token_id")
+  public UUID startedByApiTokenId;
+
   // Read-only navigation; writers set stackId directly.
   @ManyToOne(fetch = FetchType.LAZY)
   @JoinColumn(name = "stack_id", insertable = false, updatable = false)
