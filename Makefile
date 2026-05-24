@@ -2,7 +2,8 @@
 	app-dev app-build app-test app-clean \
 	format format-check \
 	pulumi-extract pulumi-compare pulumi-discover pulumi-api-test \
-	pulumi-recorder-run pulumi-recorder-run-no-build pulumi-recorder-catalog pulumi-recorder-verify pulumi-recorder-discover
+	pulumi-recorder-run pulumi-recorder-run-no-build pulumi-recorder-catalog pulumi-recorder-verify pulumi-recorder-discover \
+	pulumi-workbench
 
 PULUMI_SCOPE         ?= $(CURDIR)/tools/pulumi/api-extract/scopes/state-backend.yaml
 PULUMI_SNAPSHOTS_DIR ?= $(CURDIR)/api-snapshots/pulumi
@@ -34,6 +35,17 @@ app-test:
 ## Clean all module build outputs.
 app-clean:
 	$(IN_CONTAINER) mvn -f modules/pom.xml clean
+
+## -------------------------
+## Pulumi Workbench
+## -------------------------
+## Forward to workbench/pulumi/Makefile.
+## Usage: make pulumi-workbench cmd=up args="STACK=scratch"
+pulumi-workbench:
+ifndef cmd
+	$(error cmd is required, e.g. make pulumi-workbench cmd=up)
+endif
+	$(MAKE) -C workbench/pulumi $(cmd) $(args)
 
 ## -------------------------
 ## Formatting

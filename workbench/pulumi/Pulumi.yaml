@@ -1,0 +1,62 @@
+name: state-db-workbench
+runtime: yaml
+description: Editable Pulumi project for running real CLI deployments against state-db.
+resources:
+  pet:
+    type: random:RandomPet
+    properties:
+      length: 2
+      separator: "-"
+  word:
+    type: random:RandomString
+    properties:
+      length: 8
+      special: false
+      upper: false
+    options:
+      dependsOn:
+        - ${pet}
+  pin:
+    type: random:RandomInteger
+    properties:
+      min: 42
+      max: 42
+      seed: state-db-workbench
+    options:
+      dependsOn:
+        - ${word}
+  password:
+    type: random:RandomPassword
+    properties:
+      length: 14
+      lower: true
+      upper: true
+      numeric: true
+      special: true
+      minLower: 3
+      minUpper: 2
+      minNumeric: 2
+      minSpecial: 1
+      overrideSpecial: "_-"
+    options:
+      dependsOn:
+        - ${pin}
+  token:
+    type: random:RandomId
+    properties:
+      byteLength: 6
+      prefix: wb-
+      keepers:
+        project: state-db-workbench
+        purpose: local-backend-exercise
+    options:
+      dependsOn:
+        - ${password}
+outputs:
+  petName: ${pet.id}
+  word: ${word.result}
+  pin: ${pin.result}
+  password:
+    value: ${password.result}
+    secret: true
+  tokenHex: ${token.hex}

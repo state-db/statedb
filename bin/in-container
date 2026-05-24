@@ -30,11 +30,17 @@ if [[ -f /.dockerenv ]]; then
   exec "$@"
 fi
 
+cd "$REPO_ROOT"
+
 # Prefer the official CLI: it picks the right user/workdir/env the same way
 # the editor integrations do. If the container is down it produces its own
 # error — the user fixes that by opening the folder in their editor or
 # running `devcontainer up`.
-if command -v devcontainer >/dev/null 2>&1; then
+#
+# Exception: when invoked from a Make recipe, this devcontainer CLI build exits
+# before running the requested command. Fall through to the docker-exec path
+# below; it uses the same devcontainer label and remote user.
+if [[ -z "${MAKELEVEL:-}" ]] && command -v devcontainer >/dev/null 2>&1; then
   exec devcontainer exec --workspace-folder "$REPO_ROOT" "$@"
 fi
 

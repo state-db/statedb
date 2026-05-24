@@ -19,3 +19,6 @@ Thumbs.db
 # Env files (never commit)
 .env
 .env.local
+
+# Local Pulumi workbench state
+workbench/.pulumi-home/
