@@ -1,5 +1,7 @@
 package io.statedb.pulumiapi.update;
 
+import io.statedb.persistence.events.EventBatchAppender;
+import io.statedb.persistence.events.EventBatchValidationException;
 import io.statedb.persistence.journal.JournalAppender;
 import io.statedb.persistence.journal.JournalValidationException;
 import io.statedb.persistence.lock.Lease;
@@ -18,6 +20,7 @@ import io.statedb.persistence.update.StartUpdateRequest;
 import io.statedb.persistence.update.StartedUpdate;
 import io.statedb.pulumiapi.auth.CurrentPrincipal;
 import io.statedb.pulumiapi.auth.LeaseContextHolder;
+import io.statedb.pulumiapi.update.events.EventBatchRequest;
 import io.statedb.pulumiapi.update.journal.JournalPatchRequest;
 import jakarta.inject.Inject;
 import jakarta.ws.rs.Consumes;
@@ -54,6 +57,8 @@ public class UpdateResource {
   @Inject LeaseContextHolder leaseHolder;
 
   @Inject JournalAppender journalAppender;
+
+  @Inject EventBatchAppender eventBatchAppender;
 
   @POST
   @Path("/update")
@@ -186,6 +191,40 @@ public class UpdateResource {
     }
 
     journalAppender.append(ctx.stackId(), ctx.updateId(), body.entries);
+    return Response.ok(Map.of()).build();
+  }
+
+  @POST
+  @Path("/update/{updateID}/events/batch")
+  @Consumes(MediaType.APPLICATION_JSON)
+  @Produces(MediaType.APPLICATION_JSON)
+  public Response postEventsBatch(
+      @PathParam("org") String org,
+      @PathParam("project") String project,
+      @PathParam("stack") String stack,
+      @PathParam("updateID") String updateID,
+      EventBatchRequest body) {
+    // LeaseTokenFilter has already validated the bearer token and confirmed that the path's
+    // stack and updateID match the lease. Re-read context here defensively before mutating state.
+    LeaseContext ctx = leaseHolder.get();
+    UUID pathUpdateId = parseUpdateIdOr404(updateID, org, project, stack);
+    if (ctx == null || !pathUpdateId.equals(ctx.updateId())) {
+      return Response.status(Response.Status.CONFLICT).build();
+    }
+
+    // Vert.x auto-decompresses gzip request bodies. A malformed gzip envelope yields a null body
+    // — without this check that would look like a successful no-op and the CLI would move on
+    // with corrupt event state. Treat null/missing events as 400.
+    if (body == null || body.events == null) {
+      throw new EventBatchValidationException("request body missing 'events' array");
+    }
+    if (body.events.isEmpty()) {
+      // Pulumi Cloud returns 400 "No events provided" for empty batches — match that so a CLI
+      // that accidentally sends an empty batch sees the same wire behavior.
+      throw new EventBatchValidationException("no events provided");
+    }
+
+    eventBatchAppender.append(ctx.stackId(), ctx.updateId(), body.events);
     return Response.ok(Map.of()).build();
   }
 
