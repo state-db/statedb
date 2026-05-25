@@ -14,7 +14,9 @@ import io.statedb.persistence.lock.StackLockedException;
 import io.statedb.persistence.stack.StackNotFoundException;
 import io.statedb.persistence.stack.StackRef;
 import io.statedb.persistence.stack.StackRefResolver;
+import io.statedb.persistence.update.CompleteValidationException;
 import io.statedb.persistence.update.StackUpdate;
+import io.statedb.persistence.update.StackUpdateCompleter;
 import io.statedb.persistence.update.StackUpdateStarter;
 import io.statedb.persistence.update.StartUpdateRequest;
 import io.statedb.persistence.update.StartedUpdate;
@@ -60,6 +62,8 @@ public class UpdateResource {
 
   @Inject EventBatchAppender eventBatchAppender;
 
+  @Inject StackUpdateCompleter completer;
+
   @POST
   @Path("/update")
   @Consumes(MediaType.APPLICATION_JSON)
@@ -97,6 +101,19 @@ public class UpdateResource {
       @HeaderParam("Idempotency-Key") String idempotencyKey,
       UpdateProgramRequest body) {
     return start(org, project, stack, StackUpdate.Kind.DESTROY, idempotencyKey, body);
+  }
+
+  @POST
+  @Path("/refresh")
+  @Consumes(MediaType.APPLICATION_JSON)
+  @Produces(MediaType.APPLICATION_JSON)
+  public StartUpdateResponse startRefresh(
+      @PathParam("org") String org,
+      @PathParam("project") String project,
+      @PathParam("stack") String stack,
+      @HeaderParam("Idempotency-Key") String idempotencyKey,
+      UpdateProgramRequest body) {
+    return start(org, project, stack, StackUpdate.Kind.REFRESH, idempotencyKey, body);
   }
 
   @POST
@@ -190,7 +207,7 @@ public class UpdateResource {
       return Response.ok(Map.of()).build();
     }
 
-    journalAppender.append(ctx.stackId(), ctx.updateId(), body.entries);
+    journalAppender.append(ctx.stackId(), ctx.updateId(), ctx.leaseId(), body.entries);
     return Response.ok(Map.of()).build();
   }
 
@@ -250,6 +267,40 @@ public class UpdateResource {
   @Produces(MediaType.APPLICATION_JSON)
   public Response checkpointVerbatimNotImplemented() {
     return notImplementedJournaling();
+  }
+
+  @POST
+  @Path("/update/{updateID}/complete")
+  @Consumes(MediaType.APPLICATION_JSON)
+  @Produces(MediaType.APPLICATION_JSON)
+  public Response completeUpdate(
+      @PathParam("org") String org,
+      @PathParam("project") String project,
+      @PathParam("stack") String stack,
+      @PathParam("updateID") String updateID,
+      CompleteUpdateRequest body) {
+    // LeaseTokenFilter has already validated the bearer token and confirmed that the path's stack
+    // and updateID match the lease. Re-read context here defensively before mutating state.
+    LeaseContext ctx = leaseHolder.get();
+    UUID pathUpdateId = parseUpdateIdOr404(updateID, org, project, stack);
+    if (ctx == null || !pathUpdateId.equals(ctx.updateId())) {
+      return Response.status(Response.Status.CONFLICT).build();
+    }
+
+    if (body == null || body.status == null || body.status.isBlank()) {
+      throw new CompleteValidationException("request body missing 'status'");
+    }
+    StackUpdate.Status terminal =
+        switch (body.status) {
+          case "succeeded" -> StackUpdate.Status.SUCCEEDED;
+          case "failed" -> StackUpdate.Status.FAILED;
+          default ->
+              throw new CompleteValidationException(
+                  "status must be 'succeeded' or 'failed', got '" + body.status + "'");
+        };
+
+    completer.complete(ctx.leaseId(), ctx.stackId(), ctx.updateId(), terminal);
+    return Response.ok(Map.of()).build();
   }
 
   @DELETE

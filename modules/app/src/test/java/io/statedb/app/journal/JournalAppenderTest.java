@@ -15,6 +15,10 @@ import io.statedb.persistence.identity.Organization;
 import io.statedb.persistence.journal.JournalAppender;
 import io.statedb.persistence.journal.JournalSequenceConflictException;
 import io.statedb.persistence.journal.JournalValidationException;
+import io.statedb.persistence.lock.Lease;
+import io.statedb.persistence.lock.LeaseExpiredException;
+import io.statedb.persistence.lock.StackLockAcquirer;
+import io.statedb.persistence.lock.StackLockCanceller;
 import io.statedb.persistence.stack.StackCreator;
 import io.statedb.persistence.stack.StackRef;
 import io.statedb.persistence.update.StackUpdate;
@@ -43,11 +47,14 @@ class JournalAppenderTest {
 
   @Inject StackCreator stackCreator;
   @Inject StackUpdateStarter starter;
+  @Inject StackLockAcquirer lockAcquirer;
+  @Inject StackLockCanceller lockCanceller;
   @Inject JournalAppender appender;
   @Inject EntityManager em;
 
   private UUID stackId;
   private UUID updateId;
+  private UUID leaseId;
 
   @BeforeEach
   void seed() {
@@ -72,6 +79,8 @@ class JournalAppenderTest {
             new StartUpdateRequest(
                 Map.of(), Map.of(), Map.of(), "desc", "yaml", "v3.242.0", "msg"));
     updateId = u.updateId();
+    Lease lease = lockAcquirer.acquire(stackId, updateId, "user:test", 1, null).orElseThrow();
+    leaseId = lease.leaseId();
   }
 
   @AfterEach
@@ -89,6 +98,7 @@ class JournalAppenderTest {
     appender.append(
         stackId,
         updateId,
+        leaseId,
         List.of(
             entry(
                 1,
@@ -149,6 +159,7 @@ class JournalAppenderTest {
     appender.append(
         stackId,
         updateId,
+        leaseId,
         List.of(
             entry(6, 1, 6L, "{\"state\":{\"urn\":\"urn:6\"}}"),
             entry(5, 1, 5L, "{\"state\":{\"urn\":\"urn:5\"}}"),
@@ -177,12 +188,14 @@ class JournalAppenderTest {
     appender.append(
         stackId,
         updateId,
+        leaseId,
         List.of(
             entry(3, 1, 3L, "{\"state\":{\"urn\":\"urn:3\"}}"),
             entry(5, 1, 5L, "{\"state\":{\"urn\":\"urn:5\"}}")));
     appender.append(
         stackId,
         updateId,
+        leaseId,
         List.of(
             entry(4, 1, 4L, "{\"state\":{\"urn\":\"urn:4\"}}"),
             entry(6, 1, 6L, "{\"state\":{\"urn\":\"urn:6\"}}")));
@@ -204,12 +217,16 @@ class JournalAppenderTest {
 
   @Test
   void duplicateWireSequenceAcrossPatchesReturns409() {
-    appender.append(stackId, updateId, List.of(entry(1, 1, 1L, "{\"state\":{\"urn\":\"urn:1\"}}")));
+    appender.append(
+        stackId, updateId, leaseId, List.of(entry(1, 1, 1L, "{\"state\":{\"urn\":\"urn:1\"}}")));
     assertThrows(
         JournalSequenceConflictException.class,
         () ->
             appender.append(
-                stackId, updateId, List.of(entry(1, 1, 1L, "{\"state\":{\"urn\":\"urn:dup\"}}"))));
+                stackId,
+                updateId,
+                leaseId,
+                List.of(entry(1, 1, 1L, "{\"state\":{\"urn\":\"urn:dup\"}}"))));
 
     QuarkusTransaction.requiringNew()
         .run(
@@ -229,7 +246,7 @@ class JournalAppenderTest {
   void invalidKindRejectedWithNoWrites() {
     assertThrows(
         JournalValidationException.class,
-        () -> appender.append(stackId, updateId, List.of(entry(1, 8, null, "{}"))));
+        () -> appender.append(stackId, updateId, leaseId, List.of(entry(1, 8, null, "{}"))));
 
     QuarkusTransaction.requiringNew()
         .run(
@@ -249,7 +266,7 @@ class JournalAppenderTest {
   void nonPositiveSequenceRejected() {
     assertThrows(
         JournalValidationException.class,
-        () -> appender.append(stackId, updateId, List.of(entry(0, 0, 1L, "{}"))));
+        () -> appender.append(stackId, updateId, leaseId, List.of(entry(0, 0, 1L, "{}"))));
   }
 
   @Test
@@ -257,6 +274,7 @@ class JournalAppenderTest {
     appender.append(
         stackId,
         updateId,
+        leaseId,
         List.of(
             entry(
                 1,
@@ -283,7 +301,7 @@ class JournalAppenderTest {
             });
 
     appender.append(
-        stackId, updateId, List.of(entry(2, 1, 42L, "{\"state\":{\"urn\":\"urn:r\"}}")));
+        stackId, updateId, leaseId, List.of(entry(2, 1, 42L, "{\"state\":{\"urn\":\"urn:r\"}}")));
 
     QuarkusTransaction.requiringNew()
         .run(
@@ -306,6 +324,7 @@ class JournalAppenderTest {
     appender.append(
         stackId,
         updateId,
+        leaseId,
         List.of(
             entry(
                 1,
@@ -340,6 +359,7 @@ class JournalAppenderTest {
     appender.append(
         stackId,
         updateId,
+        leaseId,
         List.of(
             entry(1, 3, 9L, "{\"state\":{\"urn\":\"urn:s\"},\"isRefresh\":true,\"removeOld\":5}")));
 
@@ -394,7 +414,8 @@ class JournalAppenderTest {
                     .setParameter(1, stackId)
                     .executeUpdate());
 
-    appender.append(stackId, updateId, List.of(entry(1, 1, 1L, "{\"state\":{\"urn\":\"urn:x\"}}")));
+    appender.append(
+        stackId, updateId, leaseId, List.of(entry(1, 1, 1L, "{\"state\":{\"urn\":\"urn:x\"}}")));
 
     QuarkusTransaction.requiringNew()
         .run(
@@ -428,6 +449,7 @@ class JournalAppenderTest {
                     appender.append(
                         stackId,
                         updateId,
+                        leaseId,
                         List.of(entry(1, 1, 1L, "{\"state\":{\"urn\":\"u:1\"}}")));
                   });
       Future<?> f2 =
@@ -442,6 +464,7 @@ class JournalAppenderTest {
                     appender.append(
                         stackId,
                         updateId,
+                        leaseId,
                         List.of(entry(2, 1, 2L, "{\"state\":{\"urn\":\"u:2\"}}")));
                   });
       f1.get(10, TimeUnit.SECONDS);
@@ -465,13 +488,56 @@ class JournalAppenderTest {
   }
 
   @Test
+  void appendAfterLockDeletedThrowsLeaseExpired() {
+    // Simulate /complete (or a cancel) winning the race: lock row is gone before the appender's
+    // tx starts. Without in-tx revalidation, append would advance journal_seq past
+    // end_journal_seq; with it, requireLive throws and zero rows persist.
+    lockCanceller.cancel(leaseId, stackId, updateId);
+
+    assertThrows(
+        LeaseExpiredException.class,
+        () ->
+            appender.append(
+                stackId,
+                updateId,
+                leaseId,
+                List.of(entry(1, 1, 1L, "{\"state\":{\"urn\":\"u:after\"}}"))));
+
+    QuarkusTransaction.requiringNew()
+        .run(
+            () -> {
+              long count =
+                  ((Number)
+                          em.createNativeQuery(
+                                  "SELECT count(*) FROM journal_entries WHERE update_id = ?1")
+                              .setParameter(1, updateId)
+                              .getSingleResult())
+                      .longValue();
+              assertEquals(0L, count);
+
+              long seq =
+                  ((Number)
+                          em.createNativeQuery(
+                                  "SELECT journal_seq FROM stack_state WHERE stack_id = ?1")
+                              .setParameter(1, stackId)
+                              .getSingleResult())
+                      .longValue();
+              assertEquals(0L, seq);
+            });
+  }
+
+  @Test
   void secondUpdateContinuesGlobalSequence() {
     appender.append(
         stackId,
         updateId,
+        leaseId,
         List.of(
             entry(1, 1, 1L, "{\"state\":{\"urn\":\"u:1\"}}"),
             entry(2, 1, 2L, "{\"state\":{\"urn\":\"u:2\"}}")));
+
+    // Release the first lock so we can take a fresh one for u2 — stack_locks is UNIQUE per stack.
+    lockCanceller.cancel(leaseId, stackId, updateId);
 
     StartedUpdate u2 =
         starter.start(
@@ -481,9 +547,14 @@ class JournalAppenderTest {
             null,
             UUID.randomUUID().toString(),
             new StartUpdateRequest(Map.of(), Map.of(), Map.of(), null, null, null, null));
+    UUID lease2 =
+        lockAcquirer.acquire(stackId, u2.updateId(), "user:test", 1, null).orElseThrow().leaseId();
 
     appender.append(
-        stackId, u2.updateId(), List.of(entry(1, 1, 1L, "{\"state\":{\"urn\":\"u:2-1\"}}")));
+        stackId,
+        u2.updateId(),
+        lease2,
+        List.of(entry(1, 1, 1L, "{\"state\":{\"urn\":\"u:2-1\"}}")));
 
     QuarkusTransaction.requiringNew()
         .run(

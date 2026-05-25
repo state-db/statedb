@@ -1,6 +1,7 @@
 package io.statedb.persistence.journal;
 
 import com.fasterxml.jackson.databind.JsonNode;
+import io.statedb.persistence.lock.LeaseRevalidator;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 import jakarta.persistence.EntityManager;
@@ -28,8 +29,14 @@ import org.hibernate.exception.ConstraintViolationException;
  * {@code UNIQUE(stack_id, sequence_id)} constraints are layered defenses: any retry that re-sends a
  * committed wire ID lands here as a {@link JournalSequenceConflictException} (→ 409).
  *
- * <p>The lease filter has already validated the bearer token before this method runs; we trust that
- * {@code stackId} and {@code updateId} match the lease's view of the world.
+ * <p>The lease filter has validated the bearer token before this method runs, but filter-time
+ * validation cannot prevent a concurrent {@code /complete} (or {@code DELETE /update/{id}}) from
+ * removing the lock row between admission and the actual write. After taking the {@code stack_state
+ * FOR UPDATE} we therefore call {@link LeaseRevalidator#requireLive(UUID)} inside the same
+ * transaction — that locks the {@code stack_locks} row through commit, so any completer or
+ * canceller that runs concurrently either blocks (when we ran first) or finds the lock already gone
+ * (when they ran first, in which case {@code requireLive} throws). Without this, a PATCH admitted
+ * before {@code /complete} could land journal entries past {@code stack_updates.end_journal_seq}.
  */
 @ApplicationScoped
 public class JournalAppender {
@@ -52,8 +59,10 @@ public class JournalAppender {
 
   @Inject EntityManager em;
 
+  @Inject LeaseRevalidator leaseRevalidator;
+
   @Transactional
-  public void append(UUID stackId, UUID updateId, List<JsonNode> rawEntries) {
+  public void append(UUID stackId, UUID updateId, UUID leaseId, List<JsonNode> rawEntries) {
     if (rawEntries == null || rawEntries.isEmpty()) {
       return;
     }
@@ -88,6 +97,12 @@ public class JournalAppender {
                     .setParameter(1, stackId)
                     .getSingleResult())
             .longValue();
+
+    // 2a. Revalidate the lease inside the tx. If /complete (or a cancel) ran between filter
+    //     admission and our stack_state lock, the lock row is gone and requireLive throws — so we
+    //     never advance journal_seq past end_journal_seq. Lock order is stack_state → stack_locks,
+    //     matching StackUpdateCompleter, so no deadlock.
+    leaseRevalidator.requireLive(leaseId);
 
     // 3. Atomically capture the per-update offset on first PATCH; otherwise read the existing one.
     //    Reuses stack_updates.start_journal_seq (added in V003) as the offset.
