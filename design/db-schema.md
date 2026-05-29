@@ -632,11 +632,19 @@ Each entry uses the same row shape. The wire discriminator is numeric
 7 RebuiltBaseState → dependency-rebuild marker; payload is usually empty
 ```
 
-The index fields are six distinct nullable int64s:
-`removeOld`, `removeNew`, `deleteOld`, `deleteNew`,
-`pendingReplacementOld`, and `pendingReplacementNew`. `removeNew` is an
-index into the reconstructed "new" resource list, not a UUID. Boolean fields
-such as `isRefresh` are omit-default-false on the wire.
+The index/operation fields are six distinct nullable int64s:
+
+| Field | Replay meaning |
+|-------|----------------|
+| `removeOld` | Index into the base snapshot's `resources` list; skip that base slot during materialisation. |
+| `removeNew` | Operation ID for a resource created earlier in the current replayer; skip the matching new resource. |
+| `deleteOld` | Index into the base snapshot's `resources` list; mark that base resource with `delete: true`. |
+| `deleteNew` | Operation ID for a resource created earlier in the current replayer; mark that new resource with `delete: true`. |
+| `pendingReplacementOld` | Index into the base snapshot's `resources` list; mark that base resource with `pendingReplacement: true`. |
+| `pendingReplacementNew` | Operation ID for a resource created earlier in the current replayer; mark that new resource with `pendingReplacement: true`. |
+
+In short: `*Old` fields are base-resource indexes; `*New` fields are operation
+IDs. Boolean fields such as `isRefresh` are omit-default-false on the wire.
 
 Pulumi's wire `sequenceID` resets for each update. It is stored as
 `wire_sequence_id`; the server-assigned `sequence_id` is the stack-global
@@ -672,12 +680,15 @@ caught by `UNIQUE (update_id, wire_sequence_id)` and surface as a 409.
      Success            → clear pending op; apply removeOld/removeNew/delete*/pendingReplacement*;
                           append state when present
      Failure            → clear pending op without appending state
-     RefreshSuccess     → replace/remove the old indexed resource, then append refreshed state
-     Outputs            → mutate the synthetic pulumi:pulumi:Stack resource outputs
+     RefreshSuccess     → replace/remove the base-indexed or operation-ID-indexed resource
+                          without appending to the new resource list
+     Outputs            → replace the indexed synthetic pulumi:pulumi:Stack resource in place
      Write              → replace the whole working deployment with newSnapshot
      SecretsManager     → update deployment secretsProvider
-     RebuiltBaseState   → prune stale dependency references
-5. Return { version: 3, deployment: <reconstructed DeploymentV3> }
+     RebuiltBaseState   → promote the materialised deployment to the working base
+5. Rebuild stale dependency references after refresh, normalize URN aliases, and
+   return the UntypedDeployment shape:
+     { version: 3|4, deployment: <reconstructed DeploymentV3>, features?: [...] }
 ```
 
 ---

@@ -480,10 +480,10 @@ Each slice in this phase moves one step closer to a real `pulumi up` cycle succe
 
 **Scope**
 
-- New `persistence/stack/StackAssembler` — pure persistence service that, given a `stackId`, reads the base snapshot from `stack_state` and replays `journal_entries WHERE sequence_id > base` per `db-schema.md` "State Reconstruction" rules.
-- The reducer is a port of Pulumi's journal-apply behavior, not prose-derived logic. Reference implementation lives in `pulumi/pulumi` — search for `applyJournalEntry` / `AppJournalEntry` in `pkg/engine` and `pkg/backend/httpstate`. The port must handle all numeric kinds 0..7, `SecretsManager`, `removeOld`/`removeNew` as resource-list indexes, `deleteOld`/`deleteNew` for in-place deletion bookkeeping, `pendingReplacementOld`/`pendingReplacementNew` for the replace-then-delete pending list, Failure entries that clear a pending op without appending state, deletion Success entries with no `state`, `Outputs` mutating the synthetic stack resource, refresh replacement, and `Write` entries with `newSnapshot`.
-- `GET /api/stacks/{org}/{project}/{stack}/export`:
-  - Calls `StackAssembler.assemble(stackId)` and returns `{ version: 3, deployment: <reconstructed DeploymentV3> }`.
+- New `persistence/stack/StackAssembler` — persistence service that, given a `stackId`, reads the base snapshot from `stack_state` and replays `journal_entries WHERE sequence_id > base` per `db-schema.md` "State Reconstruction" rules.
+- The reducer is a port of Pulumi's journal-apply behavior, not prose-derived logic. Reference implementation lives in `pulumi/pulumi` under `pkg/backend/journal.go` and `sdk/go/common/apitype/journal.go`. The port handles all numeric kinds 0..7, `SecretsManager`, `*Old` fields as base-resource indexes, `*New` fields as current-replayer operation IDs, `deleteOld`/`deleteNew` in-place deletion marks, `pendingReplacementOld`/`pendingReplacementNew` in-place pending-replacement marks, Failure entries that clear a pending op without appending state, deletion Success entries with no `state`, `Outputs` replacing the indexed synthetic stack resource in place, refresh replacement/removal without appending, and `Write` entries with `newSnapshot`.
+- `GET /pulumi/api/stacks/{org}/{project}/{stack}/export`:
+  - Calls `StackAssembler.assemble(stackId)` and returns the Pulumi `UntypedDeployment` shape `{ version: 3|4, deployment: <reconstructed DeploymentV3>, features?: [...] }`.
 - This is the only place reconstruction logic lives; Slice 21 (compaction worker) and Slice 29 (console stack drilldown) both call it. Drift between callers would produce different current-state answers for the same stack.
 
 **Out of scope.** Compaction (Slice 21); the assembler runs over the full journal every export until then.
