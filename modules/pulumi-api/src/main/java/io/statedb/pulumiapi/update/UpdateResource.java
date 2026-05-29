@@ -142,7 +142,8 @@ public class UpdateResource {
             existing.stackId, existing.id, lockedBy, safe.journalVersion, safe.tags);
 
     Lease l = lease.orElseThrow(() -> new StackLockedException(existing.stackId));
-    return new AcquireLockResponse(l.plaintextToken().toString(), l.duration().toSeconds());
+    return new AcquireLockResponse(
+        l.plaintextToken().toString(), l.expiresAt().getEpochSecond(), 1, safe.journalVersion);
   }
 
   @POST

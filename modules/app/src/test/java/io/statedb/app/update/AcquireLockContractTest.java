@@ -2,12 +2,15 @@ package io.statedb.app.update;
 
 import static io.restassured.RestAssured.given;
 import static org.hamcrest.Matchers.equalTo;
+import static org.hamcrest.Matchers.greaterThan;
 import static org.hamcrest.Matchers.notNullValue;
+import static org.hamcrest.Matchers.nullValue;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 
 import io.quarkus.narayana.jta.QuarkusTransaction;
 import io.quarkus.test.junit.QuarkusTest;
+import io.restassured.response.ValidatableResponse;
 import io.statedb.persistence.auth.ApiToken;
 import io.statedb.persistence.identity.OrgMember;
 import io.statedb.persistence.identity.Organization;
@@ -18,6 +21,8 @@ import jakarta.persistence.EntityManager;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
+import java.time.Instant;
+import java.time.OffsetDateTime;
 import java.util.Map;
 import java.util.UUID;
 import org.junit.jupiter.api.AfterEach;
@@ -92,19 +97,25 @@ class AcquireLockContractTest {
   }
 
   @Test
-  void acquireReturnsTokenAndDurationAndPersistsAcquireBody() {
+  void acquireReturnsPulumiLeaseContractAndPersistsAcquireBody() {
     String updateId = startPreview();
 
-    given()
-        .header("Authorization", "token " + RAW_TOKEN)
-        .contentType("application/json")
-        .body(Map.of("journalVersion", 1, "tags", Map.of("pulumi:runtime", "yaml")))
-        .when()
-        .post("/pulumi/api/stacks/" + ORG + "/" + PROJECT + "/" + STACK + "/update/" + updateId)
-        .then()
-        .statusCode(200)
-        .body("token", notNullValue())
-        .body("duration", equalTo(3600));
+    ValidatableResponse response =
+        given()
+            .header("Authorization", "token " + RAW_TOKEN)
+            .contentType("application/json")
+            .body(Map.of("journalVersion", 1, "tags", Map.of("pulumi:runtime", "yaml")))
+            .when()
+            .post("/pulumi/api/stacks/" + ORG + "/" + PROJECT + "/" + STACK + "/update/" + updateId)
+            .then()
+            .statusCode(200)
+            .body("token", notNullValue())
+            .body("tokenExpiration", greaterThan(0))
+            .body("version", equalTo(1))
+            .body("journalVersion", equalTo(1))
+            .body("duration", nullValue());
+
+    long tokenExpiration = ((Number) response.extract().path("tokenExpiration")).longValue();
 
     QuarkusTransaction.requiringNew()
         .run(
@@ -112,11 +123,17 @@ class AcquireLockContractTest {
               Object[] row =
                   (Object[])
                       em.createNativeQuery(
-                              "SELECT journal_version, tags FROM stack_updates WHERE id = ?1")
+                              """
+                              SELECT su.journal_version, su.tags, sl.expires_at
+                                FROM stack_updates su
+                                JOIN stack_locks sl ON sl.stack_id = su.stack_id
+                               WHERE su.id = ?1
+                              """)
                           .setParameter(1, UUID.fromString(updateId))
                           .getSingleResult();
               assertEquals(1, ((Number) row[0]).intValue());
               assertNotNull(row[1]);
+              assertEquals(toInstant(row[2]).getEpochSecond(), tokenExpiration);
 
               Number lockCount =
                   (Number)
@@ -179,5 +196,12 @@ class AcquireLockContractTest {
     } catch (NoSuchAlgorithmException e) {
       throw new IllegalStateException(e);
     }
+  }
+
+  private static Instant toInstant(Object value) {
+    if (value instanceof Instant i) return i;
+    if (value instanceof OffsetDateTime o) return o.toInstant();
+    if (value instanceof java.sql.Timestamp t) return t.toInstant();
+    throw new IllegalStateException("unexpected timestamp type: " + value.getClass());
   }
 }
