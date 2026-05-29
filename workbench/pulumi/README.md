@@ -55,7 +55,8 @@ make pulumi-workbench cmd=reset
 - Raw token: `state-db-workbench-token`
 - Postgres container: `state-db-workbench-postgres`
 - Postgres image: `postgres:16`
-- Postgres host port: `55432`
+- Postgres host port: `localhost:55432`
+- Postgres volume: `state-db-workbench-postgres-data` mounted at `/var/lib/postgresql`
 
 Override any of these with Make variables, for example:
 
@@ -76,6 +77,17 @@ make pulumi-workbench cmd=up args="BACKEND_URL=http://127.0.0.1:8080/pulumi"
 Use another local Postgres image if Docker cannot pull the default:
 
 ```bash
+make pulumi-workbench cmd=db-up args="DB_IMAGE=postgres:18"
+```
+
+The workbench database is published on host localhost only, so local tools can
+connect to `postgresql://statedb:statedb@localhost:55432/statedb`.
+
+If you switch Postgres major versions, recreate the throwaway workbench
+container and volume first:
+
+```bash
+make pulumi-workbench cmd=reset
 make pulumi-workbench cmd=db-up args="DB_IMAGE=postgres:18"
 ```
 

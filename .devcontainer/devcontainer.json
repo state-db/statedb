@@ -21,7 +21,13 @@
       "version": "latest",
     },
   },
-  "forwardPorts": [8080],
+  "forwardPorts": [8080, 55432],
+  "portsAttributes": {
+    "55432": {
+      "label": "Workbench Postgres",
+      "onAutoForward": "silent",
+    },
+  },
   "containerEnv": {
     // Testcontainers (used by Quarkus Dev Services) defaults to reaching
     // sibling containers via the Docker bridge gateway (172.17.0.1). On

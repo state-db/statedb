@@ -33,8 +33,8 @@ db-up:
 			-e POSTGRES_DB=$(DB_NAME) \
 			-e POSTGRES_USER=$(DB_USER) \
 			-e POSTGRES_PASSWORD=$(DB_PASSWORD) \
-			-p $(DB_PORT):5432 \
-			-v $(DB_VOLUME):/var/lib/postgresql/data \
+			-p 127.0.0.1:$(DB_PORT):5432 \
+			-v $(DB_VOLUME):/var/lib/postgresql \
 			-d $(DB_IMAGE) >/dev/null; \
 	fi'
 	@$(IN_CONTAINER) sh -lc 'for i in $$(seq 1 30); do docker exec $(DB_CONTAINER) pg_isready -U $(DB_USER) -d $(DB_NAME) >/dev/null 2>&1 && exit 0; sleep 1; done; echo "Postgres did not become ready"; exit 1'
