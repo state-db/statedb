@@ -568,18 +568,73 @@ pulumi stack export | jq '.deployment.resources // []'
 
 **Scope**
 
-- Migration `V007__compaction.sql`: `snapshots`, `compaction_jobs`, FK from `stack_state.base_snapshot_id`.
-- Enqueue trigger inside the `POST /complete` transaction when `journal_entries_since_compaction >= auto_compact_threshold`.
-- `persistence/stack/CompactionWorker` `@Scheduled`: polls for `status='pending'`, `SELECT ... FOR UPDATE` on `stack_state`, calls Slice 17.5's `StackAssembler` to build the snapshot (same code path as `/export` — drift here would split-brain compaction vs. read), INSERT `snapshots`, point `stack_state.base_snapshot_id` at it, reset `journal_entries_since_compaction`, mark job `completed`.
-- Failure path: mark `failed` with `error_message`, retry capped at 3 attempts (`attempts` column on the job table — add to migration).
+- Migration `V008__compaction.sql`: `snapshots`, `compaction_jobs`, FK from `stack_state.base_snapshot_id`.
+- Enqueue a compaction job inside the `POST /complete` transaction after every completed update. The partial unique index on `compaction_jobs(stack_id) WHERE status IN ('pending','running')` coalesces bursts so a stack has at most one active job.
+- `persistence/stack/CompactionWorker` `@Scheduled`: claims jobs with `FOR UPDATE SKIP LOCKED`, locks `stack_state`, calls Slice 17.5's `StackAssembler` to build the snapshot (same code path as `/export` — drift here would split-brain compaction vs. read), INSERT `snapshots`, point `stack_state.base_snapshot_id` at it, reset `journal_entries_since_compaction`, mark job `completed`.
+- Failure path: mark failed/retryable with `error_message`, retry capped by `state-db.compaction.max-attempts`; reaper returns timed-out `running` jobs to `pending` or terminal `failed`.
+- Add `quarkus-scheduler` and config: `poll-interval`, `per-tick-cap`, `claim-timeout`, `max-attempts`.
+- Wire `StackAssembler` to load `snapshots.checkpoint` as the base and replay only `journal_entries.sequence_id > snapshots.compacted_from_journal_seq`.
 
 **Tests**
 
-- Threshold trigger enqueues exactly one job.
+- `POST /complete` enqueues exactly one active job per stack; a second completed update while one is pending/running coalesces.
 - Compaction collapses N journal entries into one snapshot; `/export` after compaction returns the same bytes as before.
 - A worker holding `FOR UPDATE` blocks a concurrent PATCH `/journalentries`; PATCH succeeds after compaction commits.
+- Reaper reclaims old `running` jobs and fails exhausted jobs.
 
-**Manual verification.** Set `auto_compact_threshold=5` in `application.yml`, run six `pulumi up` cycles, then `SELECT * FROM snapshots`.
+**Out of scope.** Physical deletion of old `journal_entries` and old `snapshots`; compaction only moves the `/export` replay boundary. Retention is tracked explicitly in Slices 21.1 and 21.2.
+
+**Manual verification.** Run six `pulumi up` cycles, then inspect `snapshots`, `stack_state.base_snapshot_id`, and `compaction_jobs`.
+
+---
+
+### Slice 21.1 · Journal retention after compaction
+
+**Scope**
+
+- Add an app-level retention job or compaction follow-up step that physically deletes compacted journal rows only after a successful snapshot is active.
+- Default policy: keep current-state correctness, not full historical replay. Delete rows for a stack where `journal_entries.sequence_id <= snapshots.compacted_from_journal_seq` for the active base snapshot.
+- Preserve `stack_updates` metadata so history lists still show completed operations even when their bulky journal rows have been pruned.
+- Make the behavior explicit in config:
+  - `state-db.journal-retention.enabled` default `false` until operators opt in.
+  - `state-db.journal-retention.keep-after-compaction` default `0` rows/updates unless a stronger audit requirement appears.
+  - Optional minimum age such as `state-db.journal-retention.min-age` so a just-compacted stack is not pruned immediately in debugging environments.
+- Deletion must lock the stack's `stack_state` row or otherwise run from a snapshot boundary that cannot move underneath it.
+- Use a database-native bulk delete; this is a legitimate native SQL path because retention is set-based cleanup, not entity business logic.
+
+**Tests**
+
+- Given a stack with an active snapshot at sequence `N`, pruning deletes journal rows with `sequence_id <= N` and keeps rows with `sequence_id > N`.
+- `/export` before and after pruning returns the same checkpoint bytes.
+- Pruning one stack never deletes rows for another stack.
+- If `stack_state.base_snapshot_id IS NULL`, pruning no-ops.
+- If retention is disabled, pruning no-ops.
+
+**Manual verification.** Enable journal retention, run several `pulumi up` cycles until snapshots advance, run the retention job, then compare `pulumi stack export` before/after and inspect `journal_entries` row counts.
+
+---
+
+### Slice 21.2 · Snapshot retention
+
+**Scope**
+
+- Delete old `snapshots` rows once newer snapshots have become the active base for a stack.
+- Default policy: keep the active snapshot plus one previous snapshot per stack (`state-db.snapshot-retention.keep=2`) for debugging/rollback safety.
+- Never delete `stack_state.base_snapshot_id`; the FK protects this, but the job should filter it out deliberately.
+- Delete `completed` `compaction_jobs` older than a configurable age after any referenced snapshot retention is complete. Keep `failed` jobs longer or indefinitely until there is an operator-visible failure surface.
+- Coordinate ordering with journal retention:
+  - journal retention uses the active snapshot boundary,
+  - snapshot retention must not delete the active snapshot,
+  - old snapshots can be removed after no live pointer or retained diagnostic window needs them.
+
+**Tests**
+
+- With three snapshots for one stack and `keep=2`, retention deletes only the oldest and keeps the active snapshot.
+- Snapshot retention across multiple stacks is independent.
+- A snapshot referenced by `stack_state.base_snapshot_id` is never deleted even if it would otherwise fall outside `keep`.
+- Old completed compaction jobs are pruned according to config; failed jobs remain.
+
+**Manual verification.** Set `state-db.snapshot-retention.keep=1`, run several compactions, run the retention job, and confirm the active snapshot remains while older unreferenced snapshots disappear.
 
 ---
 
