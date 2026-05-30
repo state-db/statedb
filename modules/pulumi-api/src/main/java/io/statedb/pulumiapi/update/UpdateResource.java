@@ -143,7 +143,10 @@ public class UpdateResource {
 
     Lease l = lease.orElseThrow(() -> new StackLockedException(existing.stackId));
     return new AcquireLockResponse(
-        l.plaintextToken().toString(), l.expiresAt().getEpochSecond(), 1, safe.journalVersion);
+        l.plaintextToken().toString(),
+        l.expiresAt().getEpochSecond(),
+        existing.version,
+        safe.journalVersion);
   }
 
   @POST

@@ -170,6 +170,23 @@ class AcquireLockContractTest {
         .statusCode(409);
   }
 
+  @Test
+  void acquireReturnsPersistedUpdateVersion() {
+    startPreview();
+    startPreview();
+    String thirdUpdate = startPreview();
+
+    given()
+        .header("Authorization", "token " + RAW_TOKEN)
+        .contentType("application/json")
+        .body(Map.of("journalVersion", 1))
+        .when()
+        .post("/pulumi/api/stacks/" + ORG + "/" + PROJECT + "/" + STACK + "/update/" + thirdUpdate)
+        .then()
+        .statusCode(200)
+        .body("version", equalTo(3));
+  }
+
   private String startPreview() {
     return given()
         .header("Authorization", "token " + RAW_TOKEN)
