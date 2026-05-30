@@ -31,8 +31,9 @@ public class StackAssembler {
 
   @Transactional
   public AssembledDeployment assemble(UUID stackId) {
-    ObjectNode currentBase = loadBaseSnapshotOrEmpty(stackId);
-    long baseSeq = 0L;
+    BaseSnapshot baseSnapshot = loadBaseSnapshotOrEmpty(stackId);
+    ObjectNode currentBase = baseSnapshot.checkpoint();
+    long baseSeq = baseSnapshot.compactedFromJournalSeq();
     UUID priorUpdateId = null;
     JournalReplayer replayer = new JournalReplayer(mapper, currentBase);
 
@@ -64,22 +65,26 @@ public class StackAssembler {
     return replayer.generateDeployment();
   }
 
-  private ObjectNode loadBaseSnapshotOrEmpty(UUID stackId) {
-    // Only base_snapshot_id is read today; base_snapshot_version (and the
-    // baseSeq filter in streamEntries) gets wired up when snapshot storage
-    // lands. Selecting it here would make the unwired state invisible.
+  private BaseSnapshot loadBaseSnapshotOrEmpty(UUID stackId) {
     UUID baseSnapshotId =
         (UUID)
             em.createNativeQuery("SELECT base_snapshot_id FROM stack_state WHERE stack_id = ?1")
                 .setParameter(1, stackId)
                 .getSingleResult();
     if (baseSnapshotId != null) {
-      throw new IllegalStateException(
-          "base snapshot loading is not available until snapshot storage lands");
+      Snapshot snapshot = em.find(Snapshot.class, baseSnapshotId);
+      if (snapshot == null) {
+        throw new IllegalStateException("base snapshot not found: " + baseSnapshotId);
+      }
+      if (!snapshot.checkpoint.isObject()) {
+        throw new IllegalStateException("base snapshot checkpoint must be a JSON object");
+      }
+      return new BaseSnapshot(
+          (ObjectNode) snapshot.checkpoint.deepCopy(), snapshot.compactedFromJournalSeq);
     }
     ObjectNode deployment = mapper.createObjectNode();
     deployment.set("resources", mapper.createArrayNode());
-    return deployment;
+    return new BaseSnapshot(deployment, 0L);
   }
 
   private Stream<EntryRow> streamEntries(UUID stackId, long baseSeq) {
@@ -142,4 +147,6 @@ public class StackAssembler {
       Long pendingReplacementOld,
       Long pendingReplacementNew,
       JsonNode payload) {}
+
+  private record BaseSnapshot(ObjectNode checkpoint, long compactedFromJournalSeq) {}
 }

@@ -25,6 +25,11 @@ quarkus:
     level: INFO
 
 state-db:
+  compaction:
+    poll-interval: 10s
+    per-tick-cap: 25
+    claim-timeout: 5m
+    max-attempts: 3
   lock:
     lease-ttl: 1h
     # Advisory; no server-side behavior keys off this today. Exposed so operators can tune the
@@ -47,5 +52,7 @@ state-db:
 # connection). Five minutes is generous; trim later if it masks real hangs.
 "%test":
   quarkus:
+    scheduler:
+      enabled: false
     transaction-manager:
       default-transaction-timeout: 300

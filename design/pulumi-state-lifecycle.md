@@ -8,7 +8,8 @@ define the model; this one explains the operational story.
 
 ## Mental Model
 
-Pulumi sends three related streams of information:
+Pulumi sends three related streams of information, and state-db maintains a few
+derived control tables around them:
 
 | Table | Meaning | Used for |
 |---|---|---|
@@ -16,13 +17,17 @@ Pulumi sends three related streams of information:
 | `journal_entries` | Append-only state journal for a run | Reconstructing `GET /export` state |
 | `update_events` | Pulumi engine event stream | UI timeline, preview/change display, diagnostics |
 | `pending_operations` | Resource operations that began but have not terminally completed | Crash recovery and `deployment.pending_operations` |
-| `stack_state` | Per-stack pointer/counter row | Current journal sequence, compaction/cache state |
+| `stack_state` | One small mutable head row per stack | Current journal sequence, active snapshot pointer, per-stack serialization lock |
+| `snapshots` | Compacted DeploymentV3 checkpoints | Fast `/export` baseline after compaction |
+| `compaction_jobs` | Async worker queue | Multi-pod safe snapshot generation |
 
 The key split is:
 
 - `journal_entries` is the source of truth for checkpoint reconstruction.
 - `update_events` is the human-facing event/progress stream.
 - `stack_updates` frames each operation and ties those streams together.
+- `stack_state` is not the checkpoint itself; it is the current head pointer
+  for one stack.
 
 ## What the Workbench Created
 
@@ -37,8 +42,60 @@ After `pulumi preview`, `pulumi up --skip-preview`, and `pulumi refresh
 
 The stack's `stack_state.journal_seq` advanced to `34`, meaning the next
 server-assigned journal sequence starts there. `cache_valid=false` is expected:
-journal inserts invalidate the read cache, and snapshot compaction is not wired
-yet.
+journal inserts invalidate the read cache. Snapshot compaction uses
+`base_snapshot_id` rather than this older cache field.
+
+## Stack State, Snapshots, and the Head Pointer
+
+`stack_state` has exactly one row per stack. It is the mutable control row that
+answers, "where is the current state head for this stack?"
+
+Important columns:
+
+| Column | Meaning |
+|---|---|
+| `stack_id` | The stack this head row belongs to |
+| `journal_seq` | The next stack-global journal sequence number to allocate |
+| `base_snapshot_id` | FK to `snapshots.id`, or `NULL` before first compaction |
+| `base_snapshot_version` | Monotonic snapshot version for the stack |
+| `journal_entries_since_compaction` | Counter reset after compaction |
+| `cached_checkpoint`, `cached_at`, `cache_valid` | Older read-cache fields, invalidated on journal insert |
+
+The table is also the per-stack serialization point. Journal appends, update
+completion, and compaction all lock the same `stack_state` row before changing
+sequence numbers or snapshot pointers. That keeps these races safe across pods:
+
+- two journal appenders cannot allocate overlapping `sequence_id` ranges,
+- compaction cannot snapshot while a journal append is advancing the stack,
+- `/complete` cannot mark the update boundary while compaction is moving the
+  base snapshot pointer.
+
+`snapshots` stores the compacted checkpoint JSON. A row contains:
+
+| Column | Meaning |
+|---|---|
+| `id` | Snapshot UUID; this is what `stack_state.base_snapshot_id` points at |
+| `stack_id` | Owning stack |
+| `version` | Stack-local snapshot version |
+| `checkpoint` | The compacted DeploymentV3 deployment JSON |
+| `compacted_from_journal_seq` | Highest journal sequence included in the snapshot |
+
+So a workbench value like:
+
+```text
+stack_state.base_snapshot_id = ac110002-9e71-114f-819e-7683aef8001f
+```
+
+means:
+
+```sql
+SELECT *
+FROM snapshots
+WHERE id = 'ac110002-9e71-114f-819e-7683aef8001f';
+```
+
+That snapshot row is the baseline for future `/export` calls. It is not stored
+inside `stack_state`; `stack_state` only points to it.
 
 ## Update Start and Completion
 
@@ -171,9 +228,10 @@ The current implementation:
 
 1. resolves `(org, project, stack)` to `stack_id`,
 2. calls `StackAssembler.assemble(stackId)`,
-3. starts from the compacted base snapshot, or an empty deployment if there is
-   no base snapshot,
-4. streams `journal_entries` ordered by `sequence_id`,
+3. starts from `snapshots.checkpoint` when `stack_state.base_snapshot_id` is
+   set, or an empty deployment if there is no base snapshot yet,
+4. streams `journal_entries` ordered by `sequence_id`, starting after the
+   snapshot boundary,
 5. applies each entry through `JournalReplayer`,
 6. returns:
 
@@ -187,9 +245,19 @@ The current implementation:
 }
 ```
 
-Today there is no persisted compacted snapshot. `stack_state.base_snapshot_id`
-is still `NULL`, so export replays the whole journal each time. Slice 21 is the
-planned snapshot/compaction slice.
+If there is no compacted snapshot yet, `stack_state.base_snapshot_id` is `NULL`
+and export replays the whole journal from sequence `0`. After compaction,
+export loads:
+
+```text
+base = snapshots.checkpoint
+baseSeq = snapshots.compacted_from_journal_seq
+tail = journal_entries where sequence_id > baseSeq
+```
+
+The same `StackAssembler` code path is used by `/export` and the compaction
+worker, so a compacted snapshot should be byte-equivalent to the state that
+`/export` would have returned immediately before compaction.
 
 ### How Duplicate URNs Are Avoided
 
@@ -286,19 +354,37 @@ treated as the UI event stream.
 
 ## Snapshot Compaction
 
-Snapshot generation from journal entries is planned for Slice 21:
+Snapshot generation is asynchronous and does not run in the request path.
+`POST /complete` enqueues a compaction job after a completed update; the
+database queue coalesces bursts so each stack has at most one pending/running
+job.
 
-- create `snapshots` and `compaction_jobs`,
-- enqueue when `journal_entries_since_compaction >= auto_compact_threshold`,
-- worker locks `stack_state`,
-- calls `StackAssembler`,
-- inserts a snapshot,
-- updates `stack_state.base_snapshot_id`,
-- resets `journal_entries_since_compaction`.
+The worker:
 
-After that lands, export should load the active snapshot and replay only the
-journal tail after the snapshot's compacted sequence. The reconstructed state
-must be byte-equivalent before and after compaction.
+1. claims a `compaction_jobs` row with `FOR UPDATE SKIP LOCKED`,
+2. locks the stack's `stack_state` row,
+3. calls `StackAssembler.assemble(stackId)`, the same code used by `/export`,
+4. inserts a `snapshots` row with the assembled checkpoint and current
+   `stack_state.journal_seq`,
+5. updates `stack_state.base_snapshot_id` and `base_snapshot_version`,
+6. resets `journal_entries_since_compaction`,
+7. marks the job `completed`.
+
+`journal_entries` are not deleted by compaction today. They remain the detailed
+append-only history, but `/export` skips entries at or before
+`snapshots.compacted_from_journal_seq`. This keeps reads fast but does not yet
+bound table size.
+
+Journal pruning needs an explicit retention policy before it is safe to add.
+The key product question is whether state-db must preserve full historical
+reconstruction or only current-state export correctness. A likely policy is:
+
+- keep the latest one or two snapshots per stack,
+- delete `journal_entries` for that stack where
+  `sequence_id <= active_snapshot.compacted_from_journal_seq`,
+- preserve `stack_updates` metadata for the history list,
+- make the retention window/config explicit if operators need longer audit
+  history.
 
 ## Practical Query Map
 
@@ -321,6 +407,15 @@ WHERE stack_id = :stack_id
 ORDER BY sequence_id;
 ```
 
+Active snapshot:
+
+```sql
+SELECT s.*
+FROM stack_state st
+JOIN snapshots s ON s.id = st.base_snapshot_id
+WHERE st.stack_id = :stack_id;
+```
+
 Run timeline:
 
 ```sql
@@ -338,4 +433,3 @@ FROM pending_operations
 WHERE stack_id = :stack_id
 ORDER BY created_at;
 ```
-

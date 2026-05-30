@@ -2,6 +2,7 @@ package io.statedb.persistence.update;
 
 import io.statedb.persistence.lock.StackLock;
 import io.statedb.persistence.lock.StackLockedException;
+import io.statedb.persistence.stack.CompactionJobEnqueuer;
 import io.statedb.persistence.stack.Stack;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
@@ -29,6 +30,8 @@ import java.util.UUID;
 public class StackUpdateCompleter {
 
   @Inject EntityManager em;
+
+  @Inject CompactionJobEnqueuer compactionJobEnqueuer;
 
   @Transactional
   public void complete(UUID leaseId, UUID stackId, UUID updateId, StackUpdate.Status terminal) {
@@ -76,5 +79,7 @@ public class StackUpdateCompleter {
           stackId,
           updateId);
     }
+
+    compactionJobEnqueuer.enqueue(stackId);
   }
 }

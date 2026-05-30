@@ -11,6 +11,7 @@ import io.statedb.persistence.identity.Organization;
 import io.statedb.persistence.lock.Lease;
 import io.statedb.persistence.lock.StackLockAcquirer;
 import io.statedb.persistence.lock.StackLockedException;
+import io.statedb.persistence.stack.CompactionJob;
 import io.statedb.persistence.stack.StackCreator;
 import io.statedb.persistence.stack.StackRef;
 import io.statedb.persistence.update.StackUpdate;
@@ -73,6 +74,21 @@ class StackUpdateCompleterTest {
     return new Fixture(stackId, updateId, lease.leaseId());
   }
 
+  private Fixture startOnStack(UUID stackId, String key) {
+    UUID updateId =
+        starter
+            .start(
+                stackId,
+                StackUpdate.Kind.UPDATE,
+                null,
+                null,
+                key,
+                new StartUpdateRequest(Map.of(), Map.of(), Map.of(), "d", "yaml", "v3.234.0", "m"))
+            .updateId();
+    Lease lease = acquirer.acquire(stackId, updateId, "user:a", null, null).orElseThrow();
+    return new Fixture(stackId, updateId, lease.leaseId());
+  }
+
   private void bumpJournalSeq(UUID stackId, long to) {
     QuarkusTransaction.requiringNew()
         .run(
@@ -97,6 +113,29 @@ class StackUpdateCompleterTest {
         42L, scalarLong("SELECT end_journal_seq FROM stack_updates WHERE id = ?1", f.updateId()));
     assertEquals(1L, scalarLong("SELECT version FROM stacks WHERE id = ?1", f.stackId()));
     assertNull(scalarUuid("SELECT active_update_id FROM stacks WHERE id = ?1", f.stackId()));
+  }
+
+  @Test
+  void completeEnqueuesOneActiveCompactionJobPerStack() {
+    Fixture first = seed(StackUpdate.Kind.UPDATE, "complete-compact-1");
+
+    completer.complete(
+        first.leaseId(), first.stackId(), first.updateId(), StackUpdate.Status.SUCCEEDED);
+
+    assertEquals(
+        1L,
+        CompactionJob.count(
+            "stackId = ?1 and status = ?2", first.stackId(), CompactionJob.Status.PENDING));
+
+    Fixture second = startOnStack(first.stackId(), "complete-compact-2");
+
+    completer.complete(
+        second.leaseId(), second.stackId(), second.updateId(), StackUpdate.Status.SUCCEEDED);
+
+    assertEquals(
+        1L,
+        CompactionJob.count(
+            "stackId = ?1 and status = ?2", first.stackId(), CompactionJob.Status.PENDING));
   }
 
   @Test
