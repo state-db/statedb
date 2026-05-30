@@ -2,6 +2,7 @@ package io.statedb.persistence.journal;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
+import io.statedb.persistence.pulumi.PulumiStateJson;
 import java.util.Set;
 
 /**
@@ -86,9 +87,9 @@ public final class JournalEntryView {
     return longOrNull("pendingReplacementNew");
   }
 
-  /** The original entry node minus the promoted columns. Stored verbatim in {@code payload}. */
+  /** The original entry node minus promoted columns and bulky source stack traces. */
   public JsonNode payload() {
-    ObjectNode copy = raw.deepCopy();
+    ObjectNode copy = (ObjectNode) PulumiStateJson.withoutStackTraces(raw);
     for (String f : PROMOTED) {
       copy.remove(f);
     }

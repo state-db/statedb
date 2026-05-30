@@ -2,6 +2,7 @@ package io.statedb.persistence.stack;
 
 import io.quarkus.narayana.jta.QuarkusTransaction;
 import io.quarkus.scheduler.Scheduled;
+import io.statedb.persistence.pulumi.PulumiStateJson;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 import jakarta.persistence.EntityManager;
@@ -162,7 +163,7 @@ public class CompactionWorker {
     Snapshot snapshot = new Snapshot();
     snapshot.stackId = job.stackId();
     snapshot.version = snapshotVersion;
-    snapshot.checkpoint = assembled.deployment();
+    snapshot.checkpoint = PulumiStateJson.withoutStackTraces(assembled.deployment());
     snapshot.compactedFromJournalSeq = journalSeq;
     snapshot.persistAndFlush();
 

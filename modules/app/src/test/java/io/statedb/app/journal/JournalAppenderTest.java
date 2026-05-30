@@ -404,6 +404,58 @@ class JournalAppenderTest {
   }
 
   @Test
+  void payloadPrunesStackTraceButKeepsSourcePosition() {
+    appender.append(
+        stackId,
+        updateId,
+        leaseId,
+        List.of(
+            entry(
+                1,
+                1,
+                1L,
+                """
+                {
+                  "state": {
+                    "urn": "urn:s",
+                    "sourcePosition": "file:///work/Pulumi.yaml:12:3",
+                    "stackTrace": [
+                      {"sourcePosition": "file:///work/Pulumi.yaml:12:3"},
+                      {"sourcePosition": "file:///work/Pulumi.yaml:1:1"}
+                    ],
+                    "outputs": {
+                      "nested": {
+                        "stackTrace": [{"sourcePosition": "file:///work/lib.ts:1:1"}]
+                      }
+                    }
+                  }
+                }
+                """)));
+
+    QuarkusTransaction.requiringNew()
+        .run(
+            () -> {
+              String payloadJson =
+                  (String)
+                      em.createNativeQuery(
+                              "SELECT payload::text FROM journal_entries WHERE update_id = ?1")
+                          .setParameter(1, updateId)
+                          .getSingleResult();
+              JsonNode payload;
+              try {
+                payload = MAPPER.readTree(payloadJson);
+              } catch (Exception e) {
+                throw new RuntimeException(e);
+              }
+              JsonNode state = payload.required("state");
+              assertEquals(
+                  "file:///work/Pulumi.yaml:12:3", state.required("sourcePosition").asText());
+              assertNull(state.get("stackTrace"));
+              assertNull(state.required("outputs").required("nested").get("stackTrace"));
+            });
+  }
+
+  @Test
   void cacheInvalidationTriggerFiresOnInsert() {
     // Seed cache_valid = true so we can observe the trigger flip it.
     QuarkusTransaction.requiringNew()

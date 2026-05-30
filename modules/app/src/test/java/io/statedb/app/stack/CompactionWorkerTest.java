@@ -1,6 +1,7 @@
 package io.statedb.app.stack;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -72,6 +73,42 @@ class CompactionWorkerTest {
         1L,
         CompactionJob.count(
             "stackId = ?1 and status = ?2", stackId, CompactionJob.Status.COMPLETED));
+  }
+
+  @Test
+  void compactionPrunesStackTraceFromSnapshot() throws Exception {
+    UUID update = update(stackId);
+    entry(
+        stackId,
+        update,
+        1,
+        1L,
+        """
+        {
+          "state": {
+            "urn": "%s",
+            "type": "pkg:index:traced",
+            "custom": true,
+            "sourcePosition": "file:///work/Pulumi.yaml:12:3",
+            "stackTrace": [{"sourcePosition": "file:///work/Pulumi.yaml:12:3"}]
+          }
+        }
+        """
+            .formatted(urn("traced")));
+
+    QuarkusTransaction.requiringNew().run(() -> enqueuer.enqueue(stackId));
+
+    assertEquals(1, worker.drainOnce());
+
+    QuarkusTransaction.requiringNew()
+        .run(
+            () -> {
+              Snapshot snapshot = Snapshot.find("stackId", stackId).<Snapshot>singleResult();
+              JsonNode resource = snapshot.checkpoint.required("resources").get(0);
+              assertEquals(
+                  "file:///work/Pulumi.yaml:12:3", resource.required("sourcePosition").asText());
+              assertNull(resource.get("stackTrace"));
+            });
   }
 
   @Test
