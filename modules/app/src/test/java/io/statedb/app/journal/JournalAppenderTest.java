@@ -215,21 +215,120 @@ class JournalAppenderTest {
                       .getResultList();
               assertEquals(
                   List.of(3L, 4L, 5L, 6L), wireSeqs.stream().map(Number::longValue).toList());
+
+              long stateSeq =
+                  ((Number)
+                          em.createNativeQuery(
+                                  "SELECT journal_seq FROM stack_state WHERE stack_id = ?1")
+                              .setParameter(1, stackId)
+                              .getSingleResult())
+                      .longValue();
+              assertEquals(7L, stateSeq);
             });
   }
 
   @Test
-  void duplicateWireSequenceAcrossPatchesReturns409() {
+  void duplicateIdenticalPatchIsNoOp() {
     appender.append(
         stackId, updateId, leaseId, List.of(entry(1, 1, 1L, "{\"state\":{\"urn\":\"urn:1\"}}")));
-    assertThrows(
-        JournalSequenceConflictException.class,
-        () ->
-            appender.append(
-                stackId,
-                updateId,
-                leaseId,
-                List.of(entry(1, 1, 1L, "{\"state\":{\"urn\":\"urn:dup\"}}"))));
+    appender.append(
+        stackId, updateId, leaseId, List.of(entry(1, 1, 1L, "{\"state\":{\"urn\":\"urn:1\"}}")));
+
+    QuarkusTransaction.requiringNew()
+        .run(
+            () -> {
+              long count =
+                  ((Number)
+                          em.createNativeQuery(
+                                  "SELECT count(*) FROM journal_entries WHERE update_id = ?1")
+                              .setParameter(1, updateId)
+                              .getSingleResult())
+                      .longValue();
+              assertEquals(1L, count);
+
+              long stateSeq =
+                  ((Number)
+                          em.createNativeQuery(
+                                  "SELECT journal_seq FROM stack_state WHERE stack_id = ?1")
+                              .setParameter(1, stackId)
+                              .getSingleResult())
+                      .longValue();
+              assertEquals(2L, stateSeq);
+
+              long sinceCompaction =
+                  ((Number)
+                          em.createNativeQuery(
+                                  "SELECT journal_entries_since_compaction FROM stack_state "
+                                      + "WHERE stack_id = ?1")
+                              .setParameter(1, stackId)
+                              .getSingleResult())
+                      .longValue();
+              assertEquals(1L, sinceCompaction);
+            });
+  }
+
+  @Test
+  void partialOverlapRetryInsertsOnlyMissingEntries() {
+    appender.append(
+        stackId,
+        updateId,
+        leaseId,
+        List.of(
+            entry(1, 1, 1L, "{\"state\":{\"urn\":\"urn:1\"}}"),
+            entry(2, 1, 2L, "{\"state\":{\"urn\":\"urn:2\"}}")));
+    appender.append(
+        stackId,
+        updateId,
+        leaseId,
+        List.of(
+            entry(2, 1, 2L, "{\"state\":{\"urn\":\"urn:2\"}}"),
+            entry(3, 1, 3L, "{\"state\":{\"urn\":\"urn:3\"}}")));
+
+    QuarkusTransaction.requiringNew()
+        .run(
+            () -> {
+              long count =
+                  ((Number)
+                          em.createNativeQuery(
+                                  "SELECT count(*) FROM journal_entries WHERE update_id = ?1")
+                              .setParameter(1, updateId)
+                              .getSingleResult())
+                      .longValue();
+              assertEquals(3L, count);
+
+              long stateSeq =
+                  ((Number)
+                          em.createNativeQuery(
+                                  "SELECT journal_seq FROM stack_state WHERE stack_id = ?1")
+                              .setParameter(1, stackId)
+                              .getSingleResult())
+                      .longValue();
+              assertEquals(4L, stateSeq);
+
+              long sinceCompaction =
+                  ((Number)
+                          em.createNativeQuery(
+                                  "SELECT journal_entries_since_compaction FROM stack_state "
+                                      + "WHERE stack_id = ?1")
+                              .setParameter(1, stackId)
+                              .getSingleResult())
+                      .longValue();
+              assertEquals(3L, sinceCompaction);
+            });
+  }
+
+  @Test
+  void duplicateJsonbEquivalentPayloadIsNoOp() {
+    appender.append(
+        stackId,
+        updateId,
+        leaseId,
+        List.of(entry(1, 1, 1L, "{\"state\":{\"urn\":\"urn:1\",\"value\":1.0}}")));
+    appender.append(
+        stackId,
+        updateId,
+        leaseId,
+        List.of(entry(1, 1, 1L, "{\"state\":{\"urn\":\"urn:1\",\"value\":1}}")));
 
     QuarkusTransaction.requiringNew()
         .run(
@@ -243,6 +342,20 @@ class JournalAppenderTest {
                       .longValue();
               assertEquals(1L, count);
             });
+  }
+
+  @Test
+  void duplicateWireSequenceWithDifferentPayloadReturns409() {
+    appender.append(
+        stackId, updateId, leaseId, List.of(entry(1, 1, 1L, "{\"state\":{\"urn\":\"urn:1\"}}")));
+    assertThrows(
+        JournalSequenceConflictException.class,
+        () ->
+            appender.append(
+                stackId,
+                updateId,
+                leaseId,
+                List.of(entry(1, 1, 1L, "{\"state\":{\"urn\":\"urn:dup\"}}"))));
   }
 
   @Test

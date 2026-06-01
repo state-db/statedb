@@ -7,7 +7,11 @@ import jakarta.inject.Inject;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.PersistenceException;
 import jakarta.transaction.Transactional;
+import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
 import org.hibernate.exception.ConstraintViolationException;
@@ -26,8 +30,9 @@ import org.hibernate.exception.ConstraintViolationException;
  *
  * <p>Concurrency: a {@code SELECT ... FOR UPDATE} on the {@code stack_state} row serializes
  * appenders cross-pod for the same stack. The {@code UNIQUE(update_id, wire_sequence_id)} and
- * {@code UNIQUE(stack_id, sequence_id)} constraints are layered defenses: any retry that re-sends a
- * committed wire ID lands here as a {@link JournalSequenceConflictException} (→ 409).
+ * {@code UNIQUE(stack_id, sequence_id)} constraints are layered defenses. A retry that re-sends an
+ * already committed batch is accepted as an idempotent no-op; a duplicate wire ID with different
+ * contents lands here as a {@link JournalSequenceConflictException} (→ 409).
  *
  * <p>The lease filter has validated the bearer token before this method runs, but filter-time
  * validation cannot prevent a concurrent {@code /complete} (or {@code DELETE /update/{id}}) from
@@ -119,8 +124,13 @@ public class JournalAppender {
                     .getSingleResult())
             .longValue();
 
+    List<JournalEntryView> viewsToInsert = missingEntries(updateId, offset, views);
+    if (viewsToInsert.isEmpty()) {
+      return;
+    }
+
     // 4. Insert journal rows. Insertion order is arrival order; replay sorts by sequence_id.
-    for (JournalEntryView v : views) {
+    for (JournalEntryView v : viewsToInsert) {
       long wireSeq = v.sequenceId();
       short kind = v.kind();
       JournalEntry je = new JournalEntry();
@@ -158,7 +168,7 @@ public class JournalAppender {
     // 6/7. Pending-operations maintenance. Order doesn't matter — a Success that arrives before
     //      its Begin will simply no-op the DELETE, and the late Begin will then leave a stale row
     //      that compaction will sweep for terminated updates.
-    for (JournalEntryView v : views) {
+    for (JournalEntryView v : viewsToInsert) {
       short kind = v.kind();
       Long opId = v.operationId();
       if (kind == KIND_BEGIN && opId != null) {
@@ -203,7 +213,7 @@ public class JournalAppender {
                 + "       journal_entries_since_compaction = journal_entries_since_compaction + ?2 "
                 + " WHERE stack_id = ?3")
         .setParameter(1, offset + maxWireInBatch + 1)
-        .setParameter(2, views.size())
+        .setParameter(2, viewsToInsert.size())
         .setParameter(3, stackId)
         .executeUpdate();
   }
@@ -215,5 +225,57 @@ public class JournalAppender {
       }
     }
     return false;
+  }
+
+  private List<JournalEntryView> missingEntries(
+      UUID updateId, long offset, List<JournalEntryView> views) {
+    List<Long> wireIds = views.stream().map(JournalEntryView::sequenceId).toList();
+    List<JournalEntry> existing =
+        JournalEntry.<JournalEntry>list(
+            "updateId = ?1 and wireSequenceId in ?2", updateId, wireIds);
+    if (existing.isEmpty()) {
+      return views;
+    }
+
+    Map<Long, JournalEntry> byWire = new HashMap<>();
+    for (JournalEntry entry : existing) {
+      byWire.put(entry.wireSequenceId, entry);
+    }
+    List<JournalEntryView> missing = new ArrayList<>();
+    for (JournalEntryView view : views) {
+      JournalEntry entry = byWire.get(view.sequenceId());
+      if (entry == null) {
+        missing.add(view);
+      } else if (!sameEntry(entry, offset, view)) {
+        throw new JournalSequenceConflictException(updateId);
+      }
+    }
+    return missing;
+  }
+
+  private boolean sameEntry(JournalEntry entry, long offset, JournalEntryView view) {
+    return entry.sequenceId == offset + view.sequenceId()
+        && entry.kind == view.kind()
+        && Objects.equals(entry.operationId, view.operationId())
+        && entry.version == view.version()
+        && Objects.equals(entry.removeOld, view.removeOld())
+        && Objects.equals(entry.removeNew, view.removeNew())
+        && Objects.equals(entry.deleteOld, view.deleteOld())
+        && Objects.equals(entry.deleteNew, view.deleteNew())
+        && Objects.equals(entry.pendingReplacementOld, view.pendingReplacementOld())
+        && Objects.equals(entry.pendingReplacementNew, view.pendingReplacementNew())
+        && entry.isRefresh == view.isRefresh()
+        && payloadEquals(entry.payload, view.payload())
+        && Objects.equals(entry.resourceUrn, view.resourceUrn());
+  }
+
+  private boolean payloadEquals(JsonNode stored, JsonNode incoming) {
+    // jsonb canonicalizes numerics and object representation; use Postgres' own equality here so
+    // retry detection matches the durable payload, not Jackson node-shape details.
+    return (Boolean)
+        em.createNativeQuery("SELECT CAST(?1 AS jsonb) = CAST(?2 AS jsonb)")
+            .setParameter(1, stored.toString())
+            .setParameter(2, incoming.toString())
+            .getSingleResult();
   }
 }

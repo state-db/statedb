@@ -141,7 +141,7 @@ class JournalEntriesContractTest {
   }
 
   @Test
-  void duplicateWireSequenceReturns409() throws Exception {
+  void duplicateWireSequenceRetryReturns200() throws Exception {
     String updateId = startPreview();
     String token = acquireLock(updateId);
 
@@ -169,7 +169,21 @@ class JournalEntriesContractTest {
         .when()
         .patch(journalPath(updateId))
         .then()
-        .statusCode(409);
+        .statusCode(200);
+
+    UUID upd = UUID.fromString(updateId);
+    QuarkusTransaction.requiringNew()
+        .run(
+            () -> {
+              long count =
+                  ((Number)
+                          em.createNativeQuery(
+                                  "SELECT count(*) FROM journal_entries WHERE update_id = ?1")
+                              .setParameter(1, upd)
+                              .getSingleResult())
+                      .longValue();
+              assertEquals(1L, count);
+            });
   }
 
   @Test

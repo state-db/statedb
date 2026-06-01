@@ -7,12 +7,16 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import io.quarkus.narayana.jta.QuarkusTransaction;
 import io.quarkus.test.junit.QuarkusTest;
 import io.statedb.persistence.auth.ApiToken;
 import io.statedb.persistence.identity.OrgMember;
 import io.statedb.persistence.identity.Organization;
 import io.statedb.persistence.identity.User;
+import io.statedb.persistence.stack.AssembledDeployment;
+import io.statedb.persistence.stack.Project;
+import io.statedb.persistence.stack.StackAssembler;
 import io.statedb.persistence.stack.StackCreator;
 import io.statedb.testsupport.RepoRoot;
 import jakarta.inject.Inject;
@@ -26,6 +30,7 @@ import java.util.Base64;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import java.util.stream.IntStream;
 import java.util.stream.Stream;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -53,6 +58,7 @@ class RecordedJournalFixtureReplayTest {
 
   @Inject EntityManager em;
   @Inject StackCreator stackCreator;
+  @Inject StackAssembler assembler;
 
   static Stream<Arguments> commands() {
     return Stream.of(
@@ -206,6 +212,43 @@ class RecordedJournalFixtureReplayTest {
             });
   }
 
+  @ParameterizedTest(name = "split replay {0}")
+  @MethodSource("commands")
+  void splitAndUnsplitRecordedJournalStreamProduceSameExport(
+      String command, String orgName, String project, String stack) throws Exception {
+    this.org = orgName;
+    seedIdentityAndStack(orgName, project, stack + "-one");
+    seedStack(orgName, project, stack + "-split");
+
+    String unsplitUpdate = startUpdate(orgName, project, stack + "-one");
+    String unsplitToken = acquireLock(orgName, project, stack + "-one", unsplitUpdate);
+    String splitUpdate = startUpdate(orgName, project, stack + "-split");
+    String splitToken = acquireLock(orgName, project, stack + "-split", splitUpdate);
+
+    List<JsonNode> entries = recordedEntries(command);
+    assertTrue(entries.size() > 1, command + ": need multiple entries to exercise split replay");
+
+    postJournalBatch(orgName, project, stack + "-one", unsplitUpdate, unsplitToken, entries);
+    for (int from = 0; from < entries.size(); from += 3) {
+      postJournalBatch(
+          orgName,
+          project,
+          stack + "-split",
+          splitUpdate,
+          splitToken,
+          entries.subList(from, Math.min(from + 3, entries.size())));
+    }
+
+    UUID unsplitStackId = stackId(orgName, project, stack + "-one");
+    UUID splitStackId = stackId(orgName, project, stack + "-split");
+    AssembledDeployment unsplit = assembler.assemble(unsplitStackId);
+    AssembledDeployment split = assembler.assemble(splitStackId);
+    assertEquals(
+        comparableDeployment(unsplit.deployment()),
+        comparableDeployment(split.deployment()),
+        command + ": export mismatch");
+  }
+
   private void seedIdentityAndStack(String orgName, String project, String stack) {
     QuarkusTransaction.requiringNew()
         .run(
@@ -237,6 +280,15 @@ class RecordedJournalFixtureReplayTest {
               t.persistAndFlush();
 
               stackCreator.create(o.id, orgName, project, stack, Map.of());
+            });
+  }
+
+  private void seedStack(String orgName, String project, String stack) {
+    QuarkusTransaction.requiringNew()
+        .run(
+            () -> {
+              Organization org = Organization.<Organization>find("name", orgName).firstResult();
+              stackCreator.create(org.id, orgName, project, stack, Map.of());
             });
   }
 
@@ -273,6 +325,86 @@ class RecordedJournalFixtureReplayTest {
           .filter(p -> p.getFileName().toString().endsWith("_journalentries.json"))
           .sorted()
           .toList();
+    }
+  }
+
+  private static List<JsonNode> recordedEntries(String command) throws Exception {
+    try (Stream<Path> fixtures = journalFixtures(command).stream()) {
+      return fixtures
+          .flatMap(
+              fixture -> {
+                try {
+                  JsonNode entries =
+                      MAPPER.readTree(fixture.toFile()).required("body").required("entries");
+                  return IntStream.range(0, entries.size()).mapToObj(entries::get);
+                } catch (Exception e) {
+                  throw new RuntimeException(e);
+                }
+              })
+          .toList();
+    }
+  }
+
+  private static void postJournalBatch(
+      String orgName,
+      String project,
+      String stack,
+      String updateId,
+      String token,
+      List<JsonNode> entries)
+      throws Exception {
+    byte[] body = gzip(MAPPER.writeValueAsBytes(Map.of("entries", entries)));
+    given()
+        .header("Authorization", "update-token " + token)
+        .header("Content-Encoding", "gzip")
+        .contentType("application/json")
+        .body(body)
+        .when()
+        .patch(
+            "/pulumi/api/stacks/"
+                + orgName
+                + "/"
+                + project
+                + "/"
+                + stack
+                + "/update/"
+                + updateId
+                + "/journalentries")
+        .then()
+        .statusCode(200);
+  }
+
+  private UUID stackId(String orgName, String project, String stack) {
+    return QuarkusTransaction.requiringNew()
+        .call(
+            () -> {
+              Organization org = Organization.<Organization>find("name", orgName).firstResult();
+              Project p = Project.find("orgId = ?1 and name = ?2", org.id, project).firstResult();
+              io.statedb.persistence.stack.Stack s =
+                  io.statedb.persistence.stack.Stack.<io.statedb.persistence.stack.Stack>find(
+                          "projectId = ?1 and name = ?2", p.id, stack)
+                      .firstResult();
+              return s.id;
+            });
+  }
+
+  private static JsonNode comparableDeployment(JsonNode deployment) {
+    ObjectNode copy = deployment.deepCopy();
+    JsonNode manifest = copy.get("manifest");
+    if (manifest instanceof ObjectNode manifestObject) {
+      manifestObject.remove("time");
+    }
+    return copy;
+  }
+
+  private static byte[] gzip(byte[] data) {
+    try (java.io.ByteArrayOutputStream baos = new java.io.ByteArrayOutputStream();
+        java.util.zip.GZIPOutputStream gz = new java.util.zip.GZIPOutputStream(baos)) {
+      gz.write(data);
+      gz.finish();
+      return baos.toByteArray();
+    } catch (Exception e) {
+      throw new RuntimeException(e);
     }
   }
 

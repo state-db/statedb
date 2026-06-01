@@ -4,9 +4,9 @@ import java.util.UUID;
 
 /**
  * Thrown when a journal PATCH carries a {@code wire_sequenceID} that is already persisted for this
- * update. Maps to HTTP 409. See {@link JournalAppender} — we rely on the {@code UNIQUE(update_id,
- * wire_sequence_id)} constraint as the source of truth, so a duplicate retry surfaces here rather
- * than silently double-writing.
+ * update with different contents. Maps to HTTP 409. Exact duplicate retries are accepted as
+ * idempotent no-ops; conflicts mean the same wire replay position is being reused for different
+ * state.
  */
 public class JournalSequenceConflictException extends RuntimeException {
 
@@ -14,6 +14,11 @@ public class JournalSequenceConflictException extends RuntimeException {
 
   public JournalSequenceConflictException(UUID updateId, Throwable cause) {
     super("duplicate wire sequenceID for update " + updateId, cause);
+    this.updateId = updateId;
+  }
+
+  public JournalSequenceConflictException(UUID updateId) {
+    super("duplicate wire sequenceID with different contents for update " + updateId);
     this.updateId = updateId;
   }
 
