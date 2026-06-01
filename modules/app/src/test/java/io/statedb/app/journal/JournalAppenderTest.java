@@ -19,6 +19,8 @@ import io.statedb.persistence.lock.Lease;
 import io.statedb.persistence.lock.LeaseExpiredException;
 import io.statedb.persistence.lock.StackLockAcquirer;
 import io.statedb.persistence.lock.StackLockCanceller;
+import io.statedb.persistence.stack.AssembledDeployment;
+import io.statedb.persistence.stack.StackAssembler;
 import io.statedb.persistence.stack.StackCreator;
 import io.statedb.persistence.stack.StackRef;
 import io.statedb.persistence.update.StackUpdate;
@@ -50,6 +52,7 @@ class JournalAppenderTest {
   @Inject StackLockAcquirer lockAcquirer;
   @Inject StackLockCanceller lockCanceller;
   @Inject JournalAppender appender;
+  @Inject StackAssembler assembler;
   @Inject EntityManager em;
 
   private UUID stackId;
@@ -315,6 +318,44 @@ class JournalAppenderTest {
                       .longValue();
               assertEquals(0L, pending);
             });
+  }
+
+  @Test
+  void successBeforeBeginRaceLeavesStaleTableRow() {
+    // Reproduces the wire-arrival race called out by JournalAppender.append's pending-ops loop:
+    // batch 1 carries a terminal (Success) for op 42, batch 2 carries the late Begin for op 42 at
+    // an earlier wire seq. The Success's DELETE no-ops (row didn't exist); the Begin's INSERT
+    // succeeds, leaving a row in pending_operations. Replay-by-sequence_id still produces an empty
+    // assembled pending_operations array, so pending_operations is not authoritative in this race.
+    appender.append(
+        stackId, updateId, leaseId, List.of(entry(2, 1, 42L, "{\"state\":{\"urn\":\"urn:x\"}}")));
+    appender.append(
+        stackId,
+        updateId,
+        leaseId,
+        List.of(
+            entry(
+                1,
+                0,
+                42L,
+                "{\"operation\":{\"resource\":{\"urn\":\"urn:x\",\"type\":\"t:x\"},"
+                    + "\"type\":\"creating\"}}")));
+
+    QuarkusTransaction.requiringNew()
+        .run(
+            () -> {
+              long pending =
+                  ((Number)
+                          em.createNativeQuery(
+                                  "SELECT count(*) FROM pending_operations WHERE update_id = ?1")
+                              .setParameter(1, updateId)
+                              .getSingleResult())
+                      .longValue();
+              assertEquals(1L, pending);
+            });
+
+    AssembledDeployment assembled = assembler.assemble(stackId);
+    assertFalse(assembled.deployment().has("pending_operations"));
   }
 
   @Test

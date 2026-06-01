@@ -76,6 +76,39 @@ class CompactionWorkerTest {
   }
 
   @Test
+  void compactionPreservesCreatingPendingOperation() throws Exception {
+    // Crash-recovery breadcrumb: a `creating` Begin without terminal must round-trip through
+    // compaction so post-crash `pulumi refresh` can still see the possibly-orphan resource.
+    UUID update = update(stackId);
+    entry(
+        stackId,
+        update,
+        0,
+        1L,
+        "{\"operation\":{\"resource\":" + res("orphan") + ",\"type\":\"creating\"}}");
+
+    JsonNode before = normalized(assembler.assemble(stackId).deployment());
+    assertEquals(1, before.required("pending_operations").size());
+
+    QuarkusTransaction.requiringNew().run(() -> enqueuer.enqueue(stackId));
+    assertEquals(1, worker.drainOnce());
+
+    QuarkusTransaction.requiringNew()
+        .run(
+            () -> {
+              Snapshot snapshot = Snapshot.find("stackId", stackId).<Snapshot>singleResult();
+              JsonNode basePending = snapshot.checkpoint.required("pending_operations");
+              assertEquals(1, basePending.size());
+              assertEquals("creating", basePending.get(0).required("type").asText());
+              assertEquals(
+                  urn("orphan"), basePending.get(0).required("resource").required("urn").asText());
+            });
+
+    JsonNode after = normalized(assembler.assemble(stackId).deployment());
+    assertEquals(before, after);
+  }
+
+  @Test
   void compactionPrunesStackTraceFromSnapshot() throws Exception {
     UUID update = update(stackId);
     entry(

@@ -21,6 +21,8 @@ import java.util.UUID;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 
 @QuarkusTest
 class StackAssemblerTest {
@@ -139,6 +141,100 @@ class StackAssemblerTest {
 
     assertEquals(1, pending.size());
     assertEquals(urn("b"), pending.get(0).required("resource").required("urn").asText());
+  }
+
+  @Test
+  void failedCreateLeavesNoResourceAndNoPendingOp() throws Exception {
+    UUID update = update();
+    entry(
+        update,
+        0,
+        1L,
+        "{\"operation\":{\"resource\":" + res("orphan") + ",\"type\":\"creating\"}}");
+    entry(update, 2, 1L, "{}");
+
+    JsonNode deployment = assembler.assemble(stackId).deployment();
+
+    assertEquals(0, deployment.required("resources").size());
+    assertFalse(deployment.has("pending_operations"));
+  }
+
+  @ParameterizedTest
+  @ValueSource(strings = {"updating", "reading", "deleting"})
+  void failedTerminalIgnoresPromotedFieldsAndClearsPendingOp(String opType) throws Exception {
+    // A Failure only clears the in-flight operation; it must not apply the index fields that
+    // Success/RefreshSuccess honor. Applying them would mutate or drop resources that may still
+    // exist in the cloud. Seed both a base resource and a Success-created new resource so the
+    // Failure targets both halves of the reducer's index space.
+    UUID update = update();
+    write(update, "[" + res("base") + "]");
+    success(update, 10L, res("new"));
+    entry(
+        update,
+        0,
+        11L,
+        "{\"operation\":{\"resource\":" + res("base") + ",\"type\":\"" + opType + "\"}}");
+    failureWithAllPromoted(update, 11L, 0L, 10L, 0L, 10L, 0L, 10L);
+
+    JsonNode deployment = assembler.assemble(stackId).deployment();
+    JsonNode resources = deployment.required("resources");
+
+    assertEquals(2, resources.size());
+    for (JsonNode r : resources) {
+      assertFalse(r.has("delete"));
+      assertFalse(r.has("pendingReplacement"));
+    }
+    assertEquals(urn("base"), find(resources, "base").required("urn").asText());
+    assertEquals(urn("new"), find(resources, "new").required("urn").asText());
+    assertFalse(deployment.has("pending_operations"));
+  }
+
+  @ParameterizedTest
+  @ValueSource(strings = {"creating", "updating", "deleting", "reading", "importing"})
+  void allBeginOpTypesSurfaceAsPendingOperations(String opType) throws Exception {
+    UUID update = update();
+    entry(
+        update,
+        0,
+        1L,
+        "{\"operation\":{\"resource\":" + res("r") + ",\"type\":\"" + opType + "\"}}");
+
+    JsonNode pending = assembler.assemble(stackId).deployment().required("pending_operations");
+
+    assertEquals(1, pending.size());
+    assertEquals(opType, pending.get(0).required("type").asText());
+    assertEquals(urn("r"), pending.get(0).required("resource").required("urn").asText());
+  }
+
+  @Test
+  void refreshSuccessClearsPendingOperation() throws Exception {
+    UUID update = update();
+    entry(update, 0, 1L, "{\"operation\":{\"resource\":" + res("r") + ",\"type\":\"reading\"}}");
+    entry(update, 3, 1L, "{}");
+
+    JsonNode deployment = assembler.assemble(stackId).deployment();
+
+    assertFalse(deployment.has("pending_operations"));
+  }
+
+  @ParameterizedTest
+  @ValueSource(strings = {"updating", "reading", "deleting", "importing"})
+  void nonCreatingBasePendingOperationsAreDropped(String opType) throws Exception {
+    UUID update = update();
+    entry(
+        update,
+        5,
+        0L,
+        "{\"newSnapshot\":{\"resources\":[],\"pending_operations\":["
+            + "{\"type\":\""
+            + opType
+            + "\",\"resource\":"
+            + res("x")
+            + "}]}}");
+
+    JsonNode deployment = assembler.assemble(stackId).deployment();
+
+    assertFalse(deployment.has("pending_operations"));
   }
 
   @Test
@@ -307,6 +403,48 @@ class StackAssemblerTest {
 
   private void entry(UUID updateId, int kind, Long operationId, String payload) throws Exception {
     entry(updateId, kind, operationId, null, null, payload);
+  }
+
+  /**
+   * Inserts a Failure (kind=2) entry carrying every promoted index field at once. Used to prove
+   * that the reducer's case 2 ignores them all; a regression that starts honoring any single field
+   * would flip an assertion in the calling test.
+   */
+  private void failureWithAllPromoted(
+      UUID updateId,
+      long operationId,
+      Long removeOld,
+      Long removeNew,
+      Long deleteOld,
+      Long deleteNew,
+      Long pendingReplacementOld,
+      Long pendingReplacementNew)
+      throws Exception {
+    long seq = ++sequence;
+    JsonNode parsed = MAPPER.readTree("{}");
+    QuarkusTransaction.requiringNew()
+        .run(
+            () ->
+                em.createNativeQuery(
+                        "INSERT INTO journal_entries "
+                            + "(id, stack_id, update_id, sequence_id, wire_sequence_id, kind, "
+                            + " operation_id, remove_old, remove_new, delete_old, delete_new, "
+                            + " pending_replacement_old, pending_replacement_new, payload) "
+                            + "VALUES (?1, ?2, ?3, ?4, ?4, 2, ?5, ?6, ?7, ?8, ?9, ?10, ?11, "
+                            + " CAST(?12 AS jsonb))")
+                    .setParameter(1, UUID.randomUUID())
+                    .setParameter(2, stackId)
+                    .setParameter(3, updateId)
+                    .setParameter(4, seq)
+                    .setParameter(5, operationId)
+                    .setParameter(6, removeOld)
+                    .setParameter(7, removeNew)
+                    .setParameter(8, deleteOld)
+                    .setParameter(9, deleteNew)
+                    .setParameter(10, pendingReplacementOld)
+                    .setParameter(11, pendingReplacementNew)
+                    .setParameter(12, parsed.toString())
+                    .executeUpdate());
   }
 
   private void entry(
