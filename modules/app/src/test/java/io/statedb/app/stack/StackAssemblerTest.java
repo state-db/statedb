@@ -438,6 +438,69 @@ class StackAssemblerTest {
     assertEquals(urn("b"), resources.get(1).required("dependencies").get(0).asText());
   }
 
+  // Pulumi's vexing deployment merge keeps both versions of a replaced URN: the live replacement
+  // appears in the current-plan DAG, while the old base resource is preserved as delete=true after
+  // untouched base-only dependencies that it still references.
+  @Test
+  void vexingReplacementMergePreservesTopologicalOrderAndDeletionState() throws Exception {
+    UUID update = update();
+    write(
+        update,
+        "["
+            + res("a")
+            + ","
+            + resource("b", "\"dependencies\":[\"" + urn("a") + "\"]")
+            + ","
+            + resource("c", "\"dependencies\":[\"" + urn("a") + "\",\"" + urn("b") + "\"]")
+            + ","
+            + resource("d", "\"dependencies\":[\"" + urn("c") + "\"]")
+            + ","
+            + resource("e", "\"dependencies\":[\"" + urn("c") + "\"]")
+            + "]");
+
+    // SameStep for b removes its dependency on a.
+    entry(update, JournalKind.BEGIN, 1L, "{}");
+    successReplaceOld(update, 1L, 1L, res("b"));
+
+    // CreateReplacement for c creates the new c and marks old c as pending deletion.
+    begin(update, 2L, "creating", resource("c", "\"dependencies\":[\"" + urn("b") + "\"]"));
+    entry(
+        update,
+        JournalKind.SUCCESS,
+        2L,
+        "delete_old",
+        2L,
+        "{\"state\":" + resource("c", "\"dependencies\":[\"" + urn("b") + "\"]") + "}");
+
+    // Replace itself produces no journal row; the old c remains until a later delete step.
+
+    // Update d points at the replacement c in the current-plan DAG.
+    begin(update, 3L, "updating", resource("d", "\"dependencies\":[\"" + urn("c") + "\"]"));
+    successReplaceOld(update, 3L, 3L, resource("d", "\"dependencies\":[\"" + urn("c") + "\"]"));
+
+    JsonNode deployment = assembler.assemble(stackId).deployment();
+    JsonNode resources = deployment.required("resources");
+
+    assertEquals(6, resources.size());
+    assertEquals(urn("b"), resources.get(0).required("urn").asText());
+    assertEquals(urn("c"), resources.get(1).required("urn").asText());
+    assertEquals(urn("d"), resources.get(2).required("urn").asText());
+    assertEquals(urn("a"), resources.get(3).required("urn").asText());
+    assertEquals(urn("c"), resources.get(4).required("urn").asText());
+    assertEquals(urn("e"), resources.get(5).required("urn").asText());
+
+    assertFalse(resources.get(0).has("dependencies"));
+    assertEquals(urn("b"), resources.get(1).required("dependencies").get(0).asText());
+    assertEquals(urn("c"), resources.get(2).required("dependencies").get(0).asText());
+    assertFalse(resources.get(3).has("dependencies"));
+    assertTrue(resources.get(4).required("delete").asBoolean());
+    assertEquals(urn("a"), resources.get(4).required("dependencies").get(0).asText());
+    assertEquals(urn("b"), resources.get(4).required("dependencies").get(1).asText());
+    assertEquals(urn("c"), resources.get(5).required("dependencies").get(0).asText());
+    assertFalse(deployment.has("pending_operations"));
+    assertReferencesPointToPriorResources(resources);
+  }
+
   // Non-dependency same changes should be carried by the replacement state, not lost because the
   // engine called the step "same".
   @Test
@@ -698,6 +761,41 @@ class StackAssemblerTest {
       if (urn.equals(resource.required("urn").asText())) count++;
     }
     return count;
+  }
+
+  private void assertReferencesPointToPriorResources(JsonNode resources) {
+    java.util.Set<String> seen = new java.util.HashSet<>();
+    for (JsonNode resource : resources) {
+      String urn = resource.required("urn").asText();
+      assertUrnArrayReferencesSeen(resource, "dependencies", seen);
+      assertUrnArrayReferencesSeen(resource, "replaceWith", seen);
+
+      String parent = resource.path("parent").asText("");
+      if (!parent.isEmpty()) assertTrue(seen.contains(parent), "parent not seen before " + urn);
+
+      String provider = resource.path("provider").asText("");
+      if (!provider.isEmpty()) {
+        int sep = provider.lastIndexOf("::");
+        String providerUrn = sep < 0 ? provider : provider.substring(0, sep);
+        assertTrue(seen.contains(providerUrn), "provider not seen before " + urn);
+      }
+
+      seen.add(urn);
+    }
+  }
+
+  private void assertUrnArrayReferencesSeen(
+      JsonNode resource, String field, java.util.Set<String> seen) {
+    JsonNode values = resource.get(field);
+    if (values == null || !values.isArray()) return;
+    for (JsonNode value : values) {
+      String urn = value.asText("");
+      if (!urn.isEmpty()) {
+        assertTrue(
+            seen.contains(urn),
+            field + " reference not seen before " + resource.required("urn").asText() + ": " + urn);
+      }
+    }
   }
 
   private String res(String name) {
