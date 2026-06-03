@@ -30,6 +30,24 @@ class StackAssemblerTest {
   private static final ObjectMapper MAPPER = new ObjectMapper();
   private static final String ORG_NAME = "assembler-org";
 
+  private enum JournalKind {
+    BEGIN(0),
+    SUCCESS(1),
+    FAILURE(2),
+    REFRESH_SUCCESS(3),
+    OUTPUTS(4),
+    WRITE(5),
+    SECRETS_MANAGER(6),
+    REBUILT_BASE_STATE(7),
+    UNKNOWN(99);
+
+    private final int wireValue;
+
+    JournalKind(int wireValue) {
+      this.wireValue = wireValue;
+    }
+  }
+
   @Inject StackAssembler assembler;
   @Inject StackCreator stackCreator;
   @Inject EntityManager em;
@@ -77,8 +95,8 @@ class StackAssemblerTest {
   @Test
   void successAppendsState() throws Exception {
     UUID update = update();
-    entry(update, 0, 1L, "{\"operation\":{\"resource\":" + res("a") + ",\"type\":\"creating\"}}");
-    entry(update, 1, 1L, "{\"state\":" + res("a") + "}");
+    begin(update, 1L, "creating", res("a"));
+    entry(update, JournalKind.SUCCESS, 1L, "{\"state\":" + res("a") + "}");
 
     JsonNode resources = assembler.assemble(stackId).deployment().required("resources");
 
@@ -90,7 +108,7 @@ class StackAssemblerTest {
   void successRemoveOldDropsBaseAtIndex() throws Exception {
     UUID update = update();
     write(update, "[" + res("a") + "," + res("b") + "]");
-    entry(update, 1, 1L, "remove_old", 1L, "{}");
+    entry(update, JournalKind.SUCCESS, 1L, "remove_old", 1L, "{}");
 
     JsonNode resources = assembler.assemble(stackId).deployment().required("resources");
 
@@ -103,7 +121,7 @@ class StackAssemblerTest {
     UUID update = update();
     success(update, 1L, res("a"));
     success(update, 2L, res("b"));
-    entry(update, 1, 3L, "remove_new", 2L, "{}");
+    entry(update, JournalKind.SUCCESS, 3L, "remove_new", 2L, "{}");
 
     JsonNode resources = assembler.assemble(stackId).deployment().required("resources");
 
@@ -117,10 +135,10 @@ class StackAssemblerTest {
     write(update, "[" + res("base-delete") + "," + res("base-pending") + "]");
     success(update, 1L, res("new-delete"));
     success(update, 2L, res("new-pending"));
-    entry(update, 1, 3L, "delete_old", 0L, "{}");
-    entry(update, 1, 4L, "pending_replacement_old", 1L, "{}");
-    entry(update, 1, 5L, "delete_new", 1L, "{}");
-    entry(update, 1, 6L, "pending_replacement_new", 2L, "{}");
+    entry(update, JournalKind.SUCCESS, 3L, "delete_old", 0L, "{}");
+    entry(update, JournalKind.SUCCESS, 4L, "pending_replacement_old", 1L, "{}");
+    entry(update, JournalKind.SUCCESS, 5L, "delete_new", 1L, "{}");
+    entry(update, JournalKind.SUCCESS, 6L, "pending_replacement_new", 2L, "{}");
 
     JsonNode resources = assembler.assemble(stackId).deployment().required("resources");
 
@@ -133,9 +151,9 @@ class StackAssemblerTest {
   @Test
   void failureClearsOnlyMatchingPendingOp() throws Exception {
     UUID update = update();
-    entry(update, 0, 1L, "{\"operation\":{\"resource\":" + res("a") + ",\"type\":\"creating\"}}");
-    entry(update, 0, 2L, "{\"operation\":{\"resource\":" + res("b") + ",\"type\":\"creating\"}}");
-    entry(update, 2, 1L, "{}");
+    begin(update, 1L, "creating", res("a"));
+    begin(update, 2L, "creating", res("b"));
+    entry(update, JournalKind.FAILURE, 1L, "{}");
 
     JsonNode pending = assembler.assemble(stackId).deployment().required("pending_operations");
 
@@ -146,12 +164,8 @@ class StackAssemblerTest {
   @Test
   void failedCreateLeavesNoResourceAndNoPendingOp() throws Exception {
     UUID update = update();
-    entry(
-        update,
-        0,
-        1L,
-        "{\"operation\":{\"resource\":" + res("orphan") + ",\"type\":\"creating\"}}");
-    entry(update, 2, 1L, "{}");
+    begin(update, 1L, "creating", res("orphan"));
+    entry(update, JournalKind.FAILURE, 1L, "{}");
 
     JsonNode deployment = assembler.assemble(stackId).deployment();
 
@@ -169,11 +183,7 @@ class StackAssemblerTest {
     UUID update = update();
     write(update, "[" + res("base") + "]");
     success(update, 10L, res("new"));
-    entry(
-        update,
-        0,
-        11L,
-        "{\"operation\":{\"resource\":" + res("base") + ",\"type\":\"" + opType + "\"}}");
+    begin(update, 11L, opType, res("base"));
     failureWithAllPromoted(update, 11L, 0L, 10L, 0L, 10L, 0L, 10L);
 
     JsonNode deployment = assembler.assemble(stackId).deployment();
@@ -193,11 +203,7 @@ class StackAssemblerTest {
   @ValueSource(strings = {"creating", "updating", "deleting", "reading", "importing"})
   void allBeginOpTypesSurfaceAsPendingOperations(String opType) throws Exception {
     UUID update = update();
-    entry(
-        update,
-        0,
-        1L,
-        "{\"operation\":{\"resource\":" + res("r") + ",\"type\":\"" + opType + "\"}}");
+    begin(update, 1L, opType, res("r"));
 
     JsonNode pending = assembler.assemble(stackId).deployment().required("pending_operations");
 
@@ -209,8 +215,8 @@ class StackAssemblerTest {
   @Test
   void refreshSuccessClearsPendingOperation() throws Exception {
     UUID update = update();
-    entry(update, 0, 1L, "{\"operation\":{\"resource\":" + res("r") + ",\"type\":\"reading\"}}");
-    entry(update, 3, 1L, "{}");
+    begin(update, 1L, "reading", res("r"));
+    entry(update, JournalKind.REFRESH_SUCCESS, 1L, "{}");
 
     JsonNode deployment = assembler.assemble(stackId).deployment();
 
@@ -223,7 +229,7 @@ class StackAssemblerTest {
     UUID update = update();
     entry(
         update,
-        5,
+        JournalKind.WRITE,
         0L,
         "{\"newSnapshot\":{\"resources\":[],\"pending_operations\":["
             + "{\"type\":\""
@@ -249,7 +255,7 @@ class StackAssemblerTest {
                 "child",
                 "\"parent\":\"" + urn("parent") + "\",\"dependencies\":[\"" + urn("parent") + "\"]")
             + "]");
-    entry(update, 3, 1L, "remove_old", 0L, "{}");
+    entry(update, JournalKind.REFRESH_SUCCESS, 1L, "remove_old", 0L, "{}");
 
     JsonNode child = find(assembler.assemble(stackId).deployment().required("resources"), "child");
 
@@ -267,7 +273,7 @@ class StackAssemblerTest {
             + ","
             + resource("dependent", "\"replaceWith\":[\"" + urn("target") + "\"]")
             + "]");
-    entry(update, 3, 1L, "remove_old", 0L, "{}");
+    entry(update, JournalKind.REFRESH_SUCCESS, 1L, "remove_old", 0L, "{}");
 
     JsonNode dependent =
         find(assembler.assemble(stackId).deployment().required("resources"), "dependent");
@@ -281,7 +287,7 @@ class StackAssemblerTest {
     success(update, 1L, resource("stack", "\"type\":\"pulumi:pulumi:Stack\""));
     entry(
         update,
-        4,
+        JournalKind.OUTPUTS,
         1L,
         "remove_new",
         1L,
@@ -298,7 +304,11 @@ class StackAssemblerTest {
   @Test
   void secretsManagerSetsProviderAndElidesNoOp() throws Exception {
     UUID update = update();
-    entry(update, 6, 0L, "{\"secretsProvider\":{\"type\":\"service\",\"state\":{\"url\":\"u\"}}}");
+    entry(
+        update,
+        JournalKind.SECRETS_MANAGER,
+        0L,
+        "{\"secretsProvider\":{\"type\":\"service\",\"state\":{\"url\":\"u\"}}}");
     // Second entry has matching type+state but adds an extraneous field. The
     // elide branch (sameSecretsProvider) compares only type+state, so a working
     // elision keeps the first provider node verbatim and the extra field never
@@ -306,7 +316,7 @@ class StackAssemblerTest {
     // wholesale-replaces secrets_providers and `extra` would leak through.
     entry(
         update,
-        6,
+        JournalKind.SECRETS_MANAGER,
         0L,
         "{\"secretsProvider\":{\"type\":\"service\",\"state\":{\"url\":\"u\"},\"extra\":\"x\"}}");
 
@@ -320,7 +330,7 @@ class StackAssemblerTest {
   void rebuiltBaseStatePromotesNewToBase() throws Exception {
     UUID update = update();
     success(update, 1L, res("a"));
-    entry(update, 7, 0L, "{}");
+    entry(update, JournalKind.REBUILT_BASE_STATE, 0L, "{}");
     success(update, 2L, res("b"));
 
     JsonNode resources = assembler.assemble(stackId).deployment().required("resources");
@@ -362,17 +372,179 @@ class StackAssemblerTest {
     assertFalse(find(resources, "a").has("aliases"));
   }
 
+  // A same-step success can carry updated checkpoint metadata; remove_old must make that state
+  // replace the base row instead of appending a duplicate resource with the same URN.
+  @Test
+  void sameSuccessReplacesBaseResourceMetadataWithoutDuplicatingResource() throws Exception {
+    UUID update = update();
+    write(update, "[" + resource("a", "\"sourcePosition\":\"project:///old.ts#1,1\"") + "]");
+
+    // Pulumi SameStep is represented here as Begin followed by Success(remove_old).
+    entry(update, JournalKind.BEGIN, 1L, "{}");
+    successReplaceOld(
+        update, 1L, 0L, resource("a", "\"sourcePosition\":\"project:///new.ts#2,1\""));
+
+    JsonNode resources = assembler.assemble(stackId).deployment().required("resources");
+
+    assertEquals(1, resources.size());
+    assertEquals(1, countUrn(resources, urn("a")));
+    assertEquals(urn("a"), resources.get(0).required("urn").asText());
+    assertEquals("project:///new.ts#2,1", resources.get(0).required("sourcePosition").asText());
+  }
+
+  // Even if a run only has elidable same-step writes, replay must still produce a normal final
+  // deployment with no leftover pending operations or duplicate base/new resources.
+  @Test
+  void onlyElidedSameEntriesStillProduceValidFinalExport() throws Exception {
+    UUID update = update();
+    write(update, "[" + res("a") + "," + res("b") + "]");
+
+    entry(update, JournalKind.BEGIN, 1L, "{}");
+    successReplaceOld(update, 1L, 0L, res("a"));
+    entry(update, JournalKind.BEGIN, 2L, "{}");
+    successReplaceOld(update, 2L, 1L, res("b"));
+
+    JsonNode deployment = assembler.assemble(stackId).deployment();
+    JsonNode resources = deployment.required("resources");
+
+    assertEquals(2, resources.size());
+    assertFalse(deployment.has("pending_operations"));
+    assertEquals(1, countUrn(resources, urn("a")));
+    assertEquals(1, countUrn(resources, urn("b")));
+    assertEquals("v3.242.0", deployment.required("manifest").required("version").asText());
+  }
+
+  // Dependency-only same changes are real checkpoint changes: each success replaces its old base
+  // index, and the merged export must preserve Pulumi's final topological order.
+  @Test
+  void sameDependencyChangesReplaceBaseAndPreserveFinalOrder() throws Exception {
+    UUID update = update();
+    write(
+        update,
+        "[" + res("a") + "," + resource("b", "\"dependencies\":[\"" + urn("a") + "\"]") + "]");
+
+    // Each SameStep is represented as Begin followed by Success(remove_old).
+    entry(update, JournalKind.BEGIN, 2L, "{}");
+    successReplaceOld(update, 2L, 1L, res("b"));
+    entry(update, JournalKind.BEGIN, 1L, "{}");
+    successReplaceOld(update, 1L, 0L, resource("a", "\"dependencies\":[\"" + urn("b") + "\"]"));
+
+    JsonNode resources = assembler.assemble(stackId).deployment().required("resources");
+
+    assertEquals(2, resources.size());
+    assertEquals(urn("b"), resources.get(0).required("urn").asText());
+    assertFalse(resources.get(0).has("dependencies"));
+    assertEquals(urn("a"), resources.get(1).required("urn").asText());
+    assertEquals(urn("b"), resources.get(1).required("dependencies").get(0).asText());
+  }
+
+  // Non-dependency same changes should be carried by the replacement state, not lost because the
+  // engine called the step "same".
+  @Test
+  void meaningfulSameChangesReplaceBaseResource() throws Exception {
+    UUID update = update();
+    String provider1 = "urn:pulumi:dev::proj::pulumi:providers:pkg::provider::id1";
+    String provider2 = "urn:pulumi:dev::proj::pulumi:providers:pkg::provider2::id2";
+    write(
+        update,
+        "["
+            + resourceWithUrn(
+                urn("provider"), "pulumi:providers:pkg", "\"custom\":true,\"id\":\"id1\"")
+            + ","
+            + resourceWithUrn(urn("parent"), "pkg:index:Parent", "\"custom\":true")
+            + ","
+            + resource("a", "\"provider\":\"" + provider1 + "\"")
+            + "]");
+
+    entry(update, JournalKind.BEGIN, 1L, "{}");
+    successReplaceOld(
+        update,
+        1L,
+        2L,
+        resourceWithUrn(
+            urn("a"),
+            "pkg:index:a",
+            "\"custom\":false,\"provider\":\""
+                + provider2
+                + "\",\"parent\":\""
+                + urn("parent")
+                + "\",\"protect\":true,\"outputs\":{\"name\":\"changed\"}"));
+
+    JsonNode resources = assembler.assemble(stackId).deployment().required("resources");
+    JsonNode a = find(resources, "a");
+
+    assertEquals(3, resources.size());
+    assertFalse(a.required("custom").asBoolean());
+    assertEquals(provider2, a.required("provider").asText());
+    assertEquals(urn("parent"), a.required("parent").asText());
+    assertTrue(a.required("protect").asBoolean());
+    assertEquals("changed", a.required("outputs").required("name").asText());
+  }
+
+  // A same-step alias/URN change must flow through the normal Pulumi reference-normalization path
+  // so dependents point at the canonical URN and transient aliases do not leak into export.
+  @Test
+  void sameAliasChangesRewriteUrnReferences() throws Exception {
+    UUID update = update();
+    String oldUrn = urn("old-a");
+    String newUrn = urn("a");
+    write(
+        update,
+        "["
+            + resourceWithUrn(oldUrn, "pkg:index:a", "\"custom\":true")
+            + ","
+            + resource("dependent", "\"dependencies\":[\"" + oldUrn + "\"]")
+            + "]");
+
+    entry(update, JournalKind.BEGIN, 1L, "{}");
+    successReplaceOld(
+        update,
+        1L,
+        0L,
+        resourceWithUrn(newUrn, "pkg:index:a", "\"custom\":true,\"aliases\":[\"" + oldUrn + "\"]"));
+
+    JsonNode resources = assembler.assemble(stackId).deployment().required("resources");
+    JsonNode a = find(resources, "a");
+    JsonNode dependent = find(resources, "dependent");
+
+    assertEquals(2, resources.size());
+    assertEquals(newUrn, a.required("urn").asText());
+    assertFalse(a.has("aliases"));
+    assertEquals(newUrn, dependent.required("dependencies").get(0).asText());
+  }
+
+  // Source-position-only edits should not force an intermediate replacement; the metadata changes
+  // only when Pulumi's close flush writes the final snapshot.
+  @Test
+  void sourcePositionOnlySameDoesNotReplaceBaseUntilCloseFlush() throws Exception {
+    UUID update = update();
+    write(update, "[" + resource("a", "\"sourcePosition\":\"project:///old.ts#1,1\"") + "]");
+
+    JsonNode beforeFlush = assembler.assemble(stackId).deployment().required("resources");
+    assertEquals(1, beforeFlush.size());
+    assertEquals(
+        "project:///old.ts#1,1", find(beforeFlush, "a").required("sourcePosition").asText());
+
+    write(update, "[" + resource("a", "\"sourcePosition\":\"project:///new.ts#1,1\"") + "]");
+
+    JsonNode afterFlush = assembler.assemble(stackId).deployment().required("resources");
+    assertEquals(1, afterFlush.size());
+    assertEquals(1, countUrn(afterFlush, urn("a")));
+    assertEquals(
+        "project:///new.ts#1,1", find(afterFlush, "a").required("sourcePosition").asText());
+  }
+
   @Test
   void unknownKindThrowsWithContext() throws Exception {
     UUID update = update();
-    entry(update, 99, 0L, "{}");
+    entry(update, JournalKind.UNKNOWN, 0L, "{}");
 
     IllegalStateException e =
         assertThrows(IllegalStateException.class, () -> assembler.assemble(stackId));
 
     assertTrue(e.getMessage().contains("stack=" + stackId));
     assertTrue(e.getMessage().contains("update=" + update));
-    assertTrue(e.getMessage().contains("kind=99"));
+    assertTrue(e.getMessage().contains("kind=" + JournalKind.UNKNOWN.wireValue));
   }
 
   private UUID update() {
@@ -393,21 +565,42 @@ class StackAssemblerTest {
     return updateId;
   }
 
+  private void begin(UUID updateId, long operationId, String operationType, String resource)
+      throws Exception {
+    entry(
+        updateId,
+        JournalKind.BEGIN,
+        operationId,
+        "{\"operation\":{\"resource\":" + resource + ",\"type\":\"" + operationType + "\"}}");
+  }
+
   private void success(UUID updateId, long operationId, String resource) throws Exception {
-    entry(updateId, 1, operationId, "{\"state\":" + resource + "}");
+    entry(updateId, JournalKind.SUCCESS, operationId, "{\"state\":" + resource + "}");
+  }
+
+  private void successReplaceOld(UUID updateId, long operationId, long removeOld, String resource)
+      throws Exception {
+    entry(
+        updateId,
+        JournalKind.SUCCESS,
+        operationId,
+        "remove_old",
+        removeOld,
+        "{\"state\":" + resource + "}");
   }
 
   private void write(UUID updateId, String resources) throws Exception {
-    entry(updateId, 5, 0L, "{\"newSnapshot\":{\"resources\":" + resources + "}}");
+    entry(updateId, JournalKind.WRITE, 0L, "{\"newSnapshot\":{\"resources\":" + resources + "}}");
   }
 
-  private void entry(UUID updateId, int kind, Long operationId, String payload) throws Exception {
-    entry(updateId, kind, operationId, null, null, payload);
+  private void entry(UUID updateId, JournalKind kind, long operationId, String payload)
+      throws Exception {
+    entry(updateId, kind, operationId, null, (Long) null, payload);
   }
 
   /**
-   * Inserts a Failure (kind=2) entry carrying every promoted index field at once. Used to prove
-   * that the reducer's case 2 ignores them all; a regression that starts honoring any single field
+   * Inserts a Failure entry carrying every promoted index field at once. Used to prove that the
+   * reducer's Failure branch ignores them all; a regression that starts honoring any single field
    * would flip an assertion in the calling test.
    */
   private void failureWithAllPromoted(
@@ -430,7 +623,9 @@ class StackAssemblerTest {
                             + "(id, stack_id, update_id, sequence_id, wire_sequence_id, kind, "
                             + " operation_id, remove_old, remove_new, delete_old, delete_new, "
                             + " pending_replacement_old, pending_replacement_new, payload) "
-                            + "VALUES (?1, ?2, ?3, ?4, ?4, 2, ?5, ?6, ?7, ?8, ?9, ?10, ?11, "
+                            + "VALUES (?1, ?2, ?3, ?4, ?4, "
+                            + JournalKind.FAILURE.wireValue
+                            + ", ?5, ?6, ?7, ?8, ?9, ?10, ?11, "
                             + " CAST(?12 AS jsonb))")
                     .setParameter(1, UUID.randomUUID())
                     .setParameter(2, stackId)
@@ -448,7 +643,12 @@ class StackAssemblerTest {
   }
 
   private void entry(
-      UUID updateId, int kind, Long operationId, String promoted, Long value, String payload)
+      UUID updateId,
+      JournalKind kind,
+      long operationId,
+      String promoted,
+      Long value,
+      String payload)
       throws Exception {
     long seq = ++sequence;
     JsonNode parsed = MAPPER.readTree(payload);
@@ -468,7 +668,7 @@ class StackAssemblerTest {
                       .setParameter(2, stackId)
                       .setParameter(3, updateId)
                       .setParameter(4, seq)
-                      .setParameter(5, kind)
+                      .setParameter(5, kind.wireValue)
                       .setParameter(6, operationId)
                       .setParameter(7, parsed.toString());
               if (promoted != null) q.setParameter(8, value);
@@ -492,6 +692,14 @@ class StackAssemblerTest {
     throw new AssertionError("resource not found: " + urn);
   }
 
+  private int countUrn(JsonNode resources, String urn) {
+    int count = 0;
+    for (JsonNode resource : resources) {
+      if (urn.equals(resource.required("urn").asText())) count++;
+    }
+    return count;
+  }
+
   private String res(String name) {
     return resource(name, "");
   }
@@ -499,6 +707,12 @@ class StackAssemblerTest {
   private String resource(String name, String extra) {
     String fields =
         "\"urn\":\"" + urn(name) + "\",\"type\":\"pkg:index:" + name + "\",\"custom\":true";
+    if (!extra.isBlank()) fields += "," + extra;
+    return "{" + fields + "}";
+  }
+
+  private String resourceWithUrn(String urn, String type, String extra) {
+    String fields = "\"urn\":\"" + urn + "\",\"type\":\"" + type + "\"";
     if (!extra.isBlank()) fields += "," + extra;
     return "{" + fields + "}";
   }
