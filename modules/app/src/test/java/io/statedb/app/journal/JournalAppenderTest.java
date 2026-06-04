@@ -40,6 +40,9 @@ import java.util.concurrent.TimeUnit;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
+import org.junit.jupiter.params.provider.ValueSource;
 
 @QuarkusTest
 class JournalAppenderTest {
@@ -385,8 +388,9 @@ class JournalAppenderTest {
         () -> appender.append(stackId, updateId, leaseId, List.of(entry(0, 0, 1L, "{}"))));
   }
 
-  @Test
-  void beginPersistsPendingOpsAndSuccessPrunes() {
+  @ParameterizedTest
+  @ValueSource(strings = {"creating", "updating", "deleting", "reading", "importing"})
+  void beginPersistsAllPendingOperationTypes(String opType) {
     appender.append(
         stackId,
         updateId,
@@ -396,7 +400,9 @@ class JournalAppenderTest {
                 1,
                 0,
                 42L,
-                "{\"operation\":{\"resource\":{\"urn\":\"urn:r\",\"type\":\"aws:s3:Bucket\"},\"type\":\"updating\"}}")));
+                "{\"operation\":{\"resource\":{\"urn\":\"urn:r\",\"type\":\"aws:s3:Bucket\"},\"type\":\""
+                    + opType
+                    + "\"}}")));
 
     QuarkusTransaction.requiringNew()
         .run(
@@ -412,12 +418,39 @@ class JournalAppenderTest {
                           .getSingleResult();
               assertEquals("urn:r", row[0]);
               assertEquals("aws:s3:Bucket", row[1]);
-              assertEquals("updating", row[2]);
+              assertEquals(opType, row[2]);
               assertEquals(1L, ((Number) row[3]).longValue());
+
+              long count =
+                  ((Number)
+                          em.createNativeQuery(
+                                  "SELECT count(*) FROM pending_operations WHERE update_id = ?1")
+                              .setParameter(1, updateId)
+                              .getSingleResult())
+                      .longValue();
+              assertEquals(1L, count);
             });
+  }
+
+  @ParameterizedTest
+  @CsvSource({"1, Success", "2, Failure", "3, RefreshSuccess"})
+  void terminalEntriesPrunePendingOpsTable(int terminalKind, String terminalLabel) {
+    appender.append(
+        stackId,
+        updateId,
+        leaseId,
+        List.of(
+            entry(
+                1,
+                0,
+                42L,
+                "{\"operation\":{\"resource\":{\"urn\":\"urn:r\",\"type\":\"aws:s3:Bucket\"},\"type\":\"creating\"}}")));
 
     appender.append(
-        stackId, updateId, leaseId, List.of(entry(2, 1, 42L, "{\"state\":{\"urn\":\"urn:r\"}}")));
+        stackId,
+        updateId,
+        leaseId,
+        List.of(entry(2, terminalKind, 42L, terminalPayload(terminalKind))));
 
     QuarkusTransaction.requiringNew()
         .run(
@@ -785,6 +818,11 @@ class JournalAppenderTest {
                       .longValue();
               assertEquals(4L, seq);
             });
+  }
+
+  private static String terminalPayload(int terminalKind) {
+    // Payload shape does not matter here: table pruning only needs kind + operationID.
+    return terminalKind == 1 ? "{\"state\":{\"urn\":\"urn:r\"}}" : "{}";
   }
 
   private static JsonNode entry(long wireSeq, int kind, Long operationId, String payloadJson) {
