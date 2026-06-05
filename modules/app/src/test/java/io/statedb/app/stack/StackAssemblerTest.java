@@ -223,6 +223,75 @@ class StackAssemblerTest {
     assertFalse(deployment.has("pending_operations"));
   }
 
+  @Test
+  void refreshSuccessRemoveOldWithStateReplacesBaseAtIndex() throws Exception {
+    UUID update = update();
+    write(update, "[" + resource("a", "\"sourcePosition\":\"project:///old.ts#1,1\"") + "]");
+
+    entry(
+        update,
+        JournalKind.REFRESH_SUCCESS,
+        1L,
+        "remove_old",
+        0L,
+        "{\"state\":" + resource("a", "\"sourcePosition\":\"project:///refreshed.ts#2,1\"") + "}");
+
+    JsonNode resources = assembler.assemble(stackId).deployment().required("resources");
+
+    assertEquals(1, resources.size());
+    assertEquals(1, countUrn(resources, urn("a")));
+    assertEquals(
+        "project:///refreshed.ts#2,1", find(resources, "a").required("sourcePosition").asText());
+  }
+
+  @Test
+  void refreshSuccessRemoveOldWithoutStateDeletesBaseAtIndex() throws Exception {
+    UUID update = update();
+    write(update, "[" + res("removed") + "," + res("survivor") + "]");
+
+    entry(update, JournalKind.REFRESH_SUCCESS, 1L, "remove_old", 0L, "{}");
+
+    JsonNode resources = assembler.assemble(stackId).deployment().required("resources");
+
+    assertEquals(1, resources.size());
+    assertEquals(urn("survivor"), resources.get(0).required("urn").asText());
+  }
+
+  @Test
+  void refreshSuccessRemoveNewReplacesNewResourceByOperationId() throws Exception {
+    UUID update = update();
+    success(update, 1L, resource("a", "\"sourcePosition\":\"project:///old.ts#1,1\""));
+
+    entry(
+        update,
+        JournalKind.REFRESH_SUCCESS,
+        1L,
+        "remove_new",
+        1L,
+        "{\"state\":" + resource("a", "\"sourcePosition\":\"project:///refreshed.ts#2,1\"") + "}");
+
+    JsonNode resources = assembler.assemble(stackId).deployment().required("resources");
+
+    assertEquals(1, resources.size());
+    assertEquals(1, countUrn(resources, urn("a")));
+    assertEquals(
+        "project:///refreshed.ts#2,1", find(resources, "a").required("sourcePosition").asText());
+  }
+
+  @Test
+  void refreshSuccessRemoveNewWithoutStateRemovesNewResourceByOperationId() throws Exception {
+    UUID update = update();
+    success(update, 1L, res("removed"));
+    success(update, 2L, res("survivor"));
+
+    entry(update, JournalKind.REFRESH_SUCCESS, 1L, "remove_new", 1L, "{}");
+
+    JsonNode resources = assembler.assemble(stackId).deployment().required("resources");
+
+    assertEquals(1, resources.size());
+    assertEquals(urn("survivor"), resources.get(0).required("urn").asText());
+  }
+
   @ParameterizedTest
   @ValueSource(strings = {"updating", "reading", "deleting", "importing"})
   void nonCreatingBasePendingOperationsAreDropped(String opType) throws Exception {
@@ -244,23 +313,73 @@ class StackAssemblerTest {
   }
 
   @Test
-  void refreshSuccessReplacesRemovesAndRebuildsDependencies() throws Exception {
+  void refreshSuccessRebuildsAllDanglingReferencesTogether() throws Exception {
     UUID update = update();
     write(
         update,
         "["
             + res("parent")
             + ","
+            + res("keeper")
+            + ","
             + resource(
                 "child",
-                "\"parent\":\"" + urn("parent") + "\",\"dependencies\":[\"" + urn("parent") + "\"]")
+                "\"parent\":\""
+                    + urn("parent")
+                    + "\",\"dependencies\":[\""
+                    + urn("parent")
+                    + "\"],\"propertyDependencies\":{\"input\":[\""
+                    + urn("parent")
+                    + "\",\""
+                    + urn("keeper")
+                    + "\"]},\"replaceWith\":[\""
+                    + urn("parent")
+                    + "\"],\"deletedWith\":\""
+                    + urn("parent")
+                    + "\"")
             + "]");
     entry(update, JournalKind.REFRESH_SUCCESS, 1L, "remove_old", 0L, "{}");
 
     JsonNode child = find(assembler.assemble(stackId).deployment().required("resources"), "child");
+    JsonNode inputDeps = child.required("propertyDependencies").required("input");
 
     assertFalse(child.required("dependencies").elements().hasNext());
+    assertEquals(1, inputDeps.size());
+    assertEquals(urn("keeper"), inputDeps.get(0).asText());
+    assertEquals("", child.required("replaceWith").get(0).asText());
+    assertEquals("", child.required("deletedWith").asText());
     assertEquals("", child.required("parent").asText());
+  }
+
+  @Test
+  void refreshSuccessRebuildsPropertyDependenciesAndDeletedWith() throws Exception {
+    UUID update = update();
+    write(
+        update,
+        "["
+            + res("removed")
+            + ","
+            + res("keeper")
+            + ","
+            + resource(
+                "dependent",
+                "\"propertyDependencies\":{\"input\":[\""
+                    + urn("removed")
+                    + "\",\""
+                    + urn("keeper")
+                    + "\"]},\"deletedWith\":\""
+                    + urn("removed")
+                    + "\"")
+            + "]");
+    entry(update, JournalKind.REFRESH_SUCCESS, 1L, "remove_old", 0L, "{}");
+
+    JsonNode dependent =
+        find(assembler.assemble(stackId).deployment().required("resources"), "dependent");
+    JsonNode inputDeps = dependent.required("propertyDependencies").required("input");
+
+    assertEquals(1, inputDeps.size());
+    assertEquals(urn("keeper"), inputDeps.get(0).asText());
+    assertEquals("", dependent.required("deletedWith").asText());
   }
 
   @Test
@@ -338,6 +457,25 @@ class StackAssemblerTest {
     assertEquals(2, resources.size());
     assertEquals(urn("b"), resources.get(0).required("urn").asText());
     assertEquals(urn("a"), resources.get(1).required("urn").asText());
+  }
+
+  @Test
+  void outOfOrderRebuiltBaseStateWithLaterRemoveNewDoesNotCrashExport() throws Exception {
+    UUID update = update();
+    success(update, 1L, res("a"));
+    entry(update, JournalKind.REBUILT_BASE_STATE, 0L, "{}");
+    entry(
+        update,
+        JournalKind.REFRESH_SUCCESS,
+        2L,
+        "remove_new",
+        1L,
+        "{\"state\":" + res("a-refreshed") + "}");
+
+    JsonNode resources = assembler.assemble(stackId).deployment().required("resources");
+
+    assertEquals(1, resources.size());
+    assertEquals(urn("a"), resources.get(0).required("urn").asText());
   }
 
   @Test

@@ -27,12 +27,15 @@ import java.nio.file.Path;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.Base64;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 import java.util.stream.IntStream;
 import java.util.stream.Stream;
 import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
@@ -212,6 +215,35 @@ class RecordedJournalFixtureReplayTest {
             });
   }
 
+  @Test
+  void recordedRefreshReplayHasTerminalRebuildAndCleanExportReferences() throws Exception {
+    this.org = "replay-refresh-integrity-org";
+    String project = "p-refresh-integrity";
+    String stack = "s-refresh-integrity";
+    seedIdentityAndStack(org, project, stack);
+
+    replayCommand(org, project, stack, "03-up");
+    replayCommand(org, project, stack, "05-refresh");
+
+    List<JsonNode> refreshEntries = recordedEntries("05-refresh");
+    JsonNode last = refreshEntries.get(refreshEntries.size() - 1);
+    assertEquals(
+        7, last.required("kind").asInt(), "recorded refresh must end with RebuiltBaseState");
+    assertTrue(
+        refreshEntries.stream()
+            .anyMatch(
+                entry ->
+                    entry.path("kind").asInt() == 3
+                        && entry.path("removeOld").isNumber()
+                        && entry.hasNonNull("state")),
+        "recorded refresh should include RefreshSuccess(removeOld, state) replacement rows");
+
+    JsonNode resources =
+        assembler.assemble(stackId(org, project, stack)).deployment().required("resources");
+
+    assertNoDanglingExportReferences(resources);
+  }
+
   @ParameterizedTest(name = "split replay {0}")
   @MethodSource("commands")
   void splitAndUnsplitRecordedJournalStreamProduceSameExport(
@@ -247,6 +279,116 @@ class RecordedJournalFixtureReplayTest {
         comparableDeployment(unsplit.deployment()),
         comparableDeployment(split.deployment()),
         command + ": export mismatch");
+  }
+
+  private String replayCommand(String orgName, String project, String stack, String command)
+      throws Exception {
+    String updateId = startUpdate(orgName, project, stack);
+    String token = acquireLock(orgName, project, stack, updateId);
+    for (Path fixture : journalFixtures(command)) {
+      JsonNode exchange = MAPPER.readTree(fixture.toFile());
+      assertTrue(exchange.path("body_gzip").asBoolean(false), fixture + " is not gzipped");
+      byte[] body = Base64.getDecoder().decode(exchange.required("body_b64").asText());
+
+      given()
+          .header("Authorization", "update-token " + token)
+          .header("Content-Encoding", "gzip")
+          .contentType("application/json")
+          .body(body)
+          .when()
+          .patch(
+              "/pulumi/api/stacks/"
+                  + orgName
+                  + "/"
+                  + project
+                  + "/"
+                  + stack
+                  + "/update/"
+                  + updateId
+                  + "/journalentries")
+          .then()
+          .statusCode(200);
+    }
+    completeUpdate(orgName, project, stack, updateId, token);
+    return updateId;
+  }
+
+  private static void completeUpdate(
+      String orgName, String project, String stack, String updateId, String token) {
+    given()
+        .header("Authorization", "update-token " + token)
+        .contentType("application/json")
+        .body(Map.of("status", "succeeded"))
+        .when()
+        .post(
+            "/pulumi/api/stacks/"
+                + orgName
+                + "/"
+                + project
+                + "/"
+                + stack
+                + "/update/"
+                + updateId
+                + "/complete")
+        .then()
+        .statusCode(200);
+  }
+
+  private static void assertNoDanglingExportReferences(JsonNode resources) {
+    Set<String> seen = new HashSet<>();
+    for (JsonNode resource : resources) {
+      assertUrnArrayReferencesSeen(resource, "dependencies", seen);
+      assertUrnArrayReferencesSeen(resource, "replaceWith", seen);
+      assertPropertyDependenciesSeen(resource, seen);
+
+      String urn = resource.required("urn").asText();
+      String parent = resource.path("parent").asText("");
+      if (!parent.isEmpty()) assertTrue(seen.contains(parent), "parent not seen before " + urn);
+      String deletedWith = resource.path("deletedWith").asText("");
+      if (!deletedWith.isEmpty()) {
+        assertTrue(seen.contains(deletedWith), "deletedWith not seen before " + urn);
+      }
+      seen.add(urn);
+    }
+  }
+
+  private static void assertUrnArrayReferencesSeen(
+      JsonNode resource, String field, Set<String> seen) {
+    JsonNode values = resource.get(field);
+    if (values == null || !values.isArray()) return;
+    for (JsonNode value : values) {
+      String urn = value.asText("");
+      if (!urn.isEmpty()) {
+        assertTrue(
+            seen.contains(urn),
+            field + " reference not seen before " + resource.required("urn").asText() + ": " + urn);
+      }
+    }
+  }
+
+  private static void assertPropertyDependenciesSeen(JsonNode resource, Set<String> seen) {
+    JsonNode propertyDependencies = resource.get("propertyDependencies");
+    if (propertyDependencies == null || !propertyDependencies.isObject()) return;
+    propertyDependencies
+        .fields()
+        .forEachRemaining(
+            entry -> {
+              JsonNode values = entry.getValue();
+              if (values == null || !values.isArray()) return;
+              for (JsonNode value : values) {
+                String urn = value.asText("");
+                if (!urn.isEmpty()) {
+                  assertTrue(
+                      seen.contains(urn),
+                      "propertyDependencies."
+                          + entry.getKey()
+                          + " reference not seen before "
+                          + resource.required("urn").asText()
+                          + ": "
+                          + urn);
+                }
+              }
+            });
   }
 
   private void seedIdentityAndStack(String orgName, String project, String stack) {
