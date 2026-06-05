@@ -9,6 +9,7 @@ import static org.hamcrest.Matchers.hasKey;
 import static org.hamcrest.Matchers.not;
 import static org.hamcrest.Matchers.nullValue;
 
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.quarkus.narayana.jta.QuarkusTransaction;
 import io.quarkus.test.junit.QuarkusTest;
@@ -38,6 +39,7 @@ import org.junit.jupiter.api.Test;
 @QuarkusTest
 class SecretsResourceTest {
 
+  private static final ObjectMapper JSON = new ObjectMapper();
   private static final String ORG_NAME = "secrets-org";
   private static final String RAW_TOKEN = "secrets-token";
   private static final String PROJECT = "secrets-proj";
@@ -189,6 +191,46 @@ class SecretsResourceTest {
   }
 
   @Test
+  void batchDecryptRoundTripsCiphertextsEmbeddedInPulumiSecretValues() throws Exception {
+    String passwordCiphertext = encryptUnder("alpha", "correct horse");
+    String tokenCiphertext = encryptUnder("alpha", "battery staple");
+    JsonNode stackState =
+        JSON.readTree(
+            """
+            {
+              "outputs": {
+                "password": %s,
+                "token": %s
+              }
+            }
+            """
+                .formatted(secretValue(passwordCiphertext), secretValue(tokenCiphertext)));
+
+    String password =
+        stackState.required("outputs").required("password").required("ciphertext").asText();
+    String token = stackState.required("outputs").required("token").required("ciphertext").asText();
+    JsonPath response =
+        given()
+            .header("Authorization", "token " + RAW_TOKEN)
+            .contentType("application/json")
+            .body(Map.of("ciphertexts", List.of(password, token)))
+            .when()
+            .post(stackPath("alpha") + "/batch-decrypt")
+            .then()
+            .statusCode(200)
+            .extract()
+            .jsonPath();
+
+    Map<String, String> plaintexts = response.getMap("plaintexts");
+    org.hamcrest.MatcherAssert.assertThat(
+        plaintexts,
+        allOf(
+            aMapWithSize(2),
+            hasEntry(passwordCiphertext, "correct horse"),
+            hasEntry(tokenCiphertext, "battery staple")));
+  }
+
+  @Test
   void batchDecryptFailsWholeBatchOnAnyBadEntry() {
     String good = encryptUnder("alpha", "ok");
     given()
@@ -278,6 +320,13 @@ class SecretsResourceTest {
 
   private static String stackPath(String stack) {
     return "/pulumi/api/stacks/" + ORG_NAME + "/" + PROJECT + "/" + stack;
+  }
+
+  private static String secretValue(String ciphertext) {
+    return "{\"4dabf18193072939515e22adb298388d\":\"1b47061264138c4ac30d75fd1eb44270\","
+        + "\"ciphertext\":\""
+        + ciphertext
+        + "\"}";
   }
 
   private static String sha256Hex(String input) {

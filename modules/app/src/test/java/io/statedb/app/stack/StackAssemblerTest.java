@@ -446,6 +446,72 @@ class StackAssemblerTest {
   }
 
   @Test
+  void secretsManagerReplacesChangedProviderAndCanClearIt() throws Exception {
+    UUID update = update();
+    entry(
+        update,
+        JournalKind.SECRETS_MANAGER,
+        0L,
+        "{\"secretsProvider\":{\"type\":\"service\",\"state\":{\"url\":\"service-a\"}}}");
+    entry(
+        update,
+        JournalKind.SECRETS_MANAGER,
+        0L,
+        "{\"secretsProvider\":{\"type\":\"service\",\"state\":{\"url\":\"service-b\"}}}");
+
+    JsonNode replaced = assembler.assemble(stackId).deployment().required("secrets_providers");
+
+    assertEquals("service", replaced.required("type").asText());
+    assertEquals("service-b", replaced.required("state").required("url").asText());
+
+    entry(
+        update,
+        JournalKind.SECRETS_MANAGER,
+        0L,
+        "{\"secretsProvider\":{\"type\":\"passphrase\",\"state\":{\"salt\":\"abc\"}}}");
+
+    JsonNode changedType = assembler.assemble(stackId).deployment().required("secrets_providers");
+
+    assertEquals("passphrase", changedType.required("type").asText());
+    assertEquals("abc", changedType.required("state").required("salt").asText());
+
+    entry(update, JournalKind.SECRETS_MANAGER, 0L, "{\"secretsProvider\":null}");
+
+    assertFalse(assembler.assemble(stackId).deployment().has("secrets_providers"));
+  }
+
+  @Test
+  void encryptedSecretValuesArePreservedInJournalStateEntries() throws Exception {
+    JsonNode expected = MAPPER.readTree(secretValue("ciphertext-1"));
+    UUID update = update();
+
+    success(update, 1L, resource("component", "\"inputs\":{\"password\":" + expected + "}"));
+    success(update, 2L, resource("stack", "\"type\":\"pulumi:pulumi:Stack\""));
+    entry(
+        update,
+        JournalKind.OUTPUTS,
+        2L,
+        "remove_new",
+        2L,
+        "{\"state\":"
+            + resource(
+                "stack",
+                "\"type\":\"pulumi:pulumi:Stack\",\"outputs\":{\"password\":" + expected + "}")
+            + "}");
+
+    JsonNode beforeWrite = assembler.assemble(stackId).deployment().required("resources");
+    assertEquals(expected, find(beforeWrite, "component").required("inputs").required("password"));
+    assertEquals(expected, find(beforeWrite, "stack").required("outputs").required("password"));
+
+    write(
+        update, "[" + resource("from-write", "\"outputs\":{\"password\":" + expected + "}") + "]");
+
+    JsonNode afterWrite = assembler.assemble(stackId).deployment().required("resources");
+
+    assertEquals(expected, find(afterWrite, "from-write").required("outputs").required("password"));
+  }
+
+  @Test
   void rebuiltBaseStatePromotesNewToBase() throws Exception {
     UUID update = update();
     success(update, 1L, res("a"));
@@ -955,5 +1021,12 @@ class StackAssemblerTest {
 
   private String urn(String name) {
     return "urn:pulumi:dev::proj::pkg:index:" + name + "::" + name;
+  }
+
+  private String secretValue(String ciphertext) {
+    return "{\"4dabf18193072939515e22adb298388d\":\"1b47061264138c4ac30d75fd1eb44270\","
+        + "\"ciphertext\":\""
+        + ciphertext
+        + "\"}";
   }
 }

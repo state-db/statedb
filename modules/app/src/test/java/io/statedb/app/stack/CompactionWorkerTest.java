@@ -145,6 +145,57 @@ class CompactionWorkerTest {
   }
 
   @Test
+  void compactionPreservesSecretsProviderAndEncryptedSecretValues() throws Exception {
+    JsonNode expectedProvider =
+        MAPPER.readTree("{\"type\":\"service\",\"state\":{\"url\":\"https://state-db.test\"}}");
+    JsonNode expectedSecret = MAPPER.readTree(secretValue("ciphertext-from-journal"));
+    UUID update = update(stackId);
+    entry(stackId, update, 6, 0L, "{\"secretsProvider\":" + expectedProvider + "}");
+    entry(
+        stackId,
+        update,
+        1,
+        1L,
+        "{\"state\":"
+            + resource(
+                "stack",
+                "\"type\":\"pulumi:pulumi:Stack\",\"outputs\":{\"password\":"
+                    + expectedSecret
+                    + "}")
+            + "}");
+
+    JsonNode before = assembler.assemble(stackId).deployment();
+    assertEquals(expectedProvider, before.required("secrets_providers"));
+    assertEquals(
+        expectedSecret,
+        before.required("resources").get(0).required("outputs").required("password"));
+
+    QuarkusTransaction.requiringNew().run(() -> enqueuer.enqueue(stackId));
+    assertEquals(1, worker.drainOnce());
+
+    QuarkusTransaction.requiringNew()
+        .run(
+            () -> {
+              Snapshot snapshot = Snapshot.find("stackId", stackId).<Snapshot>singleResult();
+              assertEquals(expectedProvider, snapshot.checkpoint.required("secrets_providers"));
+              assertEquals(
+                  expectedSecret,
+                  snapshot
+                      .checkpoint
+                      .required("resources")
+                      .get(0)
+                      .required("outputs")
+                      .required("password"));
+            });
+
+    JsonNode after = assembler.assemble(stackId).deployment();
+    assertEquals(expectedProvider, after.required("secrets_providers"));
+    assertEquals(
+        expectedSecret,
+        after.required("resources").get(0).required("outputs").required("password"));
+  }
+
+  @Test
   void assemblerStartsFromBaseSnapshotAndSkipsCompactedJournalRows() throws Exception {
     UUID oldUpdate = update(stackId);
     entry(stackId, oldUpdate, 1, 1L, "{\"state\":" + res("old") + "}");
@@ -304,7 +355,21 @@ class CompactionWorkerTest {
     return "{\"urn\":\"" + urn(name) + "\",\"type\":\"pkg:index:" + name + "\",\"custom\":true}";
   }
 
+  private String resource(String name, String extra) {
+    String fields =
+        "\"urn\":\"" + urn(name) + "\",\"type\":\"pkg:index:" + name + "\",\"custom\":true";
+    if (!extra.isBlank()) fields += "," + extra;
+    return "{" + fields + "}";
+  }
+
   private String urn(String name) {
     return "urn:pulumi:dev::proj::pkg:index:" + name + "::" + name;
+  }
+
+  private String secretValue(String ciphertext) {
+    return "{\"4dabf18193072939515e22adb298388d\":\"1b47061264138c4ac30d75fd1eb44270\","
+        + "\"ciphertext\":\""
+        + ciphertext
+        + "\"}";
   }
 }
