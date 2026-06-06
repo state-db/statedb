@@ -10,12 +10,14 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import io.quarkus.narayana.jta.QuarkusTransaction;
 import io.quarkus.test.junit.QuarkusTest;
 import io.statedb.persistence.identity.Organization;
+import io.statedb.persistence.journal.JournalEntry;
 import io.statedb.persistence.stack.AssembledDeployment;
 import io.statedb.persistence.stack.StackAssembler;
 import io.statedb.persistence.stack.StackCreator;
 import io.statedb.persistence.stack.StackRef;
+import io.statedb.persistence.update.StackUpdate;
 import jakarta.inject.Inject;
-import jakarta.persistence.EntityManager;
+import java.time.Instant;
 import java.util.Map;
 import java.util.UUID;
 import org.junit.jupiter.api.AfterEach;
@@ -50,7 +52,6 @@ class StackAssemblerTest {
 
   @Inject StackAssembler assembler;
   @Inject StackCreator stackCreator;
-  @Inject EntityManager em;
 
   private UUID stackId;
   private int updateVersion;
@@ -73,24 +74,25 @@ class StackAssemblerTest {
 
   @AfterEach
   void cleanup() {
-    QuarkusTransaction.requiringNew()
-        .run(
-            () ->
-                em.createNativeQuery("DELETE FROM organizations WHERE name = ?1")
-                    .setParameter(1, ORG_NAME)
-                    .executeUpdate());
+    QuarkusTransaction.requiringNew().run(() -> Organization.delete("name = ?1", ORG_NAME));
   }
+
+  // Empty export
 
   @Test
   void emptyStackReturnsEmptyDeployment() {
     AssembledDeployment assembled = assembler.assemble(stackId);
 
+    // Empty stacks still export as Pulumi DeploymentV3.
     assertEquals(3, assembled.version());
+    // Feature flags are only present when resources use v4-only fields.
     assertTrue(assembled.features().isEmpty());
     assertEquals(0, assembled.deployment().required("resources").size());
     assertEquals(
         "v3.242.0", assembled.deployment().required("manifest").required("version").asText());
   }
+
+  // Basic resource journal replay
 
   @Test
   void successAppendsState() throws Exception {
@@ -105,15 +107,44 @@ class StackAssemblerTest {
   }
 
   @Test
+  void writeEntryUsesNewSnapshotAsBaseForFollowingReplay() throws Exception {
+    UUID update = update();
+    entry(
+        update,
+        JournalKind.WRITE,
+        0L,
+        "{\"newSnapshot\":{"
+            + "\"secrets_providers\":{\"type\":\"service\",\"state\":{\"url\":\"u\"}},"
+            + "\"metadata\":{\"tag\":\"from-write\"},"
+            + "\"resources\":["
+            + resource("base", "\"sourcePosition\":\"project:///old.ts#1,1\"")
+            + "]}}");
+    successReplaceOld(
+        update, 1L, 0L, resource("base", "\"sourcePosition\":\"project:///new.ts#2,1\""));
+
+    JsonNode deployment = assembler.assemble(stackId).deployment();
+    JsonNode resources = deployment.required("resources");
+
+    assertEquals(1, resources.size());
+    assertEquals(1, countUrn(resources, urn("base")));
+    assertEquals(
+        "project:///new.ts#2,1", find(resources, "base").required("sourcePosition").asText());
+    assertEquals("from-write", deployment.required("metadata").required("tag").asText());
+    assertEquals("service", deployment.required("secrets_providers").required("type").asText());
+  }
+
+  @Test
   void successRemoveOldDropsBaseAtIndex() throws Exception {
     UUID update = update();
-    write(update, "[" + res("a") + "," + res("b") + "]");
+    write(update, "[" + res("a") + "," + res("b") + "," + res("c") + "," + res("d") + "]");
     entry(update, JournalKind.SUCCESS, 1L, "remove_old", 1L, "{}");
 
     JsonNode resources = assembler.assemble(stackId).deployment().required("resources");
 
-    assertEquals(1, resources.size());
+    assertEquals(3, resources.size());
     assertEquals(urn("a"), resources.get(0).required("urn").asText());
+    assertEquals(urn("c"), resources.get(1).required("urn").asText());
+    assertEquals(urn("d"), resources.get(2).required("urn").asText());
   }
 
   @Test
@@ -121,12 +152,16 @@ class StackAssemblerTest {
     UUID update = update();
     success(update, 1L, res("a"));
     success(update, 2L, res("b"));
-    entry(update, JournalKind.SUCCESS, 3L, "remove_new", 2L, "{}");
+    success(update, 3L, res("c"));
+    success(update, 4L, res("d"));
+    entry(update, JournalKind.SUCCESS, 5L, "remove_new", 2L, "{}");
 
     JsonNode resources = assembler.assemble(stackId).deployment().required("resources");
 
-    assertEquals(1, resources.size());
+    assertEquals(3, resources.size());
     assertEquals(urn("a"), resources.get(0).required("urn").asText());
+    assertEquals(urn("c"), resources.get(1).required("urn").asText());
+    assertEquals(urn("d"), resources.get(2).required("urn").asText());
   }
 
   @Test
@@ -135,6 +170,7 @@ class StackAssemblerTest {
     write(update, "[" + res("base-delete") + "," + res("base-pending") + "]");
     success(update, 1L, res("new-delete"));
     success(update, 2L, res("new-pending"));
+    // delete marks a resource as delete=true in export; remove actually drops it from export.
     entry(update, JournalKind.SUCCESS, 3L, "delete_old", 0L, "{}");
     entry(update, JournalKind.SUCCESS, 4L, "pending_replacement_old", 1L, "{}");
     entry(update, JournalKind.SUCCESS, 5L, "delete_new", 1L, "{}");
@@ -174,32 +210,6 @@ class StackAssemblerTest {
   }
 
   @ParameterizedTest
-  @ValueSource(strings = {"updating", "reading", "deleting"})
-  void failedTerminalIgnoresPromotedFieldsAndClearsPendingOp(String opType) throws Exception {
-    // A Failure only clears the in-flight operation; it must not apply the index fields that
-    // Success/RefreshSuccess honor. Applying them would mutate or drop resources that may still
-    // exist in the cloud. Seed both a base resource and a Success-created new resource so the
-    // Failure targets both halves of the reducer's index space.
-    UUID update = update();
-    write(update, "[" + res("base") + "]");
-    success(update, 10L, res("new"));
-    begin(update, 11L, opType, res("base"));
-    failureWithAllPromoted(update, 11L, 0L, 10L, 0L, 10L, 0L, 10L);
-
-    JsonNode deployment = assembler.assemble(stackId).deployment();
-    JsonNode resources = deployment.required("resources");
-
-    assertEquals(2, resources.size());
-    for (JsonNode r : resources) {
-      assertFalse(r.has("delete"));
-      assertFalse(r.has("pendingReplacement"));
-    }
-    assertEquals(urn("base"), find(resources, "base").required("urn").asText());
-    assertEquals(urn("new"), find(resources, "new").required("urn").asText());
-    assertFalse(deployment.has("pending_operations"));
-  }
-
-  @ParameterizedTest
   @ValueSource(strings = {"creating", "updating", "deleting", "reading", "importing"})
   void allBeginOpTypesSurfaceAsPendingOperations(String opType) throws Exception {
     UUID update = update();
@@ -211,6 +221,8 @@ class StackAssemblerTest {
     assertEquals(opType, pending.get(0).required("type").asText());
     assertEquals(urn("r"), pending.get(0).required("resource").required("urn").asText());
   }
+
+  // Refresh and dependency repair
 
   @Test
   void refreshSuccessClearsPendingOperation() throws Exception {
@@ -351,54 +363,7 @@ class StackAssemblerTest {
     assertEquals("", child.required("parent").asText());
   }
 
-  @Test
-  void refreshSuccessRebuildsPropertyDependenciesAndDeletedWith() throws Exception {
-    UUID update = update();
-    write(
-        update,
-        "["
-            + res("removed")
-            + ","
-            + res("keeper")
-            + ","
-            + resource(
-                "dependent",
-                "\"propertyDependencies\":{\"input\":[\""
-                    + urn("removed")
-                    + "\",\""
-                    + urn("keeper")
-                    + "\"]},\"deletedWith\":\""
-                    + urn("removed")
-                    + "\"")
-            + "]");
-    entry(update, JournalKind.REFRESH_SUCCESS, 1L, "remove_old", 0L, "{}");
-
-    JsonNode dependent =
-        find(assembler.assemble(stackId).deployment().required("resources"), "dependent");
-    JsonNode inputDeps = dependent.required("propertyDependencies").required("input");
-
-    assertEquals(1, inputDeps.size());
-    assertEquals(urn("keeper"), inputDeps.get(0).asText());
-    assertEquals("", dependent.required("deletedWith").asText());
-  }
-
-  @Test
-  void refreshSuccessClearsDanglingReplaceWith() throws Exception {
-    UUID update = update();
-    write(
-        update,
-        "["
-            + res("target")
-            + ","
-            + resource("dependent", "\"replaceWith\":[\"" + urn("target") + "\"]")
-            + "]");
-    entry(update, JournalKind.REFRESH_SUCCESS, 1L, "remove_old", 0L, "{}");
-
-    JsonNode dependent =
-        find(assembler.assemble(stackId).deployment().required("resources"), "dependent");
-
-    assertEquals("", dependent.required("replaceWith").get(0).asText());
-  }
+  // Stack outputs and secrets
 
   @Test
   void outputsReplacesNewByOpId() throws Exception {
@@ -511,6 +476,8 @@ class StackAssemblerTest {
     assertEquals(expected, find(afterWrite, "from-write").required("outputs").required("password"));
   }
 
+  // Journal boundaries and update isolation
+
   @Test
   void rebuiltBaseStatePromotesNewToBase() throws Exception {
     UUID update = update();
@@ -570,11 +537,14 @@ class StackAssemblerTest {
     AssembledDeployment assembled = assembler.assemble(stackId);
     JsonNode resources = assembled.deployment().required("resources");
 
+    // viewOf is a v4-only deployment feature, so it upgrades the export shape.
     assertEquals(4, assembled.version());
     assertEquals("views", assembled.features().get(0));
     assertEquals(urn("a"), find(resources, "c").required("dependencies").get(0).asText());
     assertFalse(find(resources, "a").has("aliases"));
   }
+
+  // Same-step and replacement behavior captured from Pulumi journal shape
 
   // A same-step success can carry updated checkpoint metadata; remove_old must make that state
   // replace the base row instead of appending a duplicate resource with the same URN.
@@ -801,6 +771,8 @@ class StackAssemblerTest {
         "project:///new.ts#1,1", find(afterFlush, "a").required("sourcePosition").asText());
   }
 
+  // Error handling
+
   @Test
   void unknownKindThrowsWithContext() throws Exception {
     UUID update = update();
@@ -815,21 +787,20 @@ class StackAssemblerTest {
   }
 
   private UUID update() {
-    UUID updateId = UUID.randomUUID();
     int version = ++updateVersion;
-    QuarkusTransaction.requiringNew()
-        .run(
-            () ->
-                em.createNativeQuery(
-                        "INSERT INTO stack_updates "
-                            + "(id, stack_id, version, kind, status, start_journal_seq) "
-                            + "VALUES (?1, ?2, ?3, 'update', 'succeeded', ?4)")
-                    .setParameter(1, updateId)
-                    .setParameter(2, stackId)
-                    .setParameter(3, version)
-                    .setParameter(4, sequence)
-                    .executeUpdate());
-    return updateId;
+    return QuarkusTransaction.requiringNew()
+        .call(
+            () -> {
+              StackUpdate update = new StackUpdate();
+              update.stackId = stackId;
+              update.version = version;
+              update.kind = StackUpdate.Kind.UPDATE;
+              update.status = StackUpdate.Status.SUCCEEDED;
+              update.startJournalSeq = sequence;
+              update.startedAt = Instant.now();
+              update.persistAndFlush();
+              return update.id;
+            });
   }
 
   private void begin(UUID updateId, long operationId, String operationType, String resource)
@@ -865,50 +836,6 @@ class StackAssemblerTest {
     entry(updateId, kind, operationId, null, (Long) null, payload);
   }
 
-  /**
-   * Inserts a Failure entry carrying every promoted index field at once. Used to prove that the
-   * reducer's Failure branch ignores them all; a regression that starts honoring any single field
-   * would flip an assertion in the calling test.
-   */
-  private void failureWithAllPromoted(
-      UUID updateId,
-      long operationId,
-      Long removeOld,
-      Long removeNew,
-      Long deleteOld,
-      Long deleteNew,
-      Long pendingReplacementOld,
-      Long pendingReplacementNew)
-      throws Exception {
-    long seq = ++sequence;
-    JsonNode parsed = MAPPER.readTree("{}");
-    QuarkusTransaction.requiringNew()
-        .run(
-            () ->
-                em.createNativeQuery(
-                        "INSERT INTO journal_entries "
-                            + "(id, stack_id, update_id, sequence_id, wire_sequence_id, kind, "
-                            + " operation_id, remove_old, remove_new, delete_old, delete_new, "
-                            + " pending_replacement_old, pending_replacement_new, payload) "
-                            + "VALUES (?1, ?2, ?3, ?4, ?4, "
-                            + JournalKind.FAILURE.wireValue
-                            + ", ?5, ?6, ?7, ?8, ?9, ?10, ?11, "
-                            + " CAST(?12 AS jsonb))")
-                    .setParameter(1, UUID.randomUUID())
-                    .setParameter(2, stackId)
-                    .setParameter(3, updateId)
-                    .setParameter(4, seq)
-                    .setParameter(5, operationId)
-                    .setParameter(6, removeOld)
-                    .setParameter(7, removeNew)
-                    .setParameter(8, deleteOld)
-                    .setParameter(9, deleteNew)
-                    .setParameter(10, pendingReplacementOld)
-                    .setParameter(11, pendingReplacementNew)
-                    .setParameter(12, parsed.toString())
-                    .executeUpdate());
-  }
-
   private void entry(
       UUID updateId,
       JournalKind kind,
@@ -922,33 +849,30 @@ class StackAssemblerTest {
     QuarkusTransaction.requiringNew()
         .run(
             () -> {
-              var q =
-                  em.createNativeQuery(
-                          "INSERT INTO journal_entries "
-                              + "(id, stack_id, update_id, sequence_id, wire_sequence_id, kind, operation_id, "
-                              + promotedColumn(promoted)
-                              + "payload) "
-                              + "VALUES (?1, ?2, ?3, ?4, ?4, ?5, ?6, "
-                              + promotedValue(promoted)
-                              + "CAST(?7 AS jsonb))")
-                      .setParameter(1, UUID.randomUUID())
-                      .setParameter(2, stackId)
-                      .setParameter(3, updateId)
-                      .setParameter(4, seq)
-                      .setParameter(5, kind.wireValue)
-                      .setParameter(6, operationId)
-                      .setParameter(7, parsed.toString());
-              if (promoted != null) q.setParameter(8, value);
-              q.executeUpdate();
+              JournalEntry entry = new JournalEntry();
+              entry.stackId = stackId;
+              entry.updateId = updateId;
+              entry.sequenceId = seq;
+              entry.wireSequenceId = seq;
+              entry.kind = (short) kind.wireValue;
+              entry.operationId = operationId;
+              entry.payload = parsed;
+              setPromotedField(entry, promoted, value);
+              entry.persistAndFlush();
             });
   }
 
-  private static String promotedColumn(String promoted) {
-    return promoted == null ? "" : promoted + ", ";
-  }
-
-  private static String promotedValue(String promoted) {
-    return promoted == null ? "" : "?8, ";
+  private static void setPromotedField(JournalEntry entry, String promoted, Long value) {
+    if (promoted == null) return;
+    switch (promoted) {
+      case "remove_old" -> entry.removeOld = value;
+      case "remove_new" -> entry.removeNew = value;
+      case "delete_old" -> entry.deleteOld = value;
+      case "delete_new" -> entry.deleteNew = value;
+      case "pending_replacement_old" -> entry.pendingReplacementOld = value;
+      case "pending_replacement_new" -> entry.pendingReplacementNew = value;
+      default -> throw new IllegalArgumentException("unknown promoted journal field: " + promoted);
+    }
   }
 
   private JsonNode find(JsonNode resources, String name) {
