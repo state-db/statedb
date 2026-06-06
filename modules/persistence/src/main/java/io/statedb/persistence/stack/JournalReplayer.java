@@ -99,7 +99,10 @@ final class JournalReplayer {
           if (idx >= 0) newResources.set(idx, state.deepCopy());
         }
       }
-      case 5 -> base = mutableDeployment(entry.payload().get("newSnapshot"));
+      case 5 ->
+          // Matches Pulumi's JournalReplayer: Write overwrites the base snapshot and is expected
+          // before later entries that mutate the snapshot.
+          base = mutableDeployment(entry.payload().get("newSnapshot"));
       case 6 -> {
         JsonNode incoming = entry.payload().get("secretsProvider");
         if (sameSecretsProvider(incoming)) return;
