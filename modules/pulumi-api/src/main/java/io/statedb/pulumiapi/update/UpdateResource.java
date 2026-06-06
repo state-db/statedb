@@ -1,5 +1,7 @@
 package io.statedb.pulumiapi.update;
 
+import com.fasterxml.jackson.annotation.JsonInclude;
+import com.fasterxml.jackson.annotation.JsonProperty;
 import io.statedb.persistence.events.EventBatchAppender;
 import io.statedb.persistence.events.EventBatchValidationException;
 import io.statedb.persistence.journal.JournalAppender;
@@ -27,6 +29,7 @@ import io.statedb.pulumiapi.update.journal.JournalPatchRequest;
 import jakarta.inject.Inject;
 import jakarta.ws.rs.Consumes;
 import jakarta.ws.rs.DELETE;
+import jakarta.ws.rs.GET;
 import jakarta.ws.rs.HeaderParam;
 import jakarta.ws.rs.PATCH;
 import jakarta.ws.rs.POST;
@@ -35,6 +38,7 @@ import jakarta.ws.rs.PathParam;
 import jakarta.ws.rs.Produces;
 import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.Response;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
@@ -147,6 +151,31 @@ public class UpdateResource {
         l.expiresAt().getEpochSecond(),
         existing.version,
         safe.journalVersion);
+  }
+
+  @GET
+  @Path("/update/{updateID}")
+  @Produces(MediaType.APPLICATION_JSON)
+  public UpdateResultsResponse getUpdate(
+      @PathParam("org") String org,
+      @PathParam("project") String project,
+      @PathParam("stack") String stack,
+      @PathParam("updateID") String updateID) {
+    StackRef ref = resolveOrThrow(org, project, stack);
+    UUID updateId = parseUpdateIdOr404(updateID, org, project, stack);
+    StackUpdate update =
+        StackUpdate.<StackUpdate>find("id = ?1 and stackId = ?2", updateId, ref.stackId())
+            .firstResultOptional()
+            .orElseThrow(() -> new StackNotFoundException(org, project, stack));
+
+    String status =
+        switch (update.status) {
+          case IN_PROGRESS -> "running";
+          case SUCCEEDED -> "succeeded";
+          case FAILED, CANCELLED -> "failed";
+        };
+    String continuationToken = update.status == StackUpdate.Status.IN_PROGRESS ? "0" : null;
+    return new UpdateResultsResponse(status, List.of(), continuationToken);
   }
 
   @POST
@@ -404,4 +433,10 @@ public class UpdateResource {
     Object m = metadata.get("message");
     return m == null ? null : m.toString();
   }
+
+  @JsonInclude(JsonInclude.Include.NON_NULL)
+  public record UpdateResultsResponse(
+      @JsonProperty("status") String status,
+      @JsonProperty("events") List<Object> events,
+      @JsonProperty("continuationToken") String continuationToken) {}
 }

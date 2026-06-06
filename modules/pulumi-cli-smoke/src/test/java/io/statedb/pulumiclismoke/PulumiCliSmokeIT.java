@@ -6,6 +6,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import io.quarkus.narayana.jta.QuarkusTransaction;
 import io.quarkus.test.common.http.TestHTTPResource;
 import io.quarkus.test.junit.QuarkusTest;
@@ -105,6 +106,39 @@ class PulumiCliSmokeIT {
     assertFalse(
         stackNames(stacksAfterRemove).contains(STACK),
         () -> "stack ls should not include " + STACK + ":\n" + stacksAfterRemove);
+  }
+
+  @Test
+  void realPulumiCliCanImportAndExportAStackCheckpoint() throws Exception {
+    String backendUrl = "http://host.testcontainers.internal:" + baseUrl.getPort() + "/pulumi";
+    Testcontainers.exposeHostPorts(baseUrl.getPort());
+
+    MountableFile recorderProject =
+        MountableFile.forHostPath(RepoRoot.get().resolve(PulumiProject.RECORDER_PROJECT_PATH));
+    pulumi =
+        new GenericContainer<>(PULUMI_IMAGE)
+            .withEnv("PULUMI_ACCESS_TOKEN", RAW_TOKEN)
+            .withEnv("PULUMI_CONFIG_PASSPHRASE", "test")
+            .withEnv("PULUMI_HOME", "/tmp/pulumi-home")
+            .withEnv("PULUMI_SKIP_CONFIRMATIONS", "true")
+            .withEnv("PULUMI_SKIP_UPDATE_CHECK", "true")
+            .withEnv("PULUMI_COLOR", "never")
+            .withCopyFileToContainer(recorderProject, "/workspace/Pulumi.yaml")
+            .withCopyToContainer(Transferable.of("{}\n"), "/workspace/Pulumi.dev.yaml")
+            .withCreateContainerCmdModifier(cmd -> cmd.withEntrypoint("sh"))
+            .withCommand("-lc", "mkdir -p /tmp/pulumi-home && sleep infinity")
+            .withStartupTimeout(Duration.ofMinutes(2));
+    pulumi.start();
+
+    execResult("pulumi login " + backendUrl);
+    execResult("pulumi stack init " + STACK);
+    execResult("pulumi stack export --file /workspace/import.json");
+    JsonNode before = execJson("cat /workspace/import.json");
+
+    execResult("pulumi stack import --file /workspace/import.json");
+
+    JsonNode after = execJson("pulumi stack export");
+    assertEquals(normalizeExport(before), normalizeExport(after));
   }
 
   @Test
@@ -263,6 +297,19 @@ class PulumiCliSmokeIT {
       }
     }
     throw new AssertionError("export did not contain a root stack resource: " + exported);
+  }
+
+  private static JsonNode normalizeExport(JsonNode exported) {
+    ObjectNode normalized = exported.deepCopy();
+    JsonNode deployment = normalized.get("deployment");
+    if (deployment instanceof ObjectNode object) {
+      object.remove("manifest");
+      JsonNode metadata = object.get("metadata");
+      if (metadata != null && metadata.isObject() && metadata.isEmpty()) {
+        object.remove("metadata");
+      }
+    }
+    return normalized;
   }
 
   private static void assertContains(String actual, String expected) {
