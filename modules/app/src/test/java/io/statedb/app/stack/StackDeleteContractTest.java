@@ -4,6 +4,8 @@ import static io.restassured.RestAssured.given;
 import static org.hamcrest.Matchers.anEmptyMap;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import io.quarkus.narayana.jta.QuarkusTransaction;
 import io.quarkus.test.junit.QuarkusTest;
 import io.statedb.persistence.auth.ApiToken;
@@ -11,6 +13,7 @@ import io.statedb.persistence.identity.OrgMember;
 import io.statedb.persistence.identity.Organization;
 import io.statedb.persistence.identity.User;
 import io.statedb.persistence.stack.Project;
+import io.statedb.persistence.stack.Snapshot;
 import io.statedb.persistence.stack.Stack;
 import io.statedb.persistence.stack.StackCreator;
 import io.statedb.persistence.stack.StackRef;
@@ -34,6 +37,7 @@ import org.junit.jupiter.api.Test;
 @QuarkusTest
 class StackDeleteContractTest {
 
+  private static final ObjectMapper MAPPER = new ObjectMapper();
   private static final String ORG_NAME = "stack-delete-org";
   private static final String OTHER_ORG_NAME = "stack-delete-other-org";
   private static final String RAW_TOKEN = "stack-delete-token";
@@ -130,7 +134,11 @@ class StackDeleteContractTest {
   @Test
   void nonEmptyStackReturns409WithoutForce() {
     StackRef ref = stackCreator.create(orgId, ORG_NAME, PROJECT, "busy", fixtureTags());
-    setJournalSeq(ref.stackId(), 1L);
+    setBaseSnapshot(
+        ref.stackId(),
+        1L,
+        "[{\"urn\":\"urn:pulumi:dev::recorder-test::pkg:index:Thing::thing\","
+            + "\"type\":\"pkg:index:Thing\",\"custom\":true}]");
 
     given()
         .header("Authorization", "token " + RAW_TOKEN)
@@ -153,9 +161,43 @@ class StackDeleteContractTest {
   }
 
   @Test
+  void deletesStackWithOnlyRootStackResourceAndJournalHistory() {
+    StackRef ref = stackCreator.create(orgId, ORG_NAME, PROJECT, "destroyed", fixtureTags());
+    setBaseSnapshot(
+        ref.stackId(),
+        42L,
+        "[{\"urn\":\"urn:pulumi:dev::recorder-test::pulumi:pulumi:Stack::recorder-test-dev\","
+            + "\"type\":\"pulumi:pulumi:Stack\",\"custom\":false,\"outputs\":{}}]");
+
+    given()
+        .header("Authorization", "token " + RAW_TOKEN)
+        .header("Accept", "application/vnd.pulumi+9")
+        .contentType("application/json")
+        .when()
+        .delete("/pulumi/api/stacks/" + ORG_NAME + "/" + PROJECT + "/destroyed?force=false")
+        .then()
+        .statusCode(200)
+        .body("$", anEmptyMap());
+
+    QuarkusTransaction.requiringNew()
+        .run(
+            () -> {
+              assertEquals(
+                  0L, count("SELECT count(*) FROM workspaces WHERE id = ?1", ref.workspaceId()));
+              assertEquals(0L, count("SELECT count(*) FROM stacks WHERE id = ?1", ref.stackId()));
+              assertEquals(
+                  0L, count("SELECT count(*) FROM stack_state WHERE stack_id = ?1", ref.stackId()));
+            });
+  }
+
+  @Test
   void forceDeletesNonEmptyStack() {
     StackRef ref = stackCreator.create(orgId, ORG_NAME, PROJECT, "force", fixtureTags());
-    setJournalSeq(ref.stackId(), 1L);
+    setBaseSnapshot(
+        ref.stackId(),
+        1L,
+        "[{\"urn\":\"urn:pulumi:dev::recorder-test::pkg:index:Thing::thing\","
+            + "\"type\":\"pkg:index:Thing\",\"custom\":true}]");
 
     given()
         .header("Authorization", "token " + RAW_TOKEN)
@@ -224,14 +266,31 @@ class StackDeleteContractTest {
         .statusCode(404);
   }
 
-  private void setJournalSeq(UUID stackId, long journalSeq) {
+  private void setBaseSnapshot(UUID stackId, long journalSeq, String resourcesJson) {
     QuarkusTransaction.requiringNew()
         .run(
-            () ->
-                em.createNativeQuery("UPDATE stack_state SET journal_seq = ?1 WHERE stack_id = ?2")
-                    .setParameter(1, journalSeq)
-                    .setParameter(2, stackId)
-                    .executeUpdate());
+            () -> {
+              Snapshot snapshot = new Snapshot();
+              snapshot.stackId = stackId;
+              snapshot.version = 1;
+              snapshot.checkpoint = deployment(resourcesJson);
+              snapshot.compactedFromJournalSeq = journalSeq;
+              snapshot.persistAndFlush();
+
+              StackState state = StackState.find("stackId", stackId).firstResult();
+              state.baseSnapshotId = snapshot.id;
+              state.baseSnapshotVersion = snapshot.version;
+              state.journalSeq = journalSeq;
+              state.persistAndFlush();
+            });
+  }
+
+  private static JsonNode deployment(String resourcesJson) {
+    try {
+      return MAPPER.readTree("{\"resources\":" + resourcesJson + "}");
+    } catch (Exception e) {
+      throw new IllegalArgumentException(e);
+    }
   }
 
   private long count(String sql, UUID id) {
