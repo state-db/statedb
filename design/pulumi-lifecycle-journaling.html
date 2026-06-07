@@ -1,0 +1,651 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>state-db · Pulumi Lifecycle &amp; Journaling</title>
+<style>
+  :root{
+    --bg:#0d1117; --panel:#161b22; --panel2:#1c2330; --ink:#e6edf3; --mut:#9aa7b4;
+    --line:#2b3440; --acc:#7ee787; --acc2:#79c0ff; --acc3:#d2a8ff; --warn:#f0883e;
+    --pink:#ff7b9c; --code:#0b0f15; --chip:#21304a;
+    --mono:"SF Mono",ui-monospace,"JetBrains Mono",Menlo,Consolas,monospace;
+    --sans:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+  }
+  *{box-sizing:border-box}
+  html{scroll-behavior:smooth}
+  body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--sans);line-height:1.55;font-size:16px}
+  a{color:var(--acc2);text-decoration:none}
+  a:hover{text-decoration:underline}
+  .wrap{display:grid;grid-template-columns:248px 1fr;max-width:1480px;margin:0 auto}
+  /* sidebar */
+  nav.toc{position:sticky;top:0;height:100vh;overflow-y:auto;padding:24px 18px;border-right:1px solid var(--line);background:var(--panel)}
+  nav.toc .brand{font-weight:800;font-size:19px;color:var(--ink)}
+  nav.toc .brand span{color:var(--acc)}
+  nav.toc .sub{color:var(--mut);font-size:12px;margin:2px 0 16px}
+  nav.toc a{display:block;color:var(--mut);padding:5px 9px;border-radius:6px;font-size:13.5px}
+  nav.toc a:hover{background:var(--panel2);color:var(--ink);text-decoration:none}
+  nav.toc a.active{background:var(--chip);color:var(--ink)}
+  nav.toc .grp{font-size:11px;letter-spacing:.13em;text-transform:uppercase;color:var(--mut);margin:16px 0 6px;padding-left:9px}
+  /* content */
+  main{padding:40px 52px 120px;max-width:1000px}
+  h1{font-size:33px;line-height:1.15;margin:0 0 8px;letter-spacing:-.5px}
+  h1 .em{color:var(--acc)}
+  .lede{color:var(--mut);font-size:17px;max-width:680px;margin:0}
+  h2{font-size:23px;margin:54px 0 8px;display:flex;align-items:center;gap:10px}
+  h2 .ix{font-family:var(--mono);font-size:14px;color:var(--acc);background:#10231a;border:1px solid #244;border-radius:7px;padding:1px 9px}
+  .h2sub{color:var(--mut);font-size:14px;margin:0 0 18px;max-width:680px}
+  h3{font-size:17px;margin:26px 0 8px;color:var(--acc2)}
+  p{margin:11px 0}
+  code{font-family:var(--mono);background:var(--code);padding:.1em .38em;border-radius:5px;font-size:.84em;color:#cdd9e5;border:1px solid var(--line)}
+  pre{background:var(--code);border:1px solid var(--line);border-radius:10px;padding:14px 16px;overflow-x:auto;font-family:var(--mono);font-size:13px;line-height:1.5}
+  pre code{background:none;border:none;padding:0}
+  .tag{display:inline-block;font-family:var(--mono);font-size:10.5px;font-weight:700;padding:2px 7px;border-radius:20px;vertical-align:middle;letter-spacing:.02em}
+  .m-get{background:#16331f;color:var(--acc);border:1px solid #2a5a39}
+  .m-post{background:#102a44;color:var(--acc2);border:1px solid #214b73}
+  .m-patch{background:#2e2440;color:var(--acc3);border:1px solid #4a3a6a}
+  .m-delete{background:#3a1d22;color:var(--pink);border:1px solid #6a3540}
+  .fileref{font-family:var(--mono);font-size:12px;color:var(--acc);background:#10231a;border:1px solid #244;border-radius:6px;padding:1px 7px;display:inline-block;white-space:nowrap}
+  .callout{border-left:3px solid var(--acc2);background:var(--panel2);border-radius:0 9px 9px 0;padding:12px 16px;margin:16px 0;font-size:14.5px}
+  .callout.warn{border-left-color:var(--warn)}
+  .callout.key{border-left-color:var(--acc)}
+  .callout .lbl{font-weight:700;font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--mut);display:block;margin-bottom:3px}
+  table{border-collapse:collapse;width:100%;margin:14px 0;font-size:13.5px}
+  th,td{border:1px solid var(--line);padding:7px 11px;text-align:left;vertical-align:top}
+  th{background:var(--panel2);font-weight:600}
+  tr:nth-child(even) td{background:rgba(255,255,255,.014)}
+  .legend{font-size:12.5px;color:var(--mut)}
+  /* ---- persona cards ---- */
+  .personas{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin:26px 0 8px}
+  .persona{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:16px;display:block;transition:.12s}
+  .persona:hover{border-color:var(--acc2);transform:translateY(-2px);text-decoration:none}
+  .persona .who{font-size:13px;color:var(--acc2);font-weight:700}
+  .persona .what{font-size:14px;color:var(--ink);margin:6px 0 2px}
+  .persona .arrow{color:var(--mut);font-size:12px;font-family:var(--mono)}
+  /* ---- peel layers ---- */
+  .peel{display:flex;flex-direction:column;gap:0;margin:18px 0;border:1px solid var(--line);border-radius:12px;overflow:hidden}
+  .layer{display:grid;grid-template-columns:120px 1fr;border-bottom:1px solid var(--line);cursor:default}
+  .layer:last-child{border-bottom:none}
+  .layer .ltag{padding:16px;font-weight:700;font-size:13px;display:flex;align-items:center;justify-content:center;text-align:center}
+  .layer .lbody{padding:14px 18px}
+  .layer .lbody h4{margin:0 0 4px;font-size:15px}
+  .layer .lbody p{margin:0;font-size:14px;color:var(--mut)}
+  .L1 .ltag{background:#102a44;color:var(--acc2)} .L1{background:rgba(121,192,255,.04)}
+  .L2 .ltag{background:#2e2440;color:var(--acc3)} .L2{background:rgba(210,168,255,.04)}
+  .L3 .ltag{background:#16331f;color:var(--acc)}  .L3{background:rgba(126,231,135,.04)}
+  /* ---- tabbed lifecycle ---- */
+  .lc{margin:18px 0;border:1px solid var(--line);border-radius:12px;overflow:hidden;background:var(--panel)}
+  .lc-rail{display:flex;overflow-x:auto;background:var(--code);border-bottom:1px solid var(--line)}
+  .lc-tab{flex:1;min-width:96px;border:none;background:none;color:var(--mut);padding:12px 8px 11px;cursor:pointer;font-family:var(--sans);font-size:12.5px;border-bottom:3px solid transparent;position:relative;transition:.1s;text-align:center}
+  .lc-tab:hover{color:var(--ink);background:rgba(255,255,255,.02)}
+  .lc-tab .step{display:block;font-family:var(--mono);font-size:10px;color:var(--acc);margin-bottom:3px;letter-spacing:.05em}
+  .lc-tab.on{color:var(--ink);border-bottom-color:var(--acc)}
+  .lc-tab.on .step{color:var(--acc)}
+  .lc-panel{display:none;padding:20px 22px;animation:fade .18s ease}
+  .lc-panel.on{display:block}
+  @keyframes fade{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:none}}
+  .lc-panel .verb{font-family:var(--mono);font-size:13px;margin:0 0 4px;color:#cdd9e5}
+  .lc-panel h4{margin:14px 0 4px;font-size:12px;text-transform:uppercase;letter-spacing:.08em;color:var(--mut)}
+  .lc-panel ul{margin:4px 0;padding-left:20px}
+  .lc-panel li{margin:3px 0;font-size:14px}
+  .lc-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:8px}
+  .lc-box{background:var(--code);border:1px solid var(--line);border-radius:8px;padding:10px 12px}
+  .lc-box .bh{font-size:11px;text-transform:uppercase;letter-spacing:.07em;color:var(--mut);margin-bottom:5px}
+  .lc-box .bb{font-size:13.5px}
+  .gotcha{margin-top:12px;border-left:3px solid var(--warn);background:rgba(240,136,62,.06);padding:8px 12px;border-radius:0 8px 8px 0;font-size:13.5px}
+  .gotcha b{color:var(--warn)}
+  /* ---- two streams ---- */
+  .streams{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin:16px 0}
+  .stream{border:1px solid var(--line);border-radius:12px;padding:16px;background:var(--panel)}
+  .stream.state{border-top:3px solid var(--acc3)}
+  .stream.evt{border-top:3px solid var(--acc2)}
+  .stream h4{margin:0 0 2px;font-size:15px}
+  .stream .tbl{font-size:13px;color:var(--mut);font-family:var(--mono)}
+  .stream ul{margin:8px 0 0;padding-left:18px;font-size:13.5px}
+  /* ---- accordion (details) ---- */
+  details{border:1px solid var(--line);border-radius:10px;margin:10px 0;background:var(--panel);overflow:hidden}
+  details[open]{background:var(--panel)}
+  summary{cursor:pointer;padding:13px 16px;font-weight:600;font-size:15px;list-style:none;display:flex;align-items:center;gap:10px;user-select:none}
+  summary::-webkit-details-marker{display:none}
+  summary .chev{color:var(--acc);transition:.15s;font-family:var(--mono);font-size:13px}
+  details[open] summary .chev{transform:rotate(90deg)}
+  summary .k{font-family:var(--mono);font-size:12px;background:var(--chip);color:var(--acc2);border-radius:5px;padding:1px 8px}
+  summary .name{flex:1}
+  summary .hint{font-weight:400;font-size:12.5px;color:var(--mut)}
+  .det-body{padding:2px 16px 16px;font-size:14px;border-top:1px solid var(--line);margin-top:0}
+  .det-body p:first-child{margin-top:12px}
+  /* sequence diagram */
+  .seq{width:100%;height:auto;background:var(--code);border:1px solid var(--line);border-radius:12px;margin:14px 0}
+  .seq text{font-family:var(--mono);font-size:12px;fill:var(--ink)}
+  .seq .lbl{font-weight:700;fill:var(--acc2)}
+  .seq .note{fill:var(--mut);font-size:10.5px}
+  .seq line.life{stroke:var(--line);stroke-dasharray:4 4}
+  .seq line.msg{stroke:var(--acc2);stroke-width:1.5}
+  .seq line.ret{stroke:var(--mut);stroke-width:1.1;stroke-dasharray:3 3}
+  .seq rect.actor{fill:var(--panel2);stroke:var(--line)}
+  .seq polygon{fill:var(--acc2)} .seq polygon.ret{fill:var(--mut)}
+  .pill{display:inline-block;font-family:var(--mono);font-size:11px;background:var(--chip);color:var(--acc2);padding:2px 8px;border-radius:6px;margin:2px 4px 2px 0}
+  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:16px 18px;margin:14px 0}
+  .card h4{margin:0 0 6px;color:var(--acc3);font-size:14px}
+  footer{color:var(--mut);font-size:12.5px;border-top:1px solid var(--line);padding-top:16px;margin-top:56px}
+  .back2top{position:fixed;right:22px;bottom:22px;background:var(--panel2);border:1px solid var(--line);color:var(--ink);border-radius:9px;padding:9px 13px;font-size:13px;cursor:pointer;opacity:0;pointer-events:none;transition:.2s}
+  .back2top.show{opacity:1;pointer-events:auto}
+  @media(max-width:980px){.wrap{grid-template-columns:1fr}nav.toc{display:none}main{padding:24px 18px}.personas,.streams,.lc-grid,.grid2{grid-template-columns:1fr}.layer{grid-template-columns:84px 1fr}}
+</style>
+</head>
+<body>
+<div class="wrap">
+<nav class="toc" id="toc">
+  <div class="brand">state<span>·</span>db</div>
+  <div class="sub">Pulumi lifecycle &amp; journaling</div>
+  <a href="#top">Overview &amp; the 3 layers</a>
+  <div class="grp">Walk the protocol</div>
+  <a href="#lifecycle">The lifecycle (interactive)</a>
+  <a href="#streams">Two streams</a>
+  <a href="#lease">Locks &amp; leases</a>
+  <div class="grp">Journaling</div>
+  <a href="#journal">The journal log</a>
+  <a href="#kinds">The 8 entry kinds</a>
+  <a href="#seq">The sequence-ID trick</a>
+  <a href="#replay">Replay → deployment</a>
+  <a href="#compaction">Compaction</a>
+  <div class="grp">Reference</div>
+  <a href="#concurrency">Concurrency invariants</a>
+  <a href="#filemap">Code map</a>
+  <a href="#firstday">Your first change</a>
+  <a href="#glossary">Glossary</a>
+</nav>
+
+<main>
+  <span id="top"></span>
+  <h1>Pulumi's <span class="em">lifecycle</span> &amp; <span class="em">journal</span>, the state-db way</h1>
+  <p class="lede">You've run <code>pulumi up</code>. You've never seen the HTTP conversation behind it. This page is that conversation — what the CLI sends, what we store, and the exact class that owns each step.</p>
+
+  <div class="callout key" style="margin-top:22px">
+    <span class="lbl">The 10-second version</span>
+    A user points <code>PULUMI_BACKEND_URL</code> at us and keeps using <code>pulumi up</code> unchanged. During a run the CLI streams tiny <b>journal</b> deltas; we just append them. We rebuild the full state <b>on read</b> by replaying that journal. That's the whole trick.
+  </div>
+
+  <h3 style="margin-top:30px">Pick your depth — these jump you to the right place</h3>
+  <div class="personas">
+    <a class="persona" href="#lifecycle">
+      <div class="who">Just give me the gist</div>
+      <div class="what">Click through the interactive lifecycle and the 3-layer model.</div>
+      <div class="arrow">→ lifecycle</div>
+    </a>
+    <a class="persona" href="#kinds">
+      <div class="who">I'm touching the journal code</div>
+      <div class="what">The 8 entry kinds, the sequence-ID trick, and the replay reducer.</div>
+      <div class="arrow">→ journaling</div>
+    </a>
+    <a class="persona" href="#concurrency">
+      <div class="who">I need every invariant</div>
+      <div class="what">Lock order, the TOCTOU revalidation, the code map.</div>
+      <div class="arrow">→ invariants</div>
+    </a>
+  </div>
+
+  <h3 style="margin-top:34px">The whole system in three layers</h3>
+  <p class="legend">Read top-to-bottom. Each layer only knows about the one below it.</p>
+  <div class="peel">
+    <div class="layer L1">
+      <div class="ltag">LAYER 1<br>WIRE</div>
+      <div class="lbody">
+        <h4>The CLI ⇄ HTTP protocol</h4>
+        <p>Start a run, grab a lock, stream journal + events, complete, read back. JAX-RS resources in <code>modules/pulumi-api</code>. → <a href="#lifecycle">walk it</a></p>
+      </div>
+    </div>
+    <div class="layer L2">
+      <div class="ltag">LAYER 2<br>STORAGE</div>
+      <div class="lbody">
+        <h4>Append-only rows in Postgres</h4>
+        <p>We never store "the state." We store the run (<code>stack_updates</code>), the deltas (<code>journal_entries</code>), and a head pointer (<code>stack_state</code>). → <a href="#journal">the log</a></p>
+      </div>
+    </div>
+    <div class="layer L3">
+      <div class="ltag">LAYER 3<br>REBUILD</div>
+      <div class="lbody">
+        <h4>Replay folds deltas into a checkpoint</h4>
+        <p>On <code>GET /export</code> (and in background compaction) we replay the journal over a base snapshot to produce a full <code>DeploymentV3</code>. → <a href="#replay">replay</a></p>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============================================================ -->
+  <h2 id="lifecycle"><span class="ix">01</span> The lifecycle — click each phase</h2>
+  <p class="h2sub">One <code>pulumi up</code>, phase by phase. Each tab is a real HTTP call; pick one to see what happens, what changes in the DB, who owns it, and the gotcha.</p>
+
+  <div class="lc">
+    <div class="lc-rail" role="tablist">
+      <button class="lc-tab on" data-p="p0"><span class="step">00</span>Negotiate</button>
+      <button class="lc-tab" data-p="p1"><span class="step">01</span>Start</button>
+      <button class="lc-tab" data-p="p2"><span class="step">02</span>Lock</button>
+      <button class="lc-tab" data-p="p3"><span class="step">03</span>Journal</button>
+      <button class="lc-tab" data-p="p4"><span class="step">04</span>Events</button>
+      <button class="lc-tab" data-p="p5"><span class="step">05</span>Complete</button>
+      <button class="lc-tab" data-p="p6"><span class="step">06</span>Export</button>
+    </div>
+
+    <div class="lc-panel on" id="p0">
+      <p class="verb"><span class="tag m-get">GET</span> /pulumi/api/capabilities</p>
+      <p>Before anything, the CLI asks which checkpoint protocol we speak. There are several historical ones; we answer "journaling."</p>
+      <div class="lc-grid">
+        <div class="lc-box"><div class="bh">DB effect</div><div class="bb">None — read only.</div></div>
+        <div class="lc-box"><div class="bh">Owner</div><div class="bb"><span class="fileref">CapabilitiesResource</span></div></div>
+      </div>
+      <div class="gotcha"><b>Gotcha:</b> the legacy <code>PATCH …/checkpoint*</code> endpoints return a deliberate <code>501</code>. A request there means protocol negotiation went wrong — we want that loud, not a silent 404.</div>
+    </div>
+
+    <div class="lc-panel" id="p1">
+      <p class="verb"><span class="tag m-post">POST</span> …/update &nbsp;·&nbsp; /preview &nbsp;·&nbsp; /refresh &nbsp;·&nbsp; /destroy</p>
+      <p>Open a run. Inserts one <code>stack_updates</code> row at <code>status=in-progress</code> with a per-stack monotonic <code>version</code>.</p>
+      <div class="lc-grid">
+        <div class="lc-box"><div class="bh">DB effect</div><div class="bb">+1 <code>stack_updates</code> row</div></div>
+        <div class="lc-box"><div class="bh">Owner</div><div class="bb"><span class="fileref">StackUpdateStarter</span></div></div>
+      </div>
+      <div class="gotcha"><b>Gotcha:</b> takes <code>FOR UPDATE</code> on the parent <code>stacks</code> row, then checks the <code>Idempotency-Key</code>. A retried POST returns the <i>existing</i> row instead of racing a duplicate insert.</div>
+    </div>
+
+    <div class="lc-panel" id="p2">
+      <p class="verb"><span class="tag m-post">POST</span> …/update/{updateID}  <span class="legend">(POST to the update = "begin it")</span></p>
+      <p>Grab the stack's exclusive lock and mint a <b>lease token</b>. One stack, one mutating run.</p>
+      <div class="lc-grid">
+        <div class="lc-box"><div class="bh">DB effect</div><div class="bb"><code>stack_locks</code> upsert · set <code>active_update_id</code></div></div>
+        <div class="lc-box"><div class="bh">Owner</div><div class="bb"><span class="fileref">StackLockAcquirer</span></div></div>
+      </div>
+      <div class="gotcha"><b>Gotcha:</b> one atomic <code>INSERT … ON CONFLICT … WHERE expires_at &lt; now()</code>. Live lock → empty result → <code>409 "locked"</code>. Expired lock → stolen in place. → <a href="#lease">deep dive</a></div>
+    </div>
+
+    <div class="lc-panel" id="p3">
+      <p class="verb"><span class="tag m-patch">PATCH</span> …/update/{updateID}/journalentries &nbsp;<span class="legend">(repeated, the state stream)</span></p>
+      <p>The CLI streams batches of journal entries — "began creating X", "X succeeded, here's its state." One entry → one row. <b>We append; we don't reconstruct.</b></p>
+      <div class="lc-grid">
+        <div class="lc-box"><div class="bh">DB effect</div><div class="bb">+N <code>journal_entries</code> · bump <code>journal_seq</code></div></div>
+        <div class="lc-box"><div class="bh">Owner</div><div class="bb"><span class="fileref">JournalAppender</span></div></div>
+      </div>
+      <div class="gotcha"><b>Gotcha:</b> first PATCH captures <code>start_journal_seq</code>; every row's replay key is <code>start_journal_seq + wire id</code>. → <a href="#seq">the sequence-ID trick</a></div>
+    </div>
+
+    <div class="lc-panel" id="p4">
+      <p class="verb"><span class="tag m-post">POST</span> …/update/{updateID}/events/batch &nbsp;<span class="legend">(parallel, the progress stream)</span></p>
+      <p>Engine progress events for the UI — "about to act on resource", "summary: 6 created." Pure observability.</p>
+      <div class="lc-grid">
+        <div class="lc-box"><div class="bh">DB effect</div><div class="bb">+N <code>update_events</code> rows</div></div>
+        <div class="lc-box"><div class="bh">Owner</div><div class="bb"><span class="fileref">EventBatchAppender</span></div></div>
+      </div>
+      <div class="gotcha"><b>Gotcha:</b> events have no ordering invariant, so this path <i>skips</i> the <code>stack_state FOR UPDATE</code> that journal appends take. That's the cleanest signal that events are <i>not</i> state. → <a href="#streams">two streams</a></div>
+    </div>
+
+    <div class="lc-panel" id="p5">
+      <p class="verb"><span class="tag m-post">POST</span> …/complete &nbsp;·&nbsp; <span class="tag m-delete">DELETE</span> …/update/{updateID} <span class="legend">(cancel)</span></p>
+      <p>End the run. Stamp the journal boundary, flip status, drop the lock, bump the stack version, queue a compaction.</p>
+      <div class="lc-grid">
+        <div class="lc-box"><div class="bh">DB effect</div><div class="bb">stamp <code>end_journal_seq</code> · del lock · <code>+1 version</code> · enqueue job</div></div>
+        <div class="lc-box"><div class="bh">Owner</div><div class="bb"><span class="fileref">StackUpdateCompleter</span></div></div>
+      </div>
+      <div class="gotcha"><b>Gotcha:</b> locks <code>stack_state</code> first, so <code>end_journal_seq</code> is read only after any in-flight PATCH commits — the boundary can never race a late journal write.</div>
+    </div>
+
+    <div class="lc-panel" id="p6">
+      <p class="verb"><span class="tag m-get">GET</span> …/export</p>
+      <p>The CLI reads state back. We replay the journal tail over the base snapshot and return a full <code>DeploymentV3</code>. Same code the compactor uses.</p>
+      <div class="lc-grid">
+        <div class="lc-box"><div class="bh">DB effect</div><div class="bb">None — pure read + in-memory fold</div></div>
+        <div class="lc-box"><div class="bh">Owner</div><div class="bb"><span class="fileref">StackExportResource</span> → <span class="fileref">StackAssembler</span></div></div>
+      </div>
+      <div class="gotcha"><b>Gotcha:</b> the output must pass Pulumi's own <i>snapshot integrity check</i> or the CLI refuses the stack. → <a href="#replay">replay</a></div>
+    </div>
+  </div>
+
+  <details>
+    <summary><span class="chev">▶</span><span class="name">See it as a sequence diagram</span><span class="hint">the same flow, drawn out</span></summary>
+    <div class="det-body">
+      <svg class="seq" viewBox="0 0 900 470" role="img" aria-label="Sequence diagram of a Pulumi update">
+        <rect class="actor" x="30"  y="16" width="120" height="32" rx="6"/><text class="lbl" x="90"  y="37" text-anchor="middle">Pulumi CLI</text>
+        <rect class="actor" x="370" y="16" width="160" height="32" rx="6"/><text class="lbl" x="450" y="37" text-anchor="middle">UpdateResource</text>
+        <rect class="actor" x="720" y="16" width="150" height="32" rx="6"/><text class="lbl" x="795" y="37" text-anchor="middle">Postgres</text>
+        <line class="life" x1="90"  y1="48" x2="90"  y2="455"/>
+        <line class="life" x1="450" y1="48" x2="450" y2="455"/>
+        <line class="life" x1="795" y1="48" x2="795" y2="455"/>
+        <line class="msg" x1="90" y1="80" x2="448" y2="80"/><polygon points="448,80 438,75 438,85"/>
+        <text x="100" y="74">POST /update → StackUpdateStarter</text>
+        <line class="ret" x1="450" y1="96" x2="92" y2="96"/><polygon class="ret" points="92,96 102,91 102,101"/>
+        <text class="note" x="110" y="110">{ updateID, version }  status=in-progress</text>
+        <line class="msg" x1="90" y1="140" x2="448" y2="140"/><polygon points="448,140 438,135 438,145"/>
+        <text x="100" y="134">POST /update/{id} → StackLockAcquirer</text>
+        <line class="ret" x1="450" y1="156" x2="92" y2="156"/><polygon class="ret" points="92,156 102,151 102,161"/>
+        <text class="note" x="110" y="170">{ token, expires }  lease minted</text>
+        <rect x="64" y="186" width="800" height="120" rx="8" fill="none" stroke="#2b3440" stroke-dasharray="5 4"/>
+        <text class="note" x="78" y="203">loop ── per resource, concurrent ──</text>
+        <line class="msg" x1="90" y1="232" x2="448" y2="232"/><polygon points="448,232 438,227 438,237"/>
+        <text x="100" y="226" style="fill:#d2a8ff">PATCH …/journalentries → JournalAppender</text>
+        <line class="ret" x1="795" y1="250" x2="452" y2="250"/><polygon class="ret" points="452,250 462,245 462,255"/>
+        <text class="note" x="468" y="244">append rows · advance journal_seq (FOR UPDATE)</text>
+        <line class="msg" x1="90" y1="282" x2="448" y2="282"/><polygon points="448,282 438,277 438,287"/>
+        <text x="100" y="276">POST …/events/batch → EventBatchAppender (no lock)</text>
+        <line class="msg" x1="90" y1="338" x2="448" y2="338"/><polygon points="448,338 438,333 438,343"/>
+        <text x="100" y="332">POST …/complete → StackUpdateCompleter</text>
+        <line class="ret" x1="795" y1="354" x2="452" y2="354"/><polygon class="ret" points="452,354 462,349 462,359"/>
+        <text class="note" x="468" y="348">stamp end_seq · drop lock · +version · enqueue compaction</text>
+        <line class="msg" x1="90" y1="392" x2="448" y2="392"/><polygon points="448,392 438,387 438,397"/>
+        <text x="100" y="386" style="fill:#7ee787">GET /export → StackAssembler.assemble()</text>
+        <line class="ret" x1="795" y1="410" x2="92" y2="410"/><polygon class="ret" points="92,410 102,405 102,415"/>
+        <text class="note" x="110" y="424">replay journal over base snapshot → DeploymentV3</text>
+        <text class="note" x="110" y="444">(compaction runs the same fold later, async)</text>
+      </svg>
+    </div>
+  </details>
+
+  <details>
+    <summary><span class="chev">▶</span><span class="name">Full endpoint reference</span><span class="hint">every route → owning class</span></summary>
+    <div class="det-body">
+      <p class="legend">All under <code>/pulumi/api/stacks/{org}/{project}/{stack}</code> unless noted.</p>
+      <table>
+        <thead><tr><th>Method + path</th><th>Purpose</th><th>Owner</th></tr></thead>
+        <tbody>
+          <tr><td><span class="tag m-get">GET</span> <code>/capabilities</code></td><td>Advertise checkpoint protocol.</td><td><code>CapabilitiesResource</code></td></tr>
+          <tr><td><span class="tag m-post">POST</span> <code>/update·/preview·/destroy·/refresh</code></td><td>Start a run.</td><td><code>UpdateResource.start()</code></td></tr>
+          <tr><td><span class="tag m-post">POST</span> <code>/update/{id}</code></td><td>Acquire lock; mint lease.</td><td><code>acquireLock()</code></td></tr>
+          <tr><td><span class="tag m-get">GET</span> <code>/update/{id}</code></td><td>Poll status.</td><td><code>getUpdate()</code></td></tr>
+          <tr><td><span class="tag m-post">POST</span> <code>/update/{id}/renew_lease</code></td><td>Heartbeat: extend lease, rotate token.</td><td><code>renewLease()</code></td></tr>
+          <tr><td><span class="tag m-patch">PATCH</span> <code>/update/{id}/journalentries</code></td><td><b>Append journal batch (state).</b></td><td><code>appendJournal()</code></td></tr>
+          <tr><td><span class="tag m-post">POST</span> <code>/update/{id}/events/batch</code></td><td>Append engine events (progress).</td><td><code>postEventsBatch()</code></td></tr>
+          <tr><td><span class="tag m-post">POST</span> <code>/update/{id}/complete</code></td><td>Terminate; enqueue compaction.</td><td><code>completeUpdate()</code></td></tr>
+          <tr><td><span class="tag m-delete">DELETE</span> <code>/update/{id}</code></td><td>Cancel; release lock.</td><td><code>cancelUpdate()</code></td></tr>
+          <tr><td><span class="tag m-get">GET</span> <code>/export</code></td><td>Reconstruct &amp; return <code>DeploymentV3</code>.</td><td><code>StackExportResource</code></td></tr>
+          <tr><td><span class="tag m-post">POST</span> <code>/import</code></td><td>Install an external deployment as a new base.</td><td><code>StackResource.importStack()</code></td></tr>
+        </tbody>
+      </table>
+    </div>
+  </details>
+
+  <!-- ============================================================ -->
+  <h2 id="streams"><span class="ix">02</span> Two streams — never confuse them</h2>
+  <p class="h2sub">During a run the CLI sends two parallel streams. They look similar but serve opposite purposes, and the code treats them differently.</p>
+  <div class="streams">
+    <div class="stream state">
+      <h4 style="color:var(--acc3)">⬡ Journal &nbsp;<span class="tag m-patch">PATCH</span></h4>
+      <div class="tbl">→ journal_entries</div>
+      <ul>
+        <li><b>Is</b> the source of truth for state.</li>
+        <li>Ordered &amp; serialized: takes <code>stack_state FOR UPDATE</code>.</li>
+        <li>Replayed to rebuild the checkpoint.</li>
+        <li>Append-only &amp; idempotent on retry.</li>
+      </ul>
+    </div>
+    <div class="stream evt">
+      <h4 style="color:var(--acc2)">◷ Events &nbsp;<span class="tag m-post">POST</span></h4>
+      <div class="tbl">→ update_events</div>
+      <ul>
+        <li><b>Is</b> human-facing progress only.</li>
+        <li>No ordering invariant: <code>skips</code> the lock.</li>
+        <li>Drives the console timeline &amp; diffs.</li>
+        <li>Never touched by state reconstruction.</li>
+      </ul>
+    </div>
+  </div>
+  <div class="callout"><span class="lbl">If you remember one thing</span> <b>Journal rebuilds state. Events render a timeline.</b> Reaching for <code>update_events</code> to answer "what resources exist?" is the classic wrong turn.</div>
+
+  <!-- ============================================================ -->
+  <h2 id="lease"><span class="ix">03</span> Locks &amp; leases</h2>
+  <p class="h2sub">Pulumi's rule: one stack, one mutating run. We enforce it with a time-boxed lease.</p>
+
+  <div class="grid2">
+    <div class="card"><h4>Acquire = one atomic statement</h4>
+      <p style="font-size:14px">HQL can't express <code>ON CONFLICT</code>, so this is a justified native query. A live lock fails the <code>WHERE</code> → empty <code>RETURNING</code> → <code>409</code>. A crashed-CLI lock (expired) is stolen in place.</p>
+    </div>
+    <div class="card"><h4>The token is a rotating bearer</h4>
+      <p style="font-size:14px">We store only the token's <b>hash</b> and hand the plaintext to the CLI as <code>Authorization: update-token &lt;uuid&gt;</code>. Every <code>renew_lease</code> mints a new one, so a leaked token dies within one window.</p>
+    </div>
+  </div>
+
+<pre><code>INSERT INTO stack_locks (…, expires_at, max_expires_at)
+VALUES (…, LEAST(now()+ttl, now()+maxLifetime), now()+maxLifetime)
+ON CONFLICT (stack_id) DO UPDATE SET … = EXCLUDED.…
+ WHERE stack_locks.expires_at &lt; now()      <span style="color:#9aa7b4">-- only steal an EXPIRED lock</span>
+RETURNING id, expires_at;</code></pre>
+
+  <table>
+    <thead><tr><th>Two TTLs</th><th>Two failure codes</th></tr></thead>
+    <tbody>
+      <tr>
+        <td><code>expires_at</code> — sliding, pushed by each renew.<br><code>max_expires_at</code> — hard ceiling; even continuous renew can't pass it (acquire uses <code>LEAST</code>).</td>
+        <td><code>401</code> — missing/malformed token ("you didn't authenticate").<br><code>409</code> — valid token but expired / wrong stack / wrong updateID ("your lease is gone").</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <details>
+    <summary><span class="chev">▶</span><span class="name">Why we revalidate the lease <i>inside</i> the write transaction</span><span class="hint">the TOCTOU gap</span></summary>
+    <div class="det-body">
+      <p>Lease-scoped routes pass two checks, and both matter:</p>
+      <ol>
+        <li><span class="fileref">LeaseTokenFilter</span> runs first: validates the token, confirms path <code>(org/project/stack)</code> + <code>updateID</code> match the lease, stashes a <code>LeaseContext</code>.</li>
+        <li>The handler re-reads it, and for writes <span class="fileref">JournalAppender:110</span> calls <code>LeaseRevalidator.requireLive()</code> <i>inside the same transaction</i>, after taking <code>stack_state FOR UPDATE</code>.</li>
+      </ol>
+      <div class="gotcha"><b>The gap it closes:</b> between filter admission and the actual write, a concurrent <code>/complete</code> could delete the lock row. Without the in-transaction recheck, a slow PATCH could land journal entries <i>past</i> <code>end_journal_seq</code> and corrupt the boundary. Revalidating under the row lock means the completer either blocks behind us, or we find the lock already gone and throw. <span class="fileref">StackLockRenewer</span> closes the same gap for renew with an <code>expires_at &gt; now()</code> predicate.</div>
+    </div>
+  </details>
+
+  <!-- ============================================================ -->
+  <h2 id="journal"><span class="ix">04</span> The journal log — what a row holds</h2>
+  <p class="h2sub">One PATCH carries a batch; one entry becomes one <code>journal_entries</code> row. The columns that matter (<span class="fileref">JournalEntry.java</span>):</p>
+  <table>
+    <thead><tr><th>Column</th><th>Meaning</th></tr></thead>
+    <tbody>
+      <tr><td><code>wire_sequence_id</code></td><td>Pulumi's per-run entry number (resets every run).</td></tr>
+      <tr><td><code>sequence_id</code></td><td><b>Server-assigned replay order</b> = <code>start_journal_seq + wire id</code>.</td></tr>
+      <tr><td><code>kind</code></td><td>Discriminator 0–7 — decides how replay reads the row.</td></tr>
+      <tr><td><code>operation_id</code></td><td>Ties a <code>Begin</code> to its later <code>Success</code>/<code>Failure</code>.</td></tr>
+      <tr><td><code>payload</code> (jsonb)</td><td>Full entry body — e.g. the resource's <code>state</code> on a Success.</td></tr>
+      <tr><td><code>remove_* / delete_* / pending_replacement_*</code></td><td><b>Index</b> instructions for mutating base-snapshot resources during replay.</td></tr>
+    </tbody>
+  </table>
+  <div class="callout key"><span class="lbl">Append-only &amp; idempotent</span> We never update a row. A retried batch of already-stored entries is a <b>no-op</b> (diffed by <code>wire_sequence_id</code>). A duplicate wire-id with <i>different</i> contents → <code>JournalSequenceConflictException</code> → <code>409</code>. Two unique constraints back it up: <code>UNIQUE(update_id, wire_sequence_id)</code> and <code>UNIQUE(stack_id, sequence_id)</code>.</div>
+
+  <!-- ============================================================ -->
+  <h2 id="kinds"><span class="ix">05</span> The 8 entry kinds</h2>
+  <p class="h2sub">The <code>kind</code> discriminator is the heart of the replay reducer (one <code>switch</code> arm each in <span class="fileref">JournalReplayer.add()</span>, pinned to Pulumi <code>v3.242.0</code>). Click a kind to expand what replay does.</p>
+
+  <details>
+    <summary><span class="chev">▶</span><span class="k">0</span><span class="name">Begin</span><span class="hint">an operation starts</span></summary>
+    <div class="det-body"><p>Records an in-flight op in <code>incompleteOps</code>. If the payload carries full resource context (<code>urn</code>, <code>type</code>, a valid <code>operation.type</code>) it also writes a <code>pending_operations</code> row. If the op never resolves, it surfaces in <code>deployment.pendingOperations</code> — that's the crash-recovery hook.</p></div>
+  </details>
+  <details>
+    <summary><span class="chev">▶</span><span class="k">1</span><span class="name">Success</span><span class="hint">the workhorse — a resource is now live</span></summary>
+    <div class="det-body"><p>Appends <code>payload.state</code> as a new live resource and clears the matching pending op. Then applies any index instructions on the row: <code>removeOld/removeNew</code> (drop), <code>deleteOld/deleteNew</code> (mark for deletion), <code>pendingReplacement*</code> (flag). This is where most of an <code>up</code>'s resources come from.</p></div>
+  </details>
+  <details>
+    <summary><span class="chev">▶</span><span class="k">2</span><span class="name">Failure</span><span class="hint">an operation failed</span></summary>
+    <div class="det-body"><p>Clears the in-flight op. The resource simply never materializes in the output deployment.</p></div>
+  </details>
+  <details>
+    <summary><span class="chev">▶</span><span class="k">3</span><span class="name">RefreshSuccess</span><span class="hint">refresh re-read a resource</span></summary>
+    <div class="det-body"><p>Replace the base-snapshot resource at index <code>removeOld</code> with the freshly-read <code>state</code> (or drop it if state is null). Sets <code>hasRefresh</code>, which triggers dependency rebuilding at materialization (see <a href="#replay">replay</a>).</p></div>
+  </details>
+  <details>
+    <summary><span class="chev">▶</span><span class="k">4</span><span class="name">Outputs</span><span class="hint">final outputs for a resource</span></summary>
+    <div class="det-body"><p>Replace a resource's state with its final outputs — e.g. the stack resource's outputs stamped at the end of a run.</p></div>
+  </details>
+  <details>
+    <summary><span class="chev">▶</span><span class="k">5</span><span class="name">Write</span><span class="hint">wholesale base replacement</span></summary>
+    <div class="det-body"><p>Overwrite the entire working base with <code>payload.newSnapshot</code>. Implemented and tested, but rare in practice (not seen in the workbench run).</p></div>
+  </details>
+  <details>
+    <summary><span class="chev">▶</span><span class="k">6</span><span class="name">SecretsProvider</span><span class="hint">set the secrets provider</span></summary>
+    <div class="det-body"><p>Set or update <code>secrets_providers</code> on the deployment. Idempotent — a no-op if the incoming provider equals the current one.</p></div>
+  </details>
+  <details>
+    <summary><span class="chev">▶</span><span class="k">7</span><span class="name">RebuiltBaseState</span><span class="hint">a checkpoint within a run</span></summary>
+    <div class="det-body"><p>Materialize everything so far into a fresh base and clear all transient replay maps. A semantic marker <i>inside</i> a run — not DB compaction.</p></div>
+  </details>
+
+  <div class="callout warn"><span class="lbl">The classic onboarding bug</span> <code>removeOld=2</code> does <b>not</b> mean "journal row 2." It's index 2 into the <i>base checkpoint's</i> <code>resources[]</code> array, as the CLI saw it. These indexes point back at resources from a prior run's exported state.</div>
+
+  <!-- ============================================================ -->
+  <h2 id="seq"><span class="ix">06</span> The sequence-ID trick</h2>
+  <p class="h2sub">The cleverest, most confusing piece. Worth reading twice.</p>
+
+  <div class="grid2">
+    <div class="card" style="border-top:3px solid var(--warn)"><h4 style="color:var(--warn)">The problem</h4>
+      <p style="font-size:14px">Pulumi numbers entries from an atomic counter at creation time. But its resource workers run <b>concurrently</b> and share one journal channel — so entries can reach our server <b>out of order</b>, even across separate PATCHes. Store arrival order and replay is wrong.</p>
+    </div>
+    <div class="card" style="border-top:3px solid var(--acc)"><h4 style="color:var(--acc)">The fix</h4>
+      <p style="font-size:14px">Make the replay key a <b>deterministic function</b> of the wire id, not of arrival. The offset is fixed once per run, so <code>ORDER BY sequence_id</code> always rebuilds the CLI's intended order.</p>
+    </div>
+  </div>
+
+<pre><code><span style="color:#7ee787">sequence_id</span> = stack_updates.<span style="color:#79c0ff">start_journal_seq</span> + <span style="color:#d2a8ff">wire_sequence_id</span>
+                       <span style="color:#9aa7b4">└─ per-run offset, claimed once on the FIRST patch ─┘</span></code></pre>
+
+  <table>
+    <thead><tr><th>Field</th><th>Scope</th><th>Assigned by</th></tr></thead>
+    <tbody>
+      <tr><td><code>wire_sequence_id</code></td><td>Per run (resets each run)</td><td>Pulumi CLI</td></tr>
+      <tr><td><code>sequence_id</code></td><td>Per stack (monotonic forever)</td><td>state-db server</td></tr>
+    </tbody>
+  </table>
+  <p class="legend">The CLI never knows <code>sequence_id</code> exists. It only sends <code>sequenceID</code> (= our <code>wire_sequence_id</code>). Insertion order = arrival order; <b>replay order = <code>sequence_id</code></b>.</p>
+
+  <details>
+    <summary><span class="chev">▶</span><span class="name">How the offset is claimed &amp; the head advanced</span><span class="hint">the two atomic moves</span></summary>
+    <div class="det-body">
+      <div class="grid2">
+        <div class="card"><h4>Claim (first PATCH only)</h4><p style="font-size:13.5px"><span class="fileref">JournalAppender:114</span> runs <code>UPDATE stack_updates SET start_journal_seq = &lt;current journal_seq&gt; WHERE id=? AND start_journal_seq IS NULL</code>. One-shot; later PATCHes read it back.</p></div>
+        <div class="card"><h4>Advance (every PATCH)</h4><p style="font-size:13.5px"><code>UPDATE stack_state SET journal_seq = GREATEST(journal_seq, offset+max+1)</code>. <code>GREATEST</code> guards against an earlier PATCH that already advanced past this batch (out-of-order arrival).</p></div>
+      </div>
+    </div>
+  </details>
+
+  <!-- ============================================================ -->
+  <h2 id="replay"><span class="ix">07</span> Replay — log back into a deployment</h2>
+  <p class="h2sub"><span class="fileref">StackAssembler.assemble(stackId)</span> is the read path — and the exact code compaction uses, which guarantees a compacted snapshot equals what <code>/export</code> would have returned.</p>
+
+  <div class="card" style="padding:12px 18px">
+    <p style="margin:8px 0"><b style="color:var(--acc)">1 · Base.</b> Load <code>snapshots.checkpoint</code> if a base exists, else an empty deployment. Note <code>baseSeq = compacted_from_journal_seq</code>.</p>
+    <p style="margin:8px 0"><b style="color:var(--acc)">2 · Stream.</b> <code>journal_entries WHERE sequence_id &gt; baseSeq ORDER BY sequence_id</code> — a scalar projection, no entity hydration.</p>
+    <p style="margin:8px 0"><b style="color:var(--acc)">3 · Fold.</b> Feed each row to <code>JournalReplayer.add()</code>. <b>On an update boundary</b> (the <code>updateId</code> changes) materialize the current deployment and use it as the next run's base — that's how each run sees the prior run's result.</p>
+    <p style="margin:8px 0"><b style="color:var(--acc)">4 · Materialize.</b> <code>generateDeployment()</code> folds the maps into a <code>DeploymentV3</code>; if any refresh happened it rebuilds dependencies, un-dangles parents, and normalizes URN aliases.</p>
+  </div>
+  <p style="font-size:14px">The replayer is a faithful Java port of Pulumi's Go reducer — its maps mirror the Go names (<code>toRemove</code>, <code>toReplaceInSnapshot</code>, <code>operationIDToIndex</code>, <code>incompleteOps</code>). It also reports a deployment <code>version</code> (3/4) and a sorted <code>features</code> list (<code>hooks</code>, <code>views</code>, <code>taint</code>…).</p>
+
+  <div class="callout warn"><span class="lbl">The bricked-state risk</span> Pulumi refuses a stack whose export fails its <i>snapshot integrity check</i> (dangling parents, unknown aliases, missing providers). So replay must emit JSON that passes Pulumi's <i>own</i> validator — that's why it bothers with dependency rebuilding and URN normalization. The integrity scenarios are tracked in <span class="fileref">design/pulumi-state-testing-roadmap.md</span>.</div>
+
+  <!-- ============================================================ -->
+  <h2 id="compaction"><span class="ix">08</span> Compaction — keeping replay cheap</h2>
+  <p class="h2sub">Replay from sequence 0 forever would get slower forever. Compaction folds the journal into a fresh base so replay only touches the tail. It's async, off the request path.</p>
+  <div class="card" style="padding:12px 18px">
+    <p style="margin:6px 0;font-size:14px"><code>/complete</code> enqueues a job (queue coalesces → ≤1 per stack). <span class="fileref">CompactionWorker</span> on a schedule:</p>
+    <p style="margin:6px 0;font-size:14px">① claim a job with <code>FOR UPDATE SKIP LOCKED</code> (multi-pod safe) → ② lock <code>stack_state</code> → ③ run <b>the same</b> <code>StackAssembler.assemble()</code> → ④ write a new <code>snapshots</code> row, repoint <code>base_snapshot_id</code>, reset the counter.</p>
+  </div>
+  <div class="callout"><span class="lbl">What it does NOT do yet</span> It doesn't delete journal rows — export just skips entries at/below <code>compacted_from_journal_seq</code>. Reads stay fast but table size isn't bounded; journal pruning needs an explicit retention policy first (open product question). Failed jobs retry to <code>max-attempts</code>; stuck "running" jobs get reclaimed by <code>reclaimStuckJobs()</code>.</div>
+
+  <!-- ============================================================ -->
+  <h2 id="concurrency"><span class="ix">09</span> Concurrency invariants</h2>
+  <p class="h2sub">Everything mutating a stack serializes on one row — <code>stack_state</code> via <code>FOR UPDATE</code>. This table is why the system is correct under multiple pods.</p>
+  <table>
+    <thead><tr><th>Operation</th><th>Locks (in order)</th><th>Prevents</th></tr></thead>
+    <tbody>
+      <tr><td>Journal append</td><td><code>stack_state</code> → <code>stack_locks</code></td><td>Overlapping seq ranges; writing past a completed boundary.</td></tr>
+      <tr><td>Complete / cancel</td><td><code>stack_state</code> → <code>stack_locks</code></td><td>Stamping <code>end_journal_seq</code> mid-PATCH.</td></tr>
+      <tr><td>Compaction</td><td><code>compaction_jobs</code> → <code>stack_state</code></td><td>Snapshotting mid-append; double-claim across pods.</td></tr>
+      <tr><td>Start update</td><td><code>stacks</code></td><td>Duplicate insert on idempotency retry; version collisions.</td></tr>
+      <tr><td>Acquire lock</td><td><code>stack_locks</code></td><td>Two CLIs holding one stack.</td></tr>
+      <tr><td>Import</td><td><code>stacks</code> → <code>stack_state</code></td><td>Importing over a live run (guards on <code>active_update_id</code>).</td></tr>
+    </tbody>
+  </table>
+  <p class="legend">Append and complete agree on the order <code>stack_state → stack_locks</code>, so they queue behind the same first row and can't deadlock.</p>
+  <details>
+    <summary><span class="chev">▶</span><span class="name">Odd one out: <code>POST /import</code></span><span class="hint">no lease protocol</span></summary>
+    <div class="det-body"><p><span class="fileref">StackImporter</span> doesn't run the lease handshake. The CLI POSTs the whole checkpoint and immediately polls an already-<code>SUCCEEDED</code> update — there's no cloud work between start and finish. So it protects the operation with row locks + an <code>active_update_id</code> guard instead of an update-token, then installs the deployment as a brand-new base snapshot and bumps the version.</p></div>
+  </details>
+
+  <!-- ============================================================ -->
+  <h2 id="filemap"><span class="ix">10</span> Code map</h2>
+  <p class="h2sub">Where each concept lives.</p>
+  <div class="grid2">
+    <div class="card"><h4>HTTP edge · modules/pulumi-api</h4>
+      <span class="pill">UpdateResource</span><span class="pill">StackExportResource</span><span class="pill">StackResource</span><span class="pill">CapabilitiesResource</span><span class="pill">LeaseTokenFilter</span><span class="pill">*ExceptionMapper</span>
+    </div>
+    <div class="card"><h4>Domain · modules/persistence</h4>
+      <span class="pill">JournalAppender</span><span class="pill">JournalReplayer</span><span class="pill">StackAssembler</span><span class="pill">StackUpdateStarter</span><span class="pill">StackUpdateCompleter</span><span class="pill">StackLockAcquirer</span><span class="pill">StackLockRenewer</span><span class="pill">CompactionWorker</span>
+    </div>
+  </div>
+  <div class="card"><h4>Entities — schema owned by Flyway, Hibernate never touches DDL</h4>
+    <span class="pill">StackUpdate</span><span class="pill">JournalEntry</span><span class="pill">StackState</span><span class="pill">Snapshot</span><span class="pill">StackLock</span><span class="pill">PendingOperation</span><span class="pill">UpdateEvent</span><span class="pill">CompactionJob</span>
+  </div>
+  <div class="card"><h4>Docs that go deeper</h4>
+    <p style="font-size:13.5px;margin:4px 0"><span class="fileref">design/pulumi-state-lifecycle.md</span> — the operational story, with real workbench data.</p>
+    <p style="font-size:13.5px;margin:4px 0"><span class="fileref">design/pulumi-state-testing-roadmap.md</span> — compatibility &amp; fault scenarios vs Pulumi source.</p>
+    <p style="font-size:13.5px;margin:4px 0"><span class="fileref">design/db-schema.md</span> — journaling section &amp; payload structures.</p>
+  </div>
+
+  <!-- ============================================================ -->
+  <h2 id="firstday"><span class="ix">11</span> Your first change</h2>
+  <p class="h2sub">A path that builds intuition fast.</p>
+  <div class="card" style="padding:14px 18px">
+    <p style="margin:7px 0"><b style="color:var(--acc)">1 · See a real journal.</b> Run <code>pulumi up</code> from <code>workbench/pulumi</code> against state-db, then <code>SELECT kind, wire_sequence_id, sequence_id, resource_urn FROM journal_entries ORDER BY sequence_id</code>. Map each row to <a href="#kinds">the 8 kinds</a>.</p>
+    <p style="margin:7px 0"><b style="color:var(--acc)">2 · Trace one PATCH.</b> Breakpoint in <code>JournalAppender.append()</code>; watch <code>start_journal_seq</code> get claimed and <code>sequence_id</code> derived.</p>
+    <p style="margin:7px 0"><b style="color:var(--acc)">3 · Trace one export.</b> Step <code>StackAssembler.assemble()</code> → <code>JournalReplayer.add()</code> for that stack; confirm it matches <code>pulumi stack export</code>.</p>
+    <p style="margin:7px 0"><b style="color:var(--acc)">4 · Read the tests.</b> <code>JournalAppenderTest</code>, <code>StackAssemblerTest</code>, and the <code>Recorded*ReplayTest</code> fixtures replay captured real journals — the best executable spec.</p>
+  </div>
+  <div class="callout key"><span class="lbl">Build &amp; test — dev container only</span> Never call <code>mvn</code> on the host:<br><code>./bin/in-container mvn -f modules/pom.xml -pl persistence -am test</code></div>
+
+  <!-- ============================================================ -->
+  <h2 id="glossary"><span class="ix">12</span> Glossary</h2>
+  <table>
+    <tbody>
+      <tr><td><b>Run / update</b></td><td>One <code>pulumi up|preview|refresh|destroy</code>. A <code>stack_updates</code> row.</td></tr>
+      <tr><td><b>Lease</b></td><td>Time-boxed lock token granting exclusive write access to a stack.</td></tr>
+      <tr><td><b>Journal</b></td><td>Append-only stream of state-mutation deltas sent during a run.</td></tr>
+      <tr><td><b>Entry kind</b></td><td>Discriminator 0–7 telling the replayer how to fold an entry.</td></tr>
+      <tr><td><b>wire_sequence_id</b></td><td>Pulumi's per-run entry counter (resets each run).</td></tr>
+      <tr><td><b>sequence_id</b></td><td>Server-assigned per-stack replay order = offset + wire id.</td></tr>
+      <tr><td><b>Replay / assemble</b></td><td>Folding the journal over a base snapshot to rebuild the <code>DeploymentV3</code>.</td></tr>
+      <tr><td><b>Base snapshot</b></td><td>A compacted checkpoint used as replay's starting point.</td></tr>
+      <tr><td><b>Compaction</b></td><td>Async job that folds the journal into a new base snapshot.</td></tr>
+      <tr><td><b>Pending operation</b></td><td>An op that began but never terminally finished; drives crash recovery.</td></tr>
+      <tr><td><b>DeploymentV3 / CheckpointV3</b></td><td>Pulumi's state file format — what <code>/export</code> returns.</td></tr>
+    </tbody>
+  </table>
+
+  <footer>
+    An onboarding map for state-db, not the territory — source of truth is always the code and the Pulumi reference checkout. File/line references are accurate as of the current branch; verify before relying on a specific line.
+  </footer>
+</main>
+</div>
+<button class="back2top" id="b2t" title="Back to top">↑ top</button>
+
+<script>
+  // Tabbed lifecycle
+  document.querySelectorAll('.lc-tab').forEach(function(tab){
+    tab.addEventListener('click', function(){
+      var lc = tab.closest('.lc');
+      lc.querySelectorAll('.lc-tab').forEach(function(t){t.classList.remove('on');});
+      lc.querySelectorAll('.lc-panel').forEach(function(p){p.classList.remove('on');});
+      tab.classList.add('on');
+      lc.querySelector('#'+tab.dataset.p).classList.add('on');
+    });
+  });
+  // Scrollspy for the sidebar
+  var links = Array.prototype.slice.call(document.querySelectorAll('nav.toc a'));
+  var targets = links.map(function(a){return document.querySelector(a.getAttribute('href'));}).filter(Boolean);
+  var spy = new IntersectionObserver(function(entries){
+    entries.forEach(function(e){
+      if(e.isIntersecting){
+        var id = e.target.id;
+        links.forEach(function(a){a.classList.toggle('active', a.getAttribute('href')==='#'+id);});
+      }
+    });
+  },{rootMargin:'-10% 0px -80% 0px'});
+  targets.forEach(function(t){spy.observe(t);});
+  // Back to top
+  var b2t = document.getElementById('b2t');
+  b2t.addEventListener('click', function(){window.scrollTo({top:0,behavior:'smooth'});});
+  window.addEventListener('scroll', function(){
+    b2t.classList.toggle('show', window.scrollY > 700);
+  });
+</script>
+</body>
+</html>
