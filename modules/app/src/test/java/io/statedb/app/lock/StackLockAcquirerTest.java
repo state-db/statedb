@@ -4,12 +4,19 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import io.quarkus.narayana.jta.QuarkusTransaction;
 import io.quarkus.test.junit.QuarkusTest;
 import io.statedb.persistence.identity.Organization;
+import io.statedb.persistence.journal.JournalAppender;
+import io.statedb.persistence.journal.JournalEntry;
 import io.statedb.persistence.lock.Lease;
+import io.statedb.persistence.lock.LeaseExpiredException;
+import io.statedb.persistence.lock.StackLock;
 import io.statedb.persistence.lock.StackLockAcquirer;
 import io.statedb.persistence.stack.StackCreator;
 import io.statedb.persistence.stack.StackRef;
@@ -19,6 +26,8 @@ import io.statedb.persistence.update.StartUpdateRequest;
 import io.statedb.persistence.update.StartedUpdate;
 import jakarta.inject.Inject;
 import jakarta.persistence.EntityManager;
+import java.time.Instant;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
@@ -29,11 +38,13 @@ import org.junit.jupiter.api.Test;
 @QuarkusTest
 class StackLockAcquirerTest {
 
+  private static final ObjectMapper MAPPER = new ObjectMapper();
   private static final String ORG_NAME = "acquirer-org";
 
   @Inject StackCreator stackCreator;
   @Inject StackUpdateStarter starter;
   @Inject StackLockAcquirer acquirer;
+  @Inject JournalAppender journalAppender;
   @Inject EntityManager em;
 
   private UUID stackId;
@@ -137,12 +148,10 @@ class StackLockAcquirerTest {
 
     QuarkusTransaction.requiringNew()
         .run(
-            () ->
-                em.createNativeQuery(
-                        "UPDATE stack_locks SET expires_at = now() - interval '1 second'"
-                            + " WHERE stack_id = ?1")
-                    .setParameter(1, stackId)
-                    .executeUpdate());
+            () -> {
+              StackLock lock = StackLock.find("stackId", stackId).<StackLock>singleResult();
+              lock.expiresAt = Instant.now().minusSeconds(1);
+            });
 
     UUID secondUpdateId = startUpdate("k-stolen");
     Lease second = acquirer.acquire(stackId, secondUpdateId, "user:b", null, null).orElseThrow();
@@ -154,6 +163,33 @@ class StackLockAcquirerTest {
                 .setParameter(1, stackId)
                 .getSingleResult();
     assertEquals(secondUpdateId, dbUpdate);
+  }
+
+  @Test
+  void oldLeaseCannotAppendAfterExpiredLockIsStolen() throws Exception {
+    UUID firstUpdateId = startUpdate("k-old-append");
+    Lease first = acquirer.acquire(stackId, firstUpdateId, "user:a", null, null).orElseThrow();
+
+    QuarkusTransaction.requiringNew()
+        .run(
+            () -> {
+              StackLock lock = StackLock.find("stackId", stackId).<StackLock>singleResult();
+              lock.expiresAt = Instant.now().minusSeconds(1);
+            });
+
+    UUID secondUpdateId = startUpdate("k-new-owner");
+    assertTrue(acquirer.acquire(stackId, secondUpdateId, "user:b", null, null).isPresent());
+
+    assertThrows(
+        LeaseExpiredException.class,
+        () ->
+            journalAppender.append(
+                stackId,
+                firstUpdateId,
+                first.leaseId(),
+                List.of(entry(1, 1, 1L, "{\"state\":{\"urn\":\"urn:stale\"}}"))));
+
+    assertEquals(0L, JournalEntry.count("updateId", firstUpdateId));
   }
 
   @Test
@@ -195,5 +231,15 @@ class StackLockAcquirerTest {
         new StartUpdateRequest(Map.of(), Map.of(), Map.of(), "desc", "yaml", "v3.234.0", "msg");
     StartedUpdate s = starter.start(stackId, StackUpdate.Kind.PREVIEW, null, null, key, req);
     return s.updateId();
+  }
+
+  private static JsonNode entry(long wireSeq, int kind, Long operationId, String payloadJson)
+      throws Exception {
+    JsonNode payload = MAPPER.readTree(payloadJson);
+    var node =
+        MAPPER.createObjectNode().put("sequenceID", wireSeq).put("kind", kind).put("version", 1);
+    if (operationId != null) node.put("operationID", operationId);
+    if (payload.has("state")) node.set("state", payload.required("state"));
+    return node;
   }
 }

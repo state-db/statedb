@@ -21,9 +21,15 @@ import io.statedb.persistence.stack.StackState;
 import io.statedb.persistence.update.StackUpdate;
 import jakarta.inject.Inject;
 import jakarta.persistence.EntityManager;
+import jakarta.persistence.LockModeType;
 import java.time.Instant;
 import java.util.Map;
 import java.util.UUID;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -73,6 +79,50 @@ class CompactionWorkerTest {
         1L,
         CompactionJob.count(
             "stackId = ?1 and status = ?2", stackId, CompactionJob.Status.COMPLETED));
+  }
+
+  @Test
+  void compactionWaitsForStackStateLockBeforeSnapshotting() throws Exception {
+    UUID update = update(stackId);
+    entry(stackId, update, 1, 1L, "{\"state\":" + res("locked") + "}");
+    QuarkusTransaction.requiringNew().run(() -> enqueuer.enqueue(stackId));
+
+    CountDownLatch locked = new CountDownLatch(1);
+    CountDownLatch release = new CountDownLatch(1);
+    ExecutorService pool = Executors.newFixedThreadPool(2);
+    try {
+      Future<?> holder =
+          pool.submit(
+              () ->
+                  QuarkusTransaction.requiringNew()
+                      .run(
+                          () -> {
+                            StackState.find("stackId", stackId)
+                                .withLock(LockModeType.PESSIMISTIC_WRITE)
+                                .<StackState>singleResult();
+                            locked.countDown();
+                            await(release);
+                          }));
+
+      org.junit.jupiter.api.Assertions.assertTrue(locked.await(5, TimeUnit.SECONDS));
+      Future<Integer> compacting = pool.submit(() -> worker.drainOnce());
+
+      Thread.sleep(200);
+      org.junit.jupiter.api.Assertions.assertFalse(
+          compacting.isDone(), "compaction must wait for the stack_state row lock");
+
+      release.countDown();
+      holder.get(5, TimeUnit.SECONDS);
+      assertEquals(1, compacting.get(5, TimeUnit.SECONDS));
+
+      StackState state = stackState(stackId);
+      assertEquals(0L, state.journalEntriesSinceCompaction);
+      Snapshot snapshot = Snapshot.find("stackId", stackId).<Snapshot>singleResult();
+      assertEquals(state.journalSeq, snapshot.compactedFromJournalSeq);
+    } finally {
+      release.countDown();
+      pool.shutdownNow();
+    }
   }
 
   @Test
@@ -371,5 +421,16 @@ class CompactionWorkerTest {
         + "\"ciphertext\":\""
         + ciphertext
         + "\"}";
+  }
+
+  private static void await(CountDownLatch latch) {
+    try {
+      if (!latch.await(5, TimeUnit.SECONDS)) {
+        throw new IllegalStateException("timed out waiting for latch");
+      }
+    } catch (InterruptedException e) {
+      Thread.currentThread().interrupt();
+      throw new RuntimeException(e);
+    }
   }
 }
