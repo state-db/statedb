@@ -246,15 +246,15 @@ OrgRole::"acme:viewer"   ←   OrgRole::"acme:member"   ←   OrgRole::"acme:own
 
 ### Schema declaration
 
-A single Cedar schema file (`policies/schema.cedar` in `pulumi-api`'s resources) declares the entity types, action types, and `appliesTo` constraints. Loaded at startup and validated against the policy set; any mismatch fails app startup loud, before the first request.
+A single Cedar schema file (`policies/schema.cedar` in `persistence` resources) declares the entity types, action types, and `appliesTo` constraints. Loaded at startup and validated against the policy set; any mismatch fails app startup loud, before the first request.
 
 The schema is checked into git. Changing the schema is a code change with normal review; changing a *policy* without a schema change is a hot-reloadable operation (Wave 2 — see "Policy storage").
 
 ### Resource construction
 
-Per request, the `@Authorize` interceptor (next section) loads the resource entity. For most operations this is one Stack; the entity loader queries `stacks JOIN projects JOIN organizations` once and constructs the Stack + Project + Org entities and their parents. Cached request-scoped, so multiple authz checks against the same resource within a request reuse the result.
+Per request, the `@Authorize` interceptor (next section) loads the resource entity. For most operations this is one Stack; the entity loader resolves `stacks JOIN projects JOIN organizations` once and constructs the Stack + Project + Org entities and their parents.
 
-For collection-level operations (`Stack::Create`), the resource is the parent (`Project` or `Org`). Cedar evaluates `principal in OrgRole::"<org>:member"` against the proposed parent.
+For collection-level operations (`Stack::Create`), the resource is the org parent. Cedar evaluates `principal in resource.member_role` against the proposed parent.
 
 ### Lease-token bypass
 
@@ -276,25 +276,27 @@ The `lock_token` is consumed only by `LeaseTokenFilter`. Downstream — principa
 ### Component layout
 
 ```
-modules/core/identity/
-├── Authorizer.java              ← single PDP entry point
-├── AuthorizationDecision.java   ← {allow, denyReason, matchedPolicyIds}
-├── PrincipalEntities.java       ← builds Cedar entities for User / ServiceAccount / Admin parents
-└── EntityLoader.java            ← SPI for resource → Cedar entity
+modules/persistence/auth/
+├── ApiTokenFinder.java          ← token lookup across users, orgs, memberships
+└── AuthenticatedPrincipal.java  ← user id, subject, org, role, token kind
 
-modules/core/policy/
+modules/persistence/authz/
+├── Authorizer.java              ← single PDP entry point; owns cedar-java calls
+├── AuthorizationDecision.java   ← allow/deny result
+├── Authorize.java               ← CDI interceptor binding for protected routes
+├── AuthorizeInterceptor.java    ← loads resource, calls Authorizer, proceeds or denies
+├── CurrentPrincipal.java        ← request-scoped authenticated principal
+├── EntityLoader.java            ← SPI for request target → Cedar resource entity
+├── OrgEntityLoader.java         ← loader for org-scoped collection operations
+└── StackEntityLoader.java       ← loader for stack-scoped operations
+
+modules/persistence/policy/
 ├── PolicyStore.java             ← interface
 ├── ClasspathPolicyStore.java    ← Wave 1 default; reads policies/*.cedar from JAR
-├── DbPolicyStore.java           ← Wave 2; reads policies + schema from a `policies` table
-└── PolicySetCache.java          ← compiled policy set; hot-swap on PolicyStore reload event
-
-modules/persistence/auth/
-├── PrincipalLoader.java         ← User principal entities from `users` + `org_members` + admin allow-list
-├── ResourceEntityLoaderImpl.java← stack/project/org loaders backed by Panache
-└── PolicyEntity.java            ← @Entity for the `policies` table (Wave 2)
+└── PolicySetCache.java          ← compiled policy set loaded at startup
 ```
 
-`Authorizer` is the only thing that talks to `cedar-java`. Everything else uses the abstraction. `core` has no Quarkus annotations — testable headless against fixture entities.
+`Authorizer` is the only thing that talks to `cedar-java`. HTTP modules call it through `@Authorize` or a focused explicit authorization path; policy loading, resource construction, and principal shape stay in `persistence/` because they depend on the persisted identity and stack model.
 
 ### Policy storage
 
@@ -516,7 +518,6 @@ Wave 1 ships JVM-only. JVM startup and footprint are acceptable for a self-hoste
 
 ## Open items
 
-- **Cedar templated entities vs string-concat.** The illustrative policies above use `OrgRole::(resource.org_name + ":viewer")`. Cedar 4.x supports templated entities but with constraints; alternative is to precompute the principal's full set of OrgRole memberships as flat parents (which we're already doing) and write policies as `principal in resource.org.viewerRole` where `viewerRole` is an attribute on the Org entity. Decide before writing the production policy set.
 - **Org renaming and policy stability.** Renaming an org changes `org_name` everywhere, including in OrgRole entity ids. Cedar entity ids are not relations — renames don't propagate. The `rename_org` tx must reconstruct OrgRole entity ids accordingly; principal entities are constructed per-request so renames take effect on the next request.
 - **Service-account scoping below the org.** Wave 1 service accounts are org-scoped (matches `api_tokens.org_id`). Future: project- and stack-scoped service accounts. The Cedar model supports it (add a `scope: Project | Stack` attribute on ServiceAccount); the schema and mint UI don't yet.
 - **Policy editor UX.** Wave 2 console policy editor needs schema-aware autocompletion + `cedar-java` validation pre-save. Dependency on `cedar-java`'s wasm bindings or a server-side validation endpoint.

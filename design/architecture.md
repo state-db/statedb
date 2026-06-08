@@ -71,15 +71,14 @@ state-db/
 ├── tools/                      Go-based extractor and recorder
 └── modules/                    all shipped code; parent pom lives here
     ├── pom.xml
-    ├── core/                   pure-Java domain types and logic, no Quarkus
-    │   ├── checkpoint/         CheckpointAssembler, journal apply rules
-    │   ├── update/             UpdateLifecycle state machine
-    │   └── identity/           Subject, Role, AdminAllowList
-    ├── persistence/            Quarkus + Hibernate ORM + Panache + Flyway
-    │   ├── entity/             @Entity classes mapping db-schema.md
-    │   ├── repo/               PanacheRepository<T> + native-query hot paths
-    │   ├── jsonb/              AttributeConverter for JSONB ↔ JsonNode
-    │   └── db/migration/       V1__init.sql, V2__..., V3__...
+    ├── persistence/            persisted domain model + shared app services
+    │   ├── identity/           organizations, users, org membership, bootstrap
+    │   ├── auth/               token lookup and authenticated principal shape
+    │   ├── authz/              Cedar PDP, @Authorize interceptor, entity loaders
+    │   ├── policy/             classpath policy store and compiled policy cache
+    │   ├── stack/              stack resolvers, journal assembly, compaction
+    │   ├── secrets/            service secrets and keyset persistence
+    │   └── db/migration/       Flyway schema migrations
     ├── pulumi-api/             JAX-RS resources for /pulumi/api/*
     │   ├── filter/             TokenAuthFilter, LeaseTokenFilter
     │   ├── stack/              StackResource, StackEncryptionResource
@@ -105,7 +104,13 @@ state-db/
         └── Dockerfile
 ```
 
-The split exists so `pulumi-api` and `console-api` cannot accidentally share security filters or JAX-RS providers. They each have their own filter chain and their own error mapping. `core` has no Quarkus annotations and is unit-testable without a runtime.
+The split exists so `pulumi-api` and `console-api` cannot accidentally share security filters or JAX-RS providers. They each have their own filter chain and their own error mapping.
+
+`persistence/` is the domain substrate for the service. Org membership, stack
+identity, Cedar resource construction, and tenant isolation are grounded in the
+database schema, so shared domain logic belongs beside the entities and
+transactional services that define those invariants. HTTP modules stay thin and
+own only protocol resources, filters, mappers, and wire DTOs.
 
 ---
 
@@ -482,7 +487,7 @@ Known reflection sources to register when native is promoted:
 
 | Layer | Tool | What it covers |
 |-------|------|----------------|
-| Unit | JUnit 5 in `core/` | `CheckpointAssembler`, journal apply rules, `AdminAllowList` parsing — pure logic, no Quarkus |
+| Unit | JUnit 5 in `persistence/` or focused `app` tests | Journal apply rules, policy/entity construction, role hierarchy, and other shared domain behavior |
 | Integration | `@QuarkusTest` + Testcontainers Postgres | Repository transactions, trigger behavior, FK cascades, lock semantics |
 | Contract | Fixture replay | Replay `tools/pulumi/recorder/fixtures/` through `pulumi-api` and assert byte-equal responses |
 | E2E | Headless Pulumi CLI against a running container | `pulumi login`, `stack init`, `up`, `destroy`, `stack rm` end-to-end |
@@ -496,7 +501,7 @@ The fixture replay is the most important. Pulumi's wire format is undocumented f
 Rough order; each step gated on the previous passing tests.
 
 1. `persistence/`: entities + Flyway V1 + repository smoke tests against Testcontainers.
-2. `core/`: `CheckpointAssembler` (decompose checkpoint into journal-style entries; reassemble; round-trip property test).
+2. `persistence/stack`: checkpoint/journal assembly and round-trip tests.
 3. `pulumi-api/` skeleton: token auth filter, `GET /api/user`, `GET /api/user/organizations/default`. Verify `pulumi login http://localhost:8080/pulumi` succeeds.
 4. Stack CRUD: `POST/GET/DELETE /api/stacks/{org}/{project}/{stack}`. Verify `pulumi stack init`/`stack rm`.
 5. Update lifecycle (no journaling): `POST /update`, `PATCH /checkpoint` (full snapshot variant), `POST /complete`. Verify `pulumi up` end-to-end on a no-op stack.

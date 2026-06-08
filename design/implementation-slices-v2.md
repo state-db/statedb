@@ -27,11 +27,14 @@ ahead.
 **Module placement.** DB-shaped code (entities, finders, queries, journal
 assembly, repository-style services) lives in `persistence/`. HTTP-shaped
 code (JAX-RS resources, filters, exception mappers, wire DTOs) lives in
-`pulumi-api/` or `console-api/`. Pure-domain/policy logic that isn't bound
-to either — Cedar authorizer, adapter SPIs — lives in `core/` (introduced
-by Slice 18). When in doubt: if both HTTP modules would need it, put it in
-`persistence/`. Duplicating a tenant-isolated query across both modules is
-a security risk, not a cosmetic one.
+`pulumi-api/` or `console-api/`. Shared domain logic that is coupled to the
+database identity model — Cedar authorizer, policy loading, stack/entity
+loaders, tenant-isolated resolvers, journal assembly — lives in `persistence/`.
+`persistence/` is the domain substrate because org membership, stack identity,
+policy entities, and tenant isolation are grounded in the persisted schema. When
+in doubt: if both HTTP modules would need it, put it in `persistence/`.
+Duplicating a tenant-isolated query across both modules is a security risk, not
+a cosmetic one.
 
 ---
 
@@ -515,8 +518,8 @@ pulumi stack export | jq '.deployment.resources // []'
 
 **Scope**
 
-- `core/identity/Authorizer`, `core/policy/PolicyStore` (classpath-only), `core/policy/PolicySetCache`.
-- `cedar-java` dependency in `core/`.
+- `persistence/authz/Authorizer`, `persistence/policy/PolicyStore` (classpath-only), `persistence/policy/PolicySetCache`.
+- `cedar-java` dependency in `persistence/`.
 - Schema file `policies/schema.cedar` declaring entities + actions for the minimum set: `User::ReadSelf`, `Stack::Read`, `Stack::Lock`, `Stack::Create`, `Stack::Delete`.
 - Three policies: `admin-escape`, `org-members-can-read`, `org-write` (no service-account or owner-only yet).
 - `@Authorize` annotation + `AuthorizeInterceptor` + `EntityLoader<Stack>` implementation.
@@ -799,7 +802,7 @@ pulumi stack export | jq '.deployment.resources // []'
 **Scope**
 
 - New module `modules/tofu-api/` with route prefix `/tofu/...`.
-- Adapter SPI: `WorkspaceAdapter` interface in `core/`; Pulumi adapter wired in `pulumi-api/`; Tofu adapter is a stub returning 501 for every route.
+- Adapter SPI: `WorkspaceAdapter` interface in `persistence/workspace/`; Pulumi adapter wired in `pulumi-api/`; Tofu adapter is a stub returning 501 for every route.
 - Tofu workspace identity mapped onto the existing `workspaces` table by adding `kind='tofu'` rows when stubs are first exercised.
 - No new state tables yet; the migration is deferred until functional Tofu lands.
 
