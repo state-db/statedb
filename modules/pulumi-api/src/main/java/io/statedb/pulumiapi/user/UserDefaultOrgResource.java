@@ -2,7 +2,7 @@ package io.statedb.pulumiapi.user;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
 import io.statedb.persistence.auth.AuthenticatedPrincipal;
-import io.statedb.pulumiapi.auth.CurrentPrincipal;
+import io.statedb.persistence.authz.CurrentPrincipal;
 import jakarta.inject.Inject;
 import jakarta.ws.rs.GET;
 import jakarta.ws.rs.Path;

@@ -2,11 +2,11 @@ package io.statedb.pulumiapi.secrets;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.google.crypto.tink.Aead;
+import io.statedb.persistence.authz.CurrentPrincipal;
 import io.statedb.persistence.secrets.ServiceSecretsAead;
 import io.statedb.persistence.stack.StackNotFoundException;
 import io.statedb.persistence.stack.StackRef;
 import io.statedb.persistence.stack.StackRefResolver;
-import io.statedb.pulumiapi.auth.CurrentPrincipal;
 import jakarta.inject.Inject;
 import jakarta.ws.rs.POST;
 import jakarta.ws.rs.Path;

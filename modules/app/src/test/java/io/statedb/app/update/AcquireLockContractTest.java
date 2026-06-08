@@ -1,6 +1,7 @@
 package io.statedb.app.update;
 
 import static io.restassured.RestAssured.given;
+import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.equalTo;
 import static org.hamcrest.Matchers.greaterThan;
 import static org.hamcrest.Matchers.notNullValue;
@@ -185,6 +186,21 @@ class AcquireLockContractTest {
         .then()
         .statusCode(200)
         .body("version", equalTo(3));
+  }
+
+  @Test
+  void acquireRejectsProjectTagMismatchInsteadOfUsingPathContext() {
+    String updateId = startPreview();
+
+    given()
+        .header("Authorization", "token " + RAW_TOKEN)
+        .contentType("application/json")
+        .body(Map.of("journalVersion", 1, "tags", Map.of("pulumi:project", "other-project")))
+        .when()
+        .post("/pulumi/api/stacks/" + ORG + "/" + PROJECT + "/" + STACK + "/update/" + updateId)
+        .then()
+        .statusCode(400)
+        .body("message", containsString("tags.pulumi:project must match the stack path"));
   }
 
   private String startPreview() {

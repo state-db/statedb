@@ -1,6 +1,7 @@
 package io.statedb.app.update;
 
 import static io.restassured.RestAssured.given;
+import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.equalTo;
 import static org.hamcrest.Matchers.notNullValue;
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -217,6 +218,38 @@ class StartUpdateContractTest {
         .statusCode(404);
   }
 
+  @Test
+  void projectNameMismatchReturns400InsteadOfUsingPathContext() {
+    given()
+        .header("Authorization", "token " + RAW_TOKEN)
+        .contentType("application/json")
+        .body(programBody("other-project"))
+        .when()
+        .post("/pulumi/api/stacks/" + ORG + "/" + PROJECT + "/" + STACK + "/preview")
+        .then()
+        .statusCode(400)
+        .body("message", containsString("name must match the stack path"));
+  }
+
+  @Test
+  void explicitOrgProjectAndStackFieldsMustMatchPath() {
+    given()
+        .header("Authorization", "token " + RAW_TOKEN)
+        .contentType("application/json")
+        .body(
+            Map.of(
+                "name", PROJECT,
+                "orgName", ORG,
+                "projectName", PROJECT,
+                "stackName", "other-stack",
+                "runtime", "yaml"))
+        .when()
+        .post("/pulumi/api/stacks/" + ORG + "/" + PROJECT + "/" + STACK + "/preview")
+        .then()
+        .statusCode(400)
+        .body("message", containsString("stackName must match the stack path"));
+  }
+
   private UUID stackId(String orgName) {
     return (UUID)
         em.createNativeQuery(
@@ -231,6 +264,10 @@ class StartUpdateContractTest {
   }
 
   private static Map<String, Object> programBody() {
+    return programBody(PROJECT);
+  }
+
+  private static Map<String, Object> programBody(String projectName) {
     return Map.of(
         "config",
         Map.of(),
@@ -250,7 +287,7 @@ class StartUpdateContractTest {
             "message",
             ""),
         "name",
-        PROJECT,
+        projectName,
         "options",
         Map.of("color", "raw", "debug", false, "dryRun", true, "parallel", 40),
         "runtime",

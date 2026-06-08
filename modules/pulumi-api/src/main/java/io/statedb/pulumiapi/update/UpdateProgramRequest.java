@@ -8,6 +8,18 @@ import java.util.Map;
 @JsonIgnoreProperties(ignoreUnknown = true)
 public class UpdateProgramRequest {
 
+  @JsonProperty("name")
+  public String name;
+
+  @JsonProperty("orgName")
+  public String orgName;
+
+  @JsonProperty("projectName")
+  public String projectName;
+
+  @JsonProperty("stackName")
+  public String stackName;
+
   @JsonProperty("config")
   public Map<String, Object> config;
 

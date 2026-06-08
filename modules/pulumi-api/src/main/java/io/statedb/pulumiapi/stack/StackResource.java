@@ -4,6 +4,9 @@ import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.databind.JsonNode;
 import io.statedb.persistence.auth.AuthenticatedPrincipal;
+import io.statedb.persistence.authz.Authorize;
+import io.statedb.persistence.authz.CurrentPrincipal;
+import io.statedb.persistence.authz.StackEntityLoader;
 import io.statedb.persistence.stack.ImportValidationException;
 import io.statedb.persistence.stack.StackDeleter;
 import io.statedb.persistence.stack.StackHead;
@@ -12,7 +15,6 @@ import io.statedb.persistence.stack.StackImporter;
 import io.statedb.persistence.stack.StackNotFoundException;
 import io.statedb.persistence.stack.StackRef;
 import io.statedb.persistence.stack.StackRefResolver;
-import io.statedb.pulumiapi.auth.CurrentPrincipal;
 import jakarta.inject.Inject;
 import jakarta.ws.rs.Consumes;
 import jakarta.ws.rs.DELETE;
@@ -43,6 +45,7 @@ public class StackResource {
   @Inject CurrentPrincipal currentPrincipal;
 
   @GET
+  @Authorize(action = "Stack::Read", loader = StackEntityLoader.class)
   @Produces(MediaType.APPLICATION_JSON)
   public StackHeadDto get(
       @PathParam("org") String org,
@@ -51,27 +54,20 @@ public class StackResource {
     StackHead head =
         finder
             .find(org, project, stack)
-            // Tenant guard: cross-org reads collapse to 404 (per db-schema.md), never 403 —
-            // a 403 would confirm the target stack exists in another org.
-            .filter(h -> h.orgId().equals(currentPrincipal.get().orgId()))
             .orElseThrow(() -> new StackNotFoundException(org, project, stack));
     return new StackHeadDto(
         head.activeUpdate(), head.orgName(), head.projectName(), head.stackName(), head.tags());
   }
 
   @DELETE
+  @Authorize(action = "Stack::Delete", loader = StackEntityLoader.class)
   @Produces(MediaType.APPLICATION_JSON)
   public Response delete(
       @PathParam("org") String org,
       @PathParam("project") String project,
       @PathParam("stack") String stack,
       @QueryParam("force") @DefaultValue("false") boolean force) {
-    StackRef ref =
-        resolver
-            .resolve(org, project, stack)
-            // Tenant guard: cross-org deletes collapse to 404, matching GET.
-            .filter(r -> r.orgId().equals(currentPrincipal.get().orgId()))
-            .orElseThrow(() -> new StackNotFoundException(org, project, stack));
+    StackRef ref = resolveOrThrow(org, project, stack);
 
     deleter.delete(ref, force);
     return Response.ok(Map.of()).build();
@@ -79,6 +75,7 @@ public class StackResource {
 
   @POST
   @Path("/import")
+  @Authorize(action = "Stack::Lock", loader = StackEntityLoader.class)
   @Consumes(MediaType.APPLICATION_JSON)
   @Produces(MediaType.APPLICATION_JSON)
   public ImportStackResponse importStack(
@@ -86,11 +83,7 @@ public class StackResource {
       @PathParam("project") String project,
       @PathParam("stack") String stack,
       ImportStackRequest body) {
-    StackRef ref =
-        resolver
-            .resolve(org, project, stack)
-            .filter(r -> r.orgId().equals(currentPrincipal.get().orgId()))
-            .orElseThrow(() -> new StackNotFoundException(org, project, stack));
+    StackRef ref = resolveOrThrow(org, project, stack);
 
     if (body == null) {
       throw new ImportValidationException("import request body is required");
@@ -107,6 +100,12 @@ public class StackResource {
         importer.importDeployment(
             ref.stackId(), principal.userId(), principal.apiTokenId(), body.deployment);
     return new ImportStackResponse(updateId.toString());
+  }
+
+  private StackRef resolveOrThrow(String org, String project, String stack) {
+    return resolver
+        .resolve(org, project, stack)
+        .orElseThrow(() -> new StackNotFoundException(org, project, stack));
   }
 
   @JsonInclude(JsonInclude.Include.ALWAYS)

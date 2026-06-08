@@ -2,6 +2,9 @@ package io.statedb.pulumiapi.update;
 
 import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.annotation.JsonProperty;
+import io.statedb.persistence.authz.Authorize;
+import io.statedb.persistence.authz.CurrentPrincipal;
+import io.statedb.persistence.authz.StackEntityLoader;
 import io.statedb.persistence.events.EventBatchAppender;
 import io.statedb.persistence.events.EventBatchValidationException;
 import io.statedb.persistence.journal.JournalAppender;
@@ -22,7 +25,6 @@ import io.statedb.persistence.update.StackUpdateCompleter;
 import io.statedb.persistence.update.StackUpdateStarter;
 import io.statedb.persistence.update.StartUpdateRequest;
 import io.statedb.persistence.update.StartedUpdate;
-import io.statedb.pulumiapi.auth.CurrentPrincipal;
 import io.statedb.pulumiapi.auth.LeaseContextHolder;
 import io.statedb.pulumiapi.update.events.EventBatchRequest;
 import io.statedb.pulumiapi.update.journal.JournalPatchRequest;
@@ -70,6 +72,7 @@ public class UpdateResource {
 
   @POST
   @Path("/update")
+  @Authorize(action = "Stack::Lock", loader = StackEntityLoader.class)
   @Consumes(MediaType.APPLICATION_JSON)
   @Produces(MediaType.APPLICATION_JSON)
   public StartUpdateResponse startUpdate(
@@ -83,6 +86,7 @@ public class UpdateResource {
 
   @POST
   @Path("/preview")
+  @Authorize(action = "Stack::Lock", loader = StackEntityLoader.class)
   @Consumes(MediaType.APPLICATION_JSON)
   @Produces(MediaType.APPLICATION_JSON)
   public StartUpdateResponse startPreview(
@@ -96,6 +100,7 @@ public class UpdateResource {
 
   @POST
   @Path("/destroy")
+  @Authorize(action = "Stack::Lock", loader = StackEntityLoader.class)
   @Consumes(MediaType.APPLICATION_JSON)
   @Produces(MediaType.APPLICATION_JSON)
   public StartUpdateResponse startDestroy(
@@ -109,6 +114,7 @@ public class UpdateResource {
 
   @POST
   @Path("/refresh")
+  @Authorize(action = "Stack::Lock", loader = StackEntityLoader.class)
   @Consumes(MediaType.APPLICATION_JSON)
   @Produces(MediaType.APPLICATION_JSON)
   public StartUpdateResponse startRefresh(
@@ -122,6 +128,7 @@ public class UpdateResource {
 
   @POST
   @Path("/update/{updateID}")
+  @Authorize(action = "Stack::Lock", loader = StackEntityLoader.class)
   @Consumes(MediaType.APPLICATION_JSON)
   @Produces(MediaType.APPLICATION_JSON)
   public AcquireLockResponse acquireLock(
@@ -141,6 +148,7 @@ public class UpdateResource {
 
     String lockedBy = "user:" + currentPrincipal.get().userId();
     AcquireLockRequest safe = body != null ? body : new AcquireLockRequest();
+    validateAcquireRequest(project, safe);
     Optional<Lease> lease =
         lockAcquirer.acquire(
             existing.stackId, existing.id, lockedBy, safe.journalVersion, safe.tags);
@@ -155,6 +163,7 @@ public class UpdateResource {
 
   @GET
   @Path("/update/{updateID}")
+  @Authorize(action = "Stack::Read", loader = StackEntityLoader.class)
   @Produces(MediaType.APPLICATION_JSON)
   public UpdateResultsResponse getUpdate(
       @PathParam("org") String org,
@@ -358,7 +367,6 @@ public class UpdateResource {
   private StackRef resolveOrThrow(String org, String project, String stack) {
     return resolver
         .resolve(org, project, stack)
-        .filter(r -> r.orgId().equals(currentPrincipal.get().orgId()))
         .orElseThrow(() -> new StackNotFoundException(org, project, stack));
   }
 
@@ -390,14 +398,10 @@ public class UpdateResource {
       StackUpdate.Kind kind,
       String idempotencyKey,
       UpdateProgramRequest body) {
-    StackRef ref =
-        resolver
-            .resolve(org, project, stack)
-            // Cross-org collapses to 404, never 403.
-            .filter(r -> r.orgId().equals(currentPrincipal.get().orgId()))
-            .orElseThrow(() -> new StackNotFoundException(org, project, stack));
+    StackRef ref = resolveOrThrow(org, project, stack);
 
     UpdateProgramRequest safe = body != null ? body : new UpdateProgramRequest();
+    validateStartRequest(org, project, stack, safe);
     StartUpdateRequest req =
         new StartUpdateRequest(
             safe.config,
@@ -417,6 +421,29 @@ public class UpdateResource {
             idempotencyKey,
             req);
     return new StartUpdateResponse(started.updateId().toString(), started.version());
+  }
+
+  private static void validateStartRequest(
+      String org, String project, String stack, UpdateProgramRequest body) {
+    requireMatches("orgName", body.orgName, org);
+    requireMatches("projectName", body.projectName, project);
+    requireMatches("name", body.name, project);
+    requireMatches("stackName", body.stackName, stack);
+  }
+
+  private static void validateAcquireRequest(String project, AcquireLockRequest body) {
+    if (body.tags == null) return;
+    Object taggedProject = body.tags.get("pulumi:project");
+    if (taggedProject == null) return;
+    requireMatches("tags.pulumi:project", taggedProject.toString(), project);
+  }
+
+  private static void requireMatches(String field, String actual, String expected) {
+    if (actual == null || actual.isBlank()) return;
+    if (!expected.equals(actual)) {
+      throw new UpdateProgramValidationException(
+          field + " must match the stack path; expected '" + expected + "', got '" + actual + "'");
+    }
   }
 
   @SuppressWarnings("unchecked")
