@@ -22,3 +22,4 @@ Thumbs.db
 
 # Local Pulumi workbench state
 workbench/.pulumi-home/
+design/pulumi-state-testing-roadmap.md
