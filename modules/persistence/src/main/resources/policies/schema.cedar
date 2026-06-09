@@ -35,6 +35,16 @@ action "Stack::Read" appliesTo {
   resource: [Stack]
 };
 
+action "Stack::DecryptSecrets" appliesTo {
+  principal: [User],
+  resource: [Stack]
+};
+
+action "Stack::EncryptSecrets" appliesTo {
+  principal: [User],
+  resource: [Stack]
+};
+
 action "Stack::Lock" appliesTo {
   principal: [User],
   resource: [Stack]

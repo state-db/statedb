@@ -14,6 +14,7 @@ import io.statedb.persistence.stack.StackCreator;
 import io.statedb.testsupport.TestIdentity;
 import jakarta.inject.Inject;
 import jakarta.persistence.EntityManager;
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import org.junit.jupiter.api.AfterEach;
@@ -50,6 +51,7 @@ class AuthorizationContractTest {
               userWithToken("viewer", OrgMember.Role.viewer, org, VIEWER_TOKEN);
               userWithToken("member", OrgMember.Role.member, org, MEMBER_TOKEN);
               stackCreator.create(org.id, ORG, PROJECT, "member-delete", Map.of());
+              stackCreator.create(org.id, ORG, PROJECT, "secrets", Map.of());
 
               User admin = new User();
               admin.iss = BootstrapProvisioner.BOOTSTRAP_ISS;
@@ -132,6 +134,68 @@ class AuthorizationContractTest {
         .delete("/pulumi/api/stacks/" + ORG + "/" + PROJECT + "/member-delete")
         .then()
         .statusCode(200);
+  }
+
+  @Test
+  void viewerDeniedOnSecretEncrypt() {
+    given()
+        .header("Authorization", "token " + VIEWER_TOKEN)
+        .contentType("application/json")
+        .body(Map.of("plaintext", "secret"))
+        .when()
+        .post("/pulumi/api/stacks/" + ORG + "/" + PROJECT + "/secrets/encrypt")
+        .then()
+        .statusCode(403);
+  }
+
+  @Test
+  void viewerAllowedOnSecretDecryptForReadFlows() {
+    String ciphertext =
+        given()
+            .header("Authorization", "token " + MEMBER_TOKEN)
+            .contentType("application/json")
+            .body(Map.of("plaintext", "preview-secret"))
+            .when()
+            .post("/pulumi/api/stacks/" + ORG + "/" + PROJECT + "/secrets/encrypt")
+            .then()
+            .statusCode(200)
+            .extract()
+            .path("ciphertext");
+
+    given()
+        .header("Authorization", "token " + VIEWER_TOKEN)
+        .contentType("application/json")
+        .body(Map.of("ciphertext", ciphertext))
+        .when()
+        .post("/pulumi/api/stacks/" + ORG + "/" + PROJECT + "/secrets/decrypt")
+        .then()
+        .statusCode(200)
+        .body("plaintext", equalTo("preview-secret"));
+  }
+
+  @Test
+  void viewerAllowedOnBatchSecretDecryptForPreviewFlows() {
+    String ciphertext =
+        given()
+            .header("Authorization", "token " + MEMBER_TOKEN)
+            .contentType("application/json")
+            .body(Map.of("plaintext", "batch-secret"))
+            .when()
+            .post("/pulumi/api/stacks/" + ORG + "/" + PROJECT + "/secrets/encrypt")
+            .then()
+            .statusCode(200)
+            .extract()
+            .path("ciphertext");
+
+    given()
+        .header("Authorization", "token " + VIEWER_TOKEN)
+        .contentType("application/json")
+        .body(Map.of("ciphertexts", List.of(ciphertext)))
+        .when()
+        .post("/pulumi/api/stacks/" + ORG + "/" + PROJECT + "/secrets/batch-decrypt")
+        .then()
+        .statusCode(200)
+        .body("plaintexts.\"" + ciphertext + "\"", equalTo("batch-secret"));
   }
 
   @Test

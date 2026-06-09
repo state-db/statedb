@@ -2,7 +2,9 @@ package io.statedb.pulumiapi.secrets;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.google.crypto.tink.Aead;
+import io.statedb.persistence.authz.Authorize;
 import io.statedb.persistence.authz.CurrentPrincipal;
+import io.statedb.persistence.authz.StackEntityLoader;
 import io.statedb.persistence.secrets.ServiceSecretsAead;
 import io.statedb.persistence.stack.StackNotFoundException;
 import io.statedb.persistence.stack.StackRef;
@@ -45,6 +47,7 @@ public class SecretsResource {
 
   @POST
   @Path("encrypt")
+  @Authorize(action = "Stack::EncryptSecrets", loader = StackEntityLoader.class)
   @Produces(MediaType.APPLICATION_JSON)
   public EncryptResponse encrypt(
       @PathParam("org") String org,
@@ -67,6 +70,7 @@ public class SecretsResource {
 
   @POST
   @Path("decrypt")
+  @Authorize(action = "Stack::DecryptSecrets", loader = StackEntityLoader.class)
   @Produces(MediaType.APPLICATION_JSON)
   public DecryptResponse decrypt(
       @PathParam("org") String org,
@@ -83,6 +87,7 @@ public class SecretsResource {
 
   @POST
   @Path("batch-decrypt")
+  @Authorize(action = "Stack::DecryptSecrets", loader = StackEntityLoader.class)
   @Produces(MediaType.APPLICATION_JSON)
   public BatchDecryptResponse batchDecrypt(
       @PathParam("org") String org,

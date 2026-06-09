@@ -1,7 +1,7 @@
 @id("org-members-can-read")
 permit(
   principal,
-  action == Action::"Stack::Read",
+  action in [Action::"Stack::Read", Action::"Stack::DecryptSecrets"],
   resource
 )
 when {
