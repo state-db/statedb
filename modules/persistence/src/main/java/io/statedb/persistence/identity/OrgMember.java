@@ -11,6 +11,7 @@ import jakarta.persistence.Table;
 import java.io.Serializable;
 import java.time.Instant;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.UUID;
 import org.hibernate.annotations.Generated;
 import org.hibernate.generator.EventType;
@@ -24,6 +25,13 @@ public class OrgMember extends PanacheEntityBase {
     owner,
     member,
     viewer
+  }
+
+  /** The role this user holds in the given org, if they are a member. */
+  public static Optional<Role> findRole(UUID orgId, UUID userId) {
+    return OrgMember.<OrgMember>find("orgId = ?1 and userId = ?2", orgId, userId)
+        .firstResultOptional()
+        .map(m -> m.role);
   }
 
   @Id

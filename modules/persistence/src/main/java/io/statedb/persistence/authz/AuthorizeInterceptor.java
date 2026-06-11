@@ -28,7 +28,7 @@ public class AuthorizeInterceptor {
     LoadedResource loaded = loader.load(ctx, principal).orElseThrow(loader::notFound);
 
     AuthorizationDecision decision =
-        authorizer.authorize(principal, authorize.action(), loaded.cedar());
+        authorizer.authorize(principal, loaded.role(), authorize.action(), loaded.cedar());
     if (!decision.allowed()) {
       throw new AuthorizationDeniedException(authorize.action());
     }

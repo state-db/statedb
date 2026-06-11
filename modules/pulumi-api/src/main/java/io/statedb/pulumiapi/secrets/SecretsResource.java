@@ -47,7 +47,7 @@ public class SecretsResource {
 
   @POST
   @Path("encrypt")
-  @Authorize(action = "Stack::EncryptSecrets", loader = StackEntityLoader.class)
+  @Authorize(action = "stack:EncryptSecrets", loader = StackEntityLoader.class)
   @Produces(MediaType.APPLICATION_JSON)
   public EncryptResponse encrypt(
       @PathParam("org") String org,
@@ -70,7 +70,7 @@ public class SecretsResource {
 
   @POST
   @Path("decrypt")
-  @Authorize(action = "Stack::DecryptSecrets", loader = StackEntityLoader.class)
+  @Authorize(action = "stack:DecryptSecrets", loader = StackEntityLoader.class)
   @Produces(MediaType.APPLICATION_JSON)
   public DecryptResponse decrypt(
       @PathParam("org") String org,
@@ -87,7 +87,7 @@ public class SecretsResource {
 
   @POST
   @Path("batch-decrypt")
-  @Authorize(action = "Stack::DecryptSecrets", loader = StackEntityLoader.class)
+  @Authorize(action = "stack:DecryptSecrets", loader = StackEntityLoader.class)
   @Produces(MediaType.APPLICATION_JSON)
   public BatchDecryptResponse batchDecrypt(
       @PathParam("org") String org,

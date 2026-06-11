@@ -72,7 +72,7 @@ public class UpdateResource {
 
   @POST
   @Path("/update")
-  @Authorize(action = "Stack::Lock", loader = StackEntityLoader.class)
+  @Authorize(action = "stack:Lock", loader = StackEntityLoader.class)
   @Consumes(MediaType.APPLICATION_JSON)
   @Produces(MediaType.APPLICATION_JSON)
   public StartUpdateResponse startUpdate(
@@ -86,7 +86,7 @@ public class UpdateResource {
 
   @POST
   @Path("/preview")
-  @Authorize(action = "Stack::Lock", loader = StackEntityLoader.class)
+  @Authorize(action = "stack:Lock", loader = StackEntityLoader.class)
   @Consumes(MediaType.APPLICATION_JSON)
   @Produces(MediaType.APPLICATION_JSON)
   public StartUpdateResponse startPreview(
@@ -100,7 +100,7 @@ public class UpdateResource {
 
   @POST
   @Path("/destroy")
-  @Authorize(action = "Stack::Lock", loader = StackEntityLoader.class)
+  @Authorize(action = "stack:Lock", loader = StackEntityLoader.class)
   @Consumes(MediaType.APPLICATION_JSON)
   @Produces(MediaType.APPLICATION_JSON)
   public StartUpdateResponse startDestroy(
@@ -114,7 +114,7 @@ public class UpdateResource {
 
   @POST
   @Path("/refresh")
-  @Authorize(action = "Stack::Lock", loader = StackEntityLoader.class)
+  @Authorize(action = "stack:Lock", loader = StackEntityLoader.class)
   @Consumes(MediaType.APPLICATION_JSON)
   @Produces(MediaType.APPLICATION_JSON)
   public StartUpdateResponse startRefresh(
@@ -128,7 +128,7 @@ public class UpdateResource {
 
   @POST
   @Path("/update/{updateID}")
-  @Authorize(action = "Stack::Lock", loader = StackEntityLoader.class)
+  @Authorize(action = "stack:Lock", loader = StackEntityLoader.class)
   @Consumes(MediaType.APPLICATION_JSON)
   @Produces(MediaType.APPLICATION_JSON)
   public AcquireLockResponse acquireLock(
@@ -163,7 +163,7 @@ public class UpdateResource {
 
   @GET
   @Path("/update/{updateID}")
-  @Authorize(action = "Stack::Read", loader = StackEntityLoader.class)
+  @Authorize(action = "stack:Read", loader = StackEntityLoader.class)
   @Produces(MediaType.APPLICATION_JSON)
   public UpdateResultsResponse getUpdate(
       @PathParam("org") String org,

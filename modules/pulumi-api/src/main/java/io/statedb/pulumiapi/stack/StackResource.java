@@ -45,7 +45,7 @@ public class StackResource {
   @Inject CurrentPrincipal currentPrincipal;
 
   @GET
-  @Authorize(action = "Stack::Read", loader = StackEntityLoader.class)
+  @Authorize(action = "stack:Read", loader = StackEntityLoader.class)
   @Produces(MediaType.APPLICATION_JSON)
   public StackHeadDto get(
       @PathParam("org") String org,
@@ -60,7 +60,7 @@ public class StackResource {
   }
 
   @DELETE
-  @Authorize(action = "Stack::Delete", loader = StackEntityLoader.class)
+  @Authorize(action = "stack:Delete", loader = StackEntityLoader.class)
   @Produces(MediaType.APPLICATION_JSON)
   public Response delete(
       @PathParam("org") String org,
@@ -75,7 +75,7 @@ public class StackResource {
 
   @POST
   @Path("/import")
-  @Authorize(action = "Stack::Lock", loader = StackEntityLoader.class)
+  @Authorize(action = "stack:Lock", loader = StackEntityLoader.class)
   @Consumes(MediaType.APPLICATION_JSON)
   @Produces(MediaType.APPLICATION_JSON)
   public ImportStackResponse importStack(

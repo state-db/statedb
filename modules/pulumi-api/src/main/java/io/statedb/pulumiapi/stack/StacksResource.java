@@ -23,7 +23,7 @@ public class StacksResource {
   @Inject StackCreator stackCreator;
 
   @POST
-  @Authorize(action = "Stack::Create", loader = OrgEntityLoader.class)
+  @Authorize(action = "stack:Create", loader = OrgEntityLoader.class)
   @Consumes(MediaType.APPLICATION_JSON)
   @Produces(MediaType.APPLICATION_JSON)
   public StackDto create(

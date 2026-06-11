@@ -2,9 +2,9 @@ package io.statedb.persistence.authz;
 
 import com.cedarpolicy.model.entity.Entity;
 import com.cedarpolicy.value.EntityUID;
-import com.cedarpolicy.value.PrimString;
 import io.statedb.persistence.auth.AuthenticatedPrincipal;
 import io.statedb.persistence.bootstrap.BootstrapProvisioner;
+import io.statedb.persistence.identity.OrgMember;
 import io.statedb.persistence.stack.StackNotFoundException;
 import io.statedb.persistence.stack.StackRef;
 import io.statedb.persistence.stack.StackRefResolver;
@@ -23,6 +23,8 @@ public class StackEntityLoader implements EntityLoader<StackRef> {
 
   @Inject StackRefResolver resolver;
 
+  @Inject PrincipalRoleResolver roleResolver;
+
   private String org;
   private String project;
   private String stack;
@@ -37,10 +39,13 @@ public class StackEntityLoader implements EntityLoader<StackRef> {
       return Optional.empty();
     }
     StackRef r = ref.get();
-    if (!r.orgId().equals(principal.orgId()) && !isAdmin(principal)) {
+    Optional<OrgMember.Role> role = roleResolver.resolve(principal, r.orgId());
+    // Hard org boundary: the principal must have a role in the resource's org (or be admin).
+    // A non-member never even sees the resource — the denial collapses to 404, not 403.
+    if (role.isEmpty() && !isAdmin(principal)) {
       return Optional.empty();
     }
-    return Optional.of(new LoadedResource(stackResource(r)));
+    return Optional.of(new LoadedResource(stackResource(r), role.orElse(null)));
   }
 
   @Override
@@ -53,45 +58,9 @@ public class StackEntityLoader implements EntityLoader<StackRef> {
     EntityUID projectUid = CedarEntities.project(ref.orgName(), ref.projectName());
     EntityUID stackUid = CedarEntities.stack(ref.orgName(), ref.projectName(), ref.stackName());
 
-    Entity org =
-        new Entity(
-            orgUid,
-            Map.of(
-                "name",
-                new PrimString(ref.orgName()),
-                "viewer_role",
-                CedarEntities.orgRole(ref.orgName(), "viewer"),
-                "member_role",
-                CedarEntities.orgRole(ref.orgName(), "member"),
-                "owner_role",
-                CedarEntities.orgRole(ref.orgName(), "owner")),
-            Set.of());
-    Entity project =
-        new Entity(
-            projectUid,
-            Map.of(
-                "org_name",
-                new PrimString(ref.orgName()),
-                "name",
-                new PrimString(ref.projectName())),
-            Set.of(orgUid));
-    Entity stack =
-        new Entity(
-            stackUid,
-            Map.of(
-                "org_name",
-                new PrimString(ref.orgName()),
-                "project_name",
-                new PrimString(ref.projectName()),
-                "name",
-                new PrimString(ref.stackName()),
-                "viewer_role",
-                CedarEntities.orgRole(ref.orgName(), "viewer"),
-                "member_role",
-                CedarEntities.orgRole(ref.orgName(), "member"),
-                "owner_role",
-                CedarEntities.orgRole(ref.orgName(), "owner")),
-            Set.of(projectUid));
+    Entity org = new Entity(orgUid, Map.of(), Set.of());
+    Entity project = new Entity(projectUid, Map.of(), Set.of(orgUid));
+    Entity stack = new Entity(stackUid, Map.of(), Set.of(projectUid));
 
     Set<Entity> entities = new HashSet<>();
     entities.add(org);

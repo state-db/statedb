@@ -26,7 +26,7 @@ public class StackExportResource {
   @Inject StackRefResolver resolver;
 
   @GET
-  @Authorize(action = "Stack::Read", loader = StackEntityLoader.class)
+  @Authorize(action = "stack:Read", loader = StackEntityLoader.class)
   @Produces(MediaType.APPLICATION_JSON)
   public ExportDto export(
       @PathParam("org") String org,

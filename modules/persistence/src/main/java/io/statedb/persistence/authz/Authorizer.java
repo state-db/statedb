@@ -11,6 +11,7 @@ import com.cedarpolicy.model.entity.Entity;
 import com.cedarpolicy.value.EntityUID;
 import io.statedb.persistence.auth.AuthenticatedPrincipal;
 import io.statedb.persistence.bootstrap.BootstrapProvisioner;
+import io.statedb.persistence.identity.OrgMember;
 import io.statedb.persistence.policy.PolicySetCache;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
@@ -21,20 +22,23 @@ import java.util.Set;
 @ApplicationScoped
 public class Authorizer {
 
-  static final EntityUID ADMINS = CedarEntities.euid("Group", "Admins");
+  static final EntityUID ADMIN = CedarEntities.role("admin");
 
   private final AuthorizationEngine engine = new BasicAuthorizationEngine();
 
   @Inject PolicySetCache policySetCache;
 
   public AuthorizationDecision authorize(
-      AuthenticatedPrincipal principal, String action, CedarResource resource) {
+      AuthenticatedPrincipal principal,
+      OrgMember.Role role,
+      String action,
+      CedarResource resource) {
     try {
-      Entity principalEntity = principalEntity(principal);
+      Entity principalEntity = principalEntity(principal, role);
       Set<Entity> all = new HashSet<>();
       all.add(principalEntity);
-      all.add(new Entity(ADMINS));
-      all.addAll(roleHierarchy(principal.orgName()));
+      all.addAll(roleHierarchy());
+      all.addAll(policySetCache.actionEntities());
       all.addAll(resource.entities());
 
       AuthorizationRequest request =
@@ -53,14 +57,18 @@ public class Authorizer {
     }
   }
 
-  private static Entity principalEntity(AuthenticatedPrincipal principal) {
+  // The principal's role is the one resolved for THIS resource's org (or none, e.g. for an admin
+  // acting outside their memberships, or a user:ReadSelf request). The User uid is the global
+  // users.id so it matches policy_grants.principal_user_id; no attributes are needed.
+  private static Entity principalEntity(AuthenticatedPrincipal principal, OrgMember.Role role) {
     Set<EntityUID> parents = new HashSet<>();
-    parents.add(CedarEntities.orgRole(principal.orgName(), principal.role().name()));
-    if (isAdmin(principal)) {
-      parents.add(ADMINS);
+    if (role != null) {
+      parents.add(CedarEntities.role(role.name()));
     }
-    return new Entity(
-        CedarEntities.euid("User", principal.iss() + ":" + principal.sub()), Map.of(), parents);
+    if (isAdmin(principal)) {
+      parents.add(ADMIN);
+    }
+    return new Entity(CedarEntities.user(principal.userId()), Map.of(), parents);
   }
 
   private static boolean isAdmin(AuthenticatedPrincipal principal) {
@@ -68,11 +76,14 @@ public class Authorizer {
         && BootstrapProvisioner.BOOTSTRAP_SUB.equals(principal.sub());
   }
 
-  static Set<Entity> roleHierarchy(String orgName) {
-    EntityUID viewer = CedarEntities.orgRole(orgName, "viewer");
-    EntityUID member = CedarEntities.orgRole(orgName, "member");
-    EntityUID owner = CedarEntities.orgRole(orgName, "owner");
+  static Set<Entity> roleHierarchy() {
+    EntityUID viewer = CedarEntities.role("viewer");
+    EntityUID member = CedarEntities.role("member");
+    EntityUID owner = CedarEntities.role("owner");
     return Set.of(
-        new Entity(viewer), new Entity(member, Set.of(viewer)), new Entity(owner, Set.of(member)));
+        new Entity(viewer),
+        new Entity(member, Set.of(viewer)),
+        new Entity(owner, Set.of(member)),
+        new Entity(ADMIN));
   }
 }

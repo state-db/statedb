@@ -2,6 +2,7 @@ package io.statedb.persistence.authz;
 
 import com.cedarpolicy.value.EntityTypeName;
 import com.cedarpolicy.value.EntityUID;
+import java.util.UUID;
 
 final class CedarEntities {
 
@@ -11,6 +12,10 @@ final class CedarEntities {
     EntityTypeName typeName =
         EntityTypeName.parse(type).orElseThrow(() -> new IllegalArgumentException(type));
     return typeName.of(id);
+  }
+
+  static EntityUID user(UUID userId) {
+    return euid("User", userId.toString());
   }
 
   static EntityUID org(String orgName) {
@@ -25,7 +30,7 @@ final class CedarEntities {
     return euid("Stack", orgName + "/" + projectName + "/" + stackName);
   }
 
-  static EntityUID orgRole(String orgName, String role) {
-    return euid("OrgRole", orgName + ":" + role);
+  static EntityUID role(String role) {
+    return euid("Role", role);
   }
 }
