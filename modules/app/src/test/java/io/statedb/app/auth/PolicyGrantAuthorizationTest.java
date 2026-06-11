@@ -6,6 +6,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import com.cedarpolicy.model.entity.Entity;
 import com.cedarpolicy.value.EntityTypeName;
 import com.cedarpolicy.value.EntityUID;
+import com.cedarpolicy.value.PrimString;
 import io.quarkus.narayana.jta.QuarkusTransaction;
 import io.quarkus.test.junit.QuarkusTest;
 import io.statedb.persistence.auth.ApiToken;
@@ -13,6 +14,7 @@ import io.statedb.persistence.auth.AuthenticatedPrincipal;
 import io.statedb.persistence.authz.Authorizer;
 import io.statedb.persistence.authz.CedarResource;
 import io.statedb.persistence.authz.PrincipalRoleResolver;
+import io.statedb.persistence.authz.ResourceName;
 import io.statedb.persistence.identity.OrgMember;
 import io.statedb.persistence.identity.Organization;
 import io.statedb.persistence.identity.User;
@@ -122,7 +124,7 @@ class PolicyGrantAuthorizationTest {
     AuthenticatedPrincipal both = session(bothViewerId, "both");
     assertFalse(decide(both, "stack:Create", acmeId, orgResource(ACME)));
 
-    grant("managed-stack-write", acmeId, bothViewerId, null);
+    grant("StackWriteAccess", acmeId, bothViewerId, null);
 
     assertTrue(decide(both, "stack:Create", acmeId, orgResource(ACME)));
     // viewer in other, no grant there → still denied
@@ -134,7 +136,7 @@ class PolicyGrantAuthorizationTest {
     AuthenticatedPrincipal dual = session(dualUserId, "dual");
     assertFalse(decide(dual, "stack:Lock", acmeId, stack(ACME, "prod")));
 
-    grant("stack-share-write", acmeId, dualUserId, prodStackId);
+    grant("StackWriteResourcePolicy", acmeId, dualUserId, prodStackId);
 
     assertTrue(decide(dual, "stack:Lock", acmeId, stack(ACME, "prod")));
     assertFalse(decide(dual, "stack:Lock", acmeId, stack(ACME, "staging")));
@@ -143,7 +145,7 @@ class PolicyGrantAuthorizationTest {
   @Test
   void stackShareReadDoesNotGrantWrite() {
     AuthenticatedPrincipal dual = session(dualUserId, "dual");
-    grant("stack-share-read", acmeId, dualUserId, prodStackId);
+    grant("StackReadResourcePolicy", acmeId, dualUserId, prodStackId);
     assertTrue(decide(dual, "stack:Read", acmeId, stack(ACME, "prod")));
     assertFalse(decide(dual, "stack:Lock", acmeId, stack(ACME, "prod")));
   }
@@ -152,14 +154,14 @@ class PolicyGrantAuthorizationTest {
   void shareToNonMemberIsNeutralizedByMembershipGuard() {
     // outsider is not a member of acme; a (stale/invalid) share must not grant anything.
     AuthenticatedPrincipal outsider = session(outsiderId, "outsider");
-    grant("stack-share-write", acmeId, outsiderId, prodStackId);
+    grant("StackWriteResourcePolicy", acmeId, outsiderId, prodStackId);
     assertFalse(decide(outsider, "stack:Lock", acmeId, stack(ACME, "prod")));
   }
 
   @Test
   void deletingTheStackCascadesTheShareGrant() {
     AuthenticatedPrincipal dual = session(dualUserId, "dual");
-    grant("stack-share-write", acmeId, dualUserId, prodStackId);
+    grant("StackWriteResourcePolicy", acmeId, dualUserId, prodStackId);
     assertTrue(decide(dual, "stack:Lock", acmeId, stack(ACME, "prod")));
 
     QuarkusTransaction.requiringNew()
@@ -221,21 +223,29 @@ class PolicyGrantAuthorizationTest {
     return EntityTypeName.parse(type).orElseThrow().of(id);
   }
 
+  // Mirrors StackEntityLoader: resource-name ids + the matching `id` attribute, so resources line
+  // up
+  // with the name-keyed grant links assembled by PolicySetCache.
   private static CedarResource stack(String org, String name) {
-    EntityUID o = uid("Org", org);
-    EntityUID p = uid("Project", org + "/" + PROJECT);
-    EntityUID s = uid("Stack", org + "/" + PROJECT + "/" + name);
+    EntityUID o = uid("Org", ResourceName.org(org));
+    EntityUID p = uid("Project", ResourceName.project(org, PROJECT));
+    EntityUID s = uid("Stack", ResourceName.stack(org, PROJECT, name));
     Set<Entity> entities =
         Set.of(
-            new Entity(o, Map.of(), Set.of()),
-            new Entity(p, Map.of(), Set.of(o)),
-            new Entity(s, Map.of(), Set.of(p)));
+            new Entity(o, idAttr(ResourceName.org(org)), Set.of()),
+            new Entity(p, idAttr(ResourceName.project(org, PROJECT)), Set.of(o)),
+            new Entity(s, idAttr(ResourceName.stack(org, PROJECT, name)), Set.of(p)));
     return new CedarResource(s, entities);
   }
 
   private static CedarResource orgResource(String name) {
-    EntityUID uid = uid("Org", name);
-    return new CedarResource(uid, Set.of(new Entity(uid, Map.of(), Set.of())));
+    EntityUID uid = uid("Org", ResourceName.org(name));
+    return new CedarResource(
+        uid, Set.of(new Entity(uid, idAttr(ResourceName.org(name)), Set.of())));
+  }
+
+  private static Map<String, com.cedarpolicy.value.Value> idAttr(String resourceName) {
+    return Map.of("id", new PrimString(resourceName));
   }
 
   private static Organization persistOrg(String name) {

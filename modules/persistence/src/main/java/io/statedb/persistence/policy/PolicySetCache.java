@@ -14,6 +14,7 @@ import com.cedarpolicy.value.EntityUID;
 import com.fasterxml.jackson.databind.JsonNode;
 import io.quarkus.narayana.jta.QuarkusTransaction;
 import io.quarkus.runtime.Startup;
+import io.statedb.persistence.authz.ResourceName;
 import jakarta.annotation.PostConstruct;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
@@ -30,7 +31,7 @@ import org.jboss.logging.Logger;
  *
  * <ul>
  *   <li>classpath <b>static policies</b> (the role policies),
- *   <li>classpath <b>templates</b> ({@code managed-stack-write}, {@code stack-share}), and
+ *   <li>classpath <b>templates</b> ({@code StackWriteAccess}, {@code Stack*ResourcePolicy}), and
  *   <li><b>template links</b> built from {@code policy_grants} rows — the per-principal "managed"
  *       grants and per-resource shares.
  * </ul>
@@ -122,8 +123,8 @@ public class PolicySetCache {
     for (GrantLink g : grantLinkFinder.all()) {
       EntityUID resource =
           g.stackName() != null
-              ? STACK.of(g.stackOrg() + "/" + g.stackProject() + "/" + g.stackName())
-              : ORG.of(g.orgName());
+              ? STACK.of(ResourceName.stack(g.stackOrg(), g.stackProject(), g.stackName()))
+              : ORG.of(ResourceName.org(g.orgName()));
       List<LinkValue> values =
           List.of(
               new LinkValue("?principal", USER.of(g.principalUserId().toString())),

@@ -2,6 +2,7 @@ package io.statedb.persistence.authz;
 
 import com.cedarpolicy.model.entity.Entity;
 import com.cedarpolicy.value.EntityUID;
+import com.cedarpolicy.value.PrimString;
 import io.statedb.persistence.auth.AuthenticatedPrincipal;
 import io.statedb.persistence.bootstrap.BootstrapProvisioner;
 import io.statedb.persistence.identity.OrgMember;
@@ -35,7 +36,8 @@ public class OrgEntityLoader implements EntityLoader<Organization> {
     }
 
     EntityUID uid = CedarEntities.org(org.name);
-    Entity entity = new Entity(uid, Map.of(), Set.of());
+    Entity entity =
+        new Entity(uid, Map.of("id", new PrimString(ResourceName.org(org.name))), Set.of());
     return Optional.of(
         new LoadedResource(new CedarResource(uid, Set.of(entity)), role.orElse(null)));
   }

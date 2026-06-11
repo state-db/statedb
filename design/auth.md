@@ -188,8 +188,11 @@ Two schema-declared **bundle actions** group the leaf actions so a policy grants
 |--------|---------|
 | `stack:ReadOnlyAccess` | `stack:Read`, `stack:DecryptSecrets` |
 | `stack:WriteAccess` | `stack:Create`, `stack:Lock`, `stack:Delete`, `stack:EncryptSecrets` |
+| `stack:*` | both bundles above (all stack actions — the IAM `"Action": "stack:*"` wildcard) |
 
-Membership is declared on each leaf in `schema.cedar` (`action "stack:Create" in ["stack:WriteAccess"] …`). Because the engine never sees the schema at evaluation time, `PolicySetCache` derives the action entities (with their `memberOf` parents) from the schema JSON at startup and includes them in every request's entity slice — so `action in Action::"stack:WriteAccess"` resolves. The schema stays the single source of truth; there is no second hand-maintained list.
+`stack:*` is the all-of-service wildcard: the two `*Access` bundles are themselves members of it, so
+`action in Action::"stack:*"` matches every stack action (used by `StackFullAccess`, the owner
+policy). Membership is declared on each leaf/bundle in `schema.cedar` (`action "stack:Create" in ["stack:WriteAccess"] …`, `action "stack:WriteAccess" in ["stack:*"]`). Because the engine never sees the schema at evaluation time, `PolicySetCache` derives the action entities (with their `memberOf` parents) from the schema JSON at startup and includes them in every request's entity slice — so `action in Action::"stack:WriteAccess"` resolves. The schema stays the single source of truth; there is no second hand-maintained list.
 
 ### Cedar entity model
 
@@ -213,18 +216,21 @@ Lease::"lease:<stack_id>:<update_id>"
     stack: Stack           (reference)
     update_id: String
 
-Stack::"<org>/<project>/<stack>"
+Stack::"statedb:stack:<org>/<project>/<stack>"
   parents:
-    - Project::"<org>/<project>"
+    - Project::"statedb:project:<org>/<project>"
         parents:
-            - Org::"<org_name>"
-  attributes: (none)
+            - Org::"statedb:org:<org_name>"
+  attributes:
+    id: String             (== the entity id; lets policies pattern-match it IAM-style,
+                            e.g. resource.id like "statedb:stack:*/prod")
 
-Org::"<org_name>"
-  attributes: (none)
+Org::"statedb:org:<org_name>"
+  attributes:
+    id: String
 
-Project::"<org>/<project>"
-  (structural parent only; no attributes)
+Project::"statedb:project:<org>/<project>"
+  (structural parent; carries id: String)
 
 Token::"<token_id>"
   attributes:
@@ -242,8 +248,12 @@ several orgs with a different role in each. Roles are **global** entities (`Role
 `OrgRole::"acme:member"`) and inherit: `Role::"owner"` ⊃ `Role::"member"` ⊃ `Role::"viewer"`. The
 principal carries exactly the role it holds **in the resource's org**, resolved per request and
 attached as a parent. So the role policies are pure RBAC — `permit(principal in Role::"member", …)`
-with no org clause, because the attached role is already org-correct. Resources carry **no
-attributes**; the Stack → Project → Org hierarchy is kept so managed grants can scope through it.
+with no org clause, because the attached role is already org-correct. Resource entity ids are
+**IAM-style fully-qualified names** (`statedb:<service>:<org>/<project>/<stack>` — the same shape as
+an AWS ARN but state-db-native, no Amazon branding), and each resource carries that name as an `id`
+attribute so a policy can pattern-match it the IAM way (`resource.id like …`); the Stack → Project →
+Org hierarchy is kept so managed grants can scope through it. Tenancy is still the resolved role, not
+a stored field — the name is for resource-pattern matching only.
 
 ```
 Role::"viewer"   ←   Role::"member"   ←   Role::"owner"
@@ -278,7 +288,7 @@ The schema is checked into git. Changing the schema is a code change with normal
 
 ### Resource construction
 
-Per request, the `@Authorize` interceptor (next section) loads the resource entity. For most operations this is one Stack; the entity loader resolves `stacks JOIN projects JOIN organizations` once and constructs the Stack + Project + Org entities and their parents (no attributes — see "Role resolution").
+Per request, the `@Authorize` interceptor (next section) loads the resource entity. For most operations this is one Stack; the entity loader resolves `stacks JOIN projects JOIN organizations` once and constructs the Stack + Project + Org entities and their parents, each carrying its resource name as an `id` attribute (see "Role resolution").
 
 For collection-level operations (`stack:Create`), the resource is the Org. Cedar evaluates the member policy — `permit(principal in Role::"member", …)` — against that Org, where the principal's `Role::"member"` is the role resolved for that Org.
 
@@ -359,11 +369,11 @@ Compilation failure during reload **does not unload the previous good set** — 
 {
   "ts": "2026-...",
   "request_id": "...",
-  "principal": "User::https://accounts.google.com:115...",
-  "action": "Action::stack:Create",
-  "resource": "Org::acme",
+  "principal": "https://accounts.google.com:115...",
+  "action": "stack:Create",
+  "resource": "statedb:org:acme",
   "decision": "allow",
-  "matched": ["member-write"]
+  "matched": ["PowerUserAccess"]
 }
 ```
 
@@ -458,23 +468,31 @@ The interceptor runs *after* the method is dispatched (and after request body pa
 
 ## Policy set
 
-One role per file under `policies/`. Each reads top-down like an IAM statement and is **pure RBAC**: a role on the principal, the actions (a bundle or list), no org clause — the principal already carries only the role it holds in the resource's org (see "Role resolution").
+One policy per file under `policies/`: the role policies (each reads top-down like an IAM statement
+and is **pure RBAC** — a role on the principal, the actions, no org clause, because the principal
+already carries only the role it holds in the resource's org), plus an explicit-Deny guardrail. The
+`@id`s mirror AWS managed-policy names.
 
 ```cedar
-// admin.cedar — break-glass administrator (≈ AdministratorAccess): every action,
-// every resource, no org boundary.
-@id("admin-full-access")
+// admin.cedar — AWS AdministratorAccess analog: every action, every resource, no
+// org boundary. An explicit Deny still overrides it (see guardrails.cedar).
+@id("AdministratorAccess")
 permit(principal in Role::"admin", action, resource);
 
-// viewer.cedar — viewers may read stacks (and decrypt their secrets).
-// Members and owners inherit this via viewer ⊂ member ⊂ owner.
-@id("viewer-read-only")
-permit(principal in Role::"viewer", action in Action::"stack:ReadOnlyAccess", resource);
+// owner.cedar — AWS service-FullAccess analog (≈ AmazonS3FullAccess): full access
+// to the stack "service" in one statement via the stack:* action wildcard.
+@id("StackFullAccess")
+permit(principal in Role::"owner", action in Action::"stack:*", resource);
 
-// member.cedar — members may create, lock, delete, and encrypt stacks.
-// Owners inherit this via member ⊂ owner.
-@id("member-write")
+// member.cedar — AWS PowerUserAccess analog: the write bundle (read is inherited
+// from viewer; owners inherit this via member ⊂ owner).
+@id("PowerUserAccess")
 permit(principal in Role::"member", action in Action::"stack:WriteAccess", resource);
+
+// viewer.cedar — AWS ReadOnlyAccess analog: read stacks (and decrypt their
+// secrets). Members and owners inherit this via viewer ⊂ member ⊂ owner.
+@id("ReadOnlyAccess")
+permit(principal in Role::"viewer", action in Action::"stack:ReadOnlyAccess", resource);
 
 // self.cedar — any authenticated principal may read its own user record.
 @id("users-can-read-self")
@@ -482,14 +500,23 @@ permit(principal, action == Action::"user:ReadSelf", resource)
 when { principal == resource };
 ```
 
-Authoring a new role rule is mechanical: pick a role, grant the actions. Adding a finer grant is an additive file in the same shape. Illustrative future static policies the model already supports:
+**Explicit Deny.** A `forbid` is IAM's signature deny-overrides-allow rule: it wins over every
+`permit`, including `AdministratorAccess`. The Wave 1 guardrail blocks deleting a protected stack,
+matched by resource-name pattern the IAM way (not by role):
 
 ```cedar
-// owner-only-delete: tighten delete to owners by removing it from member-write
-// and granting it here.
-@id("owner-delete")
-permit(principal in Role::"owner", action == Action::"stack:Delete", resource);
+// guardrails.cedar — org-wide guardrail (≈ an AWS SCP / permission-boundary Deny):
+// no principal, whatever its role or grants, may delete a stack named "prod".
+@id("DenyDeleteProtectedStacks")
+forbid(principal, action == Action::"stack:Delete", resource)
+when { resource.id like "statedb:stack:*/prod" };
+```
 
+Authoring a new role rule is mechanical: pick a role, grant the actions. Adding a finer grant — or a
+new guardrail Deny — is an additive file in the same shape. A future service-account grant set the
+model already supports:
+
+```cedar
 // service-account-scope: service accounts get their own grant set.
 @id("service-account-scope")
 permit(principal in Role::"service", action in [Action::"stack:Read", Action::"stack:Lock"], resource);
@@ -505,15 +532,15 @@ Templates live under `policies/templates/` and carry `?principal` / `?resource` 
 a grant the moment the user leaves the org (there is no FK from `policy_grants` to `org_members`).
 
 ```cedar
-// managed-stack-write — a managed policy: grant the write bundle across one org.
-// ?resource is the Org; `resource in ?resource` matches the org and every stack under
+// StackWriteAccess — a managed (identity-based) policy: grant the write bundle across one
+// org. ?resource is the Org; `resource in ?resource` matches the org and every stack under
 // it via the entity hierarchy.
 permit(principal == ?principal, action in Action::"stack:WriteAccess", resource in ?resource)
 when { principal in Role::"viewer" };
 
-// stack-share-read / stack-share-write — resource policies: grant the read/write bundle
-// on ONE stack. ?resource is that Stack (exact match). The -write variant elevates a
-// viewer to write a single stack without org-wide write.
+// StackReadResourcePolicy / StackWriteResourcePolicy — resource-based policies: grant the
+// read/write bundle on ONE stack. ?resource is that Stack (exact match). The write variant
+// elevates a viewer to write a single stack without org-wide write.
 permit(principal == ?principal, action in Action::"stack:WriteAccess", resource == ?resource)
 when { principal in Role::"viewer" };
 ```
@@ -531,8 +558,8 @@ CREATE TABLE policy_grants (
     created_at        TIMESTAMPTZ NOT NULL DEFAULT now(),
     -- known template + the matching ?resource shape (also closes the template set)
     CONSTRAINT policy_grants_template_shape CHECK (
-        (template_id = 'managed-stack-write'                      AND resource_stack_id IS NULL)
-     OR (template_id IN ('stack-share-read', 'stack-share-write') AND resource_stack_id IS NOT NULL)),
+        (template_id = 'StackWriteAccess'                                       AND resource_stack_id IS NULL)
+     OR (template_id IN ('StackReadResourcePolicy','StackWriteResourcePolicy')  AND resource_stack_id IS NOT NULL)),
     -- a share's stack must belong to the grant's org (composite FK, like stacks(project_id, org_id));
     -- skipped for managed grants where resource_stack_id is null
     CONSTRAINT policy_grants_stack_in_org
@@ -570,7 +597,7 @@ Wave 1 ships JVM-only. JVM startup and footprint are acceptable for a self-hoste
 
 ## Open items
 
-- **Org renaming and policy stability.** Roles are global and resources carry no attributes, so a rename touches neither. It does change the org name embedded in resource entity ids (`Stack::"<org>/..."`, `Org::"<org>"`), but those are rebuilt per-request from the DB; grant links are likewise rebuilt by name from FK ids on reload, so a rename takes effect with no stale-id reconstruction.
+- **Org renaming and policy stability.** Roles are global and resources carry no attributes, so a rename touches neither. It does change the org name embedded in resource names (`statedb:stack:<org>/...`, `statedb:org:<org>`), but those are rebuilt per-request from the DB; grant links are likewise rebuilt by name from FK ids on reload, so a rename takes effect with no stale-id reconstruction.
 - **Service-account scoping below the org.** Wave 1 service accounts are org-scoped (matches `api_tokens.org_id`). Future: project- and stack-scoped service accounts. The Cedar model supports it (add a `scope: Project | Stack` attribute on ServiceAccount); the schema and mint UI don't yet.
 - **Policy editor UX.** Wave 2 console policy editor needs schema-aware autocompletion + `cedar-java` validation pre-save. Dependency on `cedar-java`'s wasm bindings or a server-side validation endpoint.
 - **Decision logs as an indexable surface.** Currently structured-log only. If admins want "who denied/allowed what" as a console screen, we need a decisions table and a write path. Skipped for Wave 1; revisit when admin demand is real.
@@ -600,5 +627,7 @@ Wave 1 ships JVM-only. JVM startup and footprint are acceptable for a self-hoste
 | CSRF: Origin/Referer + JSON-only `Content-Type` on `/api/*` non-GET | SPA-only consumer; avoids token-management complexity of double-submit while blocking both form-based and cross-origin fetch CSRF |
 | Authorization coverage is fail-closed (build-time scan + runtime guard) | Forgetting `@Authorize` on a new endpoint must not silently ship an unauthorized route |
 | Cross-org reads collapse to 404, not 403 | 403 reveals existence; collapsing prevents enumeration of stacks/projects across tenant boundaries |
-| Action bundles (`stack:WriteAccess`) as schema action groups, entities derived from the schema at startup | Policies grant a capability in one token; the schema stays the single source of truth (no hand-maintained Java action list) since the engine resolves groups from the entity slice, not the schema |
+| Action bundles (`stack:WriteAccess`) and the `stack:*` wildcard as schema action groups, entities derived from the schema at startup | Policies grant a capability in one token and read like IAM (`action in Action::"stack:*"`); the schema stays the single source of truth (no hand-maintained Java action list) since the engine resolves groups from the entity slice, not the schema |
+| IAM-style fully-qualified resource names (`statedb:<service>:<path>`) + an `id` attribute on every resource | Borrows AWS's ARN *shape* (hierarchical, glob-matchable) without the Amazon-specific `arn:` token or empty region/account slots, so policies pattern-match resources the IAM way (`resource.id like "statedb:stack:*/prod"`) while staying state-db-native |
+| Explicit Deny (`forbid`) guardrails alongside the role `permit`s | Cedar `forbid` overrides every `permit` (even `AdministratorAccess`), giving IAM's deny-overrides-allow / SCP-style guardrails as first-class policy text |
 | User/resource policies as Cedar templates + a `policy_grants` link table | Per-principal "managed" grants and per-resource shares are data, not redeploys; reuses the library's first-class template-link mechanism and the prior-good-set reload guard |

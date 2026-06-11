@@ -26,9 +26,9 @@ class PolicyGrantConstraintsTest {
   @TestTransaction
   void validManagedAndShareGrantsAreAccepted() {
     Fixture f = seed("grant-ok");
-    grant("managed-stack-write", f.orgId, f.userId, null).persistAndFlush();
-    grant("stack-share-read", f.orgId, f.userId, f.stackId).persistAndFlush();
-    grant("stack-share-write", f.orgId, f.userId, f.stackId).persistAndFlush();
+    grant("StackWriteAccess", f.orgId, f.userId, null).persistAndFlush();
+    grant("StackReadResourcePolicy", f.orgId, f.userId, f.stackId).persistAndFlush();
+    grant("StackWriteResourcePolicy", f.orgId, f.userId, f.stackId).persistAndFlush();
   }
 
   @Test
@@ -43,7 +43,7 @@ class PolicyGrantConstraintsTest {
   @TestTransaction
   void managedGrantWithAStackIsRejected() {
     Fixture f = seed("grant-managed-stack");
-    PolicyGrant g = grant("managed-stack-write", f.orgId, f.userId, f.stackId);
+    PolicyGrant g = grant("StackWriteAccess", f.orgId, f.userId, f.stackId);
     assertThrows(Exception.class, g::persistAndFlush);
   }
 
@@ -51,7 +51,7 @@ class PolicyGrantConstraintsTest {
   @TestTransaction
   void shareGrantWithoutAStackIsRejected() {
     Fixture f = seed("grant-share-nostack");
-    PolicyGrant g = grant("stack-share-write", f.orgId, f.userId, null);
+    PolicyGrant g = grant("StackWriteResourcePolicy", f.orgId, f.userId, null);
     assertThrows(Exception.class, g::persistAndFlush);
   }
 
@@ -63,7 +63,7 @@ class PolicyGrantConstraintsTest {
     otherOrg.persistAndFlush();
     // The stack belongs to f.orgId, but the grant is tenanted under otherOrg — the
     // composite FK must reject binding ?resource to another org's stack.
-    PolicyGrant g = grant("stack-share-write", otherOrg.id, f.userId, f.stackId);
+    PolicyGrant g = grant("StackWriteResourcePolicy", otherOrg.id, f.userId, f.stackId);
     assertThrows(Exception.class, g::persistAndFlush);
   }
 

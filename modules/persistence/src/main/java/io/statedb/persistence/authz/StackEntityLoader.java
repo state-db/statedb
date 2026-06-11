@@ -2,6 +2,7 @@ package io.statedb.persistence.authz;
 
 import com.cedarpolicy.model.entity.Entity;
 import com.cedarpolicy.value.EntityUID;
+import com.cedarpolicy.value.PrimString;
 import io.statedb.persistence.auth.AuthenticatedPrincipal;
 import io.statedb.persistence.bootstrap.BootstrapProvisioner;
 import io.statedb.persistence.identity.OrgMember;
@@ -58,15 +59,30 @@ public class StackEntityLoader implements EntityLoader<StackRef> {
     EntityUID projectUid = CedarEntities.project(ref.orgName(), ref.projectName());
     EntityUID stackUid = CedarEntities.stack(ref.orgName(), ref.projectName(), ref.stackName());
 
-    Entity org = new Entity(orgUid, Map.of(), Set.of());
-    Entity project = new Entity(projectUid, Map.of(), Set.of(orgUid));
-    Entity stack = new Entity(stackUid, Map.of(), Set.of(projectUid));
+    // Each resource carries its resource name as an `id` attribute so policies can pattern-match it
+    // IAM-style (e.g. a Deny on `resource.id like "statedb:stack:*/prod"`). The Cedar entity id and
+    // the attribute are the same resource name.
+    Entity org = new Entity(orgUid, idAttr(ResourceName.org(ref.orgName())), Set.of());
+    Entity project =
+        new Entity(
+            projectUid,
+            idAttr(ResourceName.project(ref.orgName(), ref.projectName())),
+            Set.of(orgUid));
+    Entity stack =
+        new Entity(
+            stackUid,
+            idAttr(ResourceName.stack(ref.orgName(), ref.projectName(), ref.stackName())),
+            Set.of(projectUid));
 
     Set<Entity> entities = new HashSet<>();
     entities.add(org);
     entities.add(project);
     entities.add(stack);
     return new CedarResource(stackUid, entities);
+  }
+
+  private static Map<String, com.cedarpolicy.value.Value> idAttr(String resourceName) {
+    return Map.of("id", new PrimString(resourceName));
   }
 
   private static String pathParam(InvocationContext ctx, String name) {

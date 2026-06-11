@@ -19,15 +19,15 @@ final class CedarEntities {
   }
 
   static EntityUID org(String orgName) {
-    return euid("Org", orgName);
+    return euid("Org", ResourceName.org(orgName));
   }
 
   static EntityUID project(String orgName, String projectName) {
-    return euid("Project", orgName + "/" + projectName);
+    return euid("Project", ResourceName.project(orgName, projectName));
   }
 
   static EntityUID stack(String orgName, String projectName, String stackName) {
-    return euid("Stack", orgName + "/" + projectName + "/" + stackName);
+    return euid("Stack", ResourceName.stack(orgName, projectName, stackName));
   }
 
   static EntityUID role(String role) {

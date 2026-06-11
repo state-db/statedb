@@ -6,20 +6,26 @@ entity Role in [Role];
 // resource's org and attached as a Role parent — see PrincipalRoleResolver.
 entity User in [Role];
 
-// Resources carry no attributes: org-scoping is the resolved role, and managed
-// grants scope through the Stack -> Project -> Org hierarchy.
-entity Org;
+// Every resource carries its fully-qualified name (== its entity id) as an `id`
+// attribute, so policies can pattern-match it IAM-style — e.g. a Deny on
+// `resource.id like "statedb:stack:*/prod"`. Tenancy itself is still the resolved
+// role, and managed grants scope through the Stack -> Project -> Org hierarchy; the
+// name is for resource-pattern matching, not for tenancy.
+entity Org { id: String };
 
-entity Project in [Org];
+entity Project in [Org] { id: String };
 
-entity Stack in [Project];
+entity Stack in [Project] { id: String };
 
-// Actions are named IAM-style as `resource:Operation`. The two `*Access`
-// actions are pre-canned bundles (action groups): a policy can grant the
-// bundle once with `action in Action::"stack:WriteAccess"` instead of listing
-// every member. Membership is declared on each leaf with `in [...]`.
-action "stack:ReadOnlyAccess";
-action "stack:WriteAccess";
+// Actions are named IAM-style as `service:Operation`. `stack:*` is the all-of-
+// service wildcard (≈ IAM `"Action": "stack:*"`); the two `*Access` actions are
+// pre-canned bundles (≈ AWS managed-policy action sets). All three are action
+// groups: a policy grants the group once with `action in Action::"stack:*"` /
+// `action in Action::"stack:WriteAccess"` instead of listing every member.
+// Membership chains upward, leaf -> bundle -> `stack:*`, via `in [...]`.
+action "stack:*";
+action "stack:ReadOnlyAccess" in ["stack:*"];
+action "stack:WriteAccess" in ["stack:*"];
 
 action "stack:Read" in ["stack:ReadOnlyAccess"] appliesTo {
   principal: [User],

@@ -3,10 +3,10 @@
 -- supplies its ?principal / ?resource slots, producing one linked policy in the
 -- live set (PolicySetCache assembles them at startup and on reload).
 --
---   * managed-stack-write  → ?principal = the user, ?resource = the org
+--   * StackWriteAccess  → ?principal = the user, ?resource = the org
 --     (org-scoped via the Stack -> Project -> Org hierarchy). resource_stack_id null.
---   * stack-share-read / -write → ?principal = the user, ?resource = the stack.
---     resource_stack_id set.
+--   * StackReadResourcePolicy / StackWriteResourcePolicy → ?principal = the user,
+--     ?resource = the stack. resource_stack_id set.
 --
 -- References are DB-native UUIDs (not Cedar strings) so grants are org-scoped and
 -- cascade cleanly. The constraints below keep every row in a shape PolicySetCache
@@ -32,8 +32,8 @@ CREATE TABLE policy_grants (
     -- templates require it (?resource = that stack). This also closes the set of
     -- accepted template ids — adding a template is a deliberate migration.
     CONSTRAINT policy_grants_template_shape CHECK (
-        (template_id = 'managed-stack-write'                      AND resource_stack_id IS NULL)
-     OR (template_id IN ('stack-share-read', 'stack-share-write') AND resource_stack_id IS NOT NULL)
+        (template_id = 'StackWriteAccess'                                          AND resource_stack_id IS NULL)
+     OR (template_id IN ('StackReadResourcePolicy', 'StackWriteResourcePolicy')    AND resource_stack_id IS NOT NULL)
     ),
 
     -- A share's stack must belong to the org the grant is tenanted under, so a row

@@ -14,17 +14,19 @@ public class ClasspathPolicyStore implements PolicyStore {
   private static final List<String> POLICY_RESOURCES =
       List.of(
           "policies/admin.cedar",
-          "policies/viewer.cedar",
+          "policies/owner.cedar",
           "policies/member.cedar",
+          "policies/viewer.cedar",
+          "policies/guardrails.cedar",
           "policies/self.cedar");
 
   // Template id -> classpath resource. The id is what a policy_grants row and the resulting
   // TemplateLink reference, so it must stay stable.
   private static final Map<String, String> TEMPLATE_RESOURCES =
       Map.of(
-          "managed-stack-write", "policies/templates/managed-stack-write.cedar",
-          "stack-share-read", "policies/templates/stack-share-read.cedar",
-          "stack-share-write", "policies/templates/stack-share-write.cedar");
+          "StackWriteAccess", "policies/templates/StackWriteAccess.cedar",
+          "StackReadResourcePolicy", "policies/templates/StackReadResourcePolicy.cedar",
+          "StackWriteResourcePolicy", "policies/templates/StackWriteResourcePolicy.cedar");
 
   @Override
   public String schema() {

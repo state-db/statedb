@@ -52,6 +52,7 @@ class AuthorizationContractTest {
               userWithToken("member", OrgMember.Role.member, org, MEMBER_TOKEN);
               stackCreator.create(org.id, ORG, PROJECT, "member-delete", Map.of());
               stackCreator.create(org.id, ORG, PROJECT, "secrets", Map.of());
+              stackCreator.create(org.id, ORG, PROJECT, "prod", Map.of());
 
               User admin = new User();
               admin.iss = BootstrapProvisioner.BOOTSTRAP_ISS;
@@ -134,6 +135,32 @@ class AuthorizationContractTest {
         .delete("/pulumi/api/stacks/" + ORG + "/" + PROJECT + "/member-delete")
         .then()
         .statusCode(200);
+  }
+
+  @Test
+  void explicitDenyBlocksMemberDeletingProtectedStack() {
+    // A member can delete ordinary stacks (see memberAllowedOnStackDeleteForThisSlice), but the
+    // DenyDeleteProtectedStacks guardrail (an explicit Cedar forbid) blocks deleting a "prod"
+    // stack.
+    given()
+        .header("Authorization", "token " + MEMBER_TOKEN)
+        .when()
+        .delete("/pulumi/api/stacks/" + ORG + "/" + PROJECT + "/prod")
+        .then()
+        .statusCode(403);
+  }
+
+  @Test
+  void explicitDenyOverridesAdministratorAccess() {
+    // IAM-style deny-overrides-allow: forbid wins over AdministratorAccess, so even the break-glass
+    // admin — who may delete stacks in any org (see bootstrapAdminAllowedAcrossOrgs) — cannot
+    // delete a protected "prod" stack.
+    given()
+        .header("Authorization", "token " + ADMIN_TOKEN)
+        .when()
+        .delete("/pulumi/api/stacks/" + ORG + "/" + PROJECT + "/prod")
+        .then()
+        .statusCode(403);
   }
 
   @Test

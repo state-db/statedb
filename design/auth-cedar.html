@@ -1,0 +1,651 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>state-db · Authorization with Cedar — a field guide</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600;9..144,700&family=Hanken+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --paper:#f4efe6; --paper-2:#ece5d7; --card:#fffdf8; --card-2:#faf6ee;
+    --ink:#23201a; --muted:#6c655a; --faint:#a39a89;
+    --line:#e3d9c7; --line-2:#d2c5ad; --code-bg:#272320; --code-ink:#ece4d6;
+
+    --principal:#2f5fe0; --principal-bg:#e7edfc;
+    --role:#0a8f86;      --role-bg:#dcf1ef;
+    --action:#b0741a;    --action-bg:#f6ead2;
+    --resource:#1d8a55;  --resource-bg:#dff0e5;
+    --policy:#8043c9;    --policy-bg:#efe6fb;
+    --allow:#1d8a52;     --allow-bg:#e1f2e8;
+    --deny:#cf3b46;      --deny-bg:#fbe4e6;
+    --brand:#15665b;
+
+    --mono:"JetBrains Mono",ui-monospace,Menlo,Consolas,monospace;
+    --sans:"Hanken Grotesk",ui-sans-serif,system-ui,sans-serif;
+    --serif:"Fraunces",Georgia,serif;
+    --shadow:0 1px 0 rgba(0,0,0,.02), 0 14px 34px -22px rgba(40,30,10,.5);
+  }
+  *{box-sizing:border-box}
+  html{scroll-behavior:smooth}
+  body{
+    margin:0;background:
+      radial-gradient(1200px 600px at 80% -5%, #fbf7ef 0%, transparent 60%),
+      var(--paper);
+    color:var(--ink);font-family:var(--sans);font-size:16px;line-height:1.6;
+    -webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility;
+  }
+  .wrap{max-width:920px;margin:0 auto;padding:0 24px}
+  a{color:var(--brand);text-decoration:none}
+  a:hover{text-decoration:underline;text-underline-offset:3px}
+  code,.m{font-family:var(--mono)}
+
+  /* ---------- top bar ---------- */
+  .topbar{position:sticky;top:0;z-index:50;background:rgba(244,239,230,.86);
+    backdrop-filter:blur(10px);border-bottom:1px solid var(--line)}
+  .topbar .wrap{display:flex;align-items:center;gap:18px;height:54px}
+  .brand{font-family:var(--serif);font-weight:600;font-size:17px;letter-spacing:-.01em;white-space:nowrap}
+  .brand .dot{color:var(--brand)}
+  .legend{display:flex;gap:7px;flex-wrap:wrap;margin-left:auto}
+  .legend .chip{font-size:11px;padding:2px 8px}
+  @media(max-width:720px){.legend{display:none}}
+
+  /* ---------- hero ---------- */
+  header.hero{padding:64px 0 26px}
+  .eyebrow{font-family:var(--mono);font-size:12px;letter-spacing:.18em;text-transform:uppercase;color:var(--brand)}
+  h1{font-family:var(--serif);font-weight:600;font-size:clamp(34px,6vw,58px);line-height:1.02;
+    letter-spacing:-.02em;margin:14px 0 0}
+  h1 em{font-style:italic;color:var(--brand)}
+  .lede{font-size:20px;line-height:1.5;color:#4b463c;max-width:62ch;margin:20px 0 0}
+  .lede b{color:var(--ink)}
+
+  /* ---------- structure ---------- */
+  section{padding:46px 0;border-top:1px solid var(--line)}
+  .kicker{font-family:var(--mono);font-size:12px;letter-spacing:.16em;text-transform:uppercase;color:var(--action)}
+  h2{font-family:var(--serif);font-weight:600;font-size:clamp(26px,4vw,38px);line-height:1.08;
+    letter-spacing:-.015em;margin:8px 0 0}
+  h3{font-family:var(--serif);font-weight:600;font-size:21px;margin:30px 0 6px;letter-spacing:-.01em}
+  p{margin:14px 0}
+  .say{font-size:18px;color:#3c372f;max-width:64ch}
+  .small{font-size:14px;color:var(--muted)}
+  .center{text-align:center}
+
+  /* ---------- chips (the shared vocabulary) ---------- */
+  .chip{display:inline-flex;align-items:center;gap:5px;font-family:var(--mono);font-size:12.5px;
+    font-weight:500;padding:3px 9px;border-radius:7px;border:1px solid;white-space:nowrap;line-height:1.3}
+  .chip.principal{color:var(--principal);background:var(--principal-bg);border-color:#c6d4f6}
+  .chip.role{color:var(--role);background:var(--role-bg);border-color:#bfe6e2}
+  .chip.action{color:var(--action);background:var(--action-bg);border-color:#ecd6a8}
+  .chip.resource{color:var(--resource);background:var(--resource-bg);border-color:#bfe2cd}
+  .chip.policy{color:var(--policy);background:var(--policy-bg);border-color:#dcc9f3}
+  .chip.allow{color:#fff;background:var(--allow);border-color:var(--allow)}
+  .chip.deny{color:#fff;background:var(--deny);border-color:var(--deny)}
+  .chip .dot{width:7px;height:7px;border-radius:50%;background:currentColor;opacity:.85}
+
+  /* ---------- the engine black-box diagram ---------- */
+  .engine{display:grid;grid-template-columns:1fr auto 1.3fr auto 1fr;gap:14px;align-items:center;
+    margin:26px 0 6px}
+  @media(max-width:760px){.engine{grid-template-columns:1fr;gap:10px}.engine .arr{transform:rotate(90deg);justify-self:center}}
+  .stack-in{display:flex;flex-direction:column;gap:8px}
+  .box{background:var(--card);border:1px solid var(--line-2);border-radius:14px;padding:16px 16px;box-shadow:var(--shadow)}
+  .box .lbl{font-family:var(--mono);font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--faint);margin-bottom:9px}
+  .engine .core{text-align:center;border-color:var(--brand);background:
+    linear-gradient(180deg,#f0faf6,#fffdf8)}
+  .engine .core .name{font-family:var(--serif);font-weight:600;font-size:20px;color:var(--brand)}
+  .engine .core .sub{font-size:12.5px;color:var(--muted);margin-top:4px}
+  .engine .out{display:flex;flex-direction:column;gap:8px;align-items:stretch;text-align:center}
+  .arr{color:var(--line-2);font-size:24px;text-align:center;font-family:var(--mono)}
+  .verdictpill{font-family:var(--mono);font-weight:700;font-size:14px;padding:8px;border-radius:9px;border:1px solid}
+  .verdictpill.allow{color:var(--allow);background:var(--allow-bg);border-color:#bfe2cd}
+  .verdictpill.deny{color:var(--deny);background:var(--deny-bg);border-color:#f1c7cb}
+
+  /* ---------- generic cards grid ---------- */
+  .grid{display:grid;gap:14px;margin:22px 0}
+  .g2{grid-template-columns:1fr 1fr}.g3{grid-template-columns:1fr 1fr 1fr}.g4{grid-template-columns:repeat(4,1fr)}
+  @media(max-width:760px){.g2,.g3,.g4{grid-template-columns:1fr}}
+  .cardx{background:var(--card);border:1px solid var(--line);border-radius:13px;padding:16px 17px;box-shadow:var(--shadow)}
+  .cardx .top{display:flex;align-items:center;gap:9px;margin-bottom:8px}
+  .cardx h4{margin:0;font-size:15.5px;font-family:var(--sans);font-weight:700}
+  .cardx p{margin:6px 0 0;font-size:14px;color:#514b41}
+  .swatch{width:11px;height:11px;border-radius:4px;flex:none}
+
+  /* ---------- ladder / hierarchy ---------- */
+  .ladders{display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px;margin-top:22px}
+  @media(max-width:820px){.ladders{grid-template-columns:1fr}}
+  .ladder{background:var(--card);border:1px solid var(--line);border-radius:13px;padding:16px;box-shadow:var(--shadow)}
+  .ladder .cap{font-size:13px;color:var(--muted);margin:0 0 12px}
+  .ladder .cap b{color:var(--ink)}
+  .rung{display:flex;justify-content:center;margin:0}
+  .conn{display:flex;align-items:center;justify-content:center;gap:7px;color:var(--faint);
+    font-size:11px;font-family:var(--mono);height:24px;letter-spacing:.04em}
+  .conn::before{content:"▲"}
+  .ladder.split .branch{display:flex;gap:8px;justify-content:center}
+
+  /* ---------- annotated / dissected code ---------- */
+  pre{background:var(--code-bg);color:var(--code-ink);border-radius:12px;padding:16px 18px;overflow:auto;
+    font-family:var(--mono);font-size:13px;line-height:1.65;margin:16px 0;box-shadow:var(--shadow)}
+  pre .c{color:#8f8674}     /* comment */
+  pre .kw{color:#7fb2ff}    /* permit/forbid/when/in/like */
+  pre .ty{color:#e6b566}    /* entity types */
+  pre .st{color:#8fd6a0}    /* strings */
+  pre .pr{color:#b79bff}    /* slots ?principal */
+  .dissect{background:var(--card);border:1px solid var(--line);border-radius:13px;overflow:hidden;box-shadow:var(--shadow);margin:18px 0}
+  .dissect pre{margin:0;border-radius:0}
+  .annot{padding:6px 8px}
+  .annot .row{display:grid;grid-template-columns:minmax(190px,260px) 1fr;gap:14px;padding:9px 12px;border-top:1px solid var(--line)}
+  .annot .row:first-child{border-top:none}
+  .annot .tok{font-family:var(--mono);font-size:12.5px;color:var(--ink);font-weight:500}
+  .annot .exp{font-size:14px;color:#4b463c}
+  @media(max-width:680px){.annot .row{grid-template-columns:1fr}}
+
+  /* ---------- callouts ---------- */
+  .key{background:linear-gradient(180deg,#fff7e8,#fffdf8);border:1px solid #ecd9a9;
+    border-left:4px solid var(--action);border-radius:12px;padding:16px 18px;margin:22px 0}
+  .key .t{font-family:var(--mono);font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--action);font-weight:700}
+  .key p{margin:6px 0 0;font-size:16px}
+  .key b{color:#7a4f0f}
+
+  /* ---------- the big idea (two orgs) ---------- */
+  .twoorg{display:grid;grid-template-columns:1fr auto 1fr;gap:14px;align-items:center;margin:22px 0 8px}
+  @media(max-width:680px){.twoorg{grid-template-columns:1fr}}
+  .orgcard{background:var(--card);border:1px solid var(--line);border-radius:13px;padding:16px;text-align:center;box-shadow:var(--shadow)}
+  .orgcard .on{font-family:var(--mono);font-size:13px;color:var(--resource);font-weight:500}
+  .orgcard .rr{margin-top:10px}
+  .midface{text-align:center}
+  .midface .who{font-family:var(--mono);font-size:13px;color:var(--principal);font-weight:600}
+  .midface .arrows{color:var(--faint);font-size:12px;margin-top:4px;font-family:var(--mono)}
+
+  /* ---------- trace ---------- */
+  .scenario{background:#221f1a;color:#f3ecdd;border-radius:14px;padding:18px 20px;margin:8px 0 22px;box-shadow:var(--shadow)}
+  .scenario .q{font-family:var(--serif);font-size:21px;font-weight:500}
+  .scenario .meta{font-family:var(--mono);font-size:13px;color:#c3b9a4;margin-top:8px;display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+  .pipeline{display:flex;flex-direction:column;gap:0;margin:8px 0}
+  .step{display:grid;grid-template-columns:38px 1fr;gap:14px;padding:14px 0;border-top:1px dashed var(--line-2)}
+  .step:first-child{border-top:none}
+  .step .n{width:32px;height:32px;border-radius:9px;background:var(--brand);color:#fff;display:grid;place-items:center;
+    font-family:var(--mono);font-weight:700;font-size:14px}
+  .step h4{margin:2px 0 4px;font-size:16px;font-family:var(--sans);font-weight:700}
+  .step p{margin:4px 0;font-size:14.5px;color:#4b463c}
+  .step .file{font-family:var(--mono);font-size:11.5px;color:var(--faint)}
+
+  .slicebox{background:var(--card-2);border:1px solid var(--line);border-radius:12px;padding:14px 16px;margin:10px 0}
+  .slicebox .gl{font-family:var(--mono);font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--faint);margin:0 0 8px}
+  .slicechips{display:flex;gap:7px;flex-wrap:wrap}
+
+  .match{display:flex;flex-direction:column;gap:8px;margin:12px 0}
+  .pol{display:grid;grid-template-columns:24px 1fr auto;gap:11px;align-items:center;
+    background:var(--card);border:1px solid var(--line);border-radius:10px;padding:11px 13px}
+  .pol.hit{border-color:#bfe2cd;background:var(--allow-bg)}
+  .pol.hit.deny{border-color:#f1c7cb;background:var(--deny-bg)}
+  .pol .mk{font-family:var(--mono);font-weight:700}
+  .pol .mk.y{color:var(--allow)} .pol .mk.n{color:var(--faint)} .pol .mk.d{color:var(--deny)}
+  .pol .nm{font-family:var(--mono);font-size:13px}
+  .pol .why{font-size:13px;color:var(--muted);text-align:right;max-width:42ch}
+  @media(max-width:680px){.pol{grid-template-columns:24px 1fr}.pol .why{display:none}}
+  .verdict{display:flex;align-items:center;gap:12px;border-radius:12px;padding:14px 18px;margin-top:12px;font-weight:600;border:1px solid}
+  .verdict.allow{background:var(--allow-bg);border-color:#bfe2cd;color:#13633c}
+  .verdict.deny{background:var(--deny-bg);border-color:#f1c7cb;color:#9a2730}
+  .verdict .big{font-family:var(--serif);font-size:20px;font-weight:600}
+  .verdict .http{font-family:var(--mono);font-size:13px;margin-left:auto;opacity:.8}
+
+  /* ---------- comparison table ---------- */
+  table{width:100%;border-collapse:separate;border-spacing:0;margin:20px 0;font-size:14.5px;
+    background:var(--card);border:1px solid var(--line);border-radius:13px;overflow:hidden;box-shadow:var(--shadow)}
+  th,td{padding:12px 16px;text-align:left;vertical-align:top;border-top:1px solid var(--line)}
+  thead th{border-top:none;font-family:var(--mono);font-size:11px;letter-spacing:.1em;text-transform:uppercase;
+    color:var(--faint);background:var(--card-2);font-weight:600}
+  td.s{font-family:var(--mono);font-size:13px;color:var(--ink)}
+  td .ar{color:var(--faint);font-family:var(--mono)}
+
+  /* ---------- code map ---------- */
+  .files{display:grid;grid-template-columns:1fr;gap:7px;margin:14px 0}
+  .frow{display:grid;grid-template-columns:minmax(0,290px) 1fr;gap:16px;align-items:baseline;
+    padding:10px 14px;background:var(--card);border:1px solid var(--line);border-radius:9px}
+  .frow .p{font-family:var(--mono);font-size:12.5px;color:var(--brand)}
+  .frow .d{font-size:13.5px;color:#4b463c}
+  @media(max-width:640px){.frow{grid-template-columns:1fr;gap:3px}}
+  .grouplabel{font-family:var(--mono);font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--action);margin:22px 0 8px}
+
+  footer{border-top:1px solid var(--line);padding:30px 0 90px;color:var(--muted);font-size:13.5px}
+
+  /* ---------- reveal (progressive; visible without JS) ---------- */
+  html.js .reveal{opacity:0;transform:translateY(14px)}
+  html.js .reveal.in{opacity:1;transform:none;transition:opacity .6s ease, transform .6s cubic-bezier(.2,.7,.2,1)}
+  @media(prefers-reduced-motion:reduce){html.js .reveal{opacity:1;transform:none}}
+</style>
+</head>
+<body>
+<script>document.documentElement.classList.add('js')</script>
+
+<div class="topbar">
+  <div class="wrap">
+    <div class="brand">state-db <span class="dot">·</span> auth</div>
+    <div class="legend">
+      <span class="chip principal"><span class="dot"></span>principal</span>
+      <span class="chip action"><span class="dot"></span>action</span>
+      <span class="chip resource"><span class="dot"></span>resource</span>
+      <span class="chip policy"><span class="dot"></span>policy</span>
+    </div>
+  </div>
+</div>
+
+<div class="wrap">
+
+<header class="hero">
+  <div class="eyebrow">design · a field guide</div>
+  <h1>How authorization works,<br>and how <em>Cedar</em> makes the call.</h1>
+  <p class="lede">Every protected request in state-db ends at one yes-or-no question. This page builds
+  up the answer from scratch — what <b>Cedar</b> is, the four things it looks at, and exactly how one
+  real request becomes an <b>allow</b> or a <b>deny</b>.</p>
+</header>
+
+<!-- 1 · MENTAL MODEL -->
+<section id="model" class="reveal">
+  <div class="kicker">01 · the mental model</div>
+  <h2>Cedar is a yes/no engine</h2>
+  <p class="say">It does not store anything and it does not know your database. You hand it a
+  <b>question</b>, your <b>policies</b>, and the <b>facts</b> relevant to that question. It returns
+  <span class="chip allow">Allow</span> or <span class="chip deny">Deny</span>. That's the whole job.</p>
+
+  <div class="engine">
+    <div class="stack-in">
+      <div class="box">
+        <div class="lbl">the question</div>
+        <div style="display:flex;flex-direction:column;gap:6px;align-items:flex-start">
+          <span class="chip principal"><span class="dot"></span>principal</span>
+          <span class="chip action"><span class="dot"></span>action</span>
+          <span class="chip resource"><span class="dot"></span>resource</span>
+          <span class="small m">+ context</span>
+        </div>
+      </div>
+    </div>
+    <div class="arr">→</div>
+    <div class="box core">
+      <div class="name">Cedar engine</div>
+      <div class="sub">evaluates your <span class="chip policy" style="font-size:11px;padding:1px 6px"><span class="dot"></span>policies</span><br>against the request's <b>entities</b></div>
+    </div>
+    <div class="arr">→</div>
+    <div class="out">
+      <div class="verdictpill allow">ALLOW → run the handler</div>
+      <div class="verdictpill deny">DENY → 403 / 404</div>
+    </div>
+  </div>
+
+  <div class="key">
+    <div class="t">The two rules that decide everything</div>
+    <p><b>Default deny.</b> If no policy says yes, the answer is no. A <code class="m">permit</code>
+    rule grants access; a <code class="m">forbid</code> rule withholds it — and <b>a single
+    <code class="m">forbid</code> beats every <code class="m">permit</code></b>. That ordering is how
+    we build break-glass admins <em>and</em> guardrails that even admins can't cross.</p>
+  </div>
+</section>
+
+<!-- 2 · THE FOUR INPUTS -->
+<section id="inputs" class="reveal">
+  <div class="kicker">02 · the question</div>
+  <h2>Four words: may <span style="color:var(--principal)">who</span> do <span style="color:var(--action)">what</span> to <span style="color:var(--resource)">which thing</span>?</h2>
+  <p class="say">Cedar phrases every request the same way. Here is what each part <em>is</em> in
+  state-db when the Pulumi CLI calls in.</p>
+
+  <div class="grid g2">
+    <div class="cardx">
+      <div class="top"><span class="swatch" style="background:var(--principal)"></span><h4>principal — the caller</h4></div>
+      <p>The <span class="chip principal"><span class="dot"></span>User</span> behind the token, carrying the
+      <span class="chip role"><span class="dot"></span>Role</span> they hold <em>in this resource's org</em>
+      (more on that in §06).</p>
+    </div>
+    <div class="cardx">
+      <div class="top"><span class="swatch" style="background:var(--action)"></span><h4>action — the operation</h4></div>
+      <p>One verb, named IAM-style: <span class="chip action"><span class="dot"></span>stack:Read</span>,
+      <span class="chip action"><span class="dot"></span>stack:Delete</span>,
+      <span class="chip action"><span class="dot"></span>stack:Lock</span> …</p>
+    </div>
+    <div class="cardx">
+      <div class="top"><span class="swatch" style="background:var(--resource)"></span><h4>resource — the target</h4></div>
+      <p>A <span class="chip resource"><span class="dot"></span>Stack</span> / <span class="chip resource"><span class="dot"></span>Project</span> /
+      <span class="chip resource"><span class="dot"></span>Org</span>, each named like an ARN:
+      <code class="m">statedb:stack:acme/web/prod</code>.</p>
+    </div>
+    <div class="cardx">
+      <div class="top"><span class="swatch" style="background:var(--faint)"></span><h4>context — the rest</h4></div>
+      <p>Time, IP, request metadata. Available to policies via <code class="m">when</code> clauses;
+      state-db doesn't use it yet.</p>
+    </div>
+  </div>
+</section>
+
+<!-- 3 · ENTITIES -->
+<section id="entities" class="reveal">
+  <div class="kicker">03 · the facts</div>
+  <h2>Entities — the only facts Cedar sees</h2>
+  <p class="say">This is the piece people miss. Cedar can't query your DB, so <b>on every request you
+  hand it a small bag of <span style="color:var(--brand)">entities</span></b> — typed objects, each
+  with optional <b>attributes</b> and <b>parents</b>. Parents form hierarchies; the keyword
+  <code class="m">in</code> walks them.</p>
+
+  <pre><span class="c">// the caller — a User whose parent is the role she holds here</span>
+<span class="ty">User</span>::<span class="st">"7f3c…e21"</span>
+  parents:    [ <span class="ty">Role</span>::<span class="st">"viewer"</span> ]
+
+<span class="c">// the target — a Stack that descends from its Project, then its Org</span>
+<span class="ty">Stack</span>::<span class="st">"statedb:stack:acme/web/prod"</span>
+  attributes: { id: <span class="st">"statedb:stack:acme/web/prod"</span> }   <span class="c">// for resource.id like "…"</span>
+  parents:    [ <span class="ty">Project</span>::<span class="st">"statedb:project:acme/web"</span> ]</pre>
+
+  <div class="grid g3">
+    <div class="cardx"><div class="top"><h4>Type::"id"</h4></div><p>Every entity has a <b>type</b>
+      (<code class="m">User</code>, <code class="m">Stack</code>) and a stable <b>id</b>. That's Cedar's
+      spelling; the id is the part you read.</p></div>
+    <div class="cardx"><div class="top"><h4>attributes</h4></div><p>Key/value facts on the entity. We put
+      the resource name in <code class="m">id</code> so policies can pattern-match it.</p></div>
+    <div class="cardx"><div class="top"><h4>parents → <code class="m">in</code></h4></div><p><code class="m">a in B</code>
+      is true when <b>B is a or an ancestor of a</b>. One keyword, three hierarchies — next.</p></div>
+  </div>
+  <p class="small">The bundle of entities handed to Cedar for one request is called the
+  <b>slice</b>. Assembling the right slice is most of what the authorizer does — you'll watch it
+  happen in §07.</p>
+</section>
+
+<!-- 4 · THREE HIERARCHIES -->
+<section id="hierarchies" class="reveal">
+  <div class="kicker">04 · the leverage</div>
+  <h2>Three little ladders keep policies tiny</h2>
+  <p class="say">Because <code class="m">in</code> climbs parents, one short rule covers many cases.
+  These are the three hierarchies fed into every slice.</p>
+
+  <div class="ladders">
+    <div class="ladder">
+      <p class="cap"><b>Roles</b> — higher <em>is-a</em> lower</p>
+      <div class="rung"><span class="chip role"><span class="dot"></span>owner</span></div>
+      <div class="conn">inherits</div>
+      <div class="rung"><span class="chip role"><span class="dot"></span>member</span></div>
+      <div class="conn">inherits</div>
+      <div class="rung"><span class="chip role"><span class="dot"></span>viewer</span></div>
+      <p class="small" style="margin-top:12px">So <code class="m">in Role::"viewer"</code> admits
+      <b>everyone</b>; <code class="m">in Role::"member"</code> admits member + owner.
+      <span class="chip role"><span class="dot"></span>admin</span> stands alone.</p>
+    </div>
+
+    <div class="ladder split">
+      <p class="cap"><b>Actions</b> — leaves roll up into groups</p>
+      <div class="rung"><span class="chip action"><span class="dot"></span>stack:*</span></div>
+      <div class="conn">contains</div>
+      <div class="branch">
+        <span class="chip action" style="font-size:11px"><span class="dot"></span>ReadOnlyAccess</span>
+        <span class="chip action" style="font-size:11px"><span class="dot"></span>WriteAccess</span>
+      </div>
+      <div class="conn">contains</div>
+      <div class="branch">
+        <span class="chip action" style="font-size:10.5px">Read · Decrypt</span>
+        <span class="chip action" style="font-size:10.5px">Create · Lock · Delete · Encrypt</span>
+      </div>
+      <p class="small" style="margin-top:12px">Grant a whole bundle once:
+      <code class="m">in Action::"stack:WriteAccess"</code> covers all four writers.</p>
+    </div>
+
+    <div class="ladder">
+      <p class="cap"><b>Resources</b> — Stack lives under Org</p>
+      <div class="rung"><span class="chip resource"><span class="dot"></span>Stack</span></div>
+      <div class="conn">child of</div>
+      <div class="rung"><span class="chip resource"><span class="dot"></span>Project</span></div>
+      <div class="conn">child of</div>
+      <div class="rung"><span class="chip resource"><span class="dot"></span>Org</span></div>
+      <p class="small" style="margin-top:12px">So a grant on the Org
+      (<code class="m">resource in ?org</code>) reaches every stack beneath it.</p>
+    </div>
+  </div>
+</section>
+
+<!-- 5 · READING A POLICY -->
+<section id="policy" class="reveal">
+  <div class="kicker">05 · the rules</div>
+  <h2>Reading a policy, token by token</h2>
+  <p class="say">A policy is one <code class="m">permit</code> or <code class="m">forbid</code> with a
+  head (principal / action / resource) and an optional <code class="m">when</code>. Here's the rule
+  that lets members write — annotated.</p>
+
+  <div class="dissect">
+    <pre><span class="c">// member.cedar — the "PowerUserAccess" managed policy</span>
+<span class="kw">permit</span>(
+  principal <span class="kw">in</span> <span class="ty">Role</span>::<span class="st">"member"</span>,
+  action    <span class="kw">in</span> <span class="ty">Action</span>::<span class="st">"stack:WriteAccess"</span>,
+  resource
+);</pre>
+    <div class="annot">
+      <div class="row"><div class="tok">permit( … )</div><div class="exp">If everything in the head matches this request, vote <b>Allow</b>.</div></div>
+      <div class="row"><div class="tok">principal in Role::"member"</div><div class="exp">The caller is a member — <em>or</em> an owner, since owner inherits member (ladder #1).</div></div>
+      <div class="row"><div class="tok">action in Action::"stack:WriteAccess"</div><div class="exp">Any action in the write bundle: Create, Lock, Delete, Encrypt (ladder #2).</div></div>
+      <div class="row"><div class="tok">resource</div><div class="exp">No constraint. Tenancy is already handled — the role on the principal is the one held <em>in this resource's org</em> (§06).</div></div>
+    </div>
+  </div>
+
+  <h3>The flip side: an explicit <span style="color:var(--deny)">Deny</span></h3>
+  <p class="say">A <code class="m">forbid</code> reads the same way but votes the other direction —
+  and it <b>wins over any permit</b>. This guardrail blocks deleting a production stack, for anyone:</p>
+
+  <div class="dissect">
+    <pre><span class="c">// guardrails.cedar — DenyDeleteProtectedStacks</span>
+<span class="kw">forbid</span>(
+  principal,
+  action == <span class="ty">Action</span>::<span class="st">"stack:Delete"</span>,
+  resource
+)
+<span class="kw">when</span> { resource.id <span class="kw">like</span> <span class="st">"statedb:stack:*/prod"</span> };</pre>
+    <div class="annot">
+      <div class="row"><div class="tok">forbid( … )</div><div class="exp">If this matches, vote <b>Deny</b> — and override every <code class="m">permit</code>, including the admin's.</div></div>
+      <div class="row"><div class="tok">principal</div><div class="exp">Unconstrained: applies to <em>everyone</em>.</div></div>
+      <div class="row"><div class="tok">action == Action::"stack:Delete"</div><div class="exp">Exactly the delete action — note <code class="m">==</code> (this one), not <code class="m">in</code> (a group).</div></div>
+      <div class="row"><div class="tok">when { resource.id like "…/prod" }</div><div class="exp">Only when the resource's name ends in <code class="m">/prod</code> — pattern-matched IAM-style.</div></div>
+    </div>
+  </div>
+</section>
+
+<!-- 6 · THE BIG IDEA -->
+<section id="bigidea" class="reveal">
+  <div class="kicker">06 · the one big idea</div>
+  <h2>Global roles, resolved per request</h2>
+  <p class="say">Notice the policies have <b>no org clause</b>. That's deliberate, and it's the keystone
+  of the whole design. A user is one global identity who can hold a <em>different</em> role in each
+  org. So we never ask "what is her role?" — we ask <b>"what role does she hold in
+  <span style="color:var(--resource)">this resource's org</span>?"</b></p>
+
+  <div class="twoorg">
+    <div class="orgcard">
+      <div class="on">Org "acme"</div>
+      <div class="rr"><span class="chip role"><span class="dot"></span>viewer</span></div>
+      <p class="small" style="margin-top:8px">can read, can't write</p>
+    </div>
+    <div class="midface">
+      <div class="who">◆ same User ◆</div>
+      <div class="arrows">↙ resolved ↘<br>per request</div>
+    </div>
+    <div class="orgcard">
+      <div class="on">Org "globex"</div>
+      <div class="rr"><span class="chip role"><span class="dot"></span>owner</span></div>
+      <p class="small" style="margin-top:8px">full access here</p>
+    </div>
+  </div>
+
+  <div class="key">
+    <div class="t">why this is the keystone</div>
+    <p>One component — <code class="m">PrincipalRoleResolver</code> — answers
+    <b>(principal, resourceOrg) → role</b> and attaches that role to the Cedar principal. Now every
+    policy is pure role logic with <b>no tenancy clause to repeat</b>, and multi-org "just works."
+    No role in that org (and not an admin)? The request stops as a <b>404</b> before Cedar even runs —
+    you can't be denied access to something you can't see.</p>
+  </div>
+</section>
+
+<!-- 7 · A DECISION, TRACED -->
+<section id="trace" class="reveal">
+  <div class="kicker">07 · the payoff</div>
+  <h2>One request, traced to its verdict</h2>
+  <p class="say">Now watch it all run. Every protected handler funnels through the same pipeline; a
+  denied request never even opens a database transaction.</p>
+
+  <div class="scenario">
+    <div class="q">A viewer tries to delete a stack.</div>
+    <div class="meta">
+      <span class="chip principal" style="background:#33405e;border-color:#48597f;color:#cfe0ff"><span class="dot"></span>Mallory · viewer in acme</span>
+      <span class="chip action" style="background:#4a3c24;border-color:#6a5631;color:#f0d49a"><span class="dot"></span>stack:Delete</span>
+      <span class="chip resource" style="background:#26432f;border-color:#3a6147;color:#a9e3c1"><span class="dot"></span>acme/web/app</span>
+    </div>
+  </div>
+
+  <div class="pipeline">
+    <div class="step"><div class="n">1</div><div>
+      <h4>Authenticate</h4>
+      <p>The <code class="m">token</code> header is hashed and looked up; we build the principal — the
+      User plus, for a CLI token, the org it's scoped to.</p>
+      <div class="file">TokenAuthFilter · ApiTokenFinder</div></div></div>
+    <div class="step"><div class="n">2</div><div>
+      <h4>Load the resource</h4>
+      <p>The path <code class="m">acme/web/app</code> resolves to a real row, and we build the
+      <span class="chip resource"><span class="dot"></span>Stack</span> →
+      <span class="chip resource"><span class="dot"></span>Project</span> →
+      <span class="chip resource"><span class="dot"></span>Org</span> chain. (No such stack → 404, here.)</p>
+      <div class="file">AuthorizeInterceptor · StackEntityLoader</div></div></div>
+    <div class="step"><div class="n">3</div><div>
+      <h4>Resolve the role</h4>
+      <p>What role does Mallory hold <em>in acme</em>? A membership lookup says
+      <span class="chip role"><span class="dot"></span>viewer</span>. It rides along, attached to the
+      principal. (No role + not admin → 404.)</p>
+      <div class="file">PrincipalRoleResolver</div></div></div>
+    <div class="step"><div class="n">4</div><div>
+      <h4>Assemble the slice</h4>
+      <p>The authorizer gathers exactly the entities Cedar needs:</p>
+      <div class="slicebox">
+        <div class="gl">the slice handed to Cedar</div>
+        <div class="slicechips">
+          <span class="chip principal"><span class="dot"></span>User ▸ Role::"viewer"</span>
+          <span class="chip role"><span class="dot"></span>role ladder</span>
+          <span class="chip action"><span class="dot"></span>action groups</span>
+          <span class="chip resource"><span class="dot"></span>Stack ▸ Project ▸ Org</span>
+        </div>
+      </div>
+      <div class="file">Authorizer · PolicySetCache.actionEntities()</div></div></div>
+    <div class="step"><div class="n">5</div><div>
+      <h4>Decide</h4>
+      <p>Cedar checks every policy against the request:</p>
+      <div class="match">
+        <div class="pol"><span class="mk n">✗</span><span class="nm">ReadOnlyAccess</span><span class="why">viewer ✓ — but Delete isn't in ReadOnlyAccess</span></div>
+        <div class="pol"><span class="mk n">✗</span><span class="nm">PowerUserAccess</span><span class="why">needs member; viewer doesn't climb up to member</span></div>
+        <div class="pol"><span class="mk n">✗</span><span class="nm">StackFullAccess</span><span class="why">needs owner</span></div>
+        <div class="pol"><span class="mk n">✗</span><span class="nm">DenyDeleteProtectedStacks</span><span class="why">not a /prod stack — doesn't fire either</span></div>
+      </div>
+      <div class="verdict deny"><span class="big">Deny</span> No <code class="m">permit</code> matched, so default-deny stands.<span class="http">→ 403</span></div>
+      <div class="file">Authorizer → cedar-java · isAuthorized()</div></div></div>
+  </div>
+
+  <h3>Same machinery, the other rule: <span style="color:var(--deny)">forbid</span> beats <span style="color:var(--allow)">permit</span></h3>
+  <p class="say">Now an <b>owner</b> deletes the <b>prod</b> stack. A permit <em>does</em> match this
+  time — but the guardrail fires, and forbid wins.</p>
+  <div class="match">
+    <div class="pol hit"><span class="mk y">✓</span><span class="nm">StackFullAccess</span><span class="why">owner ✓ · Delete ∈ stack:* ✓ — votes Allow</span></div>
+    <div class="pol hit deny"><span class="mk d">✦</span><span class="nm">DenyDeleteProtectedStacks</span><span class="why">resource.id ends in /prod ✓ — votes Deny</span></div>
+  </div>
+  <div class="verdict deny"><span class="big">Deny</span> One <code class="m">forbid</code> overrides the <code class="m">permit</code> — not even an owner (or admin) can delete prod.<span class="http">→ 403</span></div>
+</section>
+
+<!-- 8 · POLICY LAYERS -->
+<section id="layers" class="reveal">
+  <div class="kicker">08 · the four kinds of policy</div>
+  <h2>Where rules come from</h2>
+  <p class="say">All four end up in one validated policy set, assembled at startup and rebuilt when a
+  grant changes (a bad grant can never take auth down — the last good set is kept).</p>
+
+  <div class="grid g2">
+    <div class="cardx">
+      <div class="top"><span class="chip policy" style="font-size:11px"><span class="dot"></span>A</span><h4>Static role policies</h4></div>
+      <p>Pure RBAC, checked into git: <code class="m">AdministratorAccess</code>,
+      <code class="m">StackFullAccess</code>, <code class="m">PowerUserAccess</code>,
+      <code class="m">ReadOnlyAccess</code>. One role → one capability.</p>
+    </div>
+    <div class="cardx">
+      <div class="top"><span class="chip deny" style="font-size:11px"><span class="dot"></span>B</span><h4>Deny guardrails</h4></div>
+      <p>Org-wide <code class="m">forbid</code> rules that override everything — like the protected-prod
+      rule. The state-db take on an AWS SCP.</p>
+    </div>
+    <div class="cardx">
+      <div class="top"><span class="chip policy" style="font-size:11px"><span class="dot"></span>C</span><h4>Managed (per-user)</h4></div>
+      <p><code class="m">StackWriteAccess</code> — attach a capability to one user across one org. A
+      reusable <b>template</b> + a DB row, no redeploy.</p>
+    </div>
+    <div class="cardx">
+      <div class="top"><span class="chip policy" style="font-size:11px"><span class="dot"></span>D</span><h4>Resource-based (per-stack)</h4></div>
+      <p><code class="m">Stack{Read,Write}ResourcePolicy</code> — share exactly one stack with one user.
+      The state-db take on an S3 bucket policy.</p>
+    </div>
+  </div>
+  <p class="small">C and D are Cedar <b>templates</b> with <code class="m">?principal</code> /
+  <code class="m">?resource</code> slots; a <code class="m">policy_grants</code> row binds the slots to
+  real entities. So per-user grants are <b>data, not deploys</b>.</p>
+</section>
+
+<!-- 9 · IAM MAP -->
+<section id="iam" class="reveal">
+  <div class="kicker">09 · if you know AWS</div>
+  <h2>The IAM mental map</h2>
+  <p class="say">state-db borrows IAM's <em>authoring model</em> while keeping Cedar as the engine.
+  If a construct feels familiar, it's meant to.</p>
+  <table>
+    <thead><tr><th>state-db</th><th></th><th>AWS IAM equivalent</th></tr></thead>
+    <tbody>
+      <tr><td class="s">Role policies (Administrator/PowerUser/ReadOnly…)</td><td class="ar">≈</td><td>AWS managed policies</td></tr>
+      <tr><td class="s">forbid guardrail</td><td class="ar">≈</td><td>SCP / permission-boundary Deny</td></tr>
+      <tr><td class="s">action groups (stack:*, stack:WriteAccess)</td><td class="ar">≈</td><td>action wildcards "stack:*"</td></tr>
+      <tr><td class="s">statedb:stack:acme/web/prod + resource.id like</td><td class="ar">≈</td><td>ARNs + Resource matching</td></tr>
+      <tr><td class="s">StackWriteAccess template + grant</td><td class="ar">≈</td><td>identity-based managed policy attachment</td></tr>
+      <tr><td class="s">Stack…ResourcePolicy template + grant</td><td class="ar">≈</td><td>resource-based policy (bucket policy)</td></tr>
+    </tbody>
+  </table>
+  <p class="small">The one deliberate departure from IAM: a non-member sees <b>404</b>, never 403 — so
+  tenants can't enumerate each other across the org boundary.</p>
+</section>
+
+<!-- 10 · CODE MAP -->
+<section id="code" class="reveal">
+  <div class="kicker">10 · where it lives</div>
+  <h2>Code map</h2>
+  <p class="say">One component talks to <code class="m">cedar-java</code> (the
+  <code class="m">Authorizer</code>); everything else feeds it entities or policies.</p>
+
+  <div class="grouplabel">the request path</div>
+  <div class="files">
+    <div class="frow"><span class="p">TokenAuthFilter.java</span><span class="d">Parses <code class="m">Authorization: token</code> and sets the principal.</span></div>
+    <div class="frow"><span class="p">AuthorizeInterceptor.java</span><span class="d">Fires before the handler: load resource → resolve role → call the Authorizer → allow / 403 / 404.</span></div>
+    <div class="frow"><span class="p">StackEntityLoader · OrgEntityLoader</span><span class="d">Build the resource entities (with the Stack▸Project▸Org chain) and enforce the 404 boundary.</span></div>
+    <div class="frow"><span class="p">PrincipalRoleResolver.java</span><span class="d">The tenancy seam: <code class="m">(principal, resourceOrg) → role</code>.</span></div>
+    <div class="frow"><span class="p">Authorizer.java</span><span class="d">The PDP. Assembles the slice and calls cedar-java <code class="m">isAuthorized()</code>.</span></div>
+  </div>
+
+  <div class="grouplabel">the policy set</div>
+  <div class="files">
+    <div class="frow"><span class="p">policies/schema.cedar</span><span class="d">Entity types, actions, action groups, <code class="m">appliesTo</code>. Validated at startup.</span></div>
+    <div class="frow"><span class="p">policies/{admin,owner,member,viewer}.cedar</span><span class="d">The static role policies (layer A).</span></div>
+    <div class="frow"><span class="p">policies/guardrails.cedar</span><span class="d">The explicit-Deny guardrails (layer B).</span></div>
+    <div class="frow"><span class="p">policies/templates/*.cedar</span><span class="d">Managed + resource-based policy templates (layers C, D).</span></div>
+    <div class="frow"><span class="p">PolicySetCache.java</span><span class="d">Assembles statics + guardrails + templates + grant links; derives action entities; <code class="m">reload()</code>.</span></div>
+  </div>
+</section>
+
+<footer>
+  A teaching companion to <code class="m">design/auth.md</code> (the prose spec). The source of truth is
+  the code and the <code class="m">.cedar</code> files it points to.
+</footer>
+
+</div>
+
+<script>
+  // Progressive reveal — content is fully visible without JS; this only adds the entrance.
+  const io = new IntersectionObserver((entries)=>{
+    for(const e of entries){ if(e.isIntersecting){ e.target.classList.add('in'); io.unobserve(e.target); } }
+  }, {rootMargin:'0px 0px -8% 0px', threshold:.08});
+  document.querySelectorAll('.reveal').forEach((el,i)=>{
+    el.style.transitionDelay = Math.min(i*40,160)+'ms';
+    io.observe(el);
+  });
+</script>
+</body>
+</html>
