@@ -18,10 +18,10 @@ Companion to [`architecture.md`](./architecture.md) and [`db-schema.md`](./db-sc
 
 ## Non-goals
 
-- **Per-resource ACLs in the console UI** for Wave 1. Cedar can express them; we don't yet have the screens to manage them. The *engine* supports it; the *product* doesn't expose it yet.
+- **Per-resource ACLs in the console UI** for Wave 1. The *engine* supports them now — resource and managed (per-principal) policies are implemented via templates + `policy_grants` (see "User and resource policies") — but the admin screens to create and revoke grants are Wave 2. Grants are seeded directly today.
 - **Conditional access** (time-of-day, IP allow-lists, MFA-step-up). Cedar handles these as policy `when` clauses, but Wave 1 doesn't ship example policies that use them.
 - **Pluggable PDP.** OPA, AVP, Permit.io are *not* on the list. We commit to Cedar embedded as a library and accept the JVM-only consequence on native image.
-- **Policy-driven admin elevation.** Admin status is read from `STATE_DB_ADMIN_SUBJECTS` env at boot. The allow-list seeds an `Admins` Cedar group; policies reference it. Storing admin status in the DB stays out of scope.
+- **Policy-driven admin elevation.** Admin status is read from `STATE_DB_ADMIN_SUBJECTS` env at boot. The allow-list makes a principal a member of the global `Role::"admin"`; the admin policy references it. Storing admin status in the DB stays out of scope.
 
 ---
 
@@ -60,7 +60,7 @@ The principal is set on the JAX-RS `SecurityContext` and on a request-scoped `@C
 - Raw token sha256'd; lookup against `api_tokens.token_hash`.
 - Joined to `organizations` to materialize `Subject{user_id, org_id, org_name, kind}`.
 - `org_members` re-checked on every request — revoking a user's org membership instantly invalidates all their tokens for that org.
-- The filter authenticates only. Org-scope and action-level decisions are made by the Cedar PDP downstream — `resource.org_name == principal.tokenOrgName` is a policy clause, not a separate filter.
+- The filter authenticates only. Org-scope and action-level decisions are made downstream — the `PrincipalRoleResolver` attaches the role the principal holds in the resource's org, and the Cedar PDP evaluates the role policies against it.
 - 401 on miss/expired/disabled. 403 is reserved for authorization-layer denials and always comes from the PDP.
 
 ### Pulumi CLI: `Authorization: update-token <leaseTok>`
@@ -149,53 +149,62 @@ Cedar over OPA (Rego is more expressive but harder to reason about and lacks a s
 
 ### Action vocabulary
 
-Actions are namespaced by resource type. Wave 1 set:
+Actions are named IAM-style as `resource:Operation` (lowercase service prefix = resource type, e.g. `stack:Read`). Wave 1 set:
 
 | Action | Bound to (route examples) | Notes |
 |--------|---------------------------|-------|
-| `Stack::Read` | `GET /pulumi/api/stacks/{ref}`, `GET /api/pulumi/stacks/{ref}` | Includes export/checkpoint download |
-| `Stack::Create` | `POST /pulumi/api/stacks/{org}/{project}` | |
-| `Stack::Delete` | `DELETE /pulumi/api/stacks/{ref}` | |
-| `Stack::Lock` | `POST /pulumi/api/.../update/{id}` (acquire) | Lease creation; the lease itself bypasses Cedar afterward |
-| `Stack::Unlock` | `DELETE /api/admin/stacks/{ref}/lock` | Admin-only manual unlock |
-| `Stack::ReadHistory` | `GET /api/pulumi/stacks/{ref}/updates` | |
-| `Stack::ReadEvents` | `GET /api/pulumi/stacks/{ref}/updates/{id}/events` | |
-| `Project::Create` | First `POST /pulumi/api/stacks/{org}/{project}/{stack}` for a new project | App-level lifecycle; not a separate route |
-| `Project::Delete` | (No direct route in Wave 1; project disappears when last stack does) | Reserved for future explicit project lifecycle |
-| `Org::Read` | `GET /api/orgs/{name}` | Lists projects, stacks, members |
-| `Org::Admin` | `/api/admin/orgs/...`, member management | |
-| `Org::AddMember`, `Org::RemoveMember` | Admin endpoints | |
-| `Token::MintOidc` | `GET /api/auth/cli-mint` | User mints for self via OIDC re-auth |
-| `Token::MintServiceAccount` | `POST /api/admin/tokens` | Admin-only |
-| `Token::List` | `GET /api/tokens` | Own tokens; admin sees all |
-| `Token::Revoke` | `DELETE /api/tokens/{id}` | Owner or admin |
-| `Provider::Manage` | `POST/PUT/DELETE /api/admin/providers` | Admin-only |
-| `Compaction::Trigger` | `POST /api/admin/stacks/{ref}/compact` | Admin-only |
-| `User::ReadSelf` | `GET /api/me` | Permitted to any authenticated principal |
-| `User::ReadOthers` | `GET /api/admin/users` | Admin-only |
+| `stack:Read` | `GET /pulumi/api/stacks/{ref}`, `GET /api/pulumi/stacks/{ref}` | Includes export/checkpoint download |
+| `stack:Create` | `POST /pulumi/api/stacks/{org}/{project}` | |
+| `stack:Delete` | `DELETE /pulumi/api/stacks/{ref}` | |
+| `stack:Lock` | `POST /pulumi/api/.../update/{id}` (acquire) | Lease creation; the lease itself bypasses Cedar afterward |
+| `stack:EncryptSecrets` | `POST /pulumi/api/stacks/{ref}/encrypt` | Encrypt secret values during an update |
+| `stack:DecryptSecrets` | `POST /pulumi/api/stacks/{ref}/decrypt`, `.../batch-decrypt` | Decrypt for read / preview flows |
+| `stack:Unlock` | `DELETE /api/admin/stacks/{ref}/lock` | Admin-only manual unlock |
+| `stack:ReadHistory` | `GET /api/pulumi/stacks/{ref}/updates` | |
+| `stack:ReadEvents` | `GET /api/pulumi/stacks/{ref}/updates/{id}/events` | |
+| `project:Create` | First `POST /pulumi/api/stacks/{org}/{project}/{stack}` for a new project | App-level lifecycle; not a separate route |
+| `project:Delete` | (No direct route in Wave 1; project disappears when last stack does) | Reserved for future explicit project lifecycle |
+| `org:Read` | `GET /api/orgs/{name}` | Lists projects, stacks, members |
+| `org:Admin` | `/api/admin/orgs/...`, member management | |
+| `org:AddMember`, `org:RemoveMember` | Admin endpoints | |
+| `token:MintOidc` | `GET /api/auth/cli-mint` | User mints for self via OIDC re-auth |
+| `token:MintServiceAccount` | `POST /api/admin/tokens` | Admin-only |
+| `token:List` | `GET /api/tokens` | Own tokens; admin sees all |
+| `token:Revoke` | `DELETE /api/tokens/{id}` | Owner or admin |
+| `provider:Manage` | `POST/PUT/DELETE /api/admin/providers` | Admin-only |
+| `compaction:Trigger` | `POST /api/admin/stacks/{ref}/compact` | Admin-only |
+| `user:ReadSelf` | `GET /api/me` | Permitted to any authenticated principal |
+| `user:ReadOthers` | `GET /api/admin/users` | Admin-only |
 
-Pulumi-internal endpoints not listed (`GET /api/user`, `GET /api/user/organizations/default`) are protected with `User::ReadSelf` against the calling user.
+Pulumi-internal endpoints not listed (`GET /api/user`, `GET /api/user/organizations/default`) are protected with `user:ReadSelf` against the calling user.
 
 The action set is **closed** for Wave 1. Adding an action requires a schema bump and a policy update; this is intentional friction.
+
+#### Action bundles
+
+Two schema-declared **bundle actions** group the leaf actions so a policy grants a capability in one token instead of re-listing members (the IAM `AmazonS3ReadOnlyAccess`-style pre-canned bundle):
+
+| Bundle | Members |
+|--------|---------|
+| `stack:ReadOnlyAccess` | `stack:Read`, `stack:DecryptSecrets` |
+| `stack:WriteAccess` | `stack:Create`, `stack:Lock`, `stack:Delete`, `stack:EncryptSecrets` |
+
+Membership is declared on each leaf in `schema.cedar` (`action "stack:Create" in ["stack:WriteAccess"] …`). Because the engine never sees the schema at evaluation time, `PolicySetCache` derives the action entities (with their `memberOf` parents) from the schema JSON at startup and includes them in every request's entity slice — so `action in Action::"stack:WriteAccess"` resolves. The schema stays the single source of truth; there is no second hand-maintained list.
 
 ### Cedar entity model
 
 ```
-User::"<iss>:<sub>"
+User::"<users.id>"          (the global user UUID — matches policy_grants.principal_user_id)
   parents:
-    - OrgRole::"<org_name>:owner" | OrgRole::"<org_name>:member" | OrgRole::"<org_name>:viewer"
-      (one parent per (org, role) tuple; resolved from `org_members`)
-    - Admins   (only if <iss>:<sub> ∈ STATE_DB_ADMIN_SUBJECTS)
-  attributes:
-    email: String          (advisory; not used in policy)
-    orgs:  Set<String>     (org names where principal has any role; convenience)
-    is_admin: Bool
+    - Role::"owner" | Role::"member" | Role::"viewer"   (the role the user holds in THIS request's
+      resource org, resolved per request — see "Role resolution"; absent if not a member)
+    - Role::"admin"   (only if the principal is in STATE_DB_ADMIN_SUBJECTS)
+  attributes: (none)
 
 ServiceAccount::"service:<token_id>"
   parents:
-    - OrgRole::"<org_name>:service"  (single role per service account)
+    - Role::"service"      (single role per service account)
   attributes:
-    org: String
     description: String
     owner_user: String     (the admin who minted it; advisory)
 
@@ -209,18 +218,13 @@ Stack::"<org>/<project>/<stack>"
     - Project::"<org>/<project>"
         parents:
             - Org::"<org_name>"
-  attributes:
-    org_name: String       (denormalized for cheap policy access)
-    project_name: String
-    name: String
+  attributes: (none)
 
 Org::"<org_name>"
-  attributes:
-    name: String
+  attributes: (none)
 
 Project::"<org>/<project>"
-  attributes:
-    org: Org
+  (structural parent only; no attributes)
 
 Token::"<token_id>"
   attributes:
@@ -233,16 +237,38 @@ Provider::"<provider_name>"
     issuer: String
 ```
 
-`OrgRole::"acme:owner"` is itself an entity; it has parent `OrgRole::"acme:member"` which has parent `OrgRole::"acme:viewer"` — capability inheritance baked into the entity hierarchy. A policy that allows `OrgRole::"acme:viewer"` automatically permits owners and members; a policy gated on `OrgRole::"acme:owner"` does not permit lower roles. This avoids enumerating role tuples in every policy.
+The user is a **global identity** (`User::<users.id>`), not an org-scoped one — a user may belong to
+several orgs with a different role in each. Roles are **global** entities (`Role::"member"`, not
+`OrgRole::"acme:member"`) and inherit: `Role::"owner"` ⊃ `Role::"member"` ⊃ `Role::"viewer"`. The
+principal carries exactly the role it holds **in the resource's org**, resolved per request and
+attached as a parent. So the role policies are pure RBAC — `permit(principal in Role::"member", …)`
+with no org clause, because the attached role is already org-correct. Resources carry **no
+attributes**; the Stack → Project → Org hierarchy is kept so managed grants can scope through it.
 
 ```
-OrgRole::"acme:viewer"   ←   OrgRole::"acme:member"   ←   OrgRole::"acme:owner"
-                                                          OrgRole::"acme:service"  (siblings of viewer; not inheriting)
-                ↑
-              Admins  (inherits from no role; uniformly allowed by the admin escape policy)
+Role::"viewer"   ←   Role::"member"   ←   Role::"owner"
+
+Role::"service"  (inherits from nothing — its own grant set)
+Role::"admin"    (inherits from nothing — uniformly allowed by the admin policy)
 ```
 
-`service` is a sibling of `viewer`, not an ancestor — service accounts get their own grant set so a viewer can't accidentally do what a CI token can or vice versa. Both are leaves under the per-org membership umbrella.
+`Role::"service"` inherits from nothing: service accounts get their own grant set so a viewer can't
+accidentally do what a CI token can or vice versa. `Role::"admin"` likewise stands alone and is the
+only role not bounded by org membership.
+
+### Role resolution
+
+`PrincipalRoleResolver` is the single tenancy seam — `(principal, resourceOrgId) → Optional<Role>`:
+
+- **Token principal** (CLI; scoped to one org) → its role iff `resourceOrgId == token.org`, else none.
+  This is what enforces token org-scoping: a token grants nothing outside its org even if the user
+  is a member elsewhere.
+- **Session principal** (console; org-agnostic) → `org_members(userId, resourceOrgId).role`, else none.
+
+The loader resolves the role once (it already holds the resource's org id from the
+`stacks JOIN projects JOIN organizations` resolution), uses it for the hard org boundary — *no role
+and not admin ⇒ `Optional.empty()` ⇒ 404* — and passes it to the `Authorizer`, which attaches
+`Role::<role>` to the principal entity.
 
 ### Schema declaration
 
@@ -252,16 +278,16 @@ The schema is checked into git. Changing the schema is a code change with normal
 
 ### Resource construction
 
-Per request, the `@Authorize` interceptor (next section) loads the resource entity. For most operations this is one Stack; the entity loader resolves `stacks JOIN projects JOIN organizations` once and constructs the Stack + Project + Org entities and their parents.
+Per request, the `@Authorize` interceptor (next section) loads the resource entity. For most operations this is one Stack; the entity loader resolves `stacks JOIN projects JOIN organizations` once and constructs the Stack + Project + Org entities and their parents (no attributes — see "Role resolution").
 
-For collection-level operations (`Stack::Create`), the resource is the org parent. Cedar evaluates `principal in resource.member_role` against the proposed parent.
+For collection-level operations (`stack:Create`), the resource is the Org. Cedar evaluates the member policy — `permit(principal in Role::"member", …)` — against that Org, where the principal's `Role::"member"` is the role resolved for that Org.
 
 ### Lease-token bypass
 
 Lease-scoped routes (`PATCH /checkpoint`, `POST /events/batch`, `POST /complete`, `POST /renew_lease`, `DELETE /update/{id}`) **do not invoke the PDP**. Reasoning:
 
 - The token represents *possession of a held lock on a stack*, not a general identity.
-- Authority was already established when the lock was acquired: that request went through TokenAuthFilter → `Stack::Lock` Cedar check → INSERT into `stack_locks`.
+- Authority was already established when the lock was acquired: that request went through TokenAuthFilter → `stack:Lock` Cedar check → INSERT into `stack_locks`.
 - Re-running Cedar on every lease-scoped request would either be redundant (the principal hasn't changed) or wrong (the principal in `stack_updates.user_id` may have lost org membership mid-update; we deliberately do not interrupt an in-flight `pulumi up`).
 - Cedar policies cannot reason cleanly about "the holder of lease X is allowed to mutate stack Y" without making the lease itself a principal — possible, but adds complexity for no practical gain.
 
@@ -287,22 +313,25 @@ modules/persistence/authz/
 ├── AuthorizeInterceptor.java    ← loads resource, calls Authorizer, proceeds or denies
 ├── CurrentPrincipal.java        ← request-scoped authenticated principal
 ├── EntityLoader.java            ← SPI for request target → Cedar resource entity
+├── PrincipalRoleResolver.java   ← (principal, resourceOrg) → role; the tenancy seam
 ├── OrgEntityLoader.java         ← loader for org-scoped collection operations
 └── StackEntityLoader.java       ← loader for stack-scoped operations
 
 modules/persistence/policy/
-├── PolicyStore.java             ← interface
-├── ClasspathPolicyStore.java    ← Wave 1 default; reads policies/*.cedar from JAR
-└── PolicySetCache.java          ← compiled policy set loaded at startup
+├── PolicyStore.java             ← interface (static policies, templates, schema)
+├── ClasspathPolicyStore.java    ← Wave 1 default; reads policies/*.cedar + templates/*.cedar
+├── PolicyGrant.java             ← policy_grants row (FK to org / user / stack)
+├── GrantLinkFinder.java         ← joins grant rows to the names that form their Cedar ids
+└── PolicySetCache.java          ← assembles statics + templates + grant links; reload()
 ```
 
 `Authorizer` is the only thing that talks to `cedar-java`. HTTP modules call it through `@Authorize` or a focused explicit authorization path; policy loading, resource construction, and principal shape stay in `persistence/` because they depend on the persisted identity and stack model.
 
 ### Policy storage
 
-Wave 1: classpath only. `policies/*.cedar` and `policies/schema.cedar` are bundled into the deployable JAR. Adding/changing policies requires a redeploy. This is fine for the initial policy set, which is small and stable.
+Wave 1: classpath for policy *text* (static policies, templates, schema — bundled into the JAR; changing them requires a redeploy), plus a DB table (`policy_grants`) for template *attachments*. The grant rows are data, not code, so adding a managed-policy attachment or a stack share is a DB write + `PolicySetCache.reload()`, no redeploy. See "User and resource policies" for the assembly.
 
-Wave 2: optional DB-stored overlay. Schema:
+Wave 2: optional DB-stored overlay for policy *text* too. Schema:
 
 ```sql
 CREATE TABLE policies (
@@ -331,10 +360,10 @@ Compilation failure during reload **does not unload the previous good set** — 
   "ts": "2026-...",
   "request_id": "...",
   "principal": "User::https://accounts.google.com:115...",
-  "action": "Action::Stack::Write",
-  "resource": "Stack::acme/myproj/prod",
+  "action": "Action::stack:Create",
+  "resource": "Org::acme",
   "decision": "allow",
-  "matched": ["org-members-can-write"]
+  "matched": ["member-write"]
 }
 ```
 
@@ -345,7 +374,7 @@ Denials carry the same shape with `"decision": "deny"` and an empty `matched` (u
 Two layers:
 
 - **Compiled policy set** — held in memory; rebuilt on policy reload. Cedar's policy compilation is fast but not free; we don't want it on the hot path.
-- **Principal entities** — the User entity (with all `OrgRole` parents and the `Admins` membership) is reconstructed from DB on every request. This is the same cost as the existing `org_members` re-check, so no regression.
+- **Principal entities** — the User entity (with the `Role` resolved for the resource's org and, for admins, `Role::"admin"`) is reconstructed on every request. For session principals the role resolution is one `org_members` lookup — the same cost as the existing membership re-check, so no regression; for token principals it is free (the role is already on the token).
 
 We do **not** cache decisions across requests. Cedar evaluation against a few hundred policies and an entity set with a handful of members is microseconds; caching invites correctness bugs (what's the cache key? what invalidates on `org_members` change?).
 
@@ -356,17 +385,15 @@ We do **not** cache decisions across requests. Cedar evaluation against a few hu
 ### `@Authorize` annotation
 
 ```java
-@Authorize(
-    action = "Stack::Read",
-    resource = @Resource(type = "Stack", from = ResourceFrom.PATH_PARAMS,
-                         params = {"org", "project", "stack"})
-)
+@Authorize(action = "stack:Read", loader = StackEntityLoader.class)
 @GET
 @Path("/api/pulumi/stacks/{org}/{project}/{stack}")
 public StackDto getStack(@PathParam("org") String org,
                          @PathParam("project") String project,
                          @PathParam("stack") String stack) { ... }
 ```
+
+The `loader` resolves the request's path params to the Cedar resource entity; the action names the operation.
 
 A CDI interceptor `@AuthorizeInterceptor`:
 
@@ -404,13 +431,13 @@ One implementation per resource type, registered as a CDI bean and discovered vi
 
 Loaders take the request's principal as a parameter. The status code distinction follows the principal's visibility into the resource's org, not the resource's existence:
 
-- If the resource's containing org is not in `principal.orgs`, the loader returns `Optional.empty()` regardless of whether the resource exists. The interceptor maps this to 404.
+- If the resource's containing org is not the principal's `org`, the loader returns `Optional.empty()` regardless of whether the resource exists. The interceptor maps this to 404.
 - If the resource is in a visible org but does not exist, the loader also returns `Optional.empty()` → 404.
 - If the resource is in a visible org and exists, the loader returns the entity; the PDP then runs, and a denial on the specific action becomes 403.
 
 403 thus only ever reflects *within-visible-scope* denials — a viewer attempting to delete a stack they can read, for example.
 
-For admin principals (`principal in Admins`), the loader skips the org gate; admins see all orgs by definition.
+For admin principals (`principal in Role::"admin"`), the loader skips the org gate; admins see all orgs by definition.
 
 ### Filter ordering
 
@@ -429,82 +456,107 @@ The interceptor runs *after* the method is dispatched (and after request body pa
 
 ---
 
-## Initial policy set
+## Policy set
 
-These are illustrative — actual text and ids will be finalized when the schema is locked in. Names indicate intent.
+One role per file under `policies/`. Each reads top-down like an IAM statement and is **pure RBAC**: a role on the principal, the actions (a bundle or list), no org clause — the principal already carries only the role it holds in the resource's org (see "Role resolution").
 
 ```cedar
-// admin-escape: admins permitted on everything.
-@id("admin-escape")
-permit(principal in Admins, action, resource);
+// admin.cedar — break-glass administrator (≈ AdministratorAccess): every action,
+// every resource, no org boundary.
+@id("admin-full-access")
+permit(principal in Role::"admin", action, resource);
 
-// org-members-can-read: any role in an org → read access for that org's stacks.
-@id("org-members-can-read")
-permit(
-  principal,
-  action in [
-    Action::"Stack::Read",
-    Action::"Stack::ReadHistory",
-    Action::"Stack::ReadEvents",
-    Action::"Org::Read",
-    Action::"User::ReadSelf"
-  ],
-  resource
-)
-when {
-  principal in OrgRole::(resource.org_name + ":viewer")
-};
+// viewer.cedar — viewers may read stacks (and decrypt their secrets).
+// Members and owners inherit this via viewer ⊂ member ⊂ owner.
+@id("viewer-read-only")
+permit(principal in Role::"viewer", action in Action::"stack:ReadOnlyAccess", resource);
 
-// org-write: members and owners can mutate stacks; viewers cannot.
-@id("org-write")
-permit(
-  principal,
-  action in [
-    Action::"Stack::Create",
-    Action::"Stack::Lock",
-    Action::"Stack::Delete"  // overridden below for viewers/members
-  ],
-  resource
-)
-when {
-  principal in OrgRole::(resource.org_name + ":member")
-};
+// member.cedar — members may create, lock, delete, and encrypt stacks.
+// Owners inherit this via member ⊂ owner.
+@id("member-write")
+permit(principal in Role::"member", action in Action::"stack:WriteAccess", resource);
 
-// org-owner-only: only owners can delete stacks.
-@id("org-owner-only-delete")
-forbid(
-  principal,
-  action == Action::"Stack::Delete",
-  resource
-)
-unless {
-  principal in OrgRole::(resource.org_name + ":owner")
-};
-
-// service-account-scope: a service-account principal acts only against its own org.
-@id("service-account-scope")
-permit(
-  principal is ServiceAccount,
-  action in [Action::"Stack::Read", Action::"Stack::Lock"],
-  resource
-)
-when {
-  resource.org_name == principal.org
-};
-
-// token-self: users mint and revoke their own tokens.
-@id("token-self")
-permit(
-  principal,
-  action in [Action::"Token::MintOidc", Action::"Token::List", Action::"Token::Revoke"],
-  resource
-)
-when {
-  resource.owner == principal
-};
+// self.cedar — any authenticated principal may read its own user record.
+@id("users-can-read-self")
+permit(principal, action == Action::"user:ReadSelf", resource)
+when { principal == resource };
 ```
 
-Cedar string-concatenation in `OrgRole::(resource.org_name + ":viewer")` is illustrative; the real implementation will use Cedar's templated entity types or precomputed entity sets — see "Open items".
+Authoring a new role rule is mechanical: pick a role, grant the actions. Adding a finer grant is an additive file in the same shape. Illustrative future static policies the model already supports:
+
+```cedar
+// owner-only-delete: tighten delete to owners by removing it from member-write
+// and granting it here.
+@id("owner-delete")
+permit(principal in Role::"owner", action == Action::"stack:Delete", resource);
+
+// service-account-scope: service accounts get their own grant set.
+@id("service-account-scope")
+permit(principal in Role::"service", action in [Action::"stack:Read", Action::"stack:Lock"], resource);
+```
+
+### User and resource policies (templates + grants)
+
+The role policies above are static and identity-based. Two further IAM concepts — **identity-based policies attached to a specific principal** ("managed policies") and **resource-based policies** (per-resource grants, ≈ an S3 bucket policy) — are implemented with Cedar **policy templates** plus a DB table of attachments.
+
+Templates live under `policies/templates/` and carry `?principal` / `?resource` slots. The
+`principal in Role::"viewer"` guard means "the grantee is a member of the resource's org" (any role
+⊆ viewer): it enforces that managed/resource grants only ever apply to org members, and neutralizes
+a grant the moment the user leaves the org (there is no FK from `policy_grants` to `org_members`).
+
+```cedar
+// managed-stack-write — a managed policy: grant the write bundle across one org.
+// ?resource is the Org; `resource in ?resource` matches the org and every stack under
+// it via the entity hierarchy.
+permit(principal == ?principal, action in Action::"stack:WriteAccess", resource in ?resource)
+when { principal in Role::"viewer" };
+
+// stack-share-read / stack-share-write — resource policies: grant the read/write bundle
+// on ONE stack. ?resource is that Stack (exact match). The -write variant elevates a
+// viewer to write a single stack without org-wide write.
+permit(principal == ?principal, action in Action::"stack:WriteAccess", resource == ?resource)
+when { principal in Role::"viewer" };
+```
+
+Attachments are rows in `policy_grants`, referenced by **DB-native FK** (not Cedar strings) so they
+are org-scoped and cascade cleanly:
+
+```sql
+CREATE TABLE policy_grants (
+    id                UUID PRIMARY KEY,
+    template_id       TEXT NOT NULL,
+    org_id            UUID NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+    principal_user_id UUID NOT NULL REFERENCES users(id)         ON DELETE CASCADE,
+    resource_stack_id UUID,                                            -- null = managed (per-org)
+    created_at        TIMESTAMPTZ NOT NULL DEFAULT now(),
+    -- known template + the matching ?resource shape (also closes the template set)
+    CONSTRAINT policy_grants_template_shape CHECK (
+        (template_id = 'managed-stack-write'                      AND resource_stack_id IS NULL)
+     OR (template_id IN ('stack-share-read', 'stack-share-write') AND resource_stack_id IS NOT NULL)),
+    -- a share's stack must belong to the grant's org (composite FK, like stacks(project_id, org_id));
+    -- skipped for managed grants where resource_stack_id is null
+    CONSTRAINT policy_grants_stack_in_org
+        FOREIGN KEY (resource_stack_id, org_id) REFERENCES stacks (id, org_id) ON DELETE CASCADE
+);
+```
+
+The DB invariants are load-bearing: PolicySetCache turns each row straight into a `TemplateLink`, so
+a malformed row (unknown template, wrong slot, or a stack tenanted under the wrong org) would either
+fail the whole reload — silently freezing the policy set on the prior version — or bind `?resource`
+to another org's stack. The `CHECK` enforces a known template with the matching `?resource`
+nullability; the composite FK to `stacks(id, org_id)` (the same pattern V002 uses to stop stacks
+straddling orgs) guarantees a shared stack lives in the grant's org. So every row that exists assembles
+into a valid, correctly tenanted link.
+
+A managed grant leaves `resource_stack_id` null (→ `?resource` = the org); a per-stack share sets it
+(→ `?resource` = that stack). `GrantLinkFinder` joins each row to the names that form its Cedar
+ids; `PolicySetCache` assembles the live set as `new PolicySet(staticPolicies, templates, links)`,
+one `TemplateLink` per row (`result id = "link:<grant_id>"`). The assembled set is validated against
+the schema before it goes live. `reload()` rebuilds it after a grant changes; **a failed reload logs
+and keeps the prior good set** as a backstop. The same machinery is the foundation for the Wave 2 DB
+policy overlay ("Policy storage").
+
+> **Wave 1 scope:** the engine and storage are in place; the admin API/console to create and revoke grants is Wave 2 (see "Non-goals: per-resource ACLs in the console"). Grants are seeded directly today.
 
 ---
 
@@ -518,7 +570,7 @@ Wave 1 ships JVM-only. JVM startup and footprint are acceptable for a self-hoste
 
 ## Open items
 
-- **Org renaming and policy stability.** Renaming an org changes `org_name` everywhere, including in OrgRole entity ids. Cedar entity ids are not relations — renames don't propagate. The `rename_org` tx must reconstruct OrgRole entity ids accordingly; principal entities are constructed per-request so renames take effect on the next request.
+- **Org renaming and policy stability.** Roles are global and resources carry no attributes, so a rename touches neither. It does change the org name embedded in resource entity ids (`Stack::"<org>/..."`, `Org::"<org>"`), but those are rebuilt per-request from the DB; grant links are likewise rebuilt by name from FK ids on reload, so a rename takes effect with no stale-id reconstruction.
 - **Service-account scoping below the org.** Wave 1 service accounts are org-scoped (matches `api_tokens.org_id`). Future: project- and stack-scoped service accounts. The Cedar model supports it (add a `scope: Project | Stack` attribute on ServiceAccount); the schema and mint UI don't yet.
 - **Policy editor UX.** Wave 2 console policy editor needs schema-aware autocompletion + `cedar-java` validation pre-save. Dependency on `cedar-java`'s wasm bindings or a server-side validation endpoint.
 - **Decision logs as an indexable surface.** Currently structured-log only. If admins want "who denied/allowed what" as a console screen, we need a decisions table and a write path. Skipped for Wave 1; revisit when admin demand is real.
@@ -536,15 +588,17 @@ Wave 1 ships JVM-only. JVM startup and footprint are acceptable for a self-hoste
 | `quarkus-oidc` web-app session via BFF | Standard library; SPA gets HttpOnly session cookie. No rolled-our-own session crypto |
 | `Path=/api/` cookie scope | Defense in depth: console session physically cannot reach `/pulumi/api/*` |
 | Lease-token bypass of PDP | Lease possession is its own authority; re-running Cedar adds no signal and complicates the entity model |
-| `OrgRole::"<org>:owner"` parents as the inheritance backbone | Cedar entity hierarchy expresses owner ⊃ member ⊃ viewer cleanly without enumerating in every policy |
+| Global roles + per-request role resolution against the resource's org | A user is a global identity who may be in many orgs; resolving "their role in the resource's org" in one seam (`PrincipalRoleResolver`) keeps the role policies pure RBAC and IAM-readable, and enforces token org-scoping (a token grants nothing outside its org) |
 | Service-account role distinct from viewer/member/owner | CI tokens get a separate grant set so refining service permissions doesn't accidentally reshape user permissions |
 | Classpath policies in Wave 1, DB overlay in Wave 2 | Avoid the "edit prod policy at 3am, broken regex, auth dies" failure mode until we have the operational tooling for it |
 | Policy reload preserves the prior set on compile failure | Authorization stays up even if an admin edits a broken policy |
 | No decision caching | Cedar is fast; cache invalidation is hard; correctness > microseconds |
 | JVM-only Wave 1; native image experimental | `cedar-java` JNI/native image story is fragile; ship JVM and revisit when upstream support stabilizes |
-| Org-scope enforced as a Cedar policy clause, not a separate filter | One PDP, one decision point; no per-filter authz logic |
-| Admin status from env, mirrored as `Admins` group entity | No DB column for admin; env stays the source of truth and the Cedar group is rebuilt from it on each request |
+| Org-scope enforced by resolving the principal's role in the resource's org, not a separate filter | One tenancy seam feeds both the hard 404 boundary and the Cedar role; no per-filter authz logic |
+| Admin status from env, mirrored as `Role::"admin"` membership | No DB column for admin; env stays the source of truth and the role membership is rebuilt from it on each request |
 | `Lease` principal id is `lease:<stack_id>:<update_id>`, never the raw `lock_token` | The lock_token is a wire-level bearer secret; it must not appear in entity ids, log MDC, traces, or audit records |
 | CSRF: Origin/Referer + JSON-only `Content-Type` on `/api/*` non-GET | SPA-only consumer; avoids token-management complexity of double-submit while blocking both form-based and cross-origin fetch CSRF |
 | Authorization coverage is fail-closed (build-time scan + runtime guard) | Forgetting `@Authorize` on a new endpoint must not silently ship an unauthorized route |
 | Cross-org reads collapse to 404, not 403 | 403 reveals existence; collapsing prevents enumeration of stacks/projects across tenant boundaries |
+| Action bundles (`stack:WriteAccess`) as schema action groups, entities derived from the schema at startup | Policies grant a capability in one token; the schema stays the single source of truth (no hand-maintained Java action list) since the engine resolves groups from the entity slice, not the schema |
+| User/resource policies as Cedar templates + a `policy_grants` link table | Per-principal "managed" grants and per-resource shares are data, not redeploys; reuses the library's first-class template-link mechanism and the prior-good-set reload guard |
