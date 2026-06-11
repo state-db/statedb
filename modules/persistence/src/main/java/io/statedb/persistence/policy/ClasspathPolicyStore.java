@@ -4,16 +4,27 @@ import jakarta.enterprise.context.ApplicationScoped;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 
 @ApplicationScoped
 public class ClasspathPolicyStore implements PolicyStore {
 
   private static final List<String> POLICY_RESOURCES =
       List.of(
-          "policies/admin-escape.cedar",
-          "policies/org-members-can-read.cedar",
-          "policies/org-write.cedar");
+          "policies/admin.cedar",
+          "policies/viewer.cedar",
+          "policies/member.cedar",
+          "policies/self.cedar");
+
+  // Template id -> classpath resource. The id is what a policy_grants row and the resulting
+  // TemplateLink reference, so it must stay stable.
+  private static final Map<String, String> TEMPLATE_RESOURCES =
+      Map.of(
+          "managed-stack-write", "policies/templates/managed-stack-write.cedar",
+          "stack-share-read", "policies/templates/stack-share-read.cedar",
+          "stack-share-write", "policies/templates/stack-share-write.cedar");
 
   @Override
   public String schema() {
@@ -27,6 +38,15 @@ public class ClasspathPolicyStore implements PolicyStore {
       all.append(read(resource)).append('\n');
     }
     return all.toString();
+  }
+
+  @Override
+  public Map<String, String> templates() {
+    Map<String, String> templates = new LinkedHashMap<>();
+    for (Map.Entry<String, String> e : TEMPLATE_RESOURCES.entrySet()) {
+      templates.put(e.getKey(), read(e.getValue()));
+    }
+    return templates;
   }
 
   private static String read(String resource) {
