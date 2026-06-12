@@ -1,0 +1,19 @@
+{
+  "seq": 312,
+  "command": "27-change-secrets-provider",
+  "cmd_seq": 6,
+  "method": "GET",
+  "path": "/api/stacks/testorg/recorder-test/dev/update",
+  "headers": {
+    "Accept": "application/vnd.pulumi+9",
+    "Accept-Encoding": "gzip",
+    "Authorization": "REDACTED",
+    "Content-Type": "application/json",
+    "User-Agent": "pulumi-cli/1 (v3.242.0; linux; cmd=stack-change-secrets-provider)"
+  },
+  "status_code": 404,
+  "response": {
+    "detail": "GET api/stacks/testorg/recorder-test/dev/update",
+    "message": "unhandled stacks path"
+  }
+}

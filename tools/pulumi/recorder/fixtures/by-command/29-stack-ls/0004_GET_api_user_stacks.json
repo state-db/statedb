@@ -1,0 +1,19 @@
+{
+  "seq": 320,
+  "command": "29-stack-ls",
+  "cmd_seq": 4,
+  "method": "GET",
+  "path": "/api/user/stacks",
+  "query": "project=recorder-test",
+  "headers": {
+    "Accept": "application/vnd.pulumi+9",
+    "Accept-Encoding": "gzip",
+    "Authorization": "REDACTED",
+    "Content-Type": "application/json",
+    "User-Agent": "pulumi-cli/1 (v3.242.0; linux; cmd=stack-ls)"
+  },
+  "status_code": 200,
+  "response": {
+    "stacks": []
+  }
+}

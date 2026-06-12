@@ -1,0 +1,21 @@
+{
+  "seq": 263,
+  "command": "26-destroy",
+  "cmd_seq": 2,
+  "method": "GET",
+  "path": "/api/user/organizations/default",
+  "headers": {
+    "Accept": "application/vnd.pulumi+9",
+    "Accept-Encoding": "gzip",
+    "Authorization": "REDACTED",
+    "Content-Type": "application/json",
+    "User-Agent": "pulumi-cli/1 (v3.242.0; linux; cmd=destroy)"
+  },
+  "status_code": 200,
+  "response": {
+    "organization": {
+      "githubLogin": "testorg",
+      "name": "testorg"
+    }
+  }
+}

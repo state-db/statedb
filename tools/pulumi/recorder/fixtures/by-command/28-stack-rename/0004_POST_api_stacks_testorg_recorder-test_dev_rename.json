@@ -1,0 +1,33 @@
+{
+  "seq": 316,
+  "command": "28-stack-rename",
+  "cmd_seq": 4,
+  "method": "POST",
+  "path": "/api/stacks/testorg/recorder-test/dev/rename",
+  "headers": {
+    "Accept": "application/vnd.pulumi+9",
+    "Accept-Encoding": "gzip",
+    "Authorization": "REDACTED",
+    "Content-Length": "50",
+    "Content-Type": "application/json",
+    "User-Agent": "pulumi-cli/1 (v3.242.0; linux; cmd=stack-rename)"
+  },
+  "body": {
+    "newName": "staging",
+    "newProject": "recorder-test"
+  },
+  "body_b64": "eyJuZXdOYW1lIjoic3RhZ2luZyIsIm5ld1Byb2plY3QiOiJyZWNvcmRlci10ZXN0In0=",
+  "status_code": 200,
+  "response": {
+    "activeUpdate": "",
+    "currentOperation": null,
+    "orgName": "testorg",
+    "projectName": "recorder-test",
+    "stackName": "staging",
+    "tags": {
+      "pulumi:description": "Minimal Pulumi project for API recording. Uses the `random` provider so `pulumi up`/`destroy` exercise the journal/checkpoint write paths with real resource state.",
+      "pulumi:project": "recorder-test",
+      "pulumi:runtime": "yaml"
+    }
+  }
+}

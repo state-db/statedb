@@ -1,0 +1,29 @@
+{
+  "seq": 215,
+  "command": "13-stack-output",
+  "cmd_seq": 6,
+  "method": "POST",
+  "path": "/api/stacks/testorg/recorder-test/dev/batch-decrypt",
+  "headers": {
+    "Accept": "application/vnd.pulumi+9",
+    "Accept-Encoding": "gzip",
+    "Authorization": "REDACTED",
+    "Content-Encoding": "gzip",
+    "Content-Length": "52",
+    "Content-Type": "application/json",
+    "User-Agent": "pulumi-cli/1 (v3.242.0; linux; cmd=stack-output)"
+  },
+  "body": {
+    "ciphertexts": [
+      "[secret]"
+    ]
+  },
+  "body_b64": "H4sIAAAAAAAA/6pWSs4syEgtKkmtKClWsopWii5OTS5KLYlViq0FBAAA//9s6xlaHAAAAA==",
+  "body_gzip": true,
+  "status_code": 200,
+  "response": {
+    "plaintexts": {
+      "[secret]": "[secret]"
+    }
+  }
+}

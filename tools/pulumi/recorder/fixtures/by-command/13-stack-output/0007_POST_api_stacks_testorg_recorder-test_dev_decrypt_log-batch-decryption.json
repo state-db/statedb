@@ -1,0 +1,25 @@
+{
+  "seq": 216,
+  "command": "13-stack-output",
+  "cmd_seq": 7,
+  "method": "POST",
+  "path": "/api/stacks/testorg/recorder-test/dev/decrypt/log-batch-decryption",
+  "headers": {
+    "Accept": "application/vnd.pulumi+9",
+    "Accept-Encoding": "gzip",
+    "Authorization": "REDACTED",
+    "Content-Length": "37",
+    "Content-Type": "application/json",
+    "User-Agent": "pulumi-cli/1 (v3.242.0; linux; cmd=stack-output)"
+  },
+  "body": {
+    "commandName": "pulumi stack output"
+  },
+  "body_b64": "eyJjb21tYW5kTmFtZSI6InB1bHVtaSBzdGFjayBvdXRwdXQifQ==",
+  "status_code": 200,
+  "response": {
+    "token": "lease-fallback-log-batch-decryption",
+    "tokenExpiration": 4102444800,
+    "version": 1
+  }
+}

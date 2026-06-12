@@ -1,0 +1,23 @@
+{
+  "seq": 235,
+  "command": "18-stack-tag-get",
+  "cmd_seq": 1,
+  "method": "GET",
+  "path": "/api/capabilities",
+  "headers": {
+    "Accept": "application/vnd.pulumi+9",
+    "Accept-Encoding": "gzip",
+    "Authorization": "REDACTED",
+    "Content-Type": "application/json",
+    "User-Agent": "pulumi-cli/1 (v3.242.0; linux; cmd=stack-tag-get)"
+  },
+  "status_code": 200,
+  "response": {
+    "capabilities": [
+      {
+        "name": "delta-checkpoint-updates",
+        "version": 1
+      }
+    ]
+  }
+}

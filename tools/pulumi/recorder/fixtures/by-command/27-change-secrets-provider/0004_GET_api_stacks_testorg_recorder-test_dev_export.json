@@ -1,0 +1,19 @@
+{
+  "seq": 310,
+  "command": "27-change-secrets-provider",
+  "cmd_seq": 4,
+  "method": "GET",
+  "path": "/api/stacks/testorg/recorder-test/dev/export",
+  "headers": {
+    "Accept": "application/vnd.pulumi+9",
+    "Accept-Encoding": "gzip",
+    "Authorization": "REDACTED",
+    "Content-Type": "application/json",
+    "User-Agent": "pulumi-cli/1 (v3.242.0; linux; cmd=stack-change-secrets-provider)"
+  },
+  "status_code": 200,
+  "response": {
+    "deployment": null,
+    "version": 3
+  }
+}

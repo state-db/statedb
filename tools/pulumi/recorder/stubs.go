@@ -179,7 +179,7 @@ func (rt *router) routeStacks(method string, parts []string, n int, body []byte)
 			}
 		case "rename":
 			if method == "POST" {
-				return 200, map[string]interface{}{}
+				return rt.renameStack(org, proj, stack, body)
 			}
 		case "updates":
 			if method == "GET" {
@@ -280,6 +280,39 @@ func (rt *router) getStack(org, proj, stack string) (int, interface{}) {
 	if !ok {
 		return 404, errBody("stack not found", org+"/"+proj+"/"+stack)
 	}
+	return 200, rt.stackBody(info)
+}
+
+// renameStack re-keys the stack record under its new name (and possibly new
+// project/org). The CLI sends the fully-qualified target as "newName"
+// (e.g. "org/project/staging"); we take the trailing segments that are present.
+func (rt *router) renameStack(org, proj, stack string, body []byte) (int, interface{}) {
+	var req struct {
+		NewName string `json:"newName"`
+	}
+	json.Unmarshal(body, &req) //nolint:errcheck
+	newOrg, newProj, newStack := org, proj, stack
+	if req.NewName != "" {
+		segs := strings.Split(req.NewName, "/")
+		switch len(segs) {
+		case 1:
+			newStack = segs[0]
+		case 2:
+			newProj, newStack = segs[0], segs[1]
+		default:
+			newOrg, newProj, newStack = segs[len(segs)-3], segs[len(segs)-2], segs[len(segs)-1]
+		}
+	}
+
+	rt.mu.Lock()
+	defer rt.mu.Unlock()
+	info, ok := rt.stacks[stackKey(org, proj, stack)]
+	if !ok {
+		return 404, errBody("stack not found", stackKey(org, proj, stack))
+	}
+	delete(rt.stacks, stackKey(org, proj, stack))
+	info.orgName, info.projectName, info.stackName = newOrg, newProj, newStack
+	rt.stacks[stackKey(newOrg, newProj, newStack)] = info
 	return 200, rt.stackBody(info)
 }
 

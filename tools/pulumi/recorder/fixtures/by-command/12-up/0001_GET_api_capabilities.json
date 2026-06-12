@@ -1,0 +1,23 @@
+{
+  "seq": 170,
+  "command": "12-up",
+  "cmd_seq": 1,
+  "method": "GET",
+  "path": "/api/capabilities",
+  "headers": {
+    "Accept": "application/vnd.pulumi+9",
+    "Accept-Encoding": "gzip",
+    "Authorization": "REDACTED",
+    "Content-Type": "application/json",
+    "User-Agent": "pulumi-cli/1 (v3.242.0; linux; cmd=up)"
+  },
+  "status_code": 200,
+  "response": {
+    "capabilities": [
+      {
+        "name": "delta-checkpoint-updates",
+        "version": 1
+      }
+    ]
+  }
+}

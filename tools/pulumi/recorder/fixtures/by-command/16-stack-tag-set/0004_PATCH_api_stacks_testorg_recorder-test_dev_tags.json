@@ -1,0 +1,24 @@
+{
+  "seq": 231,
+  "command": "16-stack-tag-set",
+  "cmd_seq": 4,
+  "method": "PATCH",
+  "path": "/api/stacks/testorg/recorder-test/dev/tags",
+  "headers": {
+    "Accept": "application/vnd.pulumi+9",
+    "Accept-Encoding": "gzip",
+    "Authorization": "REDACTED",
+    "Content-Length": "262",
+    "Content-Type": "application/json",
+    "User-Agent": "pulumi-cli/1 (v3.242.0; linux; cmd=stack-tag-set)"
+  },
+  "body": {
+    "env": "recorder",
+    "pulumi:description": "Minimal Pulumi project for API recording. Uses the `random` provider so `pulumi up`/`destroy` exercise the journal/checkpoint write paths with real resource state.",
+    "pulumi:project": "recorder-test",
+    "pulumi:runtime": "yaml"
+  },
+  "body_b64": "eyJlbnYiOiJyZWNvcmRlciIsInB1bHVtaTpkZXNjcmlwdGlvbiI6Ik1pbmltYWwgUHVsdW1pIHByb2plY3QgZm9yIEFQSSByZWNvcmRpbmcuIFVzZXMgdGhlIGByYW5kb21gIHByb3ZpZGVyIHNvIGBwdWx1bWkgdXBgL2BkZXN0cm95YCBleGVyY2lzZSB0aGUgam91cm5hbC9jaGVja3BvaW50IHdyaXRlIHBhdGhzIHdpdGggcmVhbCByZXNvdXJjZSBzdGF0ZS4iLCJwdWx1bWk6cHJvamVjdCI6InJlY29yZGVyLXRlc3QiLCJwdWx1bWk6cnVudGltZSI6InlhbWwifQ==",
+  "status_code": 200,
+  "response": {}
+}

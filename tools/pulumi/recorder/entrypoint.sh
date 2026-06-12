@@ -43,6 +43,17 @@ run() {
   }
 }
 
+# Like run(), but tolerates a non-zero exit. Used for experimental or
+# not-yet-supported subcommands where the point of recording is to capture
+# whatever HTTP call the CLI attempts (if any) before it gives up — the failure
+# itself is the signal, not an error.
+try() {
+  local cmd="$*"
+  echo ""
+  echo "--- (allow-fail) $cmd ---"
+  eval "$cmd" || echo "[non-zero exit (expected): $cmd]"
+}
+
 cd /testproject
 
 signal "01-login"
@@ -74,6 +85,74 @@ run pulumi stack export
 
 signal "10-stack-rm"
 run pulumi stack rm dev --yes
+
+# --- Additional `pulumi stack` subcommands (appended; commands 01-10 above are
+# the original baseline and must stay byte-stable). The baseline removed the
+# stack, so re-establish a populated stack before the read-oriented inspections,
+# then tear it down again through rename/destroy/rm. ---
+
+signal "11-stack-init"
+run pulumi stack init dev
+
+signal "12-up"
+run pulumi up --yes --parallel 1
+
+signal "13-stack-output"
+run pulumi stack output --json --show-secrets
+
+signal "14-stack-get"
+try pulumi stack get
+
+signal "15-stack-history"
+run pulumi stack history --json
+
+signal "16-stack-tag-set"
+try pulumi stack tag set env recorder
+
+signal "17-stack-tag-ls"
+try pulumi stack tag ls --json
+
+signal "18-stack-tag-get"
+try pulumi stack tag get env
+
+signal "19-stack-tag-rm"
+try pulumi stack tag rm env
+
+signal "20-stack-select"
+run pulumi stack select dev
+
+signal "21-stack-unselect"
+try sh -c 'pulumi stack unselect && pulumi stack select dev'
+
+signal "22-stack-graph"
+run pulumi stack graph /tmp/graph.dot
+
+# Experimental Pulumi Cloud features we do not support (expect errors).
+signal "23-stack-drift"
+try pulumi stack drift detect
+
+signal "24-stack-schedule"
+try pulumi stack schedule list
+
+signal "25-stack-webhook"
+try pulumi stack webhook list
+
+signal "26-destroy"
+run pulumi destroy --yes --parallel 1
+
+# change-secrets-provider re-encrypts config, so it must run after the
+# secret-bearing resources are gone.
+signal "27-change-secrets-provider"
+try pulumi stack change-secrets-provider passphrase
+
+signal "28-stack-rename"
+run pulumi stack rename staging
+
+signal "29-stack-ls"
+run pulumi stack ls
+
+signal "30-stack-rm"
+run pulumi stack rm staging --yes
 
 echo ""
 echo "==> all commands completed"
