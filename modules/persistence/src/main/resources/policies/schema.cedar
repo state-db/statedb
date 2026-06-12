@@ -57,6 +57,11 @@ action "stack:EncryptSecrets" in ["stack:WriteAccess"] appliesTo {
   resource: [Stack]
 };
 
+action "stack:SetTags" in ["stack:WriteAccess"] appliesTo {
+  principal: [User],
+  resource: [Stack]
+};
+
 action "user:ReadSelf" appliesTo {
   principal: [User],
   resource: [User]

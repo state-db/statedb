@@ -15,11 +15,13 @@ import io.statedb.persistence.stack.StackImporter;
 import io.statedb.persistence.stack.StackNotFoundException;
 import io.statedb.persistence.stack.StackRef;
 import io.statedb.persistence.stack.StackRefResolver;
+import io.statedb.persistence.stack.StackTagWriter;
 import jakarta.inject.Inject;
 import jakarta.ws.rs.Consumes;
 import jakarta.ws.rs.DELETE;
 import jakarta.ws.rs.DefaultValue;
 import jakarta.ws.rs.GET;
+import jakarta.ws.rs.PATCH;
 import jakarta.ws.rs.POST;
 import jakarta.ws.rs.Path;
 import jakarta.ws.rs.PathParam;
@@ -41,6 +43,8 @@ public class StackResource {
   @Inject StackDeleter deleter;
 
   @Inject StackImporter importer;
+
+  @Inject StackTagWriter tagWriter;
 
   @Inject CurrentPrincipal currentPrincipal;
 
@@ -100,6 +104,22 @@ public class StackResource {
         importer.importDeployment(
             ref.stackId(), principal.userId(), principal.apiTokenId(), body.deployment);
     return new ImportStackResponse(updateId.toString());
+  }
+
+  // `stack tag set`/`rm` PATCH the full desired tag map (not a delta), so replace wholesale.
+  @PATCH
+  @Path("/tags")
+  @Authorize(action = "stack:SetTags", loader = StackEntityLoader.class)
+  @Consumes(MediaType.APPLICATION_JSON)
+  @Produces(MediaType.APPLICATION_JSON)
+  public Response setTags(
+      @PathParam("org") String org,
+      @PathParam("project") String project,
+      @PathParam("stack") String stack,
+      Map<String, String> tags) {
+    StackRef ref = resolveOrThrow(org, project, stack);
+    tagWriter.replaceTags(ref.stackId(), tags);
+    return Response.ok(Map.of()).build();
   }
 
   private StackRef resolveOrThrow(String org, String project, String stack) {

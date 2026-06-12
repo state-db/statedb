@@ -1,0 +1,56 @@
+package io.statedb.persistence.stack;
+
+import jakarta.enterprise.context.ApplicationScoped;
+import jakarta.persistence.LockModeType;
+import jakarta.transaction.Transactional;
+import java.util.Map;
+import java.util.UUID;
+
+/**
+ * Replaces a stack's tag map wholesale — {@code pulumi stack tag set}/{@code rm} PATCH the full
+ * desired set, not a delta. Tag edits don't take a CLI state lock, so the read-modify-write is
+ * serialized against concurrent stack mutations with a {@code PESSIMISTIC_WRITE} row lock, the same
+ * way {@link StackImporter} guards its lease-less write. Holding the row lock means a tag write
+ * loads {@code active_update_id}/{@code version} under lock and writes them back unchanged, so it
+ * can't clobber a concurrent update.
+ */
+@ApplicationScoped
+public class StackTagWriter {
+
+  static final int MAX_TAGS = 50;
+  static final int MAX_KEY_LENGTH = 50;
+  static final int MAX_VALUE_LENGTH = 100;
+
+  @Transactional
+  public void replaceTags(UUID stackId, Map<String, String> tags) {
+    Map<String, String> safe = tags == null ? Map.of() : tags;
+    validate(safe);
+
+    Stack stack =
+        Stack.<Stack>find("id", stackId).withLock(LockModeType.PESSIMISTIC_WRITE).firstResult();
+    if (stack == null) {
+      return;
+    }
+    stack.tags = safe;
+    stack.persist();
+  }
+
+  private static void validate(Map<String, String> tags) {
+    if (tags.size() > MAX_TAGS) {
+      throw new TagValidationException(
+          "a stack may have at most " + MAX_TAGS + " tags, got " + tags.size());
+    }
+    for (Map.Entry<String, String> tag : tags.entrySet()) {
+      String key = tag.getKey();
+      String value = tag.getValue();
+      if (key.length() > MAX_KEY_LENGTH) {
+        throw new TagValidationException(
+            "tag key exceeds " + MAX_KEY_LENGTH + " characters: '" + key + "'");
+      }
+      if (value != null && value.length() > MAX_VALUE_LENGTH) {
+        throw new TagValidationException(
+            "tag value for '" + key + "' exceeds " + MAX_VALUE_LENGTH + " characters");
+      }
+    }
+  }
+}
