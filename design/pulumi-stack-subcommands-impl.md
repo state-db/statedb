@@ -2,8 +2,8 @@
 
 > Working doc (uncommitted). Captures the gap analysis from a recorder discovery
 > pass and the remaining implementation tasks. **Tags, the validation-exception
-> consolidation, rename, and history have landed**; schedule/webhook 501s and smoke
-> coverage are still pending.
+> consolidation, rename, history, the schedule/webhook 501s, and smoke coverage
+> have all landed** — the plan is complete.
 
 ## How we got here
 
@@ -23,14 +23,14 @@ subcommand and regenerated `api-snapshots/pulumi/catalog.md` (commit
 | Subcommand | Backend endpoint(s) | App status |
 |---|---|---|
 | `init`/`new`, `ls`, `rm`, `export`, `import`, `output` | existing | ✅ works + smoke-tested |
-| `select`, `unselect`, `get` (exp), `graph`, bare `stack`, `tag ls`/`get` | `GET stack` / `GET export` | ✅ works, **no smoke test** |
+| `select`, `unselect`, `graph`, bare `stack`, `tag ls`/`get` | `GET stack` / `GET export` | ✅ works + smoke-tested (`get` (exp) is not a real subcommand in the pinned CLI) |
 | `tag set` / `tag rm` | `PATCH .../{stack}/tags` | ✅ **DONE** (commit `4f42575`) |
 | `history` | `GET .../{stack}/updates` | ✅ **DONE** (legacy paginated response) |
 | `rename` | `POST .../{stack}/rename` | ✅ **DONE** (metadata move + checkpoint rewrite) |
 | `change-secrets-provider` | `GET export` → `POST import` → `GET .../{stack}/update` poll | ⚠️ deferred (poll endpoint missing) |
 | `drift detect` | *(none — CLI errors client-side, never reaches us)* | n/a, nothing to do |
-| `schedule list` | `GET .../{stack}/deployments/schedules` | ❌ return 501 |
-| `webhook list` | `GET .../{stack}/hooks` | ❌ return 501 |
+| `schedule list` | `GET .../{stack}/deployments/schedules` | ✅ **DONE** (501, smoke-tested) |
+| `webhook list` | `GET .../{stack}/hooks` | ✅ **DONE** (501, smoke-tested) |
 
 `tag ls`/`get` already work because `GET stack` returns the `tags` JSONB column.
 `output` works today (proven by the stackref smoke test); its extra
@@ -182,20 +182,26 @@ subcommand and regenerated `api-snapshots/pulumi/catalog.md` (commit
   No `@Authorize` (pure stub); `TokenAuthFilter` still enforces 401 globally.
 - Tests: assert 501 + message; assert 401 without token.
 
-## Task: smoke tests — 100% supported-command coverage
+## Task: smoke tests — 100% supported-command coverage ✅ DONE
 
-Extend `modules/pulumi-cli-smoke/.../PulumiCliSmokeIT.java` (real Pulumi CLI in
-Docker). Add coverage for the supported-but-untested commands and the new ones:
+Extended `modules/pulumi-cli-smoke/.../PulumiCliSmokeIT.java` (real Pulumi CLI in
+Docker) with two new `@Test` methods, each spinning one container off a
+provider-free `up` (no plugin download) so a checkpoint, an update, and a secret
+output exist to inspect:
 
-- `select` / `unselect`, bare `stack`, `stack get`, `stack graph <file>`.
-- `stack tag set/ls/get/rm` (round-trip a tag, assert it appears then disappears).
-- `stack rename` (rename, assert `stack ls` shows new name).
-- `stack history --json` (assert at least one update after an `up`).
-- Assert `stack schedule list` / `stack webhook list` fail cleanly (non-zero exit,
-  not a hang) — the 501 surfaces as a CLI error.
+- `realPulumiCliSupportsStackInspectionTagAndHistoryCommands`: `tag set/ls/get/rm`
+  round-trip (tag appears then disappears), bare `stack`, `stack graph <file>`
+  (asserts the DOT file), `stack history --json` (≥1 update, newest is `update`),
+  `select`/`unselect`/`select`.
+- `realPulumiCliRenamesStacksAndRejectsUnsupportedFeatures`: `stack schedule list`
+  and `stack webhook list` fail cleanly (non-zero exit — the 501 surfaces as a CLI
+  error, via a new `execAllowingFailure` helper), then `stack rename` with
+  `stack ls --json` asserting the new name appears and the old one is gone.
 
-Group related assertions into a couple of new `@Test` methods to keep container
-startups down (each test spins a Pulumi container).
+**`stack get` dropped:** it is not a real subcommand in the pinned CLI
+(`pulumi/pulumi:3.234.0`) — bare `pulumi stack` "accepts 0 arg(s)", so `stack get`
+errors. The doc's `(exp)` marker was optimistic for this version; covered by bare
+`stack` instead.
 
 ## Recorder note (done)
 

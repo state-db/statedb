@@ -42,6 +42,8 @@ class PulumiCliSmokeIT {
 
   private static final String ORG = "acme";
   private static final String STACK = "dev";
+  private static final String STAGING_STACK = "staging";
+  private static final String INSPECT_PROJECT = "stack-subcommands";
   private static final String RAW_TOKEN = "pulumi-cli-smoke-token";
   private static final String PRODUCER_PROJECT = "state-db-workbench";
   private static final String CONSUMER_PROJECT = "stackref-consumer";
@@ -214,6 +216,91 @@ class PulumiCliSmokeIT {
         () -> "default stack export should not leak secret value:\n" + exported);
   }
 
+  @Test
+  void realPulumiCliSupportsStackInspectionTagAndHistoryCommands() throws Exception {
+    String backendUrl = "http://host.testcontainers.internal:" + baseUrl.getPort() + "/pulumi";
+    Testcontainers.exposeHostPorts(baseUrl.getPort());
+
+    pulumi = singleProjectContainer(inspectionProject());
+    pulumi.start();
+
+    execResult("pulumi login " + backendUrl);
+    execResult("pulumi stack init " + STACK);
+    execResult("pulumi up --yes --non-interactive");
+
+    // tag round-trip: set a tag, see it via ls/get, then remove it and confirm it is gone.
+    execResult("pulumi stack tag set env smoke");
+    JsonNode tagsWithEnv = execJson("pulumi stack tag ls --json");
+    assertEquals(
+        "smoke",
+        tagsWithEnv.path("env").asText(),
+        () -> "stack tag ls should report the tag we just set:\n" + tagsWithEnv);
+    assertContains(execResult("pulumi stack tag get env").getStdout(), "smoke");
+    execResult("pulumi stack tag rm env");
+    JsonNode tagsWithoutEnv = execJson("pulumi stack tag ls --json");
+    assertFalse(
+        tagsWithoutEnv.has("env"), () -> "stack tag rm should drop the tag:\n" + tagsWithoutEnv);
+
+    // bare `stack` resolves and prints the current stack via GET stack/export. (`stack get` is not
+    // a real subcommand in the pinned CLI, so it is not covered here.)
+    assertContains(execResult("pulumi stack").getStdout(), STACK);
+
+    // graph builds a DOT file from the exported checkpoint.
+    execResult("pulumi stack graph /workspace/graph.dot");
+    assertContains(execResult("cat /workspace/graph.dot").getStdout(), "digraph");
+
+    // history lists the update we just ran (previews and renames are excluded server-side).
+    JsonNode history = execJson("pulumi stack history --json");
+    assertTrue(history.isArray() && history.size() >= 1, () -> "expected >=1 update:\n" + history);
+    assertEquals(
+        "update", history.get(0).path("kind").asText(), () -> "newest update kind:\n" + history);
+
+    // select / unselect are CLI-local state changes that still resolve the stack server-side.
+    execResult("pulumi stack select " + STACK);
+    execResult("pulumi stack unselect");
+    execResult("pulumi stack select " + STACK);
+  }
+
+  @Test
+  void realPulumiCliRenamesStacksAndRejectsUnsupportedFeatures() throws Exception {
+    String backendUrl = "http://host.testcontainers.internal:" + baseUrl.getPort() + "/pulumi";
+    Testcontainers.exposeHostPorts(baseUrl.getPort());
+
+    pulumi = singleProjectContainer(inspectionProject());
+    pulumi.start();
+
+    execResult("pulumi login " + backendUrl);
+    execResult("pulumi stack init " + STACK);
+    execResult("pulumi up --yes --non-interactive");
+
+    // schedule/webhook are Pulumi Cloud features this backend deliberately 501s; the CLI must fail
+    // cleanly (non-zero exit), not hang or treat the error as success.
+    Container.ExecResult schedule = execAllowingFailure("pulumi stack schedule list");
+    assertFalse(
+        schedule.getExitCode() == 0,
+        () ->
+            "stack schedule list should fail against an unsupported backend:\n"
+                + schedule.getStdout()
+                + schedule.getStderr());
+    Container.ExecResult webhook = execAllowingFailure("pulumi stack webhook list");
+    assertFalse(
+        webhook.getExitCode() == 0,
+        () ->
+            "stack webhook list should fail against an unsupported backend:\n"
+                + webhook.getStdout()
+                + webhook.getStderr());
+
+    // rename moves the stack server-side (metadata + checkpoint rewrite); ls must reflect the move.
+    execResult("pulumi stack rename " + STAGING_STACK);
+    JsonNode stacks = execJson("pulumi stack ls --json");
+    assertTrue(
+        stackNames(stacks).contains(STAGING_STACK),
+        () -> "stack ls should show the renamed stack:\n" + stacks);
+    assertFalse(
+        stackNames(stacks).contains(STACK),
+        () -> "stack ls should no longer show the old name:\n" + stacks);
+  }
+
   private JsonNode execJson(String command) throws Exception {
     return JSON.readTree(execResult(command).getStdout());
   }
@@ -234,6 +321,12 @@ class PulumiCliSmokeIT {
         result.getExitCode(),
         () -> command + "\nstdout:\n" + result.getStdout() + "\nstderr:\n" + result.getStderr());
     return result;
+  }
+
+  // Like execResult but tolerates a non-zero exit, for commands we expect the CLI to reject (the
+  // unsupported schedule/webhook 501s). The caller asserts on the exit code.
+  private Container.ExecResult execAllowingFailure(String command) throws Exception {
+    return pulumi.execInContainer("sh", "-lc", "cd /workspace && " + command);
   }
 
   private GenericContainer<?> pulumiContainer(Map<String, String> files) {
@@ -258,6 +351,38 @@ class PulumiCliSmokeIT {
 
     files.forEach((path, content) -> container.withCopyToContainer(Transferable.of(content), path));
     return container;
+  }
+
+  // Single-project container at /workspace, mirroring the first two tests' setup but with an inline
+  // project body instead of the recorder Pulumi.yaml.
+  private GenericContainer<?> singleProjectContainer(String pulumiYaml) {
+    return new GenericContainer<>(PULUMI_IMAGE)
+        .withEnv("PULUMI_ACCESS_TOKEN", RAW_TOKEN)
+        .withEnv("PULUMI_CONFIG_PASSPHRASE", "test")
+        .withEnv("PULUMI_HOME", "/tmp/pulumi-home")
+        .withEnv("PULUMI_SKIP_CONFIRMATIONS", "true")
+        .withEnv("PULUMI_SKIP_UPDATE_CHECK", "true")
+        .withEnv("PULUMI_COLOR", "never")
+        .withCopyToContainer(Transferable.of(pulumiYaml), "/workspace/Pulumi.yaml")
+        .withCopyToContainer(Transferable.of("{}\n"), "/workspace/Pulumi.dev.yaml")
+        .withCreateContainerCmdModifier(cmd -> cmd.withEntrypoint("sh"))
+        .withCommand("-lc", "mkdir -p /tmp/pulumi-home && sleep infinity")
+        .withStartupTimeout(Duration.ofMinutes(2));
+  }
+
+  // A provider-free project (so `up` needs no plugin download) that still produces a real update,
+  // a checkpoint to graph/export, and a secret output to exercise batch-decrypt.
+  private static String inspectionProject() {
+    return """
+        name: %s
+        runtime: yaml
+        description: Stack subcommand smoke project.
+        outputs:
+          plain: %s
+          secret:
+            fn::secret: %s
+        """
+        .formatted(INSPECT_PROJECT, PLAIN_VALUE, SECRET_VALUE);
   }
 
   private static String producerProject() {
