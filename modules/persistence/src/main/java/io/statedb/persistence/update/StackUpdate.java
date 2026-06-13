@@ -34,6 +34,11 @@ public class StackUpdate extends TimestampedEntity {
     Kind(String dbValue) {
       this.dbValue = dbValue;
     }
+
+    /** The Pulumi wire value (e.g. {@code "update"}), as emitted in {@code stack history}. */
+    public String wireValue() {
+      return dbValue;
+    }
   }
 
   public enum Status {
