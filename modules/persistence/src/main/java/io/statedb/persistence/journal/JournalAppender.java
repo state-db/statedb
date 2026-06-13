@@ -1,6 +1,7 @@
 package io.statedb.persistence.journal;
 
 import com.fasterxml.jackson.databind.JsonNode;
+import io.statedb.persistence.RequestValidationException;
 import io.statedb.persistence.lock.LeaseRevalidator;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
@@ -82,14 +83,14 @@ public class JournalAppender {
         kind = v.kind();
         seq = v.sequenceId();
       } catch (IllegalArgumentException e) {
-        throw new JournalValidationException(e.getMessage(), e);
+        throw new RequestValidationException(e.getMessage(), e);
       }
       if (kind < MIN_KIND || kind > MAX_KIND) {
-        throw new JournalValidationException(
+        throw new RequestValidationException(
             "unknown journal entry kind " + kind + " (supported: 0..7)");
       }
       if (seq <= 0) {
-        throw new JournalValidationException("sequenceID must be positive, got " + seq);
+        throw new RequestValidationException("sequenceID must be positive, got " + seq);
       }
       if (seq > maxWireInBatch) maxWireInBatch = seq;
     }

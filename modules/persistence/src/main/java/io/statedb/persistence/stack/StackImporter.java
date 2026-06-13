@@ -1,6 +1,7 @@
 package io.statedb.persistence.stack;
 
 import com.fasterxml.jackson.databind.JsonNode;
+import io.statedb.persistence.RequestValidationException;
 import io.statedb.persistence.lock.StackLockedException;
 import io.statedb.persistence.update.StackUpdate;
 import jakarta.enterprise.context.ApplicationScoped;
@@ -27,7 +28,7 @@ public class StackImporter {
   public UUID importDeployment(
       UUID stackId, UUID startedByUserId, UUID startedByApiTokenId, JsonNode deployment) {
     if (deployment == null || !deployment.isObject()) {
-      throw new ImportValidationException("import request must contain a deployment object");
+      throw new RequestValidationException("import request must contain a deployment object");
     }
 
     // Pulumi stack import does not run the normal update lease protocol: the CLI POSTs the whole

@@ -1,6 +1,7 @@
 package io.statedb.persistence.events;
 
 import com.fasterxml.jackson.databind.JsonNode;
+import io.statedb.persistence.RequestValidationException;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 import jakarta.persistence.EntityManager;
@@ -40,7 +41,7 @@ public class EventBatchAppender {
         v.kind();
         views.add(v);
       } catch (IllegalArgumentException e) {
-        throw new EventBatchValidationException(e.getMessage(), e);
+        throw new RequestValidationException(e.getMessage(), e);
       }
     }
 

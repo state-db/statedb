@@ -1,5 +1,6 @@
 package io.statedb.persistence.stack;
 
+import io.statedb.persistence.RequestValidationException;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.persistence.LockModeType;
 import jakarta.transaction.Transactional;
@@ -37,18 +38,18 @@ public class StackTagWriter {
 
   private static void validate(Map<String, String> tags) {
     if (tags.size() > MAX_TAGS) {
-      throw new TagValidationException(
+      throw new RequestValidationException(
           "a stack may have at most " + MAX_TAGS + " tags, got " + tags.size());
     }
     for (Map.Entry<String, String> tag : tags.entrySet()) {
       String key = tag.getKey();
       String value = tag.getValue();
       if (key.length() > MAX_KEY_LENGTH) {
-        throw new TagValidationException(
+        throw new RequestValidationException(
             "tag key exceeds " + MAX_KEY_LENGTH + " characters: '" + key + "'");
       }
       if (value != null && value.length() > MAX_VALUE_LENGTH) {
-        throw new TagValidationException(
+        throw new RequestValidationException(
             "tag value for '" + key + "' exceeds " + MAX_VALUE_LENGTH + " characters");
       }
     }

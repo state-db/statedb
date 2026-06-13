@@ -11,10 +11,10 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.quarkus.narayana.jta.QuarkusTransaction;
 import io.quarkus.test.junit.QuarkusTest;
+import io.statedb.persistence.RequestValidationException;
 import io.statedb.persistence.identity.Organization;
 import io.statedb.persistence.journal.JournalAppender;
 import io.statedb.persistence.journal.JournalSequenceConflictException;
-import io.statedb.persistence.journal.JournalValidationException;
 import io.statedb.persistence.lock.Lease;
 import io.statedb.persistence.lock.LeaseExpiredException;
 import io.statedb.persistence.lock.StackLockAcquirer;
@@ -364,7 +364,7 @@ class JournalAppenderTest {
   @Test
   void invalidKindRejectedWithNoWrites() {
     assertThrows(
-        JournalValidationException.class,
+        RequestValidationException.class,
         () -> appender.append(stackId, updateId, leaseId, List.of(entry(1, 8, null, "{}"))));
 
     QuarkusTransaction.requiringNew()
@@ -384,7 +384,7 @@ class JournalAppenderTest {
   @Test
   void nonPositiveSequenceRejected() {
     assertThrows(
-        JournalValidationException.class,
+        RequestValidationException.class,
         () -> appender.append(stackId, updateId, leaseId, List.of(entry(0, 0, 1L, "{}"))));
   }
 

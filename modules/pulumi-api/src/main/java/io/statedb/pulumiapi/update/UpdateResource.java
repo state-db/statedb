@@ -2,13 +2,12 @@ package io.statedb.pulumiapi.update;
 
 import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.annotation.JsonProperty;
+import io.statedb.persistence.RequestValidationException;
 import io.statedb.persistence.authz.Authorize;
 import io.statedb.persistence.authz.CurrentPrincipal;
 import io.statedb.persistence.authz.StackEntityLoader;
 import io.statedb.persistence.events.EventBatchAppender;
-import io.statedb.persistence.events.EventBatchValidationException;
 import io.statedb.persistence.journal.JournalAppender;
-import io.statedb.persistence.journal.JournalValidationException;
 import io.statedb.persistence.lock.Lease;
 import io.statedb.persistence.lock.LeaseContext;
 import io.statedb.persistence.lock.LeaseLookup;
@@ -19,7 +18,6 @@ import io.statedb.persistence.lock.StackLockedException;
 import io.statedb.persistence.stack.StackNotFoundException;
 import io.statedb.persistence.stack.StackRef;
 import io.statedb.persistence.stack.StackRefResolver;
-import io.statedb.persistence.update.CompleteValidationException;
 import io.statedb.persistence.update.StackUpdate;
 import io.statedb.persistence.update.StackUpdateCompleter;
 import io.statedb.persistence.update.StackUpdateStarter;
@@ -243,7 +241,7 @@ public class UpdateResource {
     // check that would look like a successful no-op PATCH and the CLI would move on with corrupt
     // state. Treat null/missing entries as 400.
     if (body == null || body.entries == null) {
-      throw new JournalValidationException("request body missing 'entries' array");
+      throw new RequestValidationException("request body missing 'entries' array");
     }
     if (body.entries.isEmpty()) {
       return Response.ok(Map.of()).build();
@@ -275,12 +273,12 @@ public class UpdateResource {
     // — without this check that would look like a successful no-op and the CLI would move on
     // with corrupt event state. Treat null/missing events as 400.
     if (body == null || body.events == null) {
-      throw new EventBatchValidationException("request body missing 'events' array");
+      throw new RequestValidationException("request body missing 'events' array");
     }
     if (body.events.isEmpty()) {
       // Pulumi Cloud returns 400 "No events provided" for empty batches — match that so a CLI
       // that accidentally sends an empty batch sees the same wire behavior.
-      throw new EventBatchValidationException("no events provided");
+      throw new RequestValidationException("no events provided");
     }
 
     eventBatchAppender.append(ctx.stackId(), ctx.updateId(), body.events);
@@ -330,14 +328,14 @@ public class UpdateResource {
     }
 
     if (body == null || body.status == null || body.status.isBlank()) {
-      throw new CompleteValidationException("request body missing 'status'");
+      throw new RequestValidationException("request body missing 'status'");
     }
     StackUpdate.Status terminal =
         switch (body.status) {
           case "succeeded" -> StackUpdate.Status.SUCCEEDED;
           case "failed" -> StackUpdate.Status.FAILED;
           default ->
-              throw new CompleteValidationException(
+              throw new RequestValidationException(
                   "status must be 'succeeded' or 'failed', got '" + body.status + "'");
         };
 
@@ -441,7 +439,7 @@ public class UpdateResource {
   private static void requireMatches(String field, String actual, String expected) {
     if (actual == null || actual.isBlank()) return;
     if (!expected.equals(actual)) {
-      throw new UpdateProgramValidationException(
+      throw new RequestValidationException(
           field + " must match the stack path; expected '" + expected + "', got '" + actual + "'");
     }
   }

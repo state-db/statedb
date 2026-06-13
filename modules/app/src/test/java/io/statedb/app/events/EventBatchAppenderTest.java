@@ -9,8 +9,8 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.quarkus.narayana.jta.QuarkusTransaction;
 import io.quarkus.test.junit.QuarkusTest;
+import io.statedb.persistence.RequestValidationException;
 import io.statedb.persistence.events.EventBatchAppender;
-import io.statedb.persistence.events.EventBatchValidationException;
 import io.statedb.persistence.events.EventSequenceConflictException;
 import io.statedb.persistence.identity.Organization;
 import io.statedb.persistence.stack.StackCreator;
@@ -163,7 +163,7 @@ class EventBatchAppenderTest {
   @Test
   void missingKindEnvelopeRejected() {
     assertThrows(
-        EventBatchValidationException.class,
+        RequestValidationException.class,
         () ->
             appender.append(
                 stackId, updateId, List.of(MAPPER.createObjectNode().put("sequence", 1))));
@@ -172,7 +172,7 @@ class EventBatchAppenderTest {
   @Test
   void ambiguousMultipleKindEnvelopesRejected() {
     assertThrows(
-        EventBatchValidationException.class,
+        RequestValidationException.class,
         () ->
             appender.append(
                 stackId,
@@ -185,8 +185,7 @@ class EventBatchAppenderTest {
   void missingSequenceRejected() {
     JsonNode bad = MAPPER.createObjectNode().set("stdoutEvent", MAPPER.createObjectNode());
     assertThrows(
-        EventBatchValidationException.class,
-        () -> appender.append(stackId, updateId, List.of(bad)));
+        RequestValidationException.class, () -> appender.append(stackId, updateId, List.of(bad)));
   }
 
   @Test
@@ -195,20 +194,20 @@ class EventBatchAppenderTest {
     java.util.ArrayList<JsonNode> withNull = new java.util.ArrayList<>();
     withNull.add(null);
     assertThrows(
-        EventBatchValidationException.class, () -> appender.append(stackId, updateId, withNull));
+        RequestValidationException.class, () -> appender.append(stackId, updateId, withNull));
   }
 
   @Test
   void nonObjectEntryRejected() {
     assertThrows(
-        EventBatchValidationException.class,
+        RequestValidationException.class,
         () -> appender.append(stackId, updateId, List.of(MAPPER.createArrayNode())));
   }
 
   @Test
   void negativeSequenceRejected() {
     assertThrows(
-        EventBatchValidationException.class,
+        RequestValidationException.class,
         () -> appender.append(stackId, updateId, List.of(event(-1, "stdoutEvent", "{}"))));
   }
 

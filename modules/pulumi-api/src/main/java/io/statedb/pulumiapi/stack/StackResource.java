@@ -3,11 +3,11 @@ package io.statedb.pulumiapi.stack;
 import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.databind.JsonNode;
+import io.statedb.persistence.RequestValidationException;
 import io.statedb.persistence.auth.AuthenticatedPrincipal;
 import io.statedb.persistence.authz.Authorize;
 import io.statedb.persistence.authz.CurrentPrincipal;
 import io.statedb.persistence.authz.StackEntityLoader;
-import io.statedb.persistence.stack.ImportValidationException;
 import io.statedb.persistence.stack.StackDeleter;
 import io.statedb.persistence.stack.StackHead;
 import io.statedb.persistence.stack.StackHeadFinder;
@@ -90,13 +90,13 @@ public class StackResource {
     StackRef ref = resolveOrThrow(org, project, stack);
 
     if (body == null) {
-      throw new ImportValidationException("import request body is required");
+      throw new RequestValidationException("import request body is required");
     }
     if (body.version != 3) {
-      throw new ImportValidationException("only Pulumi deployment schema version 3 is supported");
+      throw new RequestValidationException("only Pulumi deployment schema version 3 is supported");
     }
     if (body.features != null && !body.features.isEmpty()) {
-      throw new ImportValidationException("deployment features are not supported");
+      throw new RequestValidationException("deployment features are not supported");
     }
 
     AuthenticatedPrincipal principal = currentPrincipal.get();
