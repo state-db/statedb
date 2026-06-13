@@ -2,7 +2,6 @@ package io.statedb.persistence.stack;
 
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
-import jakarta.persistence.EntityManager;
 import jakarta.persistence.PersistenceException;
 import jakarta.transaction.Transactional;
 import java.util.Map;
@@ -17,7 +16,7 @@ import org.hibernate.exception.ConstraintViolationException;
 @ApplicationScoped
 public class StackCreator {
 
-  @Inject EntityManager em;
+  @Inject ProjectUpserter projectUpserter;
 
   /**
    * @throws StackAlreadyExistsException if {@code stackName} already exists under {@code (orgId,
@@ -27,7 +26,7 @@ public class StackCreator {
   @Transactional
   public StackRef create(
       UUID orgId, String orgName, String projectName, String stackName, Map<String, String> tags) {
-    UUID projectId = upsertProject(orgId, projectName);
+    UUID projectId = projectUpserter.upsert(orgId, projectName);
 
     Workspace workspace = new Workspace();
     workspace.orgId = orgId;
@@ -56,19 +55,6 @@ public class StackCreator {
     state.persist();
 
     return new StackRef(stack.id, workspace.id, orgId, orgName, projectName, stackName, 0, null);
-  }
-
-  // Concurrency-safe project upsert: ON CONFLICT DO NOTHING then SELECT. Two concurrent first-
-  // stack inits in a new project must not produce two project rows.
-  private UUID upsertProject(UUID orgId, String name) {
-    em.createNativeQuery(
-            "INSERT INTO projects (id, org_id, name) VALUES (?1, ?2, ?3) "
-                + "ON CONFLICT (org_id, name) DO NOTHING")
-        .setParameter(1, UUID.randomUUID())
-        .setParameter(2, orgId)
-        .setParameter(3, name)
-        .executeUpdate();
-    return Project.find("orgId = ?1 AND name = ?2", orgId, name).<Project>firstResult().id;
   }
 
   private static boolean isUniqueViolation(Throwable t) {

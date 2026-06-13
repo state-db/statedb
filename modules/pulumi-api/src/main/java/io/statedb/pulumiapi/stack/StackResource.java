@@ -15,6 +15,7 @@ import io.statedb.persistence.stack.StackImporter;
 import io.statedb.persistence.stack.StackNotFoundException;
 import io.statedb.persistence.stack.StackRef;
 import io.statedb.persistence.stack.StackRefResolver;
+import io.statedb.persistence.stack.StackRenamer;
 import io.statedb.persistence.stack.StackTagWriter;
 import jakarta.inject.Inject;
 import jakarta.ws.rs.Consumes;
@@ -45,6 +46,8 @@ public class StackResource {
   @Inject StackImporter importer;
 
   @Inject StackTagWriter tagWriter;
+
+  @Inject StackRenamer renamer;
 
   @Inject CurrentPrincipal currentPrincipal;
 
@@ -122,6 +125,34 @@ public class StackResource {
     return Response.ok(Map.of()).build();
   }
 
+  // `stack rename` moves the stack to a new name and/or project. The CLI sends both fields (an
+  // empty string preserving the current value). The rename is recorded as a `rename` update; the
+  // recorded service contract returns the AppImportStackResponse shape ({updateId}) carrying that
+  // update's id (empty only for a no-op rename). The CLI discards the body, but matching the
+  // documented shape keeps other clients able to decode it.
+  @POST
+  @Path("/rename")
+  @Authorize(action = "stack:Rename", loader = StackEntityLoader.class)
+  @Consumes(MediaType.APPLICATION_JSON)
+  @Produces(MediaType.APPLICATION_JSON)
+  public ImportStackResponse rename(
+      @PathParam("org") String org,
+      @PathParam("project") String project,
+      @PathParam("stack") String stack,
+      AppStackRenameRequest body) {
+    boolean noName = body == null || body.newName == null || body.newName.isBlank();
+    boolean noProject = body == null || body.newProject == null || body.newProject.isBlank();
+    if (noName && noProject) {
+      throw new RequestValidationException("no rename to apply");
+    }
+    StackRef ref = resolveOrThrow(org, project, stack);
+    AuthenticatedPrincipal principal = currentPrincipal.get();
+    UUID updateId =
+        renamer.rename(
+            ref, body.newName, body.newProject, principal.userId(), principal.apiTokenId());
+    return new ImportStackResponse(updateId == null ? "" : updateId.toString());
+  }
+
   private StackRef resolveOrThrow(String org, String project, String stack) {
     return resolver
         .resolve(org, project, stack)
@@ -144,6 +175,14 @@ public class StackResource {
         Map<String, String> tags) {
       this(activeUpdate, null, orgName, projectName, stackName, tags);
     }
+  }
+
+  public static class AppStackRenameRequest {
+    @JsonProperty("newName")
+    public String newName;
+
+    @JsonProperty("newProject")
+    public String newProject;
   }
 
   public static class ImportStackRequest {
