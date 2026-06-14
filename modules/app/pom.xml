@@ -65,6 +65,100 @@
                     </execution>
                 </executions>
             </plugin>
+
+            <!--
+              Web console build. The SPA lives in ../web (a standalone bun
+              project, not a Maven module). These executions run at
+              prepare-package so `mvn package` embeds the bundle but `quarkus:dev`
+              and `mvn test` stay fast (neither runs prepare-package). For local
+              SPA work, run the bun dev server instead (`make web-dev`).
+            -->
+            <plugin>
+                <groupId>org.codehaus.mojo</groupId>
+                <artifactId>exec-maven-plugin</artifactId>
+                <version>3.5.0</version>
+                <executions>
+                    <!-- Frozen install: fail the build if bun.lock and
+                         package.json disagree, rather than silently re-resolving
+                         dependencies. Keeps packaged artifacts reproducible. -->
+                    <execution>
+                        <id>web-install</id>
+                        <goals>
+                            <goal>exec</goal>
+                        </goals>
+                        <phase>prepare-package</phase>
+                        <configuration>
+                            <executable>bun</executable>
+                            <workingDirectory>${project.basedir}/../web</workingDirectory>
+                            <arguments>
+                                <argument>install</argument>
+                                <argument>--frozen-lockfile</argument>
+                            </arguments>
+                        </configuration>
+                    </execution>
+                    <!-- Typecheck before bundling. bun build transpiles without
+                         checking types, so without this a type error would ship. -->
+                    <execution>
+                        <id>web-typecheck</id>
+                        <goals>
+                            <goal>exec</goal>
+                        </goals>
+                        <phase>prepare-package</phase>
+                        <configuration>
+                            <executable>bun</executable>
+                            <workingDirectory>${project.basedir}/../web</workingDirectory>
+                            <arguments>
+                                <argument>run</argument>
+                                <argument>typecheck</argument>
+                            </arguments>
+                        </configuration>
+                    </execution>
+                    <execution>
+                        <id>web-build</id>
+                        <goals>
+                            <goal>exec</goal>
+                        </goals>
+                        <phase>prepare-package</phase>
+                        <configuration>
+                            <executable>bun</executable>
+                            <workingDirectory>${project.basedir}/../web</workingDirectory>
+                            <arguments>
+                                <argument>run</argument>
+                                <argument>build</argument>
+                            </arguments>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
+
+            <!--
+              Copy the bun build output into the app's classpath under
+              META-INF/resources, which Quarkus serves as static assets. Runs
+              after the exec executions above (same phase, declared later) so
+              ../web/dist exists. Targets build output, never the source tree.
+            -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-resources-plugin</artifactId>
+                <version>3.3.1</version>
+                <executions>
+                    <execution>
+                        <id>copy-web-bundle</id>
+                        <goals>
+                            <goal>copy-resources</goal>
+                        </goals>
+                        <phase>prepare-package</phase>
+                        <configuration>
+                            <outputDirectory>${project.build.outputDirectory}/META-INF/resources</outputDirectory>
+                            <resources>
+                                <resource>
+                                    <directory>${project.basedir}/../web/dist</directory>
+                                </resource>
+                            </resources>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
         </plugins>
     </build>
 </project>

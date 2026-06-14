@@ -20,8 +20,14 @@
     "ghcr.io/devcontainers-extra/features/pulumi:1": {
       "version": "latest",
     },
+    // Bun runtime for the web console (modules/web). Used by the bun dev
+    // server in local dev and invoked by the Maven build to bundle the SPA
+    // into the Quarkus app.
+    "ghcr.io/devcontainers-extra/features/bun:1": {
+      "version": "latest",
+    },
   },
-  "forwardPorts": [8080, 55432],
+  "forwardPorts": [8080, 5173, 55432],
   "portsAttributes": {
     "55432": {
       "label": "Workbench Postgres",
@@ -36,7 +42,7 @@
     // Ryuk is unreachable and Dev Services hangs before starting Postgres.
     "TESTCONTAINERS_HOST_OVERRIDE": "host.docker.internal",
   },
-  "postCreateCommand": "java -version && mvn -version && docker version --format '{{.Client.Version}}' && pulumi version",
+  "postCreateCommand": "java -version && mvn -version && docker version --format '{{.Client.Version}}' && pulumi version && bun --version",
   "customizations": {
     "vscode": {
       "extensions": [

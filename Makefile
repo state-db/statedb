@@ -1,5 +1,6 @@
 .PHONY: \
 	app-dev app-build app-test app-clean \
+	web-dev \
 	format format-check \
 	pulumi-extract pulumi-compare pulumi-discover pulumi-api-test \
 	pulumi-recorder-run pulumi-recorder-run-no-build pulumi-recorder-catalog pulumi-recorder-verify pulumi-recorder-discover \
@@ -35,6 +36,11 @@ app-test:
 ## Clean all module build outputs.
 app-clean:
 	$(IN_CONTAINER) mvn -f modules/pom.xml clean
+
+## Run the web console dev server (bun, http://localhost:5173) with HMR.
+## Proxies /api and /pulumi to the Quarkus app on :8080, so run `app-dev` too.
+web-dev:
+	$(IN_CONTAINER) bash -lc 'cd modules/web && bun install && bun dev.ts'
 
 ## -------------------------
 ## Pulumi Workbench
