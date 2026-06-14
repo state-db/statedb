@@ -17,8 +17,7 @@ public class ClasspathPolicyStore implements PolicyStore {
           "policies/owner.cedar",
           "policies/member.cedar",
           "policies/viewer.cedar",
-          "policies/guardrails.cedar",
-          "policies/self.cedar");
+          "policies/guardrails.cedar");
 
   // Template id -> classpath resource. The id is what a policy_grants row and the resulting
   // TemplateLink reference, so it must stay stable.

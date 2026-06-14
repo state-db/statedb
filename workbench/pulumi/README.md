@@ -5,11 +5,13 @@ local state-db backend and then inspecting what landed in Postgres.
 
 ## Flow
 
-Start the stable workbench database:
+Start the Compose-managed workbench infrastructure:
 
 ```bash
-make pulumi-workbench cmd=db-up
+make pulumi-workbench cmd=infra-up
 ```
+
+This starts Postgres and the mock OIDC provider. `cmd=app` also runs this target automatically.
 
 Start the app in another terminal:
 
@@ -20,6 +22,14 @@ make pulumi-workbench cmd=app
 The workbench app target disables Quarkus continuous testing. It runs with
 bootstrap credentials in the environment, and continuous tests would inherit
 those values and pollute bootstrap-related test assertions.
+
+Open the console at `http://localhost:5173`. The Bun dev server proxies:
+
+- `/api/*` and `/pulumi/*` to Quarkus on port 8080.
+- `/default/*` to the Compose mock IdP.
+
+The mock issuer is therefore `http://localhost:5173/default` for both Quarkus
+and the host browser. There is no separate port 8081 to forward or manage.
 
 Run Pulumi from another terminal:
 
@@ -56,7 +66,8 @@ make pulumi-workbench cmd=reset
 - Postgres container: `state-db-workbench-postgres`
 - Postgres image: `postgres:16`
 - Postgres host port: `localhost:55432`
-- Postgres volume: `state-db-workbench-postgres-data` mounted at `/var/lib/postgresql`
+- Postgres volume: `state-db-workbench-postgres-data` mounted at `/var/lib/postgresql/data`
+- Mock IdP upstream port: `localhost:58081` (internal workbench plumbing; use the console URL above)
 
 Override any of these with Make variables, for example:
 
@@ -82,6 +93,13 @@ make pulumi-workbench cmd=db-up args="DB_IMAGE=postgres:18"
 
 The workbench database is published on host localhost only, so local tools can
 connect to `postgresql://statedb:statedb@localhost:55432/statedb`.
+
+Postgres and the IdP are declared in `compose.yml`. Stop them while preserving
+database state with:
+
+```bash
+make pulumi-workbench cmd=infra-down
+```
 
 If you switch Postgres major versions, recreate the throwaway workbench
 container and volume first:

@@ -9,6 +9,7 @@ import jakarta.enterprise.event.Observes;
 import jakarta.inject.Inject;
 import jakarta.persistence.EntityManager;
 import java.util.UUID;
+import org.hibernate.id.uuid.UuidVersion7Strategy;
 import org.jboss.logging.Logger;
 
 /**
@@ -30,11 +31,10 @@ import org.jboss.logging.Logger;
  * AdvisoryLock} on {@link AdvisoryLock#BOOTSTRAP_KEY} — one pod runs {@link #provision}, the rest
  * block until its transaction commits and then re-run against the now-populated rows. Each upsert
  * is still a single {@code INSERT ... ON CONFLICT} statement, so the per-row guarantee holds even
- * for writers that bypass the lock (admin scripts, ad-hoc SQL). Bootstrap rows use
- * application-generated UUIDv4 — they're written once and rarely updated, so the temporal-ordering
- * benefit that {@link BaseEntity}'s UUIDv7 generator provides for hot inserts doesn't apply here.
- * Native SQL also bypasses Hibernate's {@code @UpdateTimestamp}, so {@code updated_at} is set
- * explicitly on the UPDATE branch of the conflict clause for the {@link TimestampedEntity} tables.
+ * for writers that bypass the lock (admin scripts, ad-hoc SQL). Native inserts call Hibernate's
+ * UUIDv7 strategy directly, matching {@link BaseEntity}. Native SQL also bypasses Hibernate's
+ * {@code @UpdateTimestamp}, so {@code updated_at} is set explicitly on the UPDATE branch of the
+ * conflict clause for the {@link TimestampedEntity} tables.
  */
 @ApplicationScoped
 public class BootstrapProvisioner {
@@ -86,7 +86,7 @@ public class BootstrapProvisioner {
             ON CONFLICT (name) DO UPDATE
               SET display_name = EXCLUDED.display_name, updated_at = now()
             """)
-        .setParameter("id", UUID.randomUUID())
+        .setParameter("id", UuidVersion7Strategy.INSTANCE.generateUuid(null))
         .setParameter("name", config.orgName())
         .setParameter("display", config.orgDisplayName())
         .executeUpdate();
@@ -106,7 +106,7 @@ public class BootstrapProvisioner {
                   display_name = EXCLUDED.display_name,
                   updated_at = now()
             """)
-        .setParameter("id", UUID.randomUUID())
+        .setParameter("id", UuidVersion7Strategy.INSTANCE.generateUuid(null))
         .setParameter("iss", BOOTSTRAP_ISS)
         .setParameter("sub", BOOTSTRAP_SUB)
         .setParameter("email", config.adminEmail())
@@ -138,7 +138,7 @@ public class BootstrapProvisioner {
             VALUES (:id, :hash, :desc, :user, :org, 'service_account', now() + interval '1 year')
             ON CONFLICT (token_hash) DO NOTHING
             """)
-        .setParameter("id", UUID.randomUUID())
+        .setParameter("id", UuidVersion7Strategy.INSTANCE.generateUuid(null))
         .setParameter("hash", tokenHash)
         .setParameter("desc", TOKEN_DESCRIPTION)
         .setParameter("user", userId)

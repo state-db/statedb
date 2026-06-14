@@ -35,6 +35,12 @@ public class AdvisoryLock {
    */
   public static final long SECRETS_KEYSET_BOOTSTRAP_KEY = 0x5354415444425F32L;
 
+  /**
+   * Guards the boot-time upsert of the OIDC provider from {@code STATE_DB_OIDC_BOOTSTRAP_*}. See
+   * {@link io.statedb.persistence.bootstrap.OidcProviderBootstrap}.
+   */
+  public static final long OIDC_PROVIDER_BOOTSTRAP_KEY = 0x5354415444425F33L;
+
   @Inject EntityManager em;
 
   /**

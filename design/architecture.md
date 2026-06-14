@@ -243,11 +243,12 @@ STATE_DB_OIDC_BOOTSTRAP_NAME=google
 STATE_DB_OIDC_BOOTSTRAP_ISSUER=https://accounts.google.com
 STATE_DB_OIDC_BOOTSTRAP_CLIENT_ID=...
 STATE_DB_OIDC_BOOTSTRAP_CLIENT_SECRET=...
+STATE_DB_OIDC_DEFAULT_PROVIDER=google
 ```
 
 At startup, the app upserts this row into `oidc_providers`. Env wins on conflict (so rotating client secrets via env redeploy works).
 
-Multi-provider Quarkus integration uses `TenantConfigResolver`. Login URL is `/api/auth/login/{provider_name}`; the resolver returns the config for that row. Callback at `/api/auth/callback/{provider_name}`. On success, we upsert `users` keyed by `(iss, sub)` and the extension issues a session cookie.
+Multi-provider Quarkus integration uses `TenantConfigResolver`. `/api/auth/login` selects the configured default provider; `/api/auth/login/{provider_name}` supports explicit SSO links. The resolver returns the config for that row. Callback at `/api/auth/callback/{provider_name}`. On success, we upsert `users` keyed by `(iss, sub)` and the extension issues a session cookie.
 
 ### Session storage
 
@@ -363,7 +364,7 @@ Read-heavy. Notable resources:
 - `GET /api/auth/cli-mint` — interactive CLI token mint. Triggers OIDC `prompt=none` re-auth, then returns the raw token via a one-time-display page. `kind='oidc'`, 24h TTL. See "CLI token issuance".
 - `GET /api/tokens` — list the current user's tokens (id, description, kind, expires_at, last_used_at).
 - `DELETE /api/tokens/{id}` — revoke (owner or admin).
-- `GET /api/me` — current user + admin status + org memberships.
+- `GET /api/user` — current user + admin status + org memberships.
 
 Admin:
 - `GET/POST /api/admin/providers` — manage `oidc_providers`.

@@ -1,4 +1,4 @@
-.PHONY: db-up app check-app login init preview up destroy sql psql force-unlock reset
+.PHONY: infra-up infra-down db-up idp-up idp-down console-seed app check-app login init preview up destroy sql psql force-unlock reset
 
 REPO_ROOT := ../..
 IN_CONTAINER := $(REPO_ROOT)/bin/in-container
@@ -17,6 +17,28 @@ TOKEN        ?= state-db-workbench-token
 TOKEN_HASH   ?= 5ffbb9af69ff36cfa7e28cea7b3da597ed0d0489113674b3eb3a6c2b7e386ef5
 BACKEND_URL  ?= http://localhost:8080/pulumi
 
+## Compose owns stable workbench infrastructure. The mock IdP is exposed only to the Bun dev server,
+## which proxies /default/* on the existing browser-facing :5173 origin. Quarkus and the browser
+## therefore use the same issuer without another VS Code forwarded port.
+CONSOLE_PORT  ?= 5173
+IDP_IMAGE     ?= ghcr.io/navikt/mock-oauth2-server:2.1.10
+IDP_UPSTREAM_PORT ?= 58081
+## Empty docker config dir: bypasses a credential helper that errors on anonymous ghcr.io pulls.
+IDP_DOCKER_CFG ?= /tmp/state-db-workbench-dockercfg
+
+OIDC_PROVIDER      ?= mock
+OIDC_ISSUER        ?= http://localhost:$(CONSOLE_PORT)/default
+OIDC_CLIENT_ID     ?= console
+OIDC_CLIENT_SECRET ?= console-secret
+## Sign in to the mock IdP with this subject to be treated as an admin in /api/user.
+ADMIN_SUB          ?= admin
+
+## Shell invocation that seeds the console admin into $(ORG). Shared by `app` (background) and
+## `console-seed`. The script path is resolved inside the dev container.
+SEED_CONSOLE = DB_CONTAINER=$(DB_CONTAINER) DB_USER=$(DB_USER) DB_NAME=$(DB_NAME) ORG=$(ORG) \
+	OIDC_ISSUER=$(OIDC_ISSUER) ADMIN_SUB=$(ADMIN_SUB) \
+	sh "$$(git rev-parse --show-toplevel)/workbench/pulumi/seed-console.sh"
+
 PULUMI_ENV := export \
 	PULUMI_ACCESS_TOKEN=$(TOKEN) \
 	PULUMI_CONFIG_PASSPHRASE=workbench \
@@ -24,35 +46,81 @@ PULUMI_ENV := export \
 	PULUMI_SKIP_UPDATE_CHECK=true \
 	PULUMI_SKIP_CONFIRMATIONS=true
 
-## Start or reuse the stable Postgres container used by the Pulumi workbench.
-db-up:
-	@$(IN_CONTAINER) sh -lc 'if docker inspect $(DB_CONTAINER) >/dev/null 2>&1; then \
-		docker start $(DB_CONTAINER) >/dev/null; \
-	else \
-		docker run --name $(DB_CONTAINER) \
-			-e POSTGRES_DB=$(DB_NAME) \
-			-e POSTGRES_USER=$(DB_USER) \
-			-e POSTGRES_PASSWORD=$(DB_PASSWORD) \
-			-p 127.0.0.1:$(DB_PORT):5432 \
-			-v $(DB_VOLUME):/var/lib/postgresql \
-			-d $(DB_IMAGE) >/dev/null; \
-	fi'
-	@$(IN_CONTAINER) sh -lc 'for i in $$(seq 1 30); do docker exec $(DB_CONTAINER) pg_isready -U $(DB_USER) -d $(DB_NAME) >/dev/null 2>&1 && exit 0; sleep 1; done; echo "Postgres did not become ready"; exit 1'
-	@echo "Workbench Postgres is ready on localhost:$(DB_PORT)"
+## Start the stable Postgres and mock IdP services declared in compose.yml.
+infra-up:
+	@$(IN_CONTAINER) sh -lc 'export DOCKER_CONFIG=$(IDP_DOCKER_CFG) \
+		DB_IMAGE=$(DB_IMAGE) DB_VOLUME=$(DB_VOLUME) DB_PORT=$(DB_PORT) DB_NAME=$(DB_NAME) DB_USER=$(DB_USER) DB_PASSWORD=$(DB_PASSWORD) \
+		IDP_IMAGE=$(IDP_IMAGE) IDP_UPSTREAM_PORT=$(IDP_UPSTREAM_PORT); \
+		mkdir -p "$$DOCKER_CONFIG"; \
+		for container in state-db-workbench-postgres state-db-workbench-idp; do \
+			if docker inspect "$$container" >/dev/null 2>&1 && \
+				[ "$$(docker inspect "$$container" --format "{{index .Config.Labels \"com.docker.compose.project\"}}")" != state-db-workbench ]; then \
+				docker rm -f "$$container" >/dev/null; \
+			fi; \
+			done; \
+		docker volume create $(DB_VOLUME) >/dev/null; \
+		docker compose -f "$$(git rev-parse --show-toplevel)/workbench/pulumi/compose.yml" up -d --wait; \
+		for i in $$(seq 1 30); do curl -fsS http://host.docker.internal:$(IDP_UPSTREAM_PORT)/default/.well-known/openid-configuration >/dev/null && exit 0; sleep 1; done; \
+		echo "Mock IdP did not become ready"; exit 1'
+	@echo "Workbench infrastructure is ready (Postgres :$(DB_PORT), mock IdP behind :$(CONSOLE_PORT)/default)"
 
-## Run the app in dev mode against the stable workbench Postgres database.
-app: db-up
-	$(IN_CONTAINER) sh -lc 'cd "$$(git rev-parse --show-toplevel)" && env \
-		QUARKUS_DATASOURCE_DEVSERVICES_ENABLED=false \
-		QUARKUS_DATASOURCE_JDBC_URL=jdbc:postgresql://host.docker.internal:$(DB_PORT)/$(DB_NAME) \
-		QUARKUS_DATASOURCE_USERNAME=$(DB_USER) \
-		QUARKUS_DATASOURCE_PASSWORD=$(DB_PASSWORD) \
-		STATE_DB_BOOTSTRAP_ORG_NAME=$(ORG) \
-		STATE_DB_BOOTSTRAP_ORG_DISPLAY_NAME="Acme Workbench" \
-		STATE_DB_BOOTSTRAP_ADMIN_EMAIL=admin@example.test \
-		STATE_DB_BOOTSTRAP_ADMIN_DISPLAY_NAME="Workbench Admin" \
-		STATE_DB_BOOTSTRAP_ADMIN_TOKEN_HASH=$(TOKEN_HASH) \
-		mvn -f modules/pom.xml -pl app -am -Dquarkus.test.continuous-testing=disabled quarkus:dev'
+## Stop infrastructure while preserving the Postgres volume.
+infra-down:
+	-$(IN_CONTAINER) sh -lc 'export DOCKER_CONFIG=$(IDP_DOCKER_CFG) DB_VOLUME=$(DB_VOLUME); docker compose -f "$$(git rev-parse --show-toplevel)/workbench/pulumi/compose.yml" down'
+
+## Compatibility aliases for the previous granular startup commands.
+db-up: infra-up
+idp-up: infra-up
+
+idp-down:
+	-$(IN_CONTAINER) sh -lc 'export DOCKER_CONFIG=$(IDP_DOCKER_CFG); docker compose -f "$$(git rev-parse --show-toplevel)/workbench/pulumi/compose.yml" stop idp'
+
+## Seed the console OIDC admin ($(ADMIN_SUB)) as an owner of org $(ORG) so /api/user shows orgs.
+## Idempotent; `app` runs this automatically in the background, but you can re-run it standalone.
+console-seed: db-up
+	$(IN_CONTAINER) sh -lc '$(SEED_CONSOLE)'
+
+## Run the full console dev stack against the stable workbench Postgres: the mock IdP, Quarkus in dev
+## mode (hot reload, :8080), and the bun console dev server (HMR, :$(CONSOLE_PORT)) proxying /api and
+## /pulumi to Quarkus. Open the console at http://localhost:$(CONSOLE_PORT). The console OIDC provider
+## is auto-provisioned from the STATE_DB_OIDC_BOOTSTRAP_* vars; sign in with subject "$(ADMIN_SUB)" to
+## be an admin. Ctrl-C stops Quarkus and the console dev server (the IdP and DB stay up; `cmd=reset`
+## tears everything down). The Pulumi CLI targets :8080 directly and is unaffected.
+app: infra-up
+	$(IN_CONTAINER) bash -lc 'cd "$$(git rev-parse --show-toplevel)" || exit 1; \
+		( cd modules/web && bun install >/dev/null 2>&1 && \
+			exec env PORT=$(CONSOLE_PORT) OIDC_PROXY_TARGET=http://host.docker.internal:$(IDP_UPSTREAM_PORT) bun dev.ts ) & \
+		CONSOLE_PID=$$!; \
+		( $(SEED_CONSOLE) ) & \
+		SEED_PID=$$!; \
+		cleanup() { \
+			kill $$CONSOLE_PID $$SEED_PID $$APP_PID 2>/dev/null || true; \
+			wait $$CONSOLE_PID $$SEED_PID $$APP_PID 2>/dev/null || true; \
+		}; \
+		trap cleanup EXIT INT TERM; \
+		env \
+			QUARKUS_DATASOURCE_DEVSERVICES_ENABLED=false \
+			QUARKUS_DATASOURCE_JDBC_URL=jdbc:postgresql://host.docker.internal:$(DB_PORT)/$(DB_NAME) \
+			QUARKUS_DATASOURCE_USERNAME=$(DB_USER) \
+			QUARKUS_DATASOURCE_PASSWORD=$(DB_PASSWORD) \
+			QUARKUS_HTTP_PROXY_PROXY_ADDRESS_FORWARDING=true \
+			QUARKUS_HTTP_PROXY_ENABLE_FORWARDED_HOST=true \
+			QUARKUS_HTTP_PROXY_ENABLE_FORWARDED_PREFIX=true \
+			STATE_DB_BOOTSTRAP_ORG_NAME=$(ORG) \
+			STATE_DB_BOOTSTRAP_ORG_DISPLAY_NAME="Acme Workbench" \
+			STATE_DB_BOOTSTRAP_ADMIN_EMAIL=admin@example.test \
+			STATE_DB_BOOTSTRAP_ADMIN_DISPLAY_NAME="Workbench Admin" \
+			STATE_DB_BOOTSTRAP_ADMIN_TOKEN_HASH=$(TOKEN_HASH) \
+			STATE_DB_OIDC_BOOTSTRAP_NAME=$(OIDC_PROVIDER) \
+			STATE_DB_OIDC_BOOTSTRAP_ISSUER=$(OIDC_ISSUER) \
+			STATE_DB_OIDC_BOOTSTRAP_CLIENT_ID=$(OIDC_CLIENT_ID) \
+			STATE_DB_OIDC_BOOTSTRAP_CLIENT_SECRET=$(OIDC_CLIENT_SECRET) \
+			STATE_DB_OIDC_DEFAULT_PROVIDER=$(OIDC_PROVIDER) \
+			STATE_DB_SESSION_ENCRYPTION_SECRET=state-db-workbench-session-secret-32-bytes \
+			STATE_DB_ADMIN_SUBJECTS=$(OIDC_ISSUER):$(ADMIN_SUB) \
+			mvn -f modules/pom.xml -pl app -am -Dquarkus.test.continuous-testing=disabled quarkus:dev & \
+		APP_PID=$$!; \
+		wait -n $$CONSOLE_PID $$APP_PID'
 
 ## Fail early with a useful message if the state-db app is not running.
 check-app:
@@ -100,8 +168,8 @@ force-unlock:
 		-c "UPDATE stacks SET active_update_id = NULL, updated_at = now() WHERE active_update_id IN (SELECT id FROM stack_updates WHERE status IN ('\''failed'\'', '\''cancelled'\''))" \
 		-c "DELETE FROM stack_locks"'
 
-## Delete the workbench DB container, volume, and local Pulumi home.
+## Delete all workbench infrastructure, its Postgres volume, and the local Pulumi home.
 reset:
-	-$(IN_CONTAINER) sh -lc 'docker rm -f $(DB_CONTAINER)'
+	-$(IN_CONTAINER) sh -lc 'export DOCKER_CONFIG=$(IDP_DOCKER_CFG) DB_VOLUME=$(DB_VOLUME); docker compose -f "$$(git rev-parse --show-toplevel)/workbench/pulumi/compose.yml" down -v --remove-orphans'
 	-$(IN_CONTAINER) sh -lc 'docker volume rm -f $(DB_VOLUME)'
 	$(IN_CONTAINER) sh -lc 'rm -rf "$$(git rev-parse --show-toplevel)/workbench/.pulumi-home"'

@@ -27,7 +27,7 @@ class TokenAuthFilterPredicateTest {
   @Test
   void nonPulumiApiPathsAreNotGated() {
     assertFalse(TokenAuthFilter.requiresAuth("GET", "/q/health"));
-    assertFalse(TokenAuthFilter.requiresAuth("GET", "/api/me"));
+    assertFalse(TokenAuthFilter.requiresAuth("GET", "/api/user"));
     assertFalse(TokenAuthFilter.requiresAuth("GET", "/"));
     assertFalse(TokenAuthFilter.requiresAuth("GET", "/pulumi"));
     // Trailing slash on the prefix means /pulumi/api alone is not in scope; only paths

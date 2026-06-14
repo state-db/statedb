@@ -659,22 +659,22 @@ pulumi stack export | jq '.deployment.resources // []'
 
 ## Phase 8 — Console (Wave 2 begins)
 
-### Slice 23 · OIDC console foundation + `/api/me`
+### Slice 23 · OIDC console foundation + `/api/user`
 
 **Scope**
 
 - `quarkus-oidc` dependency in `console-api/` in `web-app` mode.
 - `TenantConfigResolver` reading `oidc_providers` at request time.
 - Bootstrap upsert from `STATE_DB_OIDC_BOOTSTRAP_*` env at boot.
-- `/api/auth/login/{provider}` + `/api/auth/callback/{provider}` wired through Quarkus.
-- Real `/api/me` replacing the placeholder: returns `{ id, email, displayName, isAdmin, orgs[] }`.
+- Default `/api/auth/login`, explicit `/api/auth/login/{provider}`, and `/api/auth/callback/{provider}` wired through Quarkus.
+- Current-user `/api/user`: returns `{ id, email, name, siteAdmin, organizations[] }`.
 - Session cookie scoped to `Path=/api/`.
 
 **Out of scope.** CSRF filter (next slice); break-glass (Slice 25); CLI token mint (Slice 27).
 
-**Tests.** Integration test using a fake OIDC provider container (Keycloak in Testcontainers, or `quarkus-oidc`'s test harness). Login + `/api/me` round-trips.
+**Tests.** Integration test using a fake OIDC provider container (Keycloak in Testcontainers, or `quarkus-oidc`'s test harness). Login + `/api/user` round-trips.
 
-**Manual verification.** Configure bootstrap env to point at Google or a local Keycloak; open browser at `/api/me` → 401 → `/api/auth/login/google` → return → `/api/me` 200.
+**Manual verification.** Configure bootstrap/default-provider env to point at Google or a local Keycloak; open browser at `/api/user` → 401 → `/api/auth/login` → return → `/api/user` 200.
 
 ---
 

@@ -16,6 +16,7 @@ import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
 import org.hibernate.exception.ConstraintViolationException;
+import org.hibernate.id.uuid.UuidVersion7Strategy;
 
 /**
  * Appends a batch of Pulumi journal entries.
@@ -186,7 +187,7 @@ public class JournalAppender {
                       + " operation_type, begin_journal_seq) "
                       + "VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8) "
                       + "ON CONFLICT (update_id, operation_id) DO NOTHING")
-              .setParameter(1, UUID.randomUUID())
+              .setParameter(1, UuidVersion7Strategy.INSTANCE.generateUuid(null))
               .setParameter(2, stackId)
               .setParameter(3, updateId)
               .setParameter(4, opId)

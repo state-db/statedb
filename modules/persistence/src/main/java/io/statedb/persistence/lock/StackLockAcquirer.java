@@ -12,6 +12,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
+import org.hibernate.id.uuid.UuidVersion7Strategy;
 
 /**
  * Acquires the per-stack {@link StackLock}. The single {@code INSERT ... ON CONFLICT (stack_id) DO
@@ -37,7 +38,7 @@ public class StackLockAcquirer {
       Integer journalVersion,
       Map<String, Object> tags) {
 
-    UUID lockId = UUID.randomUUID();
+    UUID lockId = UuidVersion7Strategy.INSTANCE.generateUuid(null);
     // 122 random bits from SecureRandom. The bearer is a short-lived secret
     // (≤ leaseTtl, hard-capped by maxLeaseLifetime) and is rotated on every
     // /renew_lease, so 122 bits is well past brute-force range for this

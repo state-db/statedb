@@ -5,12 +5,30 @@ import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.Table;
 import java.util.List;
+import java.util.Optional;
 import org.hibernate.annotations.JdbcTypeCode;
 import org.hibernate.type.SqlTypes;
 
 @Entity
 @Table(name = "oidc_providers")
 public class OidcProvider extends TimestampedEntity {
+
+  /** Immutable connection settings consumed by Quarkus's dynamic OIDC tenant resolver. */
+  public record ConnectionConfig(
+      String name, String issuerUrl, String clientId, String clientSecret, List<String> scopes) {}
+
+  public static Optional<ConnectionConfig> findEnabled(String name) {
+    return OidcProvider.<OidcProvider>find("name = ?1 and enabled = true", name)
+        .firstResultOptional()
+        .map(
+            provider ->
+                new ConnectionConfig(
+                    provider.name,
+                    provider.issuerUrl,
+                    provider.clientId,
+                    provider.clientSecret,
+                    provider.scopes));
+  }
 
   @Column(nullable = false, unique = true)
   public String name;

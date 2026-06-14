@@ -4,7 +4,7 @@ import com.cedarpolicy.model.entity.Entity;
 import com.cedarpolicy.value.EntityUID;
 import com.cedarpolicy.value.PrimString;
 import io.statedb.persistence.auth.AuthenticatedPrincipal;
-import io.statedb.persistence.bootstrap.BootstrapProvisioner;
+import io.statedb.persistence.identity.AdminAllowList;
 import io.statedb.persistence.identity.OrgMember;
 import io.statedb.persistence.identity.Organization;
 import jakarta.enterprise.context.ApplicationScoped;
@@ -23,6 +23,8 @@ public class OrgEntityLoader implements EntityLoader<Organization> {
 
   @Inject PrincipalRoleResolver roleResolver;
 
+  @Inject AdminAllowList adminAllowList;
+
   @Override
   public Optional<LoadedResource> load(InvocationContext ctx, AuthenticatedPrincipal principal) {
     String orgName = pathParam(ctx, "org");
@@ -31,7 +33,7 @@ public class OrgEntityLoader implements EntityLoader<Organization> {
       return Optional.empty();
     }
     Optional<OrgMember.Role> role = roleResolver.resolve(principal, org.id);
-    if (role.isEmpty() && !isAdmin(principal)) {
+    if (role.isEmpty() && !adminAllowList.isAdmin(principal.iss(), principal.sub())) {
       return Optional.empty();
     }
 
@@ -58,10 +60,5 @@ public class OrgEntityLoader implements EntityLoader<Organization> {
       }
     }
     throw new IllegalStateException("missing @PathParam(\"" + name + "\")");
-  }
-
-  private static boolean isAdmin(AuthenticatedPrincipal principal) {
-    return BootstrapProvisioner.BOOTSTRAP_ISS.equals(principal.iss())
-        && BootstrapProvisioner.BOOTSTRAP_SUB.equals(principal.sub());
   }
 }

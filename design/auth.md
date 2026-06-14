@@ -40,15 +40,17 @@ Every authenticated request resolves to exactly one of these:
 
 ### Principal resolution
 
-A request enters one of three filters depending on path; each constructs the principal and hands off to the PDP:
+A request enters the authentication mechanism for its surface:
 
 ```
 /pulumi/api/* (non-lease)  →  TokenAuthFilter   → Principal{User|ServiceAccount}
 /pulumi/api/* (lease)      →  LeaseTokenFilter  → Principal{Lease}
-/api/*                     →  OidcSessionFilter → Principal{User}
+/api/*                     →  Quarkus HTTP permission + quarkus-oidc session
 ```
 
-The principal is set on the JAX-RS `SecurityContext` and on a request-scoped `@CurrentPrincipal` CDI bean. Handlers and the authorization interceptor read from the bean.
+The Pulumi filters publish an application principal for Cedar authorization. Console authentication
+stays in Quarkus's `SecurityIdentity`; console resources resolve application data from its verified
+OIDC issuer and subject only when they need it.
 
 ---
 
@@ -80,21 +82,41 @@ This gets us, from a single extension:
 - Multi-provider via `TenantConfigResolver`. We register one `TenantConfigResolver` that reads `oidc_providers` rows.
 - A signed/encrypted session cookie generated and verified by the extension; we never roll our own session crypto.
 
-The SPA contract is: HttpOnly cookie scoped to `/api/`, opaque to JavaScript. From the SPA's perspective, "logged in" means "fetch /api/me succeeded".
+The SPA contract is: HttpOnly cookie scoped to `/api/`, opaque to JavaScript. From the SPA's perspective, "logged in" means "fetch /api/user succeeded".
 
 #### Login flow
 
 ```
-SPA loads → fetch /api/me
+SPA loads → fetch /api/user
   ├─ 200 → render console
-  └─ 401 → location = /api/auth/login/<provider_name>
-            → Quarkus redirect to IdP
+  └─ 401 → location = /api/auth/login
+            → /api/auth/login selects STATE_DB_OIDC_DEFAULT_PROVIDER,
+              validates it (unknown/disabled → 404),
+              then 303 → /api/auth/flow/<provider_name>
+            → authenticated HTTP permission on /api/auth/flow → Quarkus redirect to IdP
             → IdP → /api/auth/callback/<provider_name>
-            → Quarkus sets session cookie
-            → 302 → /  (SPA reloads; /api/me succeeds)
+            → Quarkus exchanges the code
+            → AuthenticationCompletionAction upserts the user
+            → Quarkus sets the session cookie
+            → 302 → /api/auth/flow/<provider_name>
+            → 303 → /  (SPA reloads; /api/user succeeds)
 ```
 
-`/api/auth/login/{provider_name}` and `/api/auth/callback/{provider_name}` are handled by `quarkus-oidc`. We register one tenant per `oidc_providers` row at startup, with a `TenantConfigResolver` that picks the tenant by path.
+Authentication runs with `quarkus.http.auth.proactive=false`. Quarkus HTTP permissions permit only
+`/api/auth/login` and `/api/auth/login/*`; every other `/api/*` path requires an authenticated
+identity. With no tenant selected for an anonymous data request, Quarkus returns **401** rather than
+choosing an IdP. The public login route validates the provider before redirecting to the protected
+`/api/auth/flow/{provider}` route, whose challenge starts the code flow. The callback is owned by the
+OIDC mechanism. An `AuthenticationCompletionAction` upserts the user after token validation and
+before the session cookie is issued, so provisioning failure fails authentication. Tenants are
+**dynamic**: a `TenantConfigResolver` builds a `web-app` tenant from the matching enabled
+`oidc_providers` row, using the path on `/flow` and `/callback` and the session cookie on data routes.
+The default tenant is disabled (`quarkus.oidc.tenant-enabled=false`).
+
+The common entrypoint is `/api/auth/login`, which selects the provider named by
+`STATE_DB_OIDC_DEFAULT_PROVIDER`. Provider-specific links use `/api/auth/login/{provider}` directly;
+this supports organization or enterprise SSO links without making the SPA infer tenancy. A provider
+chooser can be added later if deployments with multiple interactive providers become common.
 
 #### Cookie semantics
 
@@ -173,10 +195,11 @@ Actions are named IAM-style as `resource:Operation` (lowercase service prefix = 
 | `token:Revoke` | `DELETE /api/tokens/{id}` | Owner or admin |
 | `provider:Manage` | `POST/PUT/DELETE /api/admin/providers` | Admin-only |
 | `compaction:Trigger` | `POST /api/admin/stacks/{ref}/compact` | Admin-only |
-| `user:ReadSelf` | `GET /api/me` | Permitted to any authenticated principal |
 | `user:ReadOthers` | `GET /api/admin/users` | Admin-only |
 
-Pulumi-internal endpoints not listed (`GET /api/user`, `GET /api/user/organizations/default`) are protected with `user:ReadSelf` against the calling user.
+Pulumi-internal identity endpoints are protected by token authentication. They return only the
+identity and organization already bound to the validated token, so there is no caller-selected
+resource requiring a Cedar decision.
 
 The action set is **closed** for Wave 1. Adding an action requires a schema bump and a policy update; this is intentional friction.
 
@@ -454,7 +477,7 @@ For admin principals (`principal in Role::"admin"`), the loader skips the org ga
 ```
 1. PreMatchingFilter (path routing decisions: which surface)
 2. CsrfFilter                (only on /api/* non-GET; rejects before any auth work)
-3. TokenAuthFilter | OidcSessionFilter | LeaseTokenFilter   (mutually exclusive by path)
+3. Quarkus OIDC | TokenAuthFilter | LeaseTokenFilter   (selected by path and credentials)
 4. (resource method dispatched)
 5. AuthorizeInterceptor      (CDI interceptor on the resource method; wraps invocation)
 6. AuthorizationCoverageGuard (response filter; see below)
@@ -494,10 +517,6 @@ permit(principal in Role::"member", action in Action::"stack:WriteAccess", resou
 @id("ReadOnlyAccess")
 permit(principal in Role::"viewer", action in Action::"stack:ReadOnlyAccess", resource);
 
-// self.cedar — any authenticated principal may read its own user record.
-@id("users-can-read-self")
-permit(principal, action == Action::"user:ReadSelf", resource)
-when { principal == resource };
 ```
 
 **Explicit Deny.** A `forbid` is IAM's signature deny-overrides-allow rule: it wins over every

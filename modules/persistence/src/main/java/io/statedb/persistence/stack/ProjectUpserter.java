@@ -4,6 +4,7 @@ import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 import jakarta.persistence.EntityManager;
 import java.util.UUID;
+import org.hibernate.id.uuid.UuidVersion7Strategy;
 
 /**
  * Concurrency-safe project upsert shared by {@link StackCreator} and {@link StackRenamer}: {@code
@@ -20,7 +21,7 @@ public class ProjectUpserter {
     em.createNativeQuery(
             "INSERT INTO projects (id, org_id, name) VALUES (?1, ?2, ?3) "
                 + "ON CONFLICT (org_id, name) DO NOTHING")
-        .setParameter(1, UUID.randomUUID())
+        .setParameter(1, UuidVersion7Strategy.INSTANCE.generateUuid(null))
         .setParameter(2, orgId)
         .setParameter(3, name)
         .executeUpdate();

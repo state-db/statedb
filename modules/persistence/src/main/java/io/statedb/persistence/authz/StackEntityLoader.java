@@ -4,7 +4,7 @@ import com.cedarpolicy.model.entity.Entity;
 import com.cedarpolicy.value.EntityUID;
 import com.cedarpolicy.value.PrimString;
 import io.statedb.persistence.auth.AuthenticatedPrincipal;
-import io.statedb.persistence.bootstrap.BootstrapProvisioner;
+import io.statedb.persistence.identity.AdminAllowList;
 import io.statedb.persistence.identity.OrgMember;
 import io.statedb.persistence.stack.StackNotFoundException;
 import io.statedb.persistence.stack.StackRef;
@@ -26,6 +26,8 @@ public class StackEntityLoader implements EntityLoader<StackRef> {
 
   @Inject PrincipalRoleResolver roleResolver;
 
+  @Inject AdminAllowList adminAllowList;
+
   private String org;
   private String project;
   private String stack;
@@ -43,7 +45,7 @@ public class StackEntityLoader implements EntityLoader<StackRef> {
     Optional<OrgMember.Role> role = roleResolver.resolve(principal, r.orgId());
     // Hard org boundary: the principal must have a role in the resource's org (or be admin).
     // A non-member never even sees the resource — the denial collapses to 404, not 403.
-    if (role.isEmpty() && !isAdmin(principal)) {
+    if (role.isEmpty() && !adminAllowList.isAdmin(principal.iss(), principal.sub())) {
       return Optional.empty();
     }
     return Optional.of(new LoadedResource(stackResource(r), role.orElse(null)));
@@ -96,10 +98,5 @@ public class StackEntityLoader implements EntityLoader<StackRef> {
       }
     }
     throw new IllegalStateException("missing @PathParam(\"" + name + "\")");
-  }
-
-  private static boolean isAdmin(AuthenticatedPrincipal principal) {
-    return BootstrapProvisioner.BOOTSTRAP_ISS.equals(principal.iss())
-        && BootstrapProvisioner.BOOTSTRAP_SUB.equals(principal.sub());
   }
 }

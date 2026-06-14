@@ -6,6 +6,23 @@ quarkus:
     # Pulumi's CLI gzips request bodies on `/batch-decrypt` (and may on other endpoints in
     # future). Vert.x only decompresses when this is on; default is false.
     enable-decompression: true
+    auth:
+      # Lazy authentication keeps public routes public until they ask for SecurityIdentity. HTTP
+      # permissions own the console boundary: only provider discovery and provider validation are
+      # public; every other /api/* route requires a Quarkus-authenticated OIDC session.
+      proactive: false
+      permission:
+        console-public:
+          paths: /api/auth/login,/api/auth/login/*
+          policy: permit
+        console-authenticated:
+          paths: /api/*
+          policy: authenticated
+  oidc:
+    # Console providers are data: ProviderTenantConfigResolver builds a web-app tenant per request
+    # from the enabled oidc_providers rows. The static default tenant is intentionally disabled so
+    # startup doesn't demand an auth-server-url and the Pulumi surface stays untouched.
+    tenant-enabled: false
   datasource:
     db-kind: postgresql
   flyway:
@@ -51,7 +68,15 @@ state-db:
 # default 60s ceiling can fire mid-test (Dev Services boot + Flyway + first
 # connection). Five minutes is generous; trim later if it masks real hangs.
 "%test":
+  state-db:
+    oidc:
+      default-provider: wiremock
+    session:
+      encryption-secret: state-db-test-session-secret-32-bytes
   quarkus:
+    http:
+      # Random free port keeps @QuarkusTest isolated from other local Quarkus processes.
+      test-port: 0
     scheduler:
       enabled: false
     transaction-manager:

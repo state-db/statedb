@@ -10,7 +10,7 @@ import com.cedarpolicy.model.entity.Entities;
 import com.cedarpolicy.model.entity.Entity;
 import com.cedarpolicy.value.EntityUID;
 import io.statedb.persistence.auth.AuthenticatedPrincipal;
-import io.statedb.persistence.bootstrap.BootstrapProvisioner;
+import io.statedb.persistence.identity.AdminAllowList;
 import io.statedb.persistence.identity.OrgMember;
 import io.statedb.persistence.policy.PolicySetCache;
 import jakarta.enterprise.context.ApplicationScoped;
@@ -27,6 +27,8 @@ public class Authorizer {
   private final AuthorizationEngine engine = new BasicAuthorizationEngine();
 
   @Inject PolicySetCache policySetCache;
+
+  @Inject AdminAllowList adminAllowList;
 
   public AuthorizationDecision authorize(
       AuthenticatedPrincipal principal,
@@ -58,22 +60,17 @@ public class Authorizer {
   }
 
   // The principal's role is the one resolved for THIS resource's org (or none, e.g. for an admin
-  // acting outside their memberships, or a user:ReadSelf request). The User uid is the global
-  // users.id so it matches policy_grants.principal_user_id; no attributes are needed.
-  private static Entity principalEntity(AuthenticatedPrincipal principal, OrgMember.Role role) {
+  // acting outside their memberships). The User uid is the global users.id so it matches
+  // policy_grants.principal_user_id; no attributes are needed.
+  private Entity principalEntity(AuthenticatedPrincipal principal, OrgMember.Role role) {
     Set<EntityUID> parents = new HashSet<>();
     if (role != null) {
       parents.add(CedarEntities.role(role.name()));
     }
-    if (isAdmin(principal)) {
+    if (adminAllowList.isAdmin(principal.iss(), principal.sub())) {
       parents.add(ADMIN);
     }
     return new Entity(CedarEntities.user(principal.userId()), Map.of(), parents);
-  }
-
-  private static boolean isAdmin(AuthenticatedPrincipal principal) {
-    return BootstrapProvisioner.BOOTSTRAP_ISS.equals(principal.iss())
-        && BootstrapProvisioner.BOOTSTRAP_SUB.equals(principal.sub());
   }
 
   static Set<Entity> roleHierarchy() {

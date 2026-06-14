@@ -66,8 +66,3 @@ action "stack:Rename" in ["stack:WriteAccess"] appliesTo {
   principal: [User],
   resource: [Stack]
 };
-
-action "user:ReadSelf" appliesTo {
-  principal: [User],
-  resource: [User]
-};
