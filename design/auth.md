@@ -124,9 +124,46 @@ The session cookie is generated and verified by `quarkus-oidc`. It is HttpOnly, 
 
 `quarkus-oidc` rotates the underlying JWE key from `quarkus.oidc.token-state-manager.encryption-secret` (env-supplied). Rotation is the standard redeploy-with-overlap dance.
 
-#### CLI token mint
+#### CLI token mint — native `pulumi login`
 
-The cli-mint flow uses `quarkus-oidc`'s `OidcConfigurationMetadata` and `OidcClientFactory` to construct an authz URL with `prompt=none` and a custom `state` payload (`intent=cli-mint`, signed via the same key as session state). The callback at `/api/auth/cli-mint/callback` is a regular JAX-RS endpoint — it does not go through the extension's callback route, because we want to inspect the result and write a row to `api_tokens` rather than mint a session. The OIDC token validation in the callback uses `OidcProviderClient` to exchange the code and verify the resulting id_token. End-to-end semantics (silent re-auth, IdP-disablement propagation within the TTL, one-time-display of the raw token) are described in `architecture.md` "CLI token issuance".
+We do **not** ship a bespoke login CLI or drive a second OIDC round trip. Pulumi's own
+`pulumi login <backend>` already implements the AWS-SSO-style browser flow against *any* backend
+(not just `app.pulumi.com`): it starts a loopback listener on `127.0.0.1:<port>`, generates a
+nonce, opens the browser to `<console>/cli-login?cliSessionPort=&cliSessionNonce=`, then captures
+the token from the loopback redirect and writes its own `credentials.json`. We implement the
+console side of that contract (`pkg/backend/httpstate/backend.go` — `loginWithBrowser` /
+`serveBrowserLoginServer`), so `pulumi login` works natively. The token's freshness and MFA come
+from the SSO session itself — re-running `pulumi login` re-establishes both — exactly as
+`aws sso login` gates short-lived credentials behind a daily, MFA'd SSO session.
+
+Three routes cooperate, because the session cookie is scoped to `/api/` (so Pulumi's root-level
+`/cli-login` cannot see it):
+
+- **`GET /cli-login`** — the entry point Pulumi opens (console root). Public; it validates
+  `cliSessionPort`/`cliSessionNonce` and 303-redirects into the `/api/` space so the session cookie
+  is sent and quarkus-oidc can challenge an anonymous caller.
+- **`GET /api/auth/cli-login`** — the authenticated handler. The `/api/*` HTTP permission plus
+  `ProviderTenantConfigResolver`'s self-start drive a fresh SSO login if there is no session
+  (quarkus-oidc restores this URL after the callback); with a session it renders a human approval
+  page and does not mint a token.
+- **`POST /api/auth/cli-login/approve`** — validates the short-lived signed approval request, binds
+  it to the current OIDC user, and only then mints an account-scoped token and 302s to
+  `http://127.0.0.1:<port>/?accessToken=&nonce=`. The redirect host is hard-coded to `127.0.0.1` —
+  only the port varies — so a crafted link cannot point the token at an external host. The token in
+  the loopback URL is the same pattern Pulumi Cloud itself uses; the listener is the user's own
+  ephemeral, single-use, loopback-only process.
+- **`GET /welcome/cli`** — the cosmetic page Pulumi's listener bounces the browser to after it has
+  captured the token (`no-store`, `no-referrer`).
+
+The minted token carries a **credential scope** of `all_current_memberships`
+(`api_tokens.kind='oidc'`, `org_id` NULL): it authenticates the actor, and authorization is resolved
+per request against the resource's org — the same path a console session takes (see "Role
+resolution"). This matches Pulumi's own token model, where the org is chosen by the stack path, not
+the token, so minting needs no org argument and no Cedar gate (it can never grant more than the
+user's live memberships allow). No mint secret and no second OIDC round trip are required; the live
+console session plus an explicit "Allow access" click are the gates. The approval prevents token
+minting on a mere top-level GET and matches the user checkpoint in flows such as `aws sso login`,
+without claiming to defend against a compromised local machine.
 
 #### Logout
 
@@ -189,7 +226,6 @@ Actions are named IAM-style as `resource:Operation` (lowercase service prefix = 
 | `org:Read` | `GET /api/orgs/{name}` | Lists projects, stacks, members |
 | `org:Admin` | `/api/admin/orgs/...`, member management | |
 | `org:AddMember`, `org:RemoveMember` | Admin endpoints | |
-| `token:MintOidc` | `GET /api/auth/cli-mint` | User mints for self via OIDC re-auth |
 | `token:MintServiceAccount` | `POST /api/admin/tokens` | Admin-only |
 | `token:List` | `GET /api/tokens` | Own tokens; admin sees all |
 | `token:Revoke` | `DELETE /api/tokens/{id}` | Owner or admin |
@@ -291,12 +327,21 @@ only role not bounded by org membership.
 
 ### Role resolution
 
-`PrincipalRoleResolver` is the single tenancy seam — `(principal, resourceOrgId) → Optional<Role>`:
+`PrincipalRoleResolver` is the single tenancy boundary — `(actor, credentialScope, resourceOrgId) →
+Optional<Role>`:
 
-- **Token principal** (CLI; scoped to one org) → its role iff `resourceOrgId == token.org`, else none.
-  This is what enforces token org-scoping: a token grants nothing outside its org even if the user
-  is a member elsewhere.
-- **Session principal** (console; org-agnostic) → `org_members(userId, resourceOrgId).role`, else none.
+- **Actor** (`userId`, `iss`, `sub`) says who is acting. It never carries an org.
+- **Credential scope** says which orgs this credential may be used against.
+- **Resource org** comes from the target stack/org row or path resolution, never from the credential.
+
+Credential scopes:
+
+- **`single_org`** (`service_account`; persisted as `api_tokens.org_id`) → the credential's cached
+  role iff `resourceOrgId == credential.org`, else none. This enforces token org-scoping: a CI token
+  grants nothing outside its org even if the user is a member elsewhere.
+- **`all_current_memberships`** (console session, account-scoped `oidc` CLI token) →
+  `org_members(userId, resourceOrgId).role`, else none. Membership is re-checked on every request,
+  so revoking it instantly narrows what the credential can do.
 
 The loader resolves the role once (it already holds the resource's org id from the
 `stacks JOIN projects JOIN organizations` resolution), uses it for the hard org boundary — *no role
@@ -447,7 +492,7 @@ Authorization is fail-closed by construction: a JAX-RS method on a protected rou
 - `@Authorize(action=..., resource=...)`, or
 - `@AuthorizeExplicit("<reason>")`.
 
-Methods on routes explicitly listed in an exemption set (`/api/auth/login/*`, `/api/auth/callback/*`, `/api/auth/local`, `/api/auth/cli-mint`, `/api/auth/cli-mint/callback`, `/api/auth/logout`) are skipped — these are pre-authentication or self-authenticating by definition. The exemption set is hard-coded in the test and adding to it requires a code change with security review.
+Methods on routes explicitly listed in an exemption set (`/api/auth/login/*`, `/api/auth/callback/*`, `/api/auth/local`, `/api/auth/cli-login`, `/api/auth/cli-login/approve`, `/api/auth/logout`) are skipped — these are pre-authentication or self-authenticating by definition (`/api/auth/cli-login` requires a session and only renders approval; `/api/auth/cli-login/approve` requires a session and a signed, user-bound approval request before minting). The exemption set is hard-coded in the test and adding to it requires a code change with security review.
 
 **Runtime safety net.** A request-scoped `AuthorizationContext` bean carries a single boolean `authorized`. `AuthorizeInterceptor` and any explicit `Authorizer.authorize(...)` call set it to `true` on `Allow`. `AuthorizationCoverageGuard` is a JAX-RS `ContainerResponseFilter` that, on every protected route, asserts `authorized == true` before the response is written. If the flag is unset, the guard logs an error (`request_id`, route, method) and overwrites the response with 500.
 

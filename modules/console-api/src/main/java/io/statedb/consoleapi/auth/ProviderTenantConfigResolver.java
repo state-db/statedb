@@ -46,7 +46,17 @@ public class ProviderTenantConfigResolver implements TenantConfigResolver {
   // provider name in the path. (/login needs no tenant — it just redirects to /flow.)
   private static final Pattern AUTH_ROUTE = Pattern.compile("^/api/auth/(?:flow|callback)/([^/]+)");
 
+  // The `pulumi login` browser flow lands here as a top-level navigation, so an unauthenticated
+  // hit should challenge the user to sign in — not 401 like an SPA fetch. Resolving the default
+  // provider here lets quarkus-oidc start the login and restore the cli-login URL after the
+  // callback, at which point the handler mints and redirects to the CLI's loopback listener.
+  private static final String CLI_LOGIN_PATH = "/api/auth/cli-login";
+
   @Inject EnabledOidcProviderLookup providerLookup;
+
+  @Inject
+  @ConfigProperty(name = "state-db.oidc.default-provider")
+  Optional<String> defaultProvider;
 
   // Encrypts the web-app session cookie. It must be stable across replicas and at least 32
   // characters; tests provide an explicit value rather than relying on Quarkus's weak fallback.
@@ -67,13 +77,22 @@ public class ProviderTenantConfigResolver implements TenantConfigResolver {
         () -> providerLookup.find(tenantId).map(this::toTenantConfig).orElse(null));
   }
 
-  private static String tenantId(RoutingContext context) {
+  private String tenantId(RoutingContext context) {
     String fromCookie = context.get(TENANT_ID_ATTRIBUTE);
     if (fromCookie != null && !fromCookie.isBlank()) {
       return fromCookie;
     }
-    Matcher m = AUTH_ROUTE.matcher(context.normalizedPath());
-    return m.find() ? m.group(1) : null;
+    String path = context.normalizedPath();
+    Matcher m = AUTH_ROUTE.matcher(path);
+    if (m.find()) {
+      return m.group(1);
+    }
+    // No session and a top-level cli-login navigation: challenge via the default provider so the
+    // user can sign in, rather than returning the SPA-style 401 that a fetch would expect.
+    if (path.startsWith(CLI_LOGIN_PATH) && defaultProvider.isPresent()) {
+      return defaultProvider.get();
+    }
+    return null;
   }
 
   private OidcTenantConfig toTenantConfig(OidcProvider.ConnectionConfig provider) {

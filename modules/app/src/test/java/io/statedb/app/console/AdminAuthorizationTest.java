@@ -11,7 +11,6 @@ import com.cedarpolicy.value.Value;
 import io.quarkus.test.junit.QuarkusTest;
 import io.quarkus.test.junit.QuarkusTestProfile;
 import io.quarkus.test.junit.TestProfile;
-import io.statedb.persistence.auth.ApiToken;
 import io.statedb.persistence.auth.AuthenticatedPrincipal;
 import io.statedb.persistence.authz.Authorizer;
 import io.statedb.persistence.authz.CedarResource;
@@ -64,8 +63,7 @@ class AdminAuthorizationTest {
   }
 
   private static AuthenticatedPrincipal session(String iss, String sub) {
-    return new AuthenticatedPrincipal(
-        UUID.randomUUID(), iss, sub, null, null, null, ApiToken.Kind.oidc, null);
+    return AuthenticatedPrincipal.consoleSession(UUID.randomUUID(), iss, sub);
   }
 
   private static CedarResource stack(String org, String proj, String name) {

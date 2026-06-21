@@ -3,7 +3,6 @@ package io.statedb.pulumiapi.secrets;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.google.crypto.tink.Aead;
 import io.statedb.persistence.authz.Authorize;
-import io.statedb.persistence.authz.CurrentPrincipal;
 import io.statedb.persistence.authz.StackEntityLoader;
 import io.statedb.persistence.secrets.ServiceSecretsAead;
 import io.statedb.persistence.stack.StackNotFoundException;
@@ -40,8 +39,6 @@ import java.util.UUID;
 public class SecretsResource {
 
   @Inject StackRefResolver resolver;
-
-  @Inject CurrentPrincipal currentPrincipal;
 
   @Inject ServiceSecretsAead secretsAead;
 
@@ -129,11 +126,15 @@ public class SecretsResource {
     }
   }
 
+  // The @Authorize(StackEntityLoader) interceptor has already resolved this exact
+  // org/project/stack and enforced the org boundary (PrincipalRoleResolver → 404 for a
+  // non-member, account-scoped principals included) before this body runs, so we trust the ref and
+  // do not re-compare against the token's org — which would be wrong for account-scoped tokens
+  // whose orgId is null. We only re-resolve to recover the stack id for the AAD.
   private byte[] aadFor(String org, String project, String stack) {
     StackRef ref =
         resolver
             .resolve(org, project, stack)
-            .filter(r -> r.orgId().equals(currentPrincipal.get().orgId()))
             .orElseThrow(() -> new StackNotFoundException(org, project, stack));
     return uuidBytes(ref.stackId());
   }

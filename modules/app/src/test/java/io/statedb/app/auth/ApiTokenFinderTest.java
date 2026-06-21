@@ -8,6 +8,8 @@ import io.quarkus.test.junit.QuarkusTest;
 import io.statedb.persistence.auth.ApiToken;
 import io.statedb.persistence.auth.ApiTokenFinder;
 import io.statedb.persistence.auth.AuthenticatedPrincipal;
+import io.statedb.persistence.auth.AuthenticatedPrincipal.CredentialKind;
+import io.statedb.persistence.auth.AuthenticatedPrincipal.CredentialScopeKind;
 import io.statedb.persistence.identity.OrgMember;
 import io.statedb.persistence.identity.Organization;
 import io.statedb.persistence.identity.User;
@@ -34,9 +36,10 @@ class ApiTokenFinderTest {
     assertTrue(resolved.isPresent(), "active token must resolve");
     AuthenticatedPrincipal p = resolved.get();
     assertEquals(f.user.id, p.userId());
-    assertEquals(f.org.id, p.orgId());
-    assertEquals(f.org.name, p.orgName());
-    assertEquals(ApiToken.Kind.service_account, p.kind());
+    assertEquals(CredentialKind.service_account_token, p.credential().kind());
+    assertEquals(CredentialScopeKind.single_org, p.credentialScope().kind());
+    assertEquals(f.org.id, p.credentialScope().orgId());
+    assertEquals(f.org.name, p.credentialScope().orgName());
     assertEquals(f.tokenId(), p.apiTokenId());
   }
 

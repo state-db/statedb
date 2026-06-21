@@ -202,8 +202,7 @@ class PolicyGrantAuthorizationTest {
   }
 
   private static AuthenticatedPrincipal session(UUID userId, String sub) {
-    return new AuthenticatedPrincipal(
-        userId, "local:test", "authz-" + sub, null, null, null, ApiToken.Kind.oidc, null);
+    return AuthenticatedPrincipal.consoleSession(userId, "local:test", "authz-" + sub);
   }
 
   private static AuthenticatedPrincipal token(
@@ -215,7 +214,7 @@ class PolicyGrantAuthorizationTest {
         orgId,
         orgName,
         role,
-        ApiToken.Kind.oidc,
+        ApiToken.Kind.service_account,
         UUID.randomUUID());
   }
 

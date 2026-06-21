@@ -42,6 +42,11 @@ class SecretsResourceTest {
   private static final ObjectMapper JSON = new ObjectMapper();
   private static final String ORG_NAME = "secrets-org";
   private static final String RAW_TOKEN = "secrets-token";
+  // Account-scoped oidc token (org_id null) for the same user — the kind `pulumi login` mints.
+  private static final String RAW_TOKEN_SSO = "secrets-sso-token";
+  // Account-scoped oidc token for a user who is NOT a member of the org.
+  private static final String RAW_TOKEN_OUTSIDER = "secrets-outsider-token";
+  private static final String OUTSIDER_SUB = "secrets-outsider";
   private static final String PROJECT = "secrets-proj";
 
   @Inject EntityManager em;
@@ -79,6 +84,29 @@ class SecretsResourceTest {
               t.description = "secrets-test";
               t.persistAndFlush();
 
+              ApiToken sso = new ApiToken();
+              sso.tokenHash = sha256Hex(RAW_TOKEN_SSO);
+              sso.userId = user.id;
+              sso.orgId = null; // account-scoped: role resolved per request from org_members
+              sso.kind = ApiToken.Kind.oidc;
+              sso.description = "secrets-sso-test";
+              sso.persistAndFlush();
+
+              // A valid account-scoped token whose user has NO membership in the org.
+              User outsider = new User();
+              outsider.iss = "local:test";
+              outsider.sub = OUTSIDER_SUB;
+              outsider.email = "outsider@example.com";
+              outsider.persistAndFlush();
+
+              ApiToken outsiderToken = new ApiToken();
+              outsiderToken.tokenHash = sha256Hex(RAW_TOKEN_OUTSIDER);
+              outsiderToken.userId = outsider.id;
+              outsiderToken.orgId = null;
+              outsiderToken.kind = ApiToken.Kind.oidc;
+              outsiderToken.description = "secrets-outsider-test";
+              outsiderToken.persistAndFlush();
+
               stackCreator.create(org.id, ORG_NAME, PROJECT, "alpha", Map.of());
               stackCreator.create(org.id, ORG_NAME, PROJECT, "beta", Map.of());
             });
@@ -92,9 +120,10 @@ class SecretsResourceTest {
               em.createNativeQuery("DELETE FROM organizations WHERE name = ?1")
                   .setParameter(1, ORG_NAME)
                   .executeUpdate();
-              em.createNativeQuery("DELETE FROM users WHERE iss = ?1 AND sub = ?2")
+              em.createNativeQuery("DELETE FROM users WHERE iss = ?1 AND sub IN (?2, ?3)")
                   .setParameter(1, "local:test")
                   .setParameter(2, "secrets")
+                  .setParameter(3, OUTSIDER_SUB)
                   .executeUpdate();
             });
   }
@@ -123,6 +152,50 @@ class SecretsResourceTest {
         .then()
         .statusCode(200)
         .body("plaintext", equalTo("supersecret"));
+  }
+
+  @Test
+  void accountScopedOidcTokenCanEncryptAndDecrypt() {
+    // Regression: an SSO-minted oidc token has org_id == null. The @Authorize interceptor gates the
+    // request via the user's org membership; aadFor must not re-compare against the (null) token
+    // org
+    // and 404 a valid request.
+    String ciphertext =
+        given()
+            .header("Authorization", "token " + RAW_TOKEN_SSO)
+            .contentType("application/json")
+            .body(Map.of("plaintext", "sso-secret"))
+            .when()
+            .post(stackPath("alpha") + "/encrypt")
+            .then()
+            .statusCode(200)
+            .extract()
+            .path("ciphertext");
+
+    given()
+        .header("Authorization", "token " + RAW_TOKEN_SSO)
+        .contentType("application/json")
+        .body(Map.of("ciphertext", ciphertext))
+        .when()
+        .post(stackPath("alpha") + "/decrypt")
+        .then()
+        .statusCode(200)
+        .body("plaintext", equalTo("sso-secret"));
+  }
+
+  @Test
+  void accountScopedTokenForNonMemberIsDenied() {
+    // Proves where org access is enforced for account-scoped tokens: not from the token (org_id is
+    // null) but from org_members, via PrincipalRoleResolver in the @Authorize loader. A valid token
+    // whose user is not a member of the org gets 404 — no membership, no role, no access.
+    given()
+        .header("Authorization", "token " + RAW_TOKEN_OUTSIDER)
+        .contentType("application/json")
+        .body(Map.of("plaintext", "x"))
+        .when()
+        .post(stackPath("alpha") + "/encrypt")
+        .then()
+        .statusCode(404);
   }
 
   @Test

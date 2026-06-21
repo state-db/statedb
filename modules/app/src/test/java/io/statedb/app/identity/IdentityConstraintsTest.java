@@ -36,11 +36,13 @@ class IdentityConstraintsTest {
     User user = newUser();
     user.persistAndFlush();
 
+    // service_account is the kind that carries an org_id (oidc tokens are account-scoped); use it
+    // so the org foreign key is the constraint under test, not the org-scope CHECK.
     ApiToken token = new ApiToken();
     token.tokenHash = "sha256:" + "a".repeat(64);
     token.userId = user.id;
     token.orgId = UUID.randomUUID();
-    token.kind = ApiToken.Kind.oidc;
+    token.kind = ApiToken.Kind.service_account;
 
     assertThrows(Exception.class, token::persistAndFlush);
   }
@@ -55,7 +57,7 @@ class IdentityConstraintsTest {
     token.tokenHash = "sha256:" + "b".repeat(64);
     token.userId = UUID.randomUUID();
     token.orgId = org.id;
-    token.kind = ApiToken.Kind.oidc;
+    token.kind = ApiToken.Kind.service_account;
 
     assertThrows(Exception.class, token::persistAndFlush);
   }
@@ -102,7 +104,7 @@ class IdentityConstraintsTest {
     first.tokenHash = sharedHash;
     first.userId = user.id;
     first.orgId = org.id;
-    first.kind = ApiToken.Kind.oidc;
+    first.kind = ApiToken.Kind.service_account;
     first.persistAndFlush();
 
     ApiToken collision = new ApiToken();
@@ -142,6 +144,38 @@ class IdentityConstraintsTest {
                 .setParameter(3, user.id)
                 .setParameter(4, org.id)
                 .executeUpdate());
+  }
+
+  @Test
+  @TestTransaction
+  void oidcTokenMustNotCarryAnOrg() {
+    User user = newUser();
+    user.persistAndFlush();
+
+    // Account-scoped: an oidc token with an org_id violates api_tokens_org_scope (V010).
+    ApiToken token = new ApiToken();
+    token.tokenHash = "sha256:" + "h".repeat(64);
+    token.userId = user.id;
+    token.orgId = UUID.randomUUID();
+    token.kind = ApiToken.Kind.oidc;
+
+    assertThrows(Exception.class, token::persistAndFlush);
+  }
+
+  @Test
+  @TestTransaction
+  void serviceAccountTokenMustCarryAnOrg() {
+    User user = newUser();
+    user.persistAndFlush();
+
+    // Org-scoped: a service_account token without an org_id violates api_tokens_org_scope (V010).
+    ApiToken token = new ApiToken();
+    token.tokenHash = "sha256:" + "i".repeat(64);
+    token.userId = user.id;
+    token.orgId = null;
+    token.kind = ApiToken.Kind.service_account;
+
+    assertThrows(Exception.class, token::persistAndFlush);
   }
 
   @Test
@@ -256,12 +290,14 @@ class IdentityConstraintsTest {
     m.persistAndFlush();
   }
 
+  // Org-scoped service_account token: the kind that carries an org_id, so it exercises the
+  // api_tokens.org_id foreign-key cascade these tests assert on.
   private static UUID persistToken(UUID orgId, UUID userId, String hashSeed) {
     ApiToken t = new ApiToken();
     t.tokenHash = "sha256:" + hashSeed.repeat(64);
     t.userId = userId;
     t.orgId = orgId;
-    t.kind = ApiToken.Kind.oidc;
+    t.kind = ApiToken.Kind.service_account;
     t.persistAndFlush();
     assertNotNull(t.id);
     return t.id;

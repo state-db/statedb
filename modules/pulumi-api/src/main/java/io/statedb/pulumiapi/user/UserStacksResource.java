@@ -4,6 +4,8 @@ import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import io.statedb.persistence.auth.AuthenticatedPrincipal;
 import io.statedb.persistence.authz.CurrentPrincipal;
+import io.statedb.persistence.identity.OrgMembershipFinder;
+import io.statedb.persistence.identity.OrgMembershipView;
 import io.statedb.persistence.stack.StackListFinder;
 import io.statedb.persistence.stack.StackSummary;
 import jakarta.inject.Inject;
@@ -21,6 +23,8 @@ public class UserStacksResource {
 
   @Inject StackListFinder finder;
 
+  @Inject OrgMembershipFinder orgMembershipFinder;
+
   @GET
   @Produces(MediaType.APPLICATION_JSON)
   public StackListDto list(@QueryParam("project") String project) {
@@ -28,7 +32,19 @@ public class UserStacksResource {
     // Cross-org rows are invisible (not 403'd), matching StackResource's isolation rule: a 403
     // would confirm the target row exists in another tenant.
     String projectFilter = (project == null || project.isBlank()) ? null : project;
-    List<StackSummary> rows = finder.findForOrg(p.orgId(), projectFilter);
+    // Single-org credentials see only their scoped org; all-current-memberships credentials span
+    // every org the actor belongs to.
+    List<StackSummary> rows =
+        p.credentialScope()
+            .singleOrgId()
+            .map(orgId -> finder.findForOrg(orgId, projectFilter))
+            .orElseGet(
+                () ->
+                    finder.findForOrgs(
+                        orgMembershipFinder.forUser(p.userId()).stream()
+                            .map(OrgMembershipView::id)
+                            .toList(),
+                        projectFilter));
     List<StackSummaryDto> dtos =
         rows.stream()
             .map(

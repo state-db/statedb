@@ -2,6 +2,7 @@ package io.statedb.pulumiapi.auth;
 
 import io.smallrye.common.annotation.Blocking;
 import io.statedb.persistence.auth.ApiTokenFinder;
+import io.statedb.persistence.auth.ApiTokenHasher;
 import io.statedb.persistence.auth.AuthenticatedPrincipal;
 import io.statedb.persistence.authz.CurrentPrincipal;
 import jakarta.annotation.Priority;
@@ -12,9 +13,6 @@ import jakarta.ws.rs.container.ContainerRequestFilter;
 import jakarta.ws.rs.core.HttpHeaders;
 import jakarta.ws.rs.core.Response;
 import jakarta.ws.rs.ext.Provider;
-import java.nio.charset.StandardCharsets;
-import java.security.MessageDigest;
-import java.security.NoSuchAlgorithmException;
 import java.util.List;
 import java.util.Optional;
 
@@ -38,6 +36,8 @@ public class TokenAuthFilter implements ContainerRequestFilter {
 
   @Inject ApiTokenFinder tokenFinder;
 
+  @Inject ApiTokenHasher tokenHasher;
+
   @Inject CurrentPrincipal currentPrincipal;
 
   @Override
@@ -58,7 +58,7 @@ public class TokenAuthFilter implements ContainerRequestFilter {
       return;
     }
 
-    String hash = sha256Hex(raw);
+    String hash = tokenHasher.hash(raw);
     Optional<AuthenticatedPrincipal> principal = tokenFinder.findValidByHash(hash);
     if (principal.isEmpty()) {
       ctx.abortWith(unauthorized());
@@ -85,20 +85,5 @@ public class TokenAuthFilter implements ContainerRequestFilter {
 
   private static Response unauthorized() {
     return Response.status(Response.Status.UNAUTHORIZED).build();
-  }
-
-  private static String sha256Hex(String input) {
-    try {
-      MessageDigest md = MessageDigest.getInstance("SHA-256");
-      byte[] digest = md.digest(input.getBytes(StandardCharsets.UTF_8));
-      StringBuilder sb = new StringBuilder(digest.length * 2);
-      for (byte b : digest) {
-        sb.append(Character.forDigit((b >> 4) & 0xF, 16));
-        sb.append(Character.forDigit(b & 0xF, 16));
-      }
-      return sb.toString();
-    } catch (NoSuchAlgorithmException e) {
-      throw new IllegalStateException("SHA-256 unavailable", e);
-    }
   }
 }

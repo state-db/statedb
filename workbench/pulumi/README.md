@@ -57,6 +57,42 @@ Reset all local workbench state:
 make pulumi-workbench cmd=reset
 ```
 
+## Browser login (SSO)
+
+The Make targets authenticate with the bootstrap raw token
+(`PULUMI_ACCESS_TOKEN`). To exercise the real `aws sso login`-style flow instead
+— `pulumi login` opens the browser, you sign in through the console SSO, and an
+account-scoped 24h token is minted and written to `credentials.json` — run, **on
+the host** (not the dev container):
+
+```bash
+# export so every later pulumi command in this shell shares the same login,
+# and use an absolute path so it doesn't matter which dir you run from.
+export PULUMI_HOME="$(git rev-parse --show-toplevel)/workbench/.pulumi-home"
+export PULUMI_CONSOLE_DOMAIN=localhost:5173
+
+pulumi login http://localhost:8080/pulumi   # press <ENTER>, do the browser SSO
+pulumi stack ls                             # reuses the same login
+```
+
+Press `<ENTER>` at the login prompt (do **not** paste a token) to start the
+browser flow. Pulumi opens `http://localhost:5173/cli-login?...`, you complete
+the mock-IdP login, click **Allow access**, and the CLI captures the token from
+its loopback listener.
+
+- **`export` `PULUMI_HOME` once.** It is read per command, not just by `login`;
+  if a later `pulumi stack ls` omits it (or uses a different relative path), it
+  falls back to `~/.pulumi` and re-prompts even though the login succeeded.
+- `PULUMI_CONSOLE_DOMAIN` is required: the backend is on `:8080` and the console
+  on `:5173`, so Pulumi cannot infer the console host on its own.
+- Run it on the host because `pulumi login`'s loopback listener and your browser
+  must share `127.0.0.1`; the dev container cannot open the host browser.
+- Do not set `PULUMI_ACCESS_TOKEN` — that bypasses the browser flow and uses the
+  raw token directly.
+
+Re-run `pulumi login` to refresh the token once it expires (the SSO session, not
+a per-mint re-auth, is what gates freshness and MFA).
+
 ## Defaults
 
 - Backend URL: `http://localhost:8080/pulumi`

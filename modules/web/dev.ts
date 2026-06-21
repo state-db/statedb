@@ -55,6 +55,11 @@ const server = Bun.serve({
     // like the embedded prod origin.
     "/api/*": proxyBackend,
     "/pulumi/*": proxyBackend,
+    // Native `pulumi login` entry points. Pulumi hardcodes these at the console
+    // root; in prod Quarkus serves them directly, so the dev proxy must forward
+    // them too or they'd fall through to the SPA and 404.
+    "/cli-login": proxyBackend,
+    "/welcome/cli": proxyBackend,
     // Workbench-only mock IdP. Reusing the dev-server origin avoids a second VS Code forwarded port
     // and gives Quarkus and the host browser one stable issuer URL.
     "/default/*": proxyOidc,
