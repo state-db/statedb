@@ -226,6 +226,61 @@ class CliLoginFlowTest {
   }
 
   @Test
+  void approvalRequestIsSingleUse() {
+    Cookie session = establishSession();
+    Response confirmation =
+        given()
+            .redirects()
+            .follow(false)
+            .cookie(session.getName(), session.getValue())
+            .accept("text/html")
+            .queryParam("cliSessionPort", "59123")
+            .queryParam("cliSessionNonce", "nonce-abc")
+            .when()
+            .get("/api/auth/cli-login");
+    confirmation.then().statusCode(200);
+    String signedRequest = hiddenInput(confirmation.asString(), "request");
+
+    given()
+        .redirects()
+        .follow(false)
+        .cookie(session.getName(), session.getValue())
+        .contentType("application/x-www-form-urlencoded")
+        .formParam("request", signedRequest)
+        .formParam("decision", "allow")
+        .when()
+        .post("/api/auth/cli-login/approve")
+        .then()
+        .statusCode(302);
+
+    // Replaying the same signed request must not mint a second token.
+    given()
+        .redirects()
+        .follow(false)
+        .cookie(session.getName(), session.getValue())
+        .contentType("application/x-www-form-urlencoded")
+        .formParam("request", signedRequest)
+        .formParam("decision", "allow")
+        .when()
+        .post("/api/auth/cli-login/approve")
+        .then()
+        .statusCode(400);
+
+    long tokens =
+        QuarkusTransaction.requiringNew()
+            .call(
+                () ->
+                    (Long)
+                        em.createQuery(
+                                "select count(t) from ApiToken t join User u on u.id = t.userId"
+                                    + " where u.iss = :iss and u.sub = :sub")
+                            .setParameter("iss", FIXTURE_ISS)
+                            .setParameter("sub", FIXTURE_SUB)
+                            .getSingleResult());
+    assertEquals(1L, tokens, "replay must not mint a second token");
+  }
+
+  @Test
   void cancellingApprovalDoesNotMintToken() {
     Cookie session = establishSession();
     Response confirmation =

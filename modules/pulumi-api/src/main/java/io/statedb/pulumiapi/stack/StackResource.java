@@ -6,6 +6,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import io.statedb.persistence.RequestValidationException;
 import io.statedb.persistence.auth.AuthenticatedPrincipal;
 import io.statedb.persistence.authz.Authorize;
+import io.statedb.persistence.authz.AuthorizedResource;
 import io.statedb.persistence.authz.CurrentPrincipal;
 import io.statedb.persistence.authz.StackEntityLoader;
 import io.statedb.persistence.stack.StackDeleter;
@@ -14,7 +15,6 @@ import io.statedb.persistence.stack.StackHeadFinder;
 import io.statedb.persistence.stack.StackImporter;
 import io.statedb.persistence.stack.StackNotFoundException;
 import io.statedb.persistence.stack.StackRef;
-import io.statedb.persistence.stack.StackRefResolver;
 import io.statedb.persistence.stack.StackRenamer;
 import io.statedb.persistence.stack.StackTagWriter;
 import jakarta.inject.Inject;
@@ -39,7 +39,7 @@ public class StackResource {
 
   @Inject StackHeadFinder finder;
 
-  @Inject StackRefResolver resolver;
+  @Inject AuthorizedResource authorized;
 
   @Inject StackDeleter deleter;
 
@@ -74,7 +74,7 @@ public class StackResource {
       @PathParam("project") String project,
       @PathParam("stack") String stack,
       @QueryParam("force") @DefaultValue("false") boolean force) {
-    StackRef ref = resolveOrThrow(org, project, stack);
+    StackRef ref = authorized.subject(StackRef.class);
 
     deleter.delete(ref, force);
     return Response.ok(Map.of()).build();
@@ -90,7 +90,7 @@ public class StackResource {
       @PathParam("project") String project,
       @PathParam("stack") String stack,
       ImportStackRequest body) {
-    StackRef ref = resolveOrThrow(org, project, stack);
+    StackRef ref = authorized.subject(StackRef.class);
 
     if (body == null) {
       throw new RequestValidationException("import request body is required");
@@ -120,7 +120,7 @@ public class StackResource {
       @PathParam("project") String project,
       @PathParam("stack") String stack,
       Map<String, String> tags) {
-    StackRef ref = resolveOrThrow(org, project, stack);
+    StackRef ref = authorized.subject(StackRef.class);
     tagWriter.replaceTags(ref.stackId(), tags);
     return Response.ok(Map.of()).build();
   }
@@ -145,18 +145,12 @@ public class StackResource {
     if (noName && noProject) {
       throw new RequestValidationException("no rename to apply");
     }
-    StackRef ref = resolveOrThrow(org, project, stack);
+    StackRef ref = authorized.subject(StackRef.class);
     AuthenticatedPrincipal principal = currentPrincipal.get();
     UUID updateId =
         renamer.rename(
             ref, body.newName, body.newProject, principal.userId(), principal.apiTokenId());
     return new ImportStackResponse(updateId == null ? "" : updateId.toString());
-  }
-
-  private StackRef resolveOrThrow(String org, String project, String stack) {
-    return resolver
-        .resolve(org, project, stack)
-        .orElseThrow(() -> new StackNotFoundException(org, project, stack));
   }
 
   @JsonInclude(JsonInclude.Include.ALWAYS)

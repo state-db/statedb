@@ -114,6 +114,20 @@ class StackRenameContractTest {
   }
 
   @Test
+  void renameOutsideNameGrammarReturns400() {
+    rename(STACK, Map.of("newName", "prod/web", "newProject", PROJECT)).then().statusCode(400);
+    rename(STACK, Map.of("newName", "staging", "newProject", "bad/proj")).then().statusCode(400);
+
+    // The stack is untouched at its original name.
+    given()
+        .header("Authorization", "token " + RAW_TOKEN)
+        .when()
+        .get(BASE + "/" + STACK)
+        .then()
+        .statusCode(200);
+  }
+
+  @Test
   void renameToExistingTargetReturns409() {
     createStack("staging");
 

@@ -58,11 +58,9 @@ public class ProviderTenantConfigResolver implements TenantConfigResolver {
   @ConfigProperty(name = "state-db.oidc.default-provider")
   Optional<String> defaultProvider;
 
-  // Encrypts the web-app session cookie. It must be stable across replicas and at least 32
-  // characters; tests provide an explicit value rather than relying on Quarkus's weak fallback.
-  @Inject
-  @ConfigProperty(name = "state-db.session.encryption-secret")
-  Optional<String> sessionEncryptionSecret;
+  // Encrypts the web-app session cookie. It must be stable across replicas; tests provide an
+  // explicit value rather than relying on Quarkus's weak fallback.
+  @Inject SessionEncryptionSecret sessionEncryptionSecret;
 
   @Override
   public Uni<OidcTenantConfig> resolve(
@@ -114,13 +112,10 @@ public class ProviderTenantConfigResolver implements TenantConfigResolver {
             .addOpenidScope(false)
             .scopes(provider.scopes())
             .end();
-    String secret =
-        sessionEncryptionSecret
-            .filter(s -> s.length() >= 32)
-            .orElseThrow(
-                () ->
-                    new IllegalStateException(
-                        "STATE_DB_SESSION_ENCRYPTION_SECRET must contain at least 32 characters"));
-    return builder.tokenStateManager().encryptionSecret(secret).end().build();
+    return builder
+        .tokenStateManager()
+        .encryptionSecret(sessionEncryptionSecret.value())
+        .end()
+        .build();
   }
 }

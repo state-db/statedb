@@ -1,5 +1,6 @@
 package io.statedb.persistence.bootstrap;
 
+import io.statedb.persistence.NameGrammar;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -30,6 +31,10 @@ public record BootstrapConfig(
 
   public BootstrapConfig {
     Objects.requireNonNull(orgName, "orgName");
+    if (!NameGrammar.isValid(orgName)) {
+      throw new IllegalStateException(
+          ENV_ORG_NAME + " must be 1-100 characters of [A-Za-z0-9._-], got '" + orgName + "'");
+    }
     Objects.requireNonNull(orgDisplayName, "orgDisplayName");
     Objects.requireNonNull(adminEmail, "adminEmail");
     Objects.requireNonNull(adminDisplayName, "adminDisplayName");

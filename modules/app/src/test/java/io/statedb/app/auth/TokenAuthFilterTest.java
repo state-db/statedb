@@ -149,6 +149,25 @@ class TokenAuthFilterTest {
   }
 
   @Test
+  void successfulAuthAdvancesLastUsedAt() {
+    given()
+        .header("Authorization", "token " + VALID_RAW_TOKEN)
+        .when()
+        .get("/pulumi/api/user")
+        .then()
+        .statusCode(200);
+
+    QuarkusTransaction.requiringNew()
+        .run(
+            () -> {
+              ApiToken token =
+                  ApiToken.<ApiToken>find("tokenHash", sha256Hex(VALID_RAW_TOKEN)).firstResult();
+              org.junit.jupiter.api.Assertions.assertNotNull(
+                  token.lastUsedAt, "auth must record last_used_at");
+            });
+  }
+
+  @Test
   void capabilitiesIsAlsoGated() {
     given().when().get("/pulumi/api/capabilities").then().statusCode(401);
     given()

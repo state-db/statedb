@@ -3,6 +3,7 @@ package io.statedb.pulumiapi.stack;
 import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import io.statedb.persistence.authz.Authorize;
+import io.statedb.persistence.authz.AuthorizedResource;
 import io.statedb.persistence.authz.OrgEntityLoader;
 import io.statedb.persistence.identity.Organization;
 import io.statedb.persistence.stack.StackCreator;
@@ -22,6 +23,8 @@ public class StacksResource {
 
   @Inject StackCreator stackCreator;
 
+  @Inject AuthorizedResource authorized;
+
   @POST
   @Authorize(action = "stack:Create", loader = OrgEntityLoader.class)
   @Consumes(MediaType.APPLICATION_JSON)
@@ -32,10 +35,7 @@ public class StacksResource {
       throw new WebApplicationException(Response.Status.BAD_REQUEST);
     }
 
-    Organization targetOrg = Organization.find("name", org).firstResult();
-    if (targetOrg == null) {
-      throw new WebApplicationException(Response.Status.FORBIDDEN);
-    }
+    Organization targetOrg = authorized.subject(Organization.class);
     stackCreator.create(targetOrg.id, org, project, body.stackName, body.tags);
     return new StackDto(org, project, body.stackName, body.tags);
   }

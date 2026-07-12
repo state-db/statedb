@@ -156,6 +156,37 @@ class StackCreateContractTest {
   }
 
   @Test
+  void stackNameOutsideGrammarReturns400() {
+    // A '/' in a name would collide Cedar resource ids (they join org/project/stack with '/'),
+    // so the grammar rejects it before any row is written.
+    Map<String, Object> body = Map.of("stackName", "prod/web", "tags", Map.of());
+
+    given()
+        .header("Authorization", "token " + RAW_TOKEN)
+        .contentType("application/json")
+        .body(body)
+        .when()
+        .post("/pulumi/api/stacks/" + ORG_NAME + "/" + PROJECT)
+        .then()
+        .statusCode(400);
+  }
+
+  @Test
+  void projectNameOutsideGrammarReturns400() {
+    // '~' is URL-safe (reaches the handler as a path segment) but outside the name grammar.
+    Map<String, Object> body = Map.of("stackName", "dev", "tags", Map.of());
+
+    given()
+        .header("Authorization", "token " + RAW_TOKEN)
+        .contentType("application/json")
+        .body(body)
+        .when()
+        .post("/pulumi/api/stacks/" + ORG_NAME + "/bad~proj")
+        .then()
+        .statusCode(400);
+  }
+
+  @Test
   void duplicateStackReturns409() {
     Map<String, Object> body = Map.of("stackName", "dup", "tags", Map.of());
 

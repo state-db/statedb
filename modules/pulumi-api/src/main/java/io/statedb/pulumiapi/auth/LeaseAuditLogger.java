@@ -26,8 +26,7 @@ public class LeaseAuditLogger implements ContainerResponseFilter {
 
   @Override
   public void filter(ContainerRequestContext request, ContainerResponseContext response) {
-    String path = request.getUriInfo().getPath();
-    String normalized = path.startsWith("/") ? path : "/" + path;
+    String normalized = RequestPaths.normalizedPath(request);
     if (!LeaseRouteMatcher.isLeaseScoped(request.getMethod(), normalized)) {
       return;
     }

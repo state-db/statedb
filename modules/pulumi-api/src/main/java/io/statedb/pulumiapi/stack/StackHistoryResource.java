@@ -4,10 +4,9 @@ import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import io.statedb.persistence.RequestValidationException;
 import io.statedb.persistence.authz.Authorize;
+import io.statedb.persistence.authz.AuthorizedResource;
 import io.statedb.persistence.authz.StackEntityLoader;
-import io.statedb.persistence.stack.StackNotFoundException;
 import io.statedb.persistence.stack.StackRef;
-import io.statedb.persistence.stack.StackRefResolver;
 import io.statedb.persistence.update.StackHistoryFinder;
 import io.statedb.persistence.update.StackUpdate;
 import jakarta.inject.Inject;
@@ -36,7 +35,7 @@ public class StackHistoryResource {
 
   @Inject StackHistoryFinder finder;
 
-  @Inject StackRefResolver resolver;
+  @Inject AuthorizedResource authorized;
 
   @GET
   @Authorize(action = "stack:Read", loader = StackEntityLoader.class)
@@ -53,10 +52,7 @@ public class StackHistoryResource {
       throw new RequestValidationException("pageSize must be positive");
     }
     int boundedPageSize = Math.min(pageSize, MAX_PAGE_SIZE);
-    StackRef ref =
-        resolver
-            .resolve(org, project, stack)
-            .orElseThrow(() -> new StackNotFoundException(org, project, stack));
+    StackRef ref = authorized.subject(StackRef.class);
     List<UpdateInfo> updates =
         finder.find(ref.stackId(), page, boundedPageSize).stream()
             .map(StackHistoryResource::toInfo)

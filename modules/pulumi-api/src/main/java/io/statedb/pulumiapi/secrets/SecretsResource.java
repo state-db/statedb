@@ -3,11 +3,10 @@ package io.statedb.pulumiapi.secrets;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.google.crypto.tink.Aead;
 import io.statedb.persistence.authz.Authorize;
+import io.statedb.persistence.authz.AuthorizedResource;
 import io.statedb.persistence.authz.StackEntityLoader;
 import io.statedb.persistence.secrets.ServiceSecretsAead;
-import io.statedb.persistence.stack.StackNotFoundException;
 import io.statedb.persistence.stack.StackRef;
-import io.statedb.persistence.stack.StackRefResolver;
 import jakarta.inject.Inject;
 import jakarta.ws.rs.POST;
 import jakarta.ws.rs.Path;
@@ -38,7 +37,7 @@ import java.util.UUID;
 @Path("/pulumi/api/stacks/{org}/{project}/{stack}")
 public class SecretsResource {
 
-  @Inject StackRefResolver resolver;
+  @Inject AuthorizedResource authorized;
 
   @Inject ServiceSecretsAead secretsAead;
 
@@ -51,7 +50,7 @@ public class SecretsResource {
       @PathParam("project") String project,
       @PathParam("stack") String stack,
       EncryptRequest request) {
-    byte[] aad = aadFor(org, project, stack);
+    byte[] aad = aad();
     if (request == null || request.plaintext() == null) {
       throw badRequest("plaintext is required");
     }
@@ -74,7 +73,7 @@ public class SecretsResource {
       @PathParam("project") String project,
       @PathParam("stack") String stack,
       DecryptRequest request) {
-    byte[] aad = aadFor(org, project, stack);
+    byte[] aad = aad();
     if (request == null || request.ciphertext() == null) {
       throw badRequest("ciphertext is required");
     }
@@ -91,7 +90,7 @@ public class SecretsResource {
       @PathParam("project") String project,
       @PathParam("stack") String stack,
       BatchDecryptRequest request) {
-    byte[] aad = aadFor(org, project, stack);
+    byte[] aad = aad();
     List<String> ciphertexts = request == null ? null : request.ciphertexts();
     if (ciphertexts == null) {
       throw badRequest("ciphertexts is required");
@@ -126,17 +125,12 @@ public class SecretsResource {
     }
   }
 
-  // The @Authorize(StackEntityLoader) interceptor has already resolved this exact
-  // org/project/stack and enforced the org boundary (PrincipalRoleResolver → 404 for a
-  // non-member, account-scoped principals included) before this body runs, so we trust the ref and
-  // do not re-compare against the token's org — which would be wrong for account-scoped tokens
-  // whose orgId is null. We only re-resolve to recover the stack id for the AAD.
-  private byte[] aadFor(String org, String project, String stack) {
-    StackRef ref =
-        resolver
-            .resolve(org, project, stack)
-            .orElseThrow(() -> new StackNotFoundException(org, project, stack));
-    return uuidBytes(ref.stackId());
+  // The @Authorize(StackEntityLoader) interceptor resolved this exact org/project/stack and
+  // enforced the org boundary before the handler runs; reuse its StackRef for the AAD rather than
+  // re-comparing against the token's org — which would be wrong for account-scoped tokens whose
+  // orgId is null.
+  private byte[] aad() {
+    return uuidBytes(authorized.subject(StackRef.class).stackId());
   }
 
   private static byte[] uuidBytes(UUID id) {

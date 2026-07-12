@@ -1,6 +1,7 @@
 package io.statedb.persistence.stack;
 
 import com.fasterxml.jackson.databind.node.ObjectNode;
+import io.statedb.persistence.NameGrammar;
 import io.statedb.persistence.lock.StackLockedException;
 import io.statedb.persistence.update.StackUpdate;
 import jakarta.enterprise.context.ApplicationScoped;
@@ -65,6 +66,8 @@ public class StackRenamer {
       UUID startedByApiTokenId) {
     String targetProject = isBlank(newProject) ? ref.projectName() : newProject;
     String targetName = isBlank(newName) ? ref.stackName() : newName;
+    NameGrammar.requireValid("project name", targetProject);
+    NameGrammar.requireValid("stack name", targetName);
     if (targetProject.equals(ref.projectName()) && targetName.equals(ref.stackName())) {
       return null;
     }

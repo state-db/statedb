@@ -18,6 +18,8 @@ public class AuthorizeInterceptor {
 
   @Inject Authorizer authorizer;
 
+  @Inject AuthorizedResource authorizedResource;
+
   @Inject Instance<EntityLoader<?>> loaders;
 
   @AroundInvoke
@@ -25,6 +27,14 @@ public class AuthorizeInterceptor {
     Authorize authorize = binding(ctx.getMethod());
     EntityLoader<?> loader = loader(authorize.loader());
     AuthenticatedPrincipal principal = currentPrincipal.get();
+    if (principal == null) {
+      // Fail closed with a diagnosis: @Authorize only works behind a filter that populates
+      // CurrentPrincipal (the Pulumi token filter). Console routes authenticate via
+      // SecurityIdentity and must not use this annotation until they set the principal too.
+      throw new IllegalStateException(
+          "@Authorize invoked with no authenticated principal in request scope on "
+              + ctx.getMethod());
+    }
     LoadedResource loaded = loader.load(ctx, principal).orElseThrow(loader::notFound);
 
     AuthorizationDecision decision =
@@ -33,6 +43,7 @@ public class AuthorizeInterceptor {
       throw new AuthorizationDeniedException(authorize.action());
     }
 
+    authorizedResource.set(loaded.subject());
     return ctx.proceed();
   }
 

@@ -24,6 +24,8 @@ public class Authorizer {
 
   static final EntityUID ADMIN = CedarEntities.role("admin");
 
+  private static final Set<Entity> ROLE_HIERARCHY = roleHierarchy();
+
   private final AuthorizationEngine engine = new BasicAuthorizationEngine();
 
   @Inject PolicySetCache policySetCache;
@@ -39,7 +41,7 @@ public class Authorizer {
       Entity principalEntity = principalEntity(principal, role);
       Set<Entity> all = new HashSet<>();
       all.add(principalEntity);
-      all.addAll(roleHierarchy());
+      all.addAll(ROLE_HIERARCHY);
       all.addAll(policySetCache.actionEntities());
       all.addAll(resource.entities());
 
@@ -77,10 +79,13 @@ public class Authorizer {
     EntityUID viewer = CedarEntities.role("viewer");
     EntityUID member = CedarEntities.role("member");
     EntityUID owner = CedarEntities.role("owner");
+    // `service` stands alone, like admin: CI grants come only from service.cedar, never from the
+    // human role ladder.
     return Set.of(
         new Entity(viewer),
         new Entity(member, Set.of(viewer)),
         new Entity(owner, Set.of(member)),
+        new Entity(CedarEntities.role("service")),
         new Entity(ADMIN));
   }
 }

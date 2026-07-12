@@ -3,6 +3,7 @@ package io.statedb.pulumiapi.auth;
 import io.smallrye.common.annotation.Blocking;
 import io.statedb.persistence.auth.ApiTokenFinder;
 import io.statedb.persistence.auth.ApiTokenHasher;
+import io.statedb.persistence.auth.ApiTokenUsageRecorder;
 import io.statedb.persistence.auth.AuthenticatedPrincipal;
 import io.statedb.persistence.authz.CurrentPrincipal;
 import jakarta.annotation.Priority;
@@ -38,11 +39,13 @@ public class TokenAuthFilter implements ContainerRequestFilter {
 
   @Inject ApiTokenHasher tokenHasher;
 
+  @Inject ApiTokenUsageRecorder usageRecorder;
+
   @Inject CurrentPrincipal currentPrincipal;
 
   @Override
   public void filter(ContainerRequestContext ctx) {
-    String path = normalize(ctx.getUriInfo().getPath());
+    String path = RequestPaths.normalizedPath(ctx);
     if (!requiresAuth(ctx.getMethod(), path)) {
       return;
     }
@@ -65,11 +68,7 @@ public class TokenAuthFilter implements ContainerRequestFilter {
       return;
     }
     currentPrincipal.set(principal.get());
-  }
-
-  // UriInfo#getPath() returns the application path without a leading slash.
-  private static String normalize(String path) {
-    return path.startsWith("/") ? path : "/" + path;
+    usageRecorder.touch(principal.get().apiTokenId());
   }
 
   static boolean requiresAuth(String method, String path) {

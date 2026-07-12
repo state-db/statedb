@@ -4,6 +4,7 @@ import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import io.statedb.persistence.RequestValidationException;
 import io.statedb.persistence.authz.Authorize;
+import io.statedb.persistence.authz.AuthorizedResource;
 import io.statedb.persistence.authz.CurrentPrincipal;
 import io.statedb.persistence.authz.StackEntityLoader;
 import io.statedb.persistence.events.EventBatchAppender;
@@ -17,7 +18,6 @@ import io.statedb.persistence.lock.StackLockRenewer;
 import io.statedb.persistence.lock.StackLockedException;
 import io.statedb.persistence.stack.StackNotFoundException;
 import io.statedb.persistence.stack.StackRef;
-import io.statedb.persistence.stack.StackRefResolver;
 import io.statedb.persistence.update.StackUpdate;
 import io.statedb.persistence.update.StackUpdateCompleter;
 import io.statedb.persistence.update.StackUpdateStarter;
@@ -46,7 +46,7 @@ import java.util.UUID;
 @Path("/pulumi/api/stacks/{org}/{project}/{stack}")
 public class UpdateResource {
 
-  @Inject StackRefResolver resolver;
+  @Inject AuthorizedResource authorized;
 
   @Inject StackUpdateStarter starter;
 
@@ -135,7 +135,7 @@ public class UpdateResource {
       @PathParam("stack") String stack,
       @PathParam("updateID") String updateID,
       AcquireLockRequest body) {
-    StackRef ref = resolveOrThrow(org, project, stack);
+    StackRef ref = authorized.subject(StackRef.class);
     UUID updateId = parseUpdateIdOr404(updateID, org, project, stack);
 
     // Confirm the update belongs to this stack — defends against cross-stack updateID smuggling.
@@ -168,7 +168,7 @@ public class UpdateResource {
       @PathParam("project") String project,
       @PathParam("stack") String stack,
       @PathParam("updateID") String updateID) {
-    StackRef ref = resolveOrThrow(org, project, stack);
+    StackRef ref = authorized.subject(StackRef.class);
     UUID updateId = parseUpdateIdOr404(updateID, org, project, stack);
     StackUpdate update =
         StackUpdate.<StackUpdate>find("id = ?1 and stackId = ?2", updateId, ref.stackId())
@@ -362,12 +362,6 @@ public class UpdateResource {
     return Response.noContent().build();
   }
 
-  private StackRef resolveOrThrow(String org, String project, String stack) {
-    return resolver
-        .resolve(org, project, stack)
-        .orElseThrow(() -> new StackNotFoundException(org, project, stack));
-  }
-
   private static Response notImplementedJournaling() {
     return Response.status(Response.Status.NOT_IMPLEMENTED)
         .type(MediaType.APPLICATION_JSON)
@@ -396,7 +390,7 @@ public class UpdateResource {
       StackUpdate.Kind kind,
       String idempotencyKey,
       UpdateProgramRequest body) {
-    StackRef ref = resolveOrThrow(org, project, stack);
+    StackRef ref = authorized.subject(StackRef.class);
 
     UpdateProgramRequest safe = body != null ? body : new UpdateProgramRequest();
     validateStartRequest(org, project, stack, safe);

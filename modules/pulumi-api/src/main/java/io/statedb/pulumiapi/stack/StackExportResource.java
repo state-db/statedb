@@ -4,12 +4,11 @@ import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.databind.JsonNode;
 import io.statedb.persistence.authz.Authorize;
+import io.statedb.persistence.authz.AuthorizedResource;
 import io.statedb.persistence.authz.StackEntityLoader;
 import io.statedb.persistence.stack.AssembledDeployment;
 import io.statedb.persistence.stack.StackAssembler;
-import io.statedb.persistence.stack.StackNotFoundException;
 import io.statedb.persistence.stack.StackRef;
-import io.statedb.persistence.stack.StackRefResolver;
 import jakarta.inject.Inject;
 import jakarta.ws.rs.GET;
 import jakarta.ws.rs.Path;
@@ -23,7 +22,7 @@ public class StackExportResource {
 
   @Inject StackAssembler assembler;
 
-  @Inject StackRefResolver resolver;
+  @Inject AuthorizedResource authorized;
 
   @GET
   @Authorize(action = "stack:Read", loader = StackEntityLoader.class)
@@ -32,10 +31,7 @@ public class StackExportResource {
       @PathParam("org") String org,
       @PathParam("project") String project,
       @PathParam("stack") String stack) {
-    StackRef ref =
-        resolver
-            .resolve(org, project, stack)
-            .orElseThrow(() -> new StackNotFoundException(org, project, stack));
+    StackRef ref = authorized.subject(StackRef.class);
     AssembledDeployment assembled = assembler.assemble(ref.stackId());
     return new ExportDto(assembled.deployment(), assembled.version(), assembled.features());
   }

@@ -1,5 +1,6 @@
 package io.statedb.persistence.stack;
 
+import io.statedb.persistence.NameGrammar;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 import jakarta.persistence.PersistenceException;
@@ -26,6 +27,8 @@ public class StackCreator {
   @Transactional
   public StackRef create(
       UUID orgId, String orgName, String projectName, String stackName, Map<String, String> tags) {
+    NameGrammar.requireValid("project name", projectName);
+    NameGrammar.requireValid("stack name", stackName);
     UUID projectId = projectUpserter.upsert(orgId, projectName);
 
     Workspace workspace = new Workspace();

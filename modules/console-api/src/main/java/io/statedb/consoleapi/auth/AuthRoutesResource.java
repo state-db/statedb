@@ -2,6 +2,7 @@ package io.statedb.consoleapi.auth;
 
 import io.quarkus.security.identity.SecurityIdentity;
 import io.smallrye.common.annotation.Blocking;
+import io.statedb.consoleapi.auth.CliLoginApprovalSigner.CliLoginApproval;
 import io.statedb.persistence.auth.CliTokenMinter;
 import io.statedb.persistence.auth.CliTokenMinter.MintedCliToken;
 import io.statedb.persistence.identity.OidcProvider;
@@ -21,15 +22,7 @@ import jakarta.ws.rs.WebApplicationException;
 import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.Response;
 import java.net.URI;
-import java.nio.charset.StandardCharsets;
-import java.security.InvalidKeyException;
-import java.security.MessageDigest;
-import java.security.NoSuchAlgorithmException;
-import java.time.Instant;
-import java.util.Base64;
 import java.util.Optional;
-import javax.crypto.Mac;
-import javax.crypto.spec.SecretKeySpec;
 import org.eclipse.microprofile.config.inject.ConfigProperty;
 import org.eclipse.microprofile.jwt.JsonWebToken;
 
@@ -66,13 +59,11 @@ public class AuthRoutesResource {
 
   @Inject CliTokenMinter minter;
 
+  @Inject CliLoginApprovalSigner signer;
+
   @Inject
   @ConfigProperty(name = "state-db.oidc.default-provider")
   Optional<String> defaultProvider;
-
-  @Inject
-  @ConfigProperty(name = "state-db.session.encryption-secret")
-  Optional<String> sessionEncryptionSecret;
 
   @GET
   @Path("/login")
@@ -124,26 +115,15 @@ public class AuthRoutesResource {
       return CliLoginResource.badRequest(
           "cli-login requires a valid cliSessionPort and cliSessionNonce");
     }
-    if (!(identity.getPrincipal() instanceof JsonWebToken jwt)) {
-      throw new NotAuthorizedException("OIDC");
-    }
+    JsonWebToken jwt = sessionJwt();
 
-    String request =
-        sign(
-            new CliLoginApproval(
-                p,
-                nonce,
-                description,
-                jwt.getIssuer(),
-                jwt.getSubject(),
-                Instant.now().plusSeconds(600).getEpochSecond()));
-    return Response.ok(approvalPage(jwt, p, nonce, description, request))
-        .header("Cache-Control", "no-store")
-        .header("Referrer-Policy", "no-referrer")
-        // Credential-issuing page: must not be framable, or a remote site could clickjack the
-        // "Allow access" button and deliver a token to an attacker-chosen loopback port.
-        .header("X-Frame-Options", "DENY")
-        .header("Content-Security-Policy", "frame-ancestors 'none'")
+    String signedRequest =
+        signer.sign(
+            CliLoginApproval.issue(p, nonce, description, jwt.getIssuer(), jwt.getSubject()));
+    String signedInAs =
+        Optional.ofNullable(jwt.getClaim("email")).map(Object::toString).orElse(jwt.getSubject());
+    String clientLabel = CliLoginResource.isBlank(description) ? "Pulumi CLI" : description.strip();
+    return credentialPage(CliLoginPages.approvalPage(signedInAs, clientLabel, p, signedRequest))
         .build();
   }
 
@@ -153,21 +133,13 @@ public class AuthRoutesResource {
   @Consumes(MediaType.APPLICATION_FORM_URLENCODED)
   public Response approveCliLogin(
       @FormParam("request") String signedRequest, @FormParam("decision") String decision) {
-    if (!(identity.getPrincipal() instanceof JsonWebToken jwt)) {
-      throw new NotAuthorizedException("OIDC");
-    }
-    CliLoginApproval approval = verify(signedRequest);
+    JsonWebToken jwt = sessionJwt();
+    CliLoginApproval approval = signer.consume(signedRequest);
     if (!approval.iss().equals(jwt.getIssuer()) || !approval.sub().equals(jwt.getSubject())) {
       throw new WebApplicationException(Response.Status.BAD_REQUEST);
     }
     if (!"allow".equals(decision)) {
-      return Response.ok(cancelledPage())
-          .type(MediaType.TEXT_HTML)
-          .header("Cache-Control", "no-store")
-          .header("Referrer-Policy", "no-referrer")
-          .header("X-Frame-Options", "DENY")
-          .header("Content-Security-Policy", "frame-ancestors 'none'")
-          .build();
+      return credentialPage(CliLoginPages.cancelledPage()).type(MediaType.TEXT_HTML).build();
     }
 
     MintedCliToken minted = minter.mint(jwt.getIssuer(), jwt.getSubject(), approval.description());
@@ -182,173 +154,21 @@ public class AuthRoutesResource {
     return Response.status(Response.Status.FOUND).location(URI.create(loopback)).build();
   }
 
-  private String approvalPage(
-      JsonWebToken jwt, int port, String nonce, String description, String signedRequest) {
-    String label = CliLoginResource.isBlank(description) ? "Pulumi CLI" : html(description.strip());
-    return """
-        <!doctype html>
-        <html lang="en">
-          <head>
-            <meta charset="utf-8" />
-            <meta name="referrer" content="no-referrer" />
-            <title>Allow CLI access</title>
-            <style>
-              body { font-family: system-ui, sans-serif; margin: 3rem auto; max-width: 40rem; line-height: 1.45; }
-              dl { display: grid; grid-template-columns: 9rem 1fr; gap: .5rem 1rem; }
-              dt { color: #555; }
-              dd { margin: 0; }
-              button { padding: .65rem 1rem; margin-right: .5rem; }
-            </style>
-          </head>
-          <body>
-            <h1>Allow CLI access?</h1>
-            <p>Pulumi CLI is requesting a 24-hour state-db token for your account.</p>
-            <dl>
-              <dt>Signed in as</dt><dd>%s</dd>
-              <dt>Client</dt><dd>%s</dd>
-              <dt>Access</dt><dd>Organizations you currently belong to</dd>
-              <dt>Loopback</dt><dd>127.0.0.1:%d</dd>
-            </dl>
-            <form method="post" action="/api/auth/cli-login/approve">
-              <input type="hidden" name="request" value="%s" />
-              <button type="submit" name="decision" value="allow">Allow access</button>
-              <button type="submit" name="decision" value="cancel">Cancel</button>
-            </form>
-          </body>
-        </html>
-        """
-        .formatted(
-            html(
-                Optional.ofNullable(jwt.getClaim("email"))
-                    .map(Object::toString)
-                    .orElse(jwt.getSubject())),
-            label,
-            port,
-            html(signedRequest));
-  }
-
-  private static String cancelledPage() {
-    return """
-        <!doctype html>
-        <html lang="en">
-          <head><meta charset="utf-8" /><title>CLI login cancelled</title></head>
-          <body><h1>CLI login cancelled.</h1><p>No token was created.</p></body>
-        </html>
-        """;
-  }
-
-  private String sign(CliLoginApproval approval) {
-    String payload = b64(approval.encode());
-    return payload + "." + b64(hmac(payload));
-  }
-
-  private CliLoginApproval verify(String signedRequest) {
-    if (signedRequest == null || signedRequest.isBlank()) {
-      throw new WebApplicationException(Response.Status.BAD_REQUEST);
+  private JsonWebToken sessionJwt() {
+    if (identity.getPrincipal() instanceof JsonWebToken jwt) {
+      return jwt;
     }
-    int dot = signedRequest.indexOf('.');
-    if (dot <= 0 || dot != signedRequest.lastIndexOf('.')) {
-      throw new WebApplicationException(Response.Status.BAD_REQUEST);
-    }
-    String payload = signedRequest.substring(0, dot);
-    byte[] actual = b64decode(signedRequest.substring(dot + 1));
-    byte[] expected = hmac(payload);
-    if (!MessageDigest.isEqual(actual, expected)) {
-      throw new WebApplicationException(Response.Status.BAD_REQUEST);
-    }
-    CliLoginApproval approval =
-        CliLoginApproval.decode(new String(b64decode(payload), StandardCharsets.UTF_8));
-    if (approval.expiresAtEpochSecond() < Instant.now().getEpochSecond()) {
-      throw new WebApplicationException(Response.Status.BAD_REQUEST);
-    }
-    return approval;
+    throw new NotAuthorizedException("OIDC");
   }
 
-  private byte[] hmac(String payload) {
-    try {
-      Mac mac = Mac.getInstance("HmacSHA256");
-      mac.init(new SecretKeySpec(signingSecret().getBytes(StandardCharsets.UTF_8), "HmacSHA256"));
-      return mac.doFinal(payload.getBytes(StandardCharsets.UTF_8));
-    } catch (NoSuchAlgorithmException | InvalidKeyException e) {
-      throw new IllegalStateException("HMAC-SHA256 unavailable", e);
-    }
-  }
-
-  private String signingSecret() {
-    return sessionEncryptionSecret
-        .filter(s -> s.length() >= 32)
-        .orElseThrow(
-            () ->
-                new IllegalStateException(
-                    "STATE_DB_SESSION_ENCRYPTION_SECRET must contain at least 32 characters"));
-  }
-
-  private static String b64(String s) {
-    return b64(s.getBytes(StandardCharsets.UTF_8));
-  }
-
-  private static String b64(byte[] bytes) {
-    return Base64.getUrlEncoder().withoutPadding().encodeToString(bytes);
-  }
-
-  private static byte[] b64decode(String s) {
-    try {
-      return Base64.getUrlDecoder().decode(s);
-    } catch (IllegalArgumentException e) {
-      throw new WebApplicationException(Response.Status.BAD_REQUEST);
-    }
-  }
-
-  private static String html(String s) {
-    return s.replace("&", "&amp;")
-        .replace("<", "&lt;")
-        .replace(">", "&gt;")
-        .replace("\"", "&quot;")
-        .replace("'", "&#39;");
-  }
-
-  private record CliLoginApproval(
-      int port,
-      String nonce,
-      String description,
-      String iss,
-      String sub,
-      long expiresAtEpochSecond) {
-    String encode() {
-      return String.join(
-          "\n",
-          Integer.toString(port),
-          b64(nonce),
-          b64(description == null ? "" : description),
-          b64(iss),
-          b64(sub),
-          Long.toString(expiresAtEpochSecond));
-    }
-
-    static CliLoginApproval decode(String encoded) {
-      String[] parts = encoded.split("\n", -1);
-      if (parts.length != 6) {
-        throw new WebApplicationException(Response.Status.BAD_REQUEST);
-      }
-      int port = CliLoginResource.parsePort(parts[0]);
-      if (port == -1) {
-        throw new WebApplicationException(Response.Status.BAD_REQUEST);
-      }
-      String nonce = new String(b64decode(parts[1]), StandardCharsets.UTF_8);
-      if (CliLoginResource.isBlank(nonce)) {
-        throw new WebApplicationException(Response.Status.BAD_REQUEST);
-      }
-      try {
-        return new CliLoginApproval(
-            port,
-            nonce,
-            new String(b64decode(parts[2]), StandardCharsets.UTF_8),
-            new String(b64decode(parts[3]), StandardCharsets.UTF_8),
-            new String(b64decode(parts[4]), StandardCharsets.UTF_8),
-            Long.parseLong(parts[5]));
-      } catch (NumberFormatException e) {
-        throw new WebApplicationException(Response.Status.BAD_REQUEST);
-      }
-    }
+  // Credential-issuing pages: must not be cached, leak a referrer, or be framable — a remote site
+  // could clickjack the "Allow access" button and deliver a token to an attacker-chosen loopback
+  // port.
+  private static Response.ResponseBuilder credentialPage(String body) {
+    return Response.ok(body)
+        .header("Cache-Control", "no-store")
+        .header("Referrer-Policy", "no-referrer")
+        .header("X-Frame-Options", "DENY")
+        .header("Content-Security-Policy", "frame-ancestors 'none'");
   }
 }

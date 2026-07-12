@@ -15,8 +15,6 @@ import jakarta.ws.rs.core.Response;
 import jakarta.ws.rs.ext.Provider;
 import java.util.Optional;
 import java.util.UUID;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
 
 /**
  * Authenticates lease-scoped routes (cancel + everything under {@code .../update/{updateID}/*}).
@@ -35,9 +33,6 @@ public class LeaseTokenFilter implements ContainerRequestFilter {
 
   private static final String SCHEME = "update-token ";
 
-  private static final Pattern PATH_PARTS =
-      Pattern.compile("^/pulumi/api/stacks/([^/]+)/([^/]+)/([^/]+)/update/([^/]+)(?:/.*)?$");
-
   @Inject LeaseLookup leaseLookup;
 
   @Inject StackRefResolver stackRefResolver;
@@ -46,7 +41,7 @@ public class LeaseTokenFilter implements ContainerRequestFilter {
 
   @Override
   public void filter(ContainerRequestContext ctx) {
-    String path = normalize(ctx.getUriInfo().getPath());
+    String path = RequestPaths.normalizedPath(ctx);
     if (!LeaseRouteMatcher.isLeaseScoped(ctx.getMethod(), path)) {
       return;
     }
@@ -71,25 +66,18 @@ public class LeaseTokenFilter implements ContainerRequestFilter {
       return;
     }
 
-    Matcher m = PATH_PARTS.matcher(path);
-    if (!m.matches()) {
-      ctx.abortWith(conflict());
-      return;
-    }
-    String org = m.group(1);
-    String project = m.group(2);
-    String stack = m.group(3);
-    String rawUpdateId = m.group(4);
+    // isLeaseScoped matched above, so the same pattern parses.
+    LeaseRouteMatcher.UpdatePath parts = LeaseRouteMatcher.parse(path).orElseThrow();
 
     UUID pathUpdateId;
     try {
-      pathUpdateId = UUID.fromString(rawUpdateId);
+      pathUpdateId = UUID.fromString(parts.updateId());
     } catch (IllegalArgumentException e) {
       ctx.abortWith(conflict());
       return;
     }
 
-    Optional<StackRef> ref = stackRefResolver.resolve(org, project, stack);
+    Optional<StackRef> ref = stackRefResolver.resolve(parts.org(), parts.project(), parts.stack());
     if (ref.isEmpty() || !ref.get().stackId().equals(lease.get().stackId())) {
       ctx.abortWith(conflict());
       return;
@@ -104,9 +92,5 @@ public class LeaseTokenFilter implements ContainerRequestFilter {
 
   private static Response conflict() {
     return Response.status(Response.Status.CONFLICT).build();
-  }
-
-  private static String normalize(String path) {
-    return path.startsWith("/") ? path : "/" + path;
   }
 }

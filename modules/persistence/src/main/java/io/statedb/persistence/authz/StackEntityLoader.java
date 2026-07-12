@@ -12,8 +12,6 @@ import io.statedb.persistence.stack.StackRefResolver;
 import jakarta.enterprise.context.RequestScoped;
 import jakarta.inject.Inject;
 import jakarta.interceptor.InvocationContext;
-import jakarta.ws.rs.PathParam;
-import java.lang.annotation.Annotation;
 import java.util.HashSet;
 import java.util.Map;
 import java.util.Optional;
@@ -34,9 +32,9 @@ public class StackEntityLoader implements EntityLoader<StackRef> {
 
   @Override
   public Optional<LoadedResource> load(InvocationContext ctx, AuthenticatedPrincipal principal) {
-    org = pathParam(ctx, "org");
-    project = pathParam(ctx, "project");
-    stack = pathParam(ctx, "stack");
+    org = EntityLoader.pathParam(ctx, "org");
+    project = EntityLoader.pathParam(ctx, "project");
+    stack = EntityLoader.pathParam(ctx, "stack");
     Optional<StackRef> ref = resolver.resolve(org, project, stack);
     if (ref.isEmpty()) {
       return Optional.empty();
@@ -48,7 +46,7 @@ public class StackEntityLoader implements EntityLoader<StackRef> {
     if (role.isEmpty() && !adminAllowList.isAdmin(principal.iss(), principal.sub())) {
       return Optional.empty();
     }
-    return Optional.of(new LoadedResource(stackResource(r), role.orElse(null)));
+    return Optional.of(new LoadedResource(stackResource(r), role.orElse(null), r));
   }
 
   @Override
@@ -85,18 +83,5 @@ public class StackEntityLoader implements EntityLoader<StackRef> {
 
   private static Map<String, com.cedarpolicy.value.Value> idAttr(String resourceName) {
     return Map.of("id", new PrimString(resourceName));
-  }
-
-  private static String pathParam(InvocationContext ctx, String name) {
-    Annotation[][] annotations = ctx.getMethod().getParameterAnnotations();
-    Object[] values = ctx.getParameters();
-    for (int i = 0; i < annotations.length; i++) {
-      for (Annotation annotation : annotations[i]) {
-        if (annotation instanceof PathParam pathParam && name.equals(pathParam.value())) {
-          return (String) values[i];
-        }
-      }
-    }
-    throw new IllegalStateException("missing @PathParam(\"" + name + "\")");
   }
 }
