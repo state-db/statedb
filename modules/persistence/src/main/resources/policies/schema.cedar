@@ -66,3 +66,23 @@ action "stack:Rename" in ["stack:WriteAccess"] appliesTo {
   principal: [User],
   resource: [Stack]
 };
+
+// Service-account (CI machine identity) management. Org-level operations: minting
+// a service account creates a machine user + membership + token inside one org.
+// Granted to owners (owner.cedar) and admins (admin.cedar's unconstrained action).
+action "serviceaccount:*";
+
+action "serviceaccount:Create" in ["serviceaccount:*"] appliesTo {
+  principal: [User],
+  resource: [Org]
+};
+
+action "serviceaccount:List" in ["serviceaccount:*"] appliesTo {
+  principal: [User],
+  resource: [Org]
+};
+
+action "serviceaccount:Revoke" in ["serviceaccount:*"] appliesTo {
+  principal: [User],
+  resource: [Org]
+};

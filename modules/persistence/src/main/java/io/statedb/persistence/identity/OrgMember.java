@@ -27,7 +27,13 @@ public class OrgMember extends PanacheEntityBase {
   public enum Role {
     owner,
     member,
-    viewer
+    viewer,
+    /**
+     * Machine identity (CI service account). Outside the viewer ⊂ member ⊂ owner ladder — service
+     * accounts have their own Cedar grant set (see {@code policies/service.cedar}) so tightening or
+     * loosening CI permissions never reshapes human permissions.
+     */
+    service
   }
 
   /** The role this user holds in the given org, if they are a member. */

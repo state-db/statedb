@@ -32,11 +32,20 @@ Every authenticated request resolves to exactly one of these:
 | Kind | Identifier | Source | Authn surface |
 |------|------------|--------|---------------|
 | `User` | `<iss>:<sub>` (e.g. `https://accounts.google.com:115...`) | `users` table; created on first OIDC login | Console (session cookie) **or** Pulumi CLI (OIDC-derived `api_token` row, `kind='oidc'`) |
-| `ServiceAccount` | `service:<token_id>` | `api_tokens` row, `kind='service_account'` | Pulumi CLI only |
+| Service account | `local:service:<sub>` | Machine `users` row (reserved issuer `local:service`) + `org_members` row with `role='service'` + org-pinned `api_tokens` row, `kind='service_account'` | Pulumi CLI only |
 | `Lease` | `lease:<stack_id>:<update_id>` | `stack_locks` row | Pulumi CLI lease-scoped routes only |
 | `BreakGlass` | First `<iss>:<sub>` from `STATE_DB_ADMIN_SUBJECTS` | env hash + loopback | `/api/auth/local` only |
 
-`User` and `ServiceAccount` go through the full Cedar PDP. `Lease` does not — see "Lease-token bypass" below. `BreakGlass` mints a session as the impersonated admin user and from there is indistinguishable from a regular admin login.
+Users and service accounts go through the full Cedar PDP. `Lease` does not — see "Lease-token bypass" below. `BreakGlass` mints a session as the impersonated admin user and from there is indistinguishable from a regular admin login.
+
+> **Implementation note.** A service account is a *machine user*, not a separate Cedar principal
+> type: a `users` row under the reserved `local:service` issuer whose org membership carries the
+> `service` role. Reusing the User entity type keeps every action's `appliesTo` untouched and reuses
+> the whole token/membership/role-resolution machinery; the distinct-grant-set requirement is met by
+> `Role::"service"` standing outside the viewer ⊂ member ⊂ owner ladder with its own policy
+> (`policies/service.cedar`). Minting/list/revoke is owner-only via the `serviceaccount:*` actions
+> (`POST/GET/DELETE /api/orgs/{org}/service-accounts`); deleting the machine user cascades the
+> membership and token away.
 
 ### Principal resolution
 

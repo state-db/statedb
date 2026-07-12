@@ -4,10 +4,8 @@ import io.statedb.persistence.identity.User;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 import jakarta.transaction.Transactional;
-import java.security.SecureRandom;
 import java.time.Duration;
 import java.time.Instant;
-import java.util.Base64;
 
 /**
  * Mints a 24-hour, account-scoped {@code kind=oidc} CLI token for a user after a console SSO
@@ -27,14 +25,7 @@ import java.util.Base64;
 @ApplicationScoped
 public class CliTokenMinter {
 
-  /** Pulumi-style opaque token; the prefix is cosmetic and aids log/grep identification. */
-  private static final String TOKEN_PREFIX = "pul-";
-
-  private static final int RAW_TOKEN_BYTES = 32;
-
   static final Duration TTL = Duration.ofHours(24);
-
-  private final SecureRandom random = new SecureRandom();
 
   @Inject ApiTokenHasher hasher;
 
@@ -49,7 +40,7 @@ public class CliTokenMinter {
             .firstResultOptional()
             .orElseThrow(() -> new IllegalStateException("no user for " + iss + ":" + sub));
 
-    String rawToken = TOKEN_PREFIX + randomToken();
+    String rawToken = RawApiTokens.generate();
     Instant expiresAt = Instant.now().plus(TTL);
 
     ApiToken token = new ApiToken();
@@ -62,11 +53,5 @@ public class CliTokenMinter {
     token.persist();
 
     return new MintedCliToken(rawToken, expiresAt);
-  }
-
-  private String randomToken() {
-    byte[] bytes = new byte[RAW_TOKEN_BYTES];
-    random.nextBytes(bytes);
-    return Base64.getUrlEncoder().withoutPadding().encodeToString(bytes);
   }
 }
