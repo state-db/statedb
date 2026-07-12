@@ -291,7 +291,8 @@
   <div class="grid g2">
     <div class="cardx">
       <div class="top"><span class="swatch" style="background:var(--principal)"></span><h4>principal — the caller</h4></div>
-      <p>The <span class="chip principal"><span class="dot"></span>User</span> behind the token, carrying the
+      <p>The <span class="chip principal"><span class="dot"></span>User</span> behind the credential —
+      console session, CLI login token, or service-account token — carrying the
       <span class="chip role"><span class="dot"></span>Role</span> they hold <em>in this resource's org</em>
       (more on that in §06).</p>
     </div>
@@ -345,6 +346,11 @@
   <p class="small">The bundle of entities handed to Cedar for one request is called the
   <b>slice</b>. Assembling the right slice is most of what the authorizer does — you'll watch it
   happen in §07.</p>
+  <p class="small"><b>Why names are strict.</b> Resource ids join names with <code class="m">/</code>,
+  so a slash inside a name could collide two stacks onto one entity id — and one stack's grants would
+  apply to the other. Hence the grammar: names are <code class="m">[A-Za-z0-9._-]{1,100}</code>,
+  enforced on create/rename (<code class="m">NameGrammar</code>) and backstopped by a DB
+  <code class="m">CHECK</code>.</p>
 </section>
 
 <!-- 4 · THREE HIERARCHIES -->
@@ -363,8 +369,11 @@
       <div class="conn">inherits</div>
       <div class="rung"><span class="chip role"><span class="dot"></span>viewer</span></div>
       <p class="small" style="margin-top:12px">So <code class="m">in Role::"viewer"</code> admits
-      <b>everyone</b>; <code class="m">in Role::"member"</code> admits member + owner.
-      <span class="chip role"><span class="dot"></span>admin</span> stands alone.</p>
+      every <em>human</em> role; <code class="m">in Role::"member"</code> admits member + owner.
+      <span class="chip role"><span class="dot"></span>admin</span> and
+      <span class="chip role"><span class="dot"></span>service</span> (CI machine identities) stand
+      alone — the service grant set (<code class="m">service.cedar</code>: read, decrypt, lock,
+      encrypt) evolves without ever reshaping human permissions.</p>
     </div>
 
     <div class="ladder split">
@@ -378,10 +387,10 @@
       <div class="conn">contains</div>
       <div class="branch">
         <span class="chip action" style="font-size:10.5px">Read · Decrypt</span>
-        <span class="chip action" style="font-size:10.5px">Create · Lock · Delete · Encrypt</span>
+        <span class="chip action" style="font-size:10.5px">Create · Lock · Delete · Encrypt · Tags · Rename</span>
       </div>
       <p class="small" style="margin-top:12px">Grant a whole bundle once:
-      <code class="m">in Action::"stack:WriteAccess"</code> covers all four writers.</p>
+      <code class="m">in Action::"stack:WriteAccess"</code> covers every writer.</p>
     </div>
 
     <div class="ladder">
@@ -470,10 +479,38 @@
   <div class="key">
     <div class="t">why this is the keystone</div>
     <p>One component — <code class="m">PrincipalRoleResolver</code> — answers
-    <b>(principal, resourceOrg) → role</b> and attaches that role to the Cedar principal. Now every
-    policy is pure role logic with <b>no tenancy clause to repeat</b>, and multi-org "just works."
-    No role in that org (and not an admin)? The request stops as a <b>404</b> before Cedar even runs —
-    you can't be denied access to something you can't see.</p>
+    <b>(credential scope, resourceOrg) → role</b> and attaches that role to the Cedar principal. Now
+    every policy is pure role logic with <b>no tenancy clause to repeat</b>, and multi-org "just
+    works." No role in that org (and not an admin)? The request stops <b>before Cedar even runs</b> —
+    stack routes as a 404, org routes as a uniform 403. Either way, existence never leaks across the
+    boundary.</p>
+  </div>
+
+  <h3>The credential draws the boundary</h3>
+  <p class="say">Before the resolver looks anything up, the <b>credential's scope</b> says which orgs
+  it may be used against at all. Three ways in, two scopes:</p>
+
+  <div class="grid g3">
+    <div class="cardx">
+      <div class="top"><span class="swatch" style="background:var(--principal)"></span><h4>console session</h4></div>
+      <p><span class="chip role"><span class="dot"></span>all current memberships</span></p>
+      <p>Browser SSO (OIDC). Role looked up <b>live</b> in <code class="m">org_members</code> for the
+      resource's org, on every request.</p>
+    </div>
+    <div class="cardx">
+      <div class="top"><span class="swatch" style="background:var(--principal)"></span><h4>CLI login token</h4></div>
+      <p><span class="chip role"><span class="dot"></span>all current memberships</span></p>
+      <p>Minted by <code class="m">pulumi login</code> after an explicit approval page; 24h TTL. Same
+      live lookup as the console — revoke a membership and the token loses that org instantly.</p>
+    </div>
+    <div class="cardx">
+      <div class="top"><span class="swatch" style="background:var(--principal)"></span><h4>service-account token</h4></div>
+      <p><span class="chip role"><span class="dot"></span>single org</span></p>
+      <p>A CI <b>machine identity</b>: a user row under the reserved <code class="m">local:service</code>
+      issuer holding <span class="chip role"><span class="dot"></span>service</span> in one org —
+      worth <b>nothing</b> anywhere else. Minted/revoked by org owners; dies with the membership (the
+      auth query joins <code class="m">org_members</code>).</p>
+    </div>
   </div>
 </section>
 
@@ -496,8 +533,10 @@
   <div class="pipeline">
     <div class="step"><div class="n">1</div><div>
       <h4>Authenticate</h4>
-      <p>The <code class="m">token</code> header is hashed and looked up; we build the principal — the
-      User plus, for a CLI token, the org it's scoped to.</p>
+      <p>The <code class="m">token</code> header is hashed (SHA-256; plaintext is never stored) and one
+      query authenticates the actor <em>and</em> builds the credential scope — for a single-org token
+      it joins <code class="m">org_members</code>, so a revoked membership stops authenticating, not
+      just authorizing.</p>
       <div class="file">TokenAuthFilter · ApiTokenFinder</div></div></div>
     <div class="step"><div class="n">2</div><div>
       <h4>Load the resource</h4>
@@ -546,6 +585,17 @@
     <div class="pol hit deny"><span class="mk d">✦</span><span class="nm">DenyDeleteProtectedStacks</span><span class="why">resource.id ends in /prod ✓ — votes Deny</span></div>
   </div>
   <div class="verdict deny"><span class="big">Deny</span> One <code class="m">forbid</code> overrides the <code class="m">permit</code> — not even an owner (or admin) can delete prod.<span class="http">→ 403</span></div>
+
+  <div class="key">
+    <div class="t">the second lane: update-token</div>
+    <p>During <code class="m">pulumi up</code>, the checkpoint/event writes don't re-run this pipeline.
+    <b>Cedar ran once</b>, at lock acquire (<code class="m">stack:Lock</code>); the CLI gets back a
+    short-lived <b>lease token</b> that <em>is</em> the proof of that decision. Lease-scoped routes
+    authenticate it instead (<code class="m">Authorization: update-token</code>) — hashed at rest,
+    valid for exactly one stack + update, path mismatch → <b>409</b>. One matcher
+    (<code class="m">LeaseRouteMatcher</code>) decides which lane a route belongs to, so the two
+    filters can never disagree.</p>
+  </div>
 </section>
 
 <!-- 8 · POLICY LAYERS -->
@@ -600,8 +650,9 @@
       <tr><td class="s">Stack…ResourcePolicy template + grant</td><td class="ar">≈</td><td>resource-based policy (bucket policy)</td></tr>
     </tbody>
   </table>
-  <p class="small">The one deliberate departure from IAM: a non-member sees <b>404</b>, never 403 — so
-  tenants can't enumerate each other across the org boundary.</p>
+  <p class="small">The one deliberate departure from IAM: a non-member sees <b>404</b> on stack routes
+  (org routes answer a uniform <b>403</b> whether the org exists or not) — either way, tenants can't
+  enumerate each other across the org boundary.</p>
 </section>
 
 <!-- 10 · CODE MAP -->
@@ -613,11 +664,14 @@
 
   <div class="grouplabel">the request path</div>
   <div class="files">
-    <div class="frow"><span class="p">TokenAuthFilter.java</span><span class="d">Parses <code class="m">Authorization: token</code> and sets the principal.</span></div>
+    <div class="frow"><span class="p">TokenAuthFilter.java</span><span class="d">Parses <code class="m">Authorization: token</code>, sets the principal + credential scope, records <code class="m">last_used_at</code>.</span></div>
+    <div class="frow"><span class="p">LeaseTokenFilter · LeaseRouteMatcher</span><span class="d">The <code class="m">update-token</code> lane. The matcher is the single owner of the lease path shape; the filter checks the token against the hashed lock row (401 = bad header, 409 = stale lease).</span></div>
     <div class="frow"><span class="p">AuthorizeInterceptor.java</span><span class="d">Fires before the handler: load resource → resolve role → call the Authorizer → allow / 403 / 404.</span></div>
-    <div class="frow"><span class="p">StackEntityLoader · OrgEntityLoader</span><span class="d">Build the resource entities (with the Stack▸Project▸Org chain) and enforce the 404 boundary.</span></div>
-    <div class="frow"><span class="p">PrincipalRoleResolver.java</span><span class="d">The tenancy seam: <code class="m">(principal, resourceOrg) → role</code>.</span></div>
+    <div class="frow"><span class="p">StackEntityLoader · OrgEntityLoader</span><span class="d">Build the resource entities (with the Stack▸Project▸Org chain) and enforce the tenancy boundary.</span></div>
+    <div class="frow"><span class="p">AuthorizedResource.java</span><span class="d">After an allow, hands the loader's resolved <code class="m">StackRef</code> / <code class="m">Organization</code> to the handler — resolve once, use twice.</span></div>
+    <div class="frow"><span class="p">PrincipalRoleResolver.java</span><span class="d">The tenancy seam: <code class="m">(credential scope, resourceOrg) → role</code>.</span></div>
     <div class="frow"><span class="p">Authorizer.java</span><span class="d">The PDP. Assembles the slice and calls cedar-java <code class="m">isAuthorized()</code>.</span></div>
+    <div class="frow"><span class="p">NameGrammar.java</span><span class="d">The <code class="m">[A-Za-z0-9._-]</code> grammar behind every resource id — enforced on create/rename, backstopped by DB CHECKs (V011).</span></div>
   </div>
 
   <div class="grouplabel">the policy set</div>
