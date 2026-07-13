@@ -19,6 +19,7 @@
     "projectName": "recorder-test",
     "stackName": "dev",
     "tags": {
+      "env": "recorder",
       "pulumi:description": "Minimal Pulumi project for API recording. Uses the `random` provider so `pulumi up`/`destroy` exercise the journal/checkpoint write paths with real resource state.",
       "pulumi:project": "recorder-test",
       "pulumi:runtime": "yaml"

@@ -187,7 +187,7 @@ func (rt *router) routeStacks(method string, parts []string, n int, body []byte)
 			}
 		case "tags":
 			if method == "PATCH" {
-				return 200, map[string]interface{}{}
+				return rt.replaceTags(org, proj, stack, body)
 			}
 		case "preview", "update", "destroy", "refresh":
 			if method == "POST" {
@@ -252,6 +252,22 @@ func (rt *router) listStacks(org string) (int, interface{}) {
 	return 200, map[string]interface{}{"stacks": out}
 }
 
+// The CLI PATCHes the full desired tag map; store it so later GETs reflect tag edits.
+func (rt *router) replaceTags(org, proj, stack string, body []byte) (int, interface{}) {
+	var tags map[string]interface{}
+	json.Unmarshal(body, &tags) //nolint:errcheck
+	if tags == nil {
+		tags = map[string]interface{}{}
+	}
+	rt.mu.Lock()
+	if info, ok := rt.stacks[stackKey(org, proj, stack)]; ok {
+		info.tags = tags
+		rt.stacks[stackKey(org, proj, stack)] = info
+	}
+	rt.mu.Unlock()
+	return 200, map[string]interface{}{}
+}
+
 func (rt *router) createStack(org, proj string, body []byte) (int, interface{}) {
 	var req map[string]interface{}
 	json.Unmarshal(body, &req) //nolint:errcheck
@@ -313,7 +329,8 @@ func (rt *router) renameStack(org, proj, stack string, body []byte) (int, interf
 	delete(rt.stacks, stackKey(org, proj, stack))
 	info.orgName, info.projectName, info.stackName = newOrg, newProj, newStack
 	rt.stacks[stackKey(newOrg, newProj, newStack)] = info
-	return 200, rt.stackBody(info)
+	// The CLI ignores the rename response body (client.RenameStack passes a nil response).
+	return 200, map[string]interface{}{}
 }
 
 func (rt *router) deleteStack(org, proj, stack string) (int, interface{}) {
@@ -338,32 +355,32 @@ func (rt *router) exportStack(org, proj, stack string) (int, interface{}) {
 	rt.mu.Lock()
 	info, ok := rt.stacks[stackKey(org, proj, stack)]
 	rt.mu.Unlock()
-	if ok && len(info.resourceOrder) > 0 {
-		resources := make([]interface{}, 0, len(info.resourceOrder))
+	// Empty stacks still export as a DeploymentV3-shaped object (matching state-db and Pulumi
+	// cloud), never as a null deployment.
+	resources := make([]interface{}, 0)
+	var secretsProvider interface{}
+	if ok {
 		for _, urn := range info.resourceOrder {
 			if res := info.resources[urn]; res != nil {
 				resources = append(resources, res)
 			}
 		}
-		deployment := map[string]interface{}{
-			"manifest": map[string]interface{}{
-				"time":    "1970-01-01T00:00:00Z",
-				"magic":   pulumiManifestMagic,
-				"version": pulumiVersion,
-			},
-			"resources": resources,
-		}
-		if info.secretsProvider != nil {
-			deployment["secrets_providers"] = info.secretsProvider
-		}
-		return 200, map[string]interface{}{
-			"version":    3,
-			"deployment": deployment,
-		}
+		secretsProvider = info.secretsProvider
+	}
+	deployment := map[string]interface{}{
+		"manifest": map[string]interface{}{
+			"time":    "1970-01-01T00:00:00Z",
+			"magic":   pulumiManifestMagic,
+			"version": pulumiVersion,
+		},
+		"resources": resources,
+	}
+	if secretsProvider != nil {
+		deployment["secrets_providers"] = secretsProvider
 	}
 	return 200, map[string]interface{}{
 		"version":    3,
-		"deployment": nil,
+		"deployment": deployment,
 	}
 }
 

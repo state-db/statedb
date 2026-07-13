@@ -66,11 +66,33 @@ class StackUpdateStarterTest {
 
   @Test
   void distinctKeysProduceMonotonicVersions() {
-    StartedUpdate a = starter.start(stackId, StackUpdate.Kind.PREVIEW, null, null, "k-a", req());
+    StartedUpdate a = starter.start(stackId, StackUpdate.Kind.UPDATE, null, null, "k-a", req());
     StartedUpdate b = starter.start(stackId, StackUpdate.Kind.UPDATE, null, null, "k-b", req());
     assertEquals(1, a.version());
     assertEquals(2, b.version());
     assertNotEquals(a.updateId(), b.updateId());
+  }
+
+  @Test
+  void dryRunsDoNotConsumeAppliedVersions() {
+    // pulumi preview, and the dry-run pass of up/refresh/destroy (same kind as the apply, but
+    // options.dryRun = true), carry version 0 and never advance the applied sequence.
+    StartedUpdate preview =
+        starter.start(stackId, StackUpdate.Kind.PREVIEW, null, null, null, req());
+    StartedUpdate dryRunPass =
+        starter.start(
+            stackId,
+            StackUpdate.Kind.UPDATE,
+            null,
+            null,
+            null,
+            new StartUpdateRequest(
+                Map.of(), Map.of(), Map.of("dryRun", true), null, null, null, null));
+    StartedUpdate apply = starter.start(stackId, StackUpdate.Kind.UPDATE, null, null, null, req());
+
+    assertEquals(0, preview.version());
+    assertEquals(0, dryRunPass.version());
+    assertEquals(1, apply.version());
   }
 
   @Test
@@ -99,8 +121,8 @@ class StackUpdateStarterTest {
 
   @Test
   void nullKeyDoesNotDeduplicate() {
-    StartedUpdate a = starter.start(stackId, StackUpdate.Kind.PREVIEW, null, null, null, req());
-    StartedUpdate b = starter.start(stackId, StackUpdate.Kind.PREVIEW, null, null, null, req());
+    StartedUpdate a = starter.start(stackId, StackUpdate.Kind.UPDATE, null, null, null, req());
+    StartedUpdate b = starter.start(stackId, StackUpdate.Kind.UPDATE, null, null, null, req());
     assertEquals(1, a.version());
     assertEquals(2, b.version());
     assertNotEquals(a.updateId(), b.updateId());
@@ -111,9 +133,9 @@ class StackUpdateStarterTest {
     ExecutorService pool = Executors.newFixedThreadPool(2);
     try {
       Callable<StartedUpdate> task1 =
-          () -> starter.start(stackId, StackUpdate.Kind.PREVIEW, null, null, "c-1", req());
+          () -> starter.start(stackId, StackUpdate.Kind.UPDATE, null, null, "c-1", req());
       Callable<StartedUpdate> task2 =
-          () -> starter.start(stackId, StackUpdate.Kind.PREVIEW, null, null, "c-2", req());
+          () -> starter.start(stackId, StackUpdate.Kind.UPDATE, null, null, "c-2", req());
       Future<StartedUpdate> f1 = pool.submit(task1);
       Future<StartedUpdate> f2 = pool.submit(task2);
       StartedUpdate r1 = f1.get(10, TimeUnit.SECONDS);

@@ -200,6 +200,9 @@ class StackTagsContractTest {
 
   @Test
   void rejectsTagLimitViolations() {
+    // Limits mirror Pulumi's pkg/util/validation/stack.go: names are 1-40 chars of
+    // [a-zA-Z0-9-_.:], values are capped at 256.
+
     // Too many tags.
     java.util.Map<String, String> tooMany = new java.util.HashMap<>();
     for (int i = 0; i < 51; i++) {
@@ -207,14 +210,17 @@ class StackTagsContractTest {
     }
     patchTags(tooMany).then().statusCode(400);
 
-    // Key over 50 characters.
-    patchTags(Map.of("k".repeat(51), "v")).then().statusCode(400);
+    // Key over 40 characters.
+    patchTags(Map.of("k".repeat(41), "v")).then().statusCode(400);
 
-    // Value over 100 characters.
-    patchTags(Map.of("env", "v".repeat(101))).then().statusCode(400);
+    // Key with characters outside Pulumi's tag-name alphabet.
+    patchTags(Map.of("bad key", "v")).then().statusCode(400);
+
+    // Value over 256 characters.
+    patchTags(Map.of("env", "v".repeat(257))).then().statusCode(400);
 
     // At the limits — accepted.
-    patchTags(Map.of("k".repeat(50), "v".repeat(100))).then().statusCode(200);
+    patchTags(Map.of("k".repeat(40), "v".repeat(256))).then().statusCode(200);
   }
 
   private io.restassured.response.Response patchTags(Map<String, String> tags) {

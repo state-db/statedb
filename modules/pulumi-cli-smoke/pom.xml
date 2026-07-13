@@ -13,6 +13,11 @@
     <properties>
         <!-- Opt-in: this module starts Docker containers and runs the real Pulumi CLI. -->
         <skipPulumiCliSmoke>true</skipPulumiCliSmoke>
+        <!-- Opt-in: adversarial fault-injection scenarios (crash, concurrency, corruption).
+             Slower than smoke; runs nightly in CI and produces the State Safety Report. -->
+        <skipPulumiCliFaults>true</skipPulumiCliFaults>
+        <!-- Pulumi CLI image under test; the nightly CI matrix overrides this. -->
+        <pulumi.cli.image>pulumi/pulumi:3.234.0</pulumi.cli.image>
     </properties>
 
     <dependencies>
@@ -63,17 +68,36 @@
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-failsafe-plugin</artifactId>
                 <configuration>
-                    <skipITs>${skipPulumiCliSmoke}</skipITs>
-                    <includes>
-                        <include>**/*IT.java</include>
-                    </includes>
+                    <systemPropertyVariables>
+                        <pulumi.cli.image>${pulumi.cli.image}</pulumi.cli.image>
+                    </systemPropertyVariables>
                 </configuration>
                 <executions>
                     <execution>
+                        <id>smoke</id>
                         <goals>
                             <goal>integration-test</goal>
                             <goal>verify</goal>
                         </goals>
+                        <configuration>
+                            <skipITs>${skipPulumiCliSmoke}</skipITs>
+                            <includes>
+                                <include>**/*SmokeIT.java</include>
+                            </includes>
+                        </configuration>
+                    </execution>
+                    <execution>
+                        <id>faults</id>
+                        <goals>
+                            <goal>integration-test</goal>
+                            <goal>verify</goal>
+                        </goals>
+                        <configuration>
+                            <skipITs>${skipPulumiCliFaults}</skipITs>
+                            <includes>
+                                <include>**/*FaultIT.java</include>
+                            </includes>
+                        </configuration>
                     </execution>
                 </executions>
             </plugin>

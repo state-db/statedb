@@ -47,19 +47,25 @@ public class StackUpdateStarter {
       }
     }
 
-    int nextVersion =
-        ((Number)
-                em.createNativeQuery(
-                        "SELECT COALESCE(MAX(version), 0) + 1 FROM stack_updates WHERE stack_id = ?1")
-                    .setParameter(1, stackId)
-                    .getSingleResult())
-            .intValue();
+    // Dry runs (pulumi preview, and the dry-run pass of up/refresh/destroy) do not consume the
+    // applied-version sequence: versions address applied updates, 1-based and contiguous.
+    boolean dryRun = kind == StackUpdate.Kind.PREVIEW || isDryRun(req);
+    int version =
+        dryRun
+            ? 0
+            : ((Number)
+                    em.createNativeQuery(
+                            "SELECT COALESCE(MAX(version), 0) + 1 FROM stack_updates WHERE stack_id = ?1")
+                        .setParameter(1, stackId)
+                        .getSingleResult())
+                .intValue();
 
     StackUpdate u = new StackUpdate();
     u.stackId = stackId;
     u.kind = kind;
     u.status = StackUpdate.Status.IN_PROGRESS;
-    u.version = nextVersion;
+    u.version = version;
+    u.dryRun = dryRun;
     u.clientRequestId = clientRequestId;
     u.config = req.config();
     u.metadata = req.metadata();
@@ -74,5 +80,9 @@ public class StackUpdateStarter {
     u.persistAndFlush();
 
     return new StartedUpdate(u.id, u.version);
+  }
+
+  private static boolean isDryRun(StartUpdateRequest req) {
+    return req.options() != null && Boolean.TRUE.equals(req.options().get("dryRun"));
   }
 }

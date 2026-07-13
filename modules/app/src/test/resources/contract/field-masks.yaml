@@ -1,8 +1,20 @@
 fieldNames:
   - updateID
+  # POST /import returns {"updateId": ...} (apitype.ImportStackResponse capitalization).
+  - updateId
   - lockToken
   - requestID
   - requestId
   - timestamp
   - createdAt
   - updatedAt
+  # Lease tokens and their expirations are generated per acquisition; the recorded stub minted
+  # deterministic placeholders. Session replay learns the live values for auth but masks them in
+  # response comparisons.
+  - token
+  - tokenExpiration
+  # Wall clock of deployment assembly, embedded in every export response.
+  - time
+  # Documented difference: state-db prunes resource stackTrace arrays from stored state (see
+  # CompactionWorkerTest#compactionPrunesStackTraceFromSnapshot); recorded CLI payloads carry them.
+  - stackTrace

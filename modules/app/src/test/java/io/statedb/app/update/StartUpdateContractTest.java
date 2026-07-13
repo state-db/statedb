@@ -100,7 +100,8 @@ class StartUpdateContractTest {
   }
 
   @Test
-  void previewReturnsUpdateIdAndVersionAndPersistsRow() {
+  void previewReturnsUpdateIdAndPersistsDryRunRow() {
+    // Previews are dry runs: they never consume the applied-version sequence (version 0).
     given()
         .header("Authorization", "token " + RAW_TOKEN)
         .contentType("application/json")
@@ -110,7 +111,7 @@ class StartUpdateContractTest {
         .then()
         .statusCode(200)
         .body("updateID", notNullValue())
-        .body("version", equalTo(1));
+        .body("version", equalTo(0));
 
     QuarkusTransaction.requiringNew()
         .run(
@@ -118,14 +119,15 @@ class StartUpdateContractTest {
               Object[] row =
                   (Object[])
                       em.createNativeQuery(
-                              "SELECT kind, status, pulumi_version, version FROM stack_updates"
-                                  + " WHERE stack_id = ?1")
+                              "SELECT kind, status, pulumi_version, version, dry_run"
+                                  + " FROM stack_updates WHERE stack_id = ?1")
                           .setParameter(1, stackId(ORG))
                           .getSingleResult();
               assertEquals("preview", row[0]);
               assertEquals("in-progress", row[1]);
               assertEquals("v3.234.0", row[2]);
-              assertEquals(1, ((Number) row[3]).intValue());
+              assertEquals(0, ((Number) row[3]).intValue());
+              assertEquals(Boolean.TRUE, row[4]);
             });
   }
 
@@ -134,7 +136,7 @@ class StartUpdateContractTest {
     given()
         .header("Authorization", "token " + RAW_TOKEN)
         .contentType("application/json")
-        .body(programBody())
+        .body(applyBody())
         .when()
         .post("/pulumi/api/stacks/" + ORG + "/" + PROJECT + "/" + STACK + "/update")
         .then()
@@ -144,7 +146,7 @@ class StartUpdateContractTest {
     given()
         .header("Authorization", "token " + RAW_TOKEN)
         .contentType("application/json")
-        .body(programBody())
+        .body(applyBody())
         .when()
         .post("/pulumi/api/stacks/" + ORG + "/" + PROJECT + "/" + STACK + "/destroy")
         .then()
@@ -264,10 +266,18 @@ class StartUpdateContractTest {
   }
 
   private static Map<String, Object> programBody() {
-    return programBody(PROJECT);
+    return programBody(PROJECT, true);
   }
 
   private static Map<String, Object> programBody(String projectName) {
+    return programBody(projectName, true);
+  }
+
+  private static Map<String, Object> applyBody() {
+    return programBody(PROJECT, false);
+  }
+
+  private static Map<String, Object> programBody(String projectName, boolean dryRun) {
     return Map.of(
         "config",
         Map.of(),
@@ -289,7 +299,7 @@ class StartUpdateContractTest {
         "name",
         projectName,
         "options",
-        Map.of("color", "raw", "debug", false, "dryRun", true, "parallel", 40),
+        Map.of("color", "raw", "debug", false, "dryRun", dryRun, "parallel", 40),
         "runtime",
         "yaml");
   }

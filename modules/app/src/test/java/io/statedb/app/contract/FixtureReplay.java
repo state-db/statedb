@@ -27,15 +27,32 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Base64;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import org.yaml.snakeyaml.LoaderOptions;
 import org.yaml.snakeyaml.Yaml;
 
-/** Replays Pulumi CLI recorder fixtures against the running {@code @QuarkusTest} server. */
+/**
+ * Replays Pulumi CLI recorder fixtures against the running {@code @QuarkusTest} server.
+ *
+ * <p>Single-command replay ({@link #command}) sends each recorded exchange as-is. Session replay
+ * ({@link #commands}) chains command directories in recorded order and reconciles the recorder
+ * stub's deterministic ids with the live server's generated ones: when a response returns an {@code
+ * updateID} or lease {@code token}, the recorded→live mapping is learned and substituted into the
+ * paths and {@code Authorization} headers of subsequent requests. Lease-scoped routes (sub-paths of
+ * {@code .../update/{updateID}}) authenticate with {@code update-token <live lease>}; everything
+ * else uses {@code token <rawToken>}.
+ *
+ * <p>Exchanges against the secrets encrypt/decrypt endpoints are skipped: the recorded ciphertexts
+ * were minted by the recorder stub and the live server cannot decrypt them. Secrets round-trips are
+ * covered by {@code SecretsFixtureReplayTest} and the CLI smoke tests.
+ */
 public final class FixtureReplay {
 
   public static final String DEFAULT_TOKEN = "fixture-replay-token";
@@ -45,32 +62,47 @@ public final class FixtureReplay {
   private static final String PULUMI_BASE_PATH = "/pulumi";
   private static final String MASKS_RESOURCE = "contract/field-masks.yaml";
 
-  private final String command;
+  private static final Pattern UPDATE_PATH =
+      Pattern.compile("^/api/stacks/[^/]+/[^/]+/[^/]+/update/([^/]+)(/.*)?$");
+  private static final Set<String> SECRETS_PATH_SUFFIXES =
+      Set.of("/batch-decrypt", "/encrypt", "/decrypt/log-batch-decryption");
+
+  private final List<String> commands;
   private final String rawToken;
   private final ResponseMasks masks;
 
-  private FixtureReplay(String command, String rawToken) {
-    this.command = command;
+  // Session state: recorded id -> live id, and recorded updateID -> live lease token.
+  private final Map<String, String> idSubstitutions = new HashMap<>();
+  private final Map<String, String> leaseByRecordedUpdate = new HashMap<>();
+
+  private FixtureReplay(List<String> commands, String rawToken) {
+    this.commands = commands;
     this.rawToken = rawToken;
     this.masks = ResponseMasks.load();
   }
 
   public static FixtureReplay command(String command) {
-    return new FixtureReplay(command, DEFAULT_TOKEN);
+    return new FixtureReplay(List.of(command), DEFAULT_TOKEN);
+  }
+
+  public static FixtureReplay commands(String... commands) {
+    return new FixtureReplay(List.of(commands), DEFAULT_TOKEN);
   }
 
   public FixtureReplay withToken(String rawToken) {
-    return new FixtureReplay(command, rawToken);
+    return new FixtureReplay(commands, rawToken);
   }
 
   public void replay() {
-    List<Path> fixtures = fixturesFor(command);
-    assertFalse(
-        fixtures.isEmpty(),
-        () -> "No recorder fixtures found for command " + command + " under " + fixtureRoot());
+    for (String command : commands) {
+      List<Path> fixtures = fixturesFor(command);
+      assertFalse(
+          fixtures.isEmpty(),
+          () -> "No recorder fixtures found for command " + command + " under " + fixtureRoot());
 
-    for (Path fixture : fixtures) {
-      replayFixture(fixture);
+      for (Path fixture : fixtures) {
+        replayFixture(fixture);
+      }
     }
   }
 
@@ -78,10 +110,14 @@ public final class FixtureReplay {
     try {
       JsonNode exchange = JSON.readTree(fixture.toFile());
       String method = exchange.required("method").asText();
-      String target = targetUrl(exchange);
+      String recordedPath = exchange.required("path").asText();
+      if (isSecretsExchange(recordedPath)) {
+        return;
+      }
+      String target = substitute(targetUrl(exchange));
 
       RequestSpecification request = given();
-      addHeaders(request, exchange.path("headers"));
+      addHeaders(request, exchange.path("headers"), method, recordedPath, fixture);
       if (exchange.has("body_b64")) {
         request.body(Base64.getDecoder().decode(exchange.required("body_b64").asText()));
       } else if (exchange.has("body_raw")) {
@@ -94,15 +130,56 @@ public final class FixtureReplay {
       int expectedStatus = exchange.required("status_code").asInt();
       assertEquals(expectedStatus, response.statusCode(), fixture + " status");
 
-      if (exchange.has("response")) {
-        assertJsonMatches(exchange.required("response"), response.asString(), fixture);
+      if (exchange.has("response") && !isStubFillerBody(method, recordedPath)) {
+        learnSubstitutions(exchange.required("response"), response.asString(), recordedPath);
+        JsonNode expected = exchange.required("response");
+        if (isOpLifecycle(method, recordedPath)) {
+          expected = stripRootVersion(expected);
+        }
+        assertJsonMatches(
+            expected, response.asString(), fixture, isOpLifecycle(method, recordedPath));
       }
     } catch (IOException e) {
       fail("Could not replay fixture " + fixture + ": " + e.getMessage());
     }
   }
 
-  private void addHeaders(RequestSpecification request, JsonNode headers) {
+  // The recorder stub did not track update history or the user-stacks index; those GET responses
+  // are filler the CLI ignored, not contract (the real shapes are pinned by
+  // StackHistoryContractTest and UserStacksContractTest). Status code is still asserted above.
+  private static boolean isStubFillerBody(String method, String recordedPath) {
+    return "GET".equalsIgnoreCase(method)
+        && (recordedPath.endsWith("/updates")
+            || recordedPath.endsWith("/update")
+            || recordedPath.startsWith("/api/user/stacks"));
+  }
+
+  // Create/start responses carry a root "version" the stub hardcoded to 1; the live value is
+  // server-generated (0 for dry runs, the applied sequence otherwise) and CLI-invisible at this
+  // point, so it is excluded from the comparison.
+  private static boolean isOpLifecycle(String method, String recordedPath) {
+    if (!"POST".equalsIgnoreCase(method)) {
+      return false;
+    }
+    return recordedPath.matches(
+            "^/api/stacks/[^/]+/[^/]+/[^/]+/(update|preview|refresh|destroy|import)$")
+        || UPDATE_PATH.matcher(recordedPath).matches();
+  }
+
+  private static JsonNode stripRootVersion(JsonNode node) {
+    JsonNode copy = node.deepCopy();
+    if (copy instanceof ObjectNode object) {
+      object.remove("version");
+    }
+    return copy;
+  }
+
+  private void addHeaders(
+      RequestSpecification request,
+      JsonNode headers,
+      String method,
+      String recordedPath,
+      Path fixture) {
     headers
         .fields()
         .forEachRemaining(
@@ -113,19 +190,81 @@ public final class FixtureReplay {
                 return;
               }
               if ("Authorization".equalsIgnoreCase(name)) {
-                request.header(name, "token " + rawToken);
+                request.header(name, authorization(method, recordedPath, fixture));
               } else {
                 request.header(name, entry.getValue().asText());
               }
             });
   }
 
-  private void assertJsonMatches(JsonNode expected, String actualBody, Path fixture)
+  // Mirrors LeaseRouteMatcher: sub-paths of .../update/{updateID} (and DELETE on the bare path)
+  // authenticate with the lease token; POST on the bare path is the acquire itself and still uses
+  // the regular token scheme.
+  private String authorization(String method, String recordedPath, Path fixture) {
+    Matcher matcher = UPDATE_PATH.matcher(recordedPath);
+    if (matcher.matches()) {
+      boolean deeper = matcher.group(2) != null && !matcher.group(2).isEmpty();
+      if (deeper || "DELETE".equalsIgnoreCase(method)) {
+        String recordedUpdateId = matcher.group(1);
+        String lease = leaseByRecordedUpdate.get(recordedUpdateId);
+        assertFalse(
+            lease == null,
+            () ->
+                fixture
+                    + " is lease-scoped but no lease was learned for recorded update "
+                    + recordedUpdateId
+                    + " — did the session include the update-start exchange?");
+        return "update-token " + lease;
+      }
+    }
+    return "token " + rawToken;
+  }
+
+  private String substitute(String target) {
+    String result = target;
+    for (Map.Entry<String, String> substitution : idSubstitutions.entrySet()) {
+      result = result.replace(substitution.getKey(), substitution.getValue());
+    }
+    return result;
+  }
+
+  // The recorder stub minted deterministic ids (update-0001, lease-0001); the live server mints
+  // real ones. Learn recorded -> live from response roots so later paths and lease headers line up.
+  private void learnSubstitutions(JsonNode expected, String actualBody, String recordedPath)
       throws IOException {
+    if (actualBody == null || actualBody.isBlank()) {
+      return;
+    }
+    JsonNode actual = JSON.readTree(actualBody);
+
+    String expectedUpdateId = expected.path("updateID").asText("");
+    String actualUpdateId = actual.path("updateID").asText("");
+    if (!expectedUpdateId.isEmpty() && !actualUpdateId.isEmpty()) {
+      idSubstitutions.put(expectedUpdateId, actualUpdateId);
+    }
+
+    String actualToken = actual.path("token").asText("");
+    if (!actualToken.isEmpty()) {
+      Matcher matcher = UPDATE_PATH.matcher(recordedPath);
+      if (matcher.matches()) {
+        leaseByRecordedUpdate.put(matcher.group(1), actualToken);
+      }
+    }
+  }
+
+  private static boolean isSecretsExchange(String recordedPath) {
+    return SECRETS_PATH_SUFFIXES.stream().anyMatch(recordedPath::endsWith);
+  }
+
+  private void assertJsonMatches(
+      JsonNode expected, String actualBody, Path fixture, boolean stripVersion) throws IOException {
     JsonNode actual =
         actualBody == null || actualBody.isBlank()
             ? JSON.createObjectNode()
             : JSON.readTree(actualBody);
+    if (stripVersion) {
+      actual = stripRootVersion(actual);
+    }
     JsonNode maskedExpected = masks.apply(expected);
     JsonNode maskedActual = masks.apply(actual);
     assertEquals(

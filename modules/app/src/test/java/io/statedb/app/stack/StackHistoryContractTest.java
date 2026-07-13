@@ -172,6 +172,8 @@ class StackHistoryContractTest {
     addUpdate(StackUpdate.Kind.PREVIEW, StackUpdate.Status.SUCCEEDED, 2, t, t, "preview");
     addUpdate(StackUpdate.Kind.RENAME, StackUpdate.Status.SUCCEEDED, 3, t, t, "rename");
     addUpdate(StackUpdate.Kind.DESTROY, StackUpdate.Status.SUCCEEDED, 4, t, t, "v4");
+    // The dry-run pass of a `pulumi up` shares the apply's kind but never surfaces in history.
+    addDryRunUpdate(t);
 
     given()
         .header("Authorization", "token " + RAW_TOKEN)
@@ -262,6 +264,23 @@ class StackHistoryContractTest {
               u.startedAt = startedAt;
               u.endedAt = endedAt;
               u.message = message;
+              u.persistAndFlush();
+            });
+  }
+
+  private void addDryRunUpdate(Instant at) {
+    QuarkusTransaction.requiringNew()
+        .run(
+            () -> {
+              StackUpdate u = new StackUpdate();
+              u.stackId = stackId();
+              u.version = 0;
+              u.dryRun = true;
+              u.kind = StackUpdate.Kind.UPDATE;
+              u.status = StackUpdate.Status.SUCCEEDED;
+              u.startedAt = at;
+              u.endedAt = at;
+              u.message = "dry-run pass";
               u.persistAndFlush();
             });
   }

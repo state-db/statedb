@@ -27,6 +27,10 @@
       "version": "latest",
     },
   },
+  // Makes host.docker.internal resolvable on plain Linux Docker engines (e.g. GitHub Actions
+  // runners) so the TESTCONTAINERS_HOST_OVERRIDE below works everywhere; Docker Desktop already
+  // resolves it and is unaffected.
+  "runArgs": ["--add-host=host.docker.internal:host-gateway"],
   "forwardPorts": [8080, 5173, 55432],
   "portsAttributes": {
     "55432": {

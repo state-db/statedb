@@ -112,7 +112,8 @@ class AcquireLockContractTest {
             .statusCode(200)
             .body("token", notNullValue())
             .body("tokenExpiration", greaterThan(0))
-            .body("version", equalTo(1))
+            // Previews are dry runs and never consume the applied-version sequence.
+            .body("version", equalTo(0))
             .body("journalVersion", equalTo(1))
             .body("duration", nullValue());
 
@@ -173,9 +174,9 @@ class AcquireLockContractTest {
 
   @Test
   void acquireReturnsPersistedUpdateVersion() {
-    startPreview();
-    startPreview();
-    String thirdUpdate = startPreview();
+    startUpdate();
+    startUpdate();
+    String thirdUpdate = startUpdate();
 
     given()
         .header("Authorization", "token " + RAW_TOKEN)
@@ -204,12 +205,20 @@ class AcquireLockContractTest {
   }
 
   private String startPreview() {
+    return startOp("preview");
+  }
+
+  private String startUpdate() {
+    return startOp("update");
+  }
+
+  private String startOp(String op) {
     return given()
         .header("Authorization", "token " + RAW_TOKEN)
         .contentType("application/json")
         .body(Map.of("name", PROJECT, "runtime", "yaml"))
         .when()
-        .post("/pulumi/api/stacks/" + ORG + "/" + PROJECT + "/" + STACK + "/preview")
+        .post("/pulumi/api/stacks/" + ORG + "/" + PROJECT + "/" + STACK + "/" + op)
         .then()
         .statusCode(200)
         .extract()

@@ -57,8 +57,19 @@ public class StackUpdate extends TimestampedEntity {
   @Column(name = "stack_id", nullable = false)
   public UUID stackId;
 
+  /**
+   * Applied-update sequence number, 1-based per stack ({@code pulumi stack export --version N}
+   * addressing). Dry-run rows do not consume the sequence and carry 0.
+   */
   @Column(nullable = false)
   public int version;
+
+  /**
+   * True for the dry-run pass of up/refresh/destroy ({@code options.dryRun}) and for {@code pulumi
+   * preview}. Dry-run rows never advance stack versions and stay out of {@code stack history}.
+   */
+  @Column(name = "dry_run", nullable = false)
+  public boolean dryRun;
 
   @Enumerated(EnumType.STRING)
   @Column(nullable = false, columnDefinition = "text")

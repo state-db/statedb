@@ -1,0 +1,47 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    name: Module tests (dev container)
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Cache Maven repository
+        uses: actions/cache@v4
+        with:
+          path: ~/.m2/repository
+          key: maven-${{ runner.os }}-${{ hashFiles('modules/**/pom.xml') }}
+          restore-keys: maven-${{ runner.os }}-
+
+      # Same environment as local development: the dev container defined in
+      # .devcontainer/devcontainer.json (JDK 21, Maven, Docker-outside-of-Docker
+      # for Quarkus Dev Services and the integrity-verifier container).
+      - name: Run module tests
+        uses: devcontainers/ci@v0.3
+        with:
+          push: never
+          runCmd: mvn -f modules/pom.xml test
+
+  verifier-tool:
+    name: Integrity verifier (Go)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: tools/pulumi/verify/go.mod
+      - name: Test and build tools/pulumi/verify
+        run: make -C tools/pulumi/verify verify
+      - name: Test and build tools/pulumi/recorder
+        run: |
+          cd tools/pulumi/recorder
+          go test ./...
+          go build ./...

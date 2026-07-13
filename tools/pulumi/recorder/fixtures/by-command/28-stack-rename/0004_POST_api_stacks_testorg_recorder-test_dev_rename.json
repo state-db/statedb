@@ -18,16 +18,5 @@
   },
   "body_b64": "eyJuZXdOYW1lIjoic3RhZ2luZyIsIm5ld1Byb2plY3QiOiJyZWNvcmRlci10ZXN0In0=",
   "status_code": 200,
-  "response": {
-    "activeUpdate": "",
-    "currentOperation": null,
-    "orgName": "testorg",
-    "projectName": "recorder-test",
-    "stackName": "staging",
-    "tags": {
-      "pulumi:description": "Minimal Pulumi project for API recording. Uses the `random` provider so `pulumi up`/`destroy` exercise the journal/checkpoint write paths with real resource state.",
-      "pulumi:project": "recorder-test",
-      "pulumi:runtime": "yaml"
-    }
-  }
+  "response": {}
 }

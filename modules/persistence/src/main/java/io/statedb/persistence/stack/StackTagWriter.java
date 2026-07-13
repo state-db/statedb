@@ -19,8 +19,14 @@ import java.util.UUID;
 public class StackTagWriter {
 
   static final int MAX_TAGS = 50;
-  static final int MAX_KEY_LENGTH = 50;
-  static final int MAX_VALUE_LENGTH = 100;
+  // Mirrors Pulumi's own rules (pkg/util/validation/stack.go): tag names are 1-40 chars of
+  // [a-zA-Z0-9-_.:]; values are capped at 256. The CLI sends pulumi:description (the project
+  // description, often >100 chars) as a tag on every `stack tag` operation, so a tighter value
+  // cap rejects valid CLI traffic.
+  static final int MAX_KEY_LENGTH = 40;
+  static final int MAX_VALUE_LENGTH = 256;
+  private static final java.util.regex.Pattern TAG_NAME =
+      java.util.regex.Pattern.compile("^[a-zA-Z0-9-_.:]{1,40}$");
 
   @Transactional
   public void replaceTags(UUID stackId, Map<String, String> tags) {
@@ -47,6 +53,13 @@ public class StackTagWriter {
       if (key.length() > MAX_KEY_LENGTH) {
         throw new RequestValidationException(
             "tag key exceeds " + MAX_KEY_LENGTH + " characters: '" + key + "'");
+      }
+      if (!TAG_NAME.matcher(key).matches()) {
+        throw new RequestValidationException(
+            "stack tag names may only contain alphanumerics, hyphens, underscores, periods, or"
+                + " colons: '"
+                + key
+                + "'");
       }
       if (value != null && value.length() > MAX_VALUE_LENGTH) {
         throw new RequestValidationException(

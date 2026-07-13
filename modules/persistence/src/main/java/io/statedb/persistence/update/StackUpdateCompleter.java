@@ -13,7 +13,7 @@ import java.util.UUID;
 
 /**
  * Terminates an in-progress {@link StackUpdate}: stamps {@code end_journal_seq}, flips the status,
- * deletes the lock row, and (for non-preview kinds) bumps {@code stacks.version}. All four writes
+ * deletes the lock row, and (for non-dry-run updates) bumps {@code stacks.version}. All four writes
  * land in one JTA transaction so a forced failure rolls them back together.
  *
  * <p>Concurrency: takes a {@code FOR UPDATE} on {@code stack_state} for the stack first, which
@@ -70,7 +70,7 @@ public class StackUpdateCompleter {
     u.endedAt = Instant.now();
     u.endJournalSeq = journalSeq;
 
-    if (u.kind == StackUpdate.Kind.PREVIEW) {
+    if (u.dryRun) {
       Stack.update(
           "activeUpdateId = null where id = ?1 and activeUpdateId = ?2", stackId, updateId);
     } else {

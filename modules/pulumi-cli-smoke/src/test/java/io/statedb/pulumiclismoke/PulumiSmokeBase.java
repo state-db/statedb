@@ -38,11 +38,14 @@ import org.testcontainers.utility.MountableFile;
  * extend this, and add a {@code @Test}. Group related assertions into one method — each method
  * spins its own container, so fewer methods means fewer Docker starts. See {@code README.md}.
  */
-abstract class PulumiSmokeBase {
+public abstract class PulumiSmokeBase {
 
   protected static final ObjectMapper JSON = new ObjectMapper();
+
+  // Overridable so the nightly CI matrix can run the suite against several CLI versions; the
+  // default pin comes from the pom's pulumi.cli.image property (forwarded by failsafe).
   protected static final DockerImageName PULUMI_IMAGE =
-      DockerImageName.parse("pulumi/pulumi:3.234.0");
+      DockerImageName.parse(System.getProperty("pulumi.cli.image", "pulumi/pulumi:3.234.0"));
 
   protected static final String ORG = "acme";
   protected static final String STACK = "dev";
@@ -58,13 +61,15 @@ abstract class PulumiSmokeBase {
 
   protected GenericContainer<?> pulumi;
 
+  // Protected (not package-private) so JUnit still discovers these lifecycle methods from
+  // subclasses in the faults subpackage.
   @BeforeEach
-  void seedIdentity() {
+  protected void seedIdentity() {
     seedAcmeIdentity();
   }
 
   @AfterEach
-  void stopContainerAndCleanup() {
+  protected void stopContainerAndCleanup() {
     if (pulumi != null) {
       pulumi.stop();
     }
