@@ -69,10 +69,12 @@ class CrashRecoveryFaultIT extends PulumiFaultBase {
     UUID stackId = stackId(PROJECT, STACK);
 
     execDetached("pulumi up --yes --non-interactive --skip-preview");
+    // Await the sleeping command's own Begin, not just any pending op: earlier resources'
+    // Begins close within milliseconds, and killing in such a gap leaves nothing pending.
     awaitTrue(
-        "up to be mid-flight (lease held, command create pending)",
+        "up to be mid-flight (lease held, command create sleeping)",
         Duration.ofMinutes(3),
-        () -> lockExists(stackId) && pendingOperationCount(stackId) > 0);
+        () -> lockExists(stackId) && pendingOperationOpen(stackId, "command:local"));
 
     killCliHard();
 
@@ -105,12 +107,29 @@ class CrashRecoveryFaultIT extends PulumiFaultBase {
     PulumiDeploymentAssert.assertIntegrityPasses(exportAfterRecovery);
     JsonNode deployment = exportAfterRecovery.required("deployment");
     assertTrue(
-        deployment.path("pending_operations").isMissingNode()
-            || deployment.path("pending_operations").isEmpty(),
-        () -> "recovery must clear pending operations:\n" + deployment.path("pending_operations"));
-    assertTrue(
         deployment.required("resources").findValuesAsText("urn").stream()
             .anyMatch(urn -> urn.endsWith("::after")),
         "the resource behind the crash point must exist after recovery");
+    // Pulumi's rule (JournalReplayer.GenerateDeployment): `creating` pending ops from the base
+    // snapshot propagate into every later deployment — the operator's breadcrumb to a possibly
+    // orphaned cloud resource — and "must require user intervention to be cleared or resolved"
+    // (Pulumi's own words). A plain up must NOT silently drop it.
+    assertEquals(
+        1,
+        deployment.required("pending_operations").size(),
+        "the crash breadcrumb must survive a plain up");
+
+    // The documented intervention clears it.
+    execResult("pulumi refresh --yes --non-interactive --skip-preview --clear-pending-creates");
+
+    JsonNode exportAfterRefresh = execJson("pulumi stack export");
+    PulumiDeploymentAssert.assertIntegrityPasses(exportAfterRefresh);
+    JsonNode refreshed = exportAfterRefresh.required("deployment");
+    assertTrue(
+        refreshed.path("pending_operations").isMissingNode()
+            || refreshed.path("pending_operations").isEmpty(),
+        () ->
+            "refresh --clear-pending-creates must clear pending operations:\n"
+                + refreshed.path("pending_operations"));
   }
 }

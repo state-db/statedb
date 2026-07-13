@@ -102,4 +102,19 @@ public abstract class PulumiFaultBase extends PulumiSmokeBase {
     return QuarkusTransaction.requiringNew()
         .call(() -> io.statedb.persistence.journal.PendingOperation.count("stackId", stackId));
   }
+
+  /**
+   * True once a Begin for the given resource type is open. Await this before killing the CLI: an
+   * early resource's pending op can open and close in milliseconds, but a {@code
+   * command:local:Command} whose create sleeps keeps its Begin open, making the kill window
+   * deterministic.
+   */
+  protected boolean pendingOperationOpen(UUID stackId, String resourceTypePrefix) {
+    return QuarkusTransaction.requiringNew()
+        .call(
+            () ->
+                io.statedb.persistence.journal.PendingOperation.count(
+                        "stackId = ?1 and resourceType like ?2", stackId, resourceTypePrefix + "%")
+                    > 0);
+  }
 }

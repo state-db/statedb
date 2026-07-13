@@ -1,0 +1,53 @@
+name: Nightly Pulumi CLI matrix
+
+on:
+  schedule:
+    # 07:00 UTC, after the workday's pushes have settled.
+    - cron: "0 7 * * *"
+  workflow_dispatch:
+
+jobs:
+  cli-battle-tests:
+    name: Smoke + faults (${{ matrix.pulumi-image }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      matrix:
+        pulumi-image:
+          # Oldest supported CLI and the pin the recorder fixtures were captured with.
+          - pulumi/pulumi:3.234.0
+          - pulumi/pulumi:3.242.0
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Cache Maven repository
+        uses: actions/cache@v4
+        with:
+          path: ~/.m2/repository
+          key: maven-${{ runner.os }}-${{ hashFiles('modules/**/pom.xml') }}
+          restore-keys: maven-${{ runner.os }}-
+
+      - name: Run smoke and fault tiers against the real Pulumi CLI
+        uses: devcontainers/ci@v0.3
+        with:
+          push: never
+          runCmd: >-
+            mvn -f modules/pom.xml -pl pulumi-cli-smoke -am verify
+            -Dsurefire.skip=true
+            -DskipPulumiCliSmoke=false
+            -DskipPulumiCliFaults=false
+            -Dpulumi.cli.image=${{ matrix.pulumi-image }}
+
+      - name: Sanitize image tag for artifact name
+        if: always()
+        id: tag
+        run: echo "tag=$(echo '${{ matrix.pulumi-image }}' | tr '/:' '--')" >> "$GITHUB_OUTPUT"
+
+      - name: Publish State Safety Report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: state-safety-report-${{ steps.tag.outputs.tag }}
+          path: modules/pulumi-cli-smoke/target/state-safety-report.md
+          if-no-files-found: warn
