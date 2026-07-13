@@ -20,6 +20,7 @@ import io.statedb.persistence.journal.PendingOperation;
 import io.statedb.persistence.lock.Lease;
 import io.statedb.persistence.lock.StackLockAcquirer;
 import io.statedb.persistence.lock.StackLockedException;
+import io.statedb.persistence.stack.AssembledDeployment;
 import io.statedb.persistence.stack.CompactionJob;
 import io.statedb.persistence.stack.StackAssembler;
 import io.statedb.persistence.stack.StackCreator;
@@ -29,6 +30,7 @@ import io.statedb.persistence.update.StackUpdate;
 import io.statedb.persistence.update.StackUpdateCompleter;
 import io.statedb.persistence.update.StackUpdateStarter;
 import io.statedb.persistence.update.StartUpdateRequest;
+import io.statedb.testsupport.pulumi.PulumiDeploymentAssert;
 import jakarta.inject.Inject;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.LockModeType;
@@ -193,7 +195,7 @@ class StackUpdateCompleterTest {
     assertEquals(1L, UpdateEvent.count("updateId", f.updateId()));
     assertEquals(0L, JournalEntry.count("updateId", f.updateId()));
     assertEquals(0, stack(f.stackId()).version);
-    assertEquals(0, assembler.assemble(f.stackId()).deployment().required("resources").size());
+    assertEquals(0, assemble(f.stackId()).deployment().required("resources").size());
   }
 
   @Test
@@ -269,7 +271,7 @@ class StackUpdateCompleterTest {
     assertEquals(StackUpdate.Status.FAILED, failedUpdate.status);
     assertEquals(0L, io.statedb.persistence.lock.StackLock.count("stackId", failed.stackId()));
     assertEquals(0L, PendingOperation.count("updateId", failed.updateId()));
-    assertEquals(1, assembler.assemble(failed.stackId()).deployment().required("resources").size());
+    assertEquals(1, assemble(failed.stackId()).deployment().required("resources").size());
     assertEquals(
         urn("base"),
         assembler
@@ -306,7 +308,7 @@ class StackUpdateCompleterTest {
     assertEquals(0L, io.statedb.persistence.lock.StackLock.count("stackId", f.stackId()));
     assertEquals(0L, PendingOperation.count("updateId", f.updateId()));
 
-    JsonNode resources = assembler.assemble(f.stackId()).deployment().required("resources");
+    JsonNode resources = assemble(f.stackId()).deployment().required("resources");
     assertEquals(1, resources.size());
     assertEquals(urn("partial"), resources.get(0).required("urn").asText());
   }
@@ -438,6 +440,13 @@ class StackUpdateCompleterTest {
 
   private String scalarString(String sql, Object param) {
     return (String) em.createNativeQuery(sql).setParameter(1, param).getSingleResult();
+  }
+
+  // Exports assembled around update completion boundaries must pass Pulumi's integrity rules.
+  private AssembledDeployment assemble(UUID stackId) {
+    AssembledDeployment assembled = assembler.assemble(stackId);
+    PulumiDeploymentAssert.assertIntegrityPasses(assembled.deployment());
+    return assembled;
   }
 
   private UUID scalarUuid(String sql, Object param) {

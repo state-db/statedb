@@ -151,7 +151,7 @@
                 "separator": "-"
               },
               "parent": "urn:pulumi:dev::recorder-test::pulumi:pulumi:Stack::recorder-test-dev",
-              "provider": "urn:pulumi:dev::recorder-test::pulumi:providers:random::default::00000000-0000-0000-0000-000000000000",
+              "provider": "urn:pulumi:dev::recorder-test::pulumi:providers:random::default::[resource-id]",
               "type": "random:index/randomPet:RandomPet",
               "urn": "urn:pulumi:dev::recorder-test::random:index/randomPet:RandomPet::pet"
             },
@@ -182,12 +182,12 @@
                 "separator": "-"
               },
               "parent": "urn:pulumi:dev::recorder-test::pulumi:pulumi:Stack::recorder-test-dev",
-              "provider": "urn:pulumi:dev::recorder-test::pulumi:providers:random::default::00000000-0000-0000-0000-000000000000",
+              "provider": "urn:pulumi:dev::recorder-test::pulumi:providers:random::default::[resource-id]",
               "type": "random:index/randomPet:RandomPet",
               "urn": "urn:pulumi:dev::recorder-test::random:index/randomPet:RandomPet::pet"
             },
             "op": "refresh",
-            "provider": "urn:pulumi:dev::recorder-test::pulumi:providers:random::default::00000000-0000-0000-0000-000000000000",
+            "provider": "urn:pulumi:dev::recorder-test::pulumi:providers:random::default::[resource-id]",
             "type": "random:index/randomPet:RandomPet",
             "urn": "urn:pulumi:dev::recorder-test::random:index/randomPet:RandomPet::pet"
           }
@@ -226,7 +226,7 @@
                 "separator": "-"
               },
               "parent": "urn:pulumi:dev::recorder-test::pulumi:pulumi:Stack::recorder-test-dev",
-              "provider": "urn:pulumi:dev::recorder-test::pulumi:providers:random::default::00000000-0000-0000-0000-000000000000",
+              "provider": "urn:pulumi:dev::recorder-test::pulumi:providers:random::default::[resource-id]",
               "type": "random:index/randomPet:RandomPet",
               "urn": "urn:pulumi:dev::recorder-test::random:index/randomPet:RandomPet::pet"
             },
@@ -257,12 +257,12 @@
                 "separator": "-"
               },
               "parent": "urn:pulumi:dev::recorder-test::pulumi:pulumi:Stack::recorder-test-dev",
-              "provider": "urn:pulumi:dev::recorder-test::pulumi:providers:random::default::00000000-0000-0000-0000-000000000000",
+              "provider": "urn:pulumi:dev::recorder-test::pulumi:providers:random::default::[resource-id]",
               "type": "random:index/randomPet:RandomPet",
               "urn": "urn:pulumi:dev::recorder-test::random:index/randomPet:RandomPet::pet"
             },
             "op": "same",
-            "provider": "urn:pulumi:dev::recorder-test::pulumi:providers:random::default::00000000-0000-0000-0000-000000000000",
+            "provider": "urn:pulumi:dev::recorder-test::pulumi:providers:random::default::[resource-id]",
             "type": "random:index/randomPet:RandomPet",
             "urn": "urn:pulumi:dev::recorder-test::random:index/randomPet:RandomPet::pet"
           }
@@ -312,7 +312,7 @@
                 "upper": false
               },
               "parent": "urn:pulumi:dev::recorder-test::pulumi:pulumi:Stack::recorder-test-dev",
-              "provider": "urn:pulumi:dev::recorder-test::pulumi:providers:random::default::00000000-0000-0000-0000-000000000000",
+              "provider": "urn:pulumi:dev::recorder-test::pulumi:providers:random::default::[resource-id]",
               "type": "random:index/randomString:RandomString",
               "urn": "urn:pulumi:dev::recorder-test::random:index/randomString:RandomString::word"
             },
@@ -354,12 +354,12 @@
                 "upper": false
               },
               "parent": "urn:pulumi:dev::recorder-test::pulumi:pulumi:Stack::recorder-test-dev",
-              "provider": "urn:pulumi:dev::recorder-test::pulumi:providers:random::default::00000000-0000-0000-0000-000000000000",
+              "provider": "urn:pulumi:dev::recorder-test::pulumi:providers:random::default::[resource-id]",
               "type": "random:index/randomString:RandomString",
               "urn": "urn:pulumi:dev::recorder-test::random:index/randomString:RandomString::word"
             },
             "op": "refresh",
-            "provider": "urn:pulumi:dev::recorder-test::pulumi:providers:random::default::00000000-0000-0000-0000-000000000000",
+            "provider": "urn:pulumi:dev::recorder-test::pulumi:providers:random::default::[resource-id]",
             "type": "random:index/randomString:RandomString",
             "urn": "urn:pulumi:dev::recorder-test::random:index/randomString:RandomString::word"
           }
@@ -409,7 +409,7 @@
                 "upper": false
               },
               "parent": "urn:pulumi:dev::recorder-test::pulumi:pulumi:Stack::recorder-test-dev",
-              "provider": "urn:pulumi:dev::recorder-test::pulumi:providers:random::default::00000000-0000-0000-0000-000000000000",
+              "provider": "urn:pulumi:dev::recorder-test::pulumi:providers:random::default::[resource-id]",
               "type": "random:index/randomString:RandomString",
               "urn": "urn:pulumi:dev::recorder-test::random:index/randomString:RandomString::word"
             },
@@ -451,12 +451,12 @@
                 "upper": false
               },
               "parent": "urn:pulumi:dev::recorder-test::pulumi:pulumi:Stack::recorder-test-dev",
-              "provider": "urn:pulumi:dev::recorder-test::pulumi:providers:random::default::00000000-0000-0000-0000-000000000000",
+              "provider": "urn:pulumi:dev::recorder-test::pulumi:providers:random::default::[resource-id]",
               "type": "random:index/randomString:RandomString",
               "urn": "urn:pulumi:dev::recorder-test::random:index/randomString:RandomString::word"
             },
             "op": "same",
-            "provider": "urn:pulumi:dev::recorder-test::pulumi:providers:random::default::00000000-0000-0000-0000-000000000000",
+            "provider": "urn:pulumi:dev::recorder-test::pulumi:providers:random::default::[resource-id]",
             "type": "random:index/randomString:RandomString",
             "urn": "urn:pulumi:dev::recorder-test::random:index/randomString:RandomString::word"
           }
@@ -494,7 +494,7 @@
                 "seed": "recorder-pin"
               },
               "parent": "urn:pulumi:dev::recorder-test::pulumi:pulumi:Stack::recorder-test-dev",
-              "provider": "urn:pulumi:dev::recorder-test::pulumi:providers:random::default::00000000-0000-0000-0000-000000000000",
+              "provider": "urn:pulumi:dev::recorder-test::pulumi:providers:random::default::[resource-id]",
               "type": "random:index/randomInteger:RandomInteger",
               "urn": "urn:pulumi:dev::recorder-test::random:index/randomInteger:RandomInteger::pin"
             },
@@ -524,12 +524,12 @@
                 "seed": "recorder-pin"
               },
               "parent": "urn:pulumi:dev::recorder-test::pulumi:pulumi:Stack::recorder-test-dev",
-              "provider": "urn:pulumi:dev::recorder-test::pulumi:providers:random::default::00000000-0000-0000-0000-000000000000",
+              "provider": "urn:pulumi:dev::recorder-test::pulumi:providers:random::default::[resource-id]",
               "type": "random:index/randomInteger:RandomInteger",
               "urn": "urn:pulumi:dev::recorder-test::random:index/randomInteger:RandomInteger::pin"
             },
             "op": "refresh",
-            "provider": "urn:pulumi:dev::recorder-test::pulumi:providers:random::default::00000000-0000-0000-0000-000000000000",
+            "provider": "urn:pulumi:dev::recorder-test::pulumi:providers:random::default::[resource-id]",
             "type": "random:index/randomInteger:RandomInteger",
             "urn": "urn:pulumi:dev::recorder-test::random:index/randomInteger:RandomInteger::pin"
           }
@@ -567,7 +567,7 @@
                 "seed": "recorder-pin"
               },
               "parent": "urn:pulumi:dev::recorder-test::pulumi:pulumi:Stack::recorder-test-dev",
-              "provider": "urn:pulumi:dev::recorder-test::pulumi:providers:random::default::00000000-0000-0000-0000-000000000000",
+              "provider": "urn:pulumi:dev::recorder-test::pulumi:providers:random::default::[resource-id]",
               "type": "random:index/randomInteger:RandomInteger",
               "urn": "urn:pulumi:dev::recorder-test::random:index/randomInteger:RandomInteger::pin"
             },
@@ -597,12 +597,12 @@
                 "seed": "recorder-pin"
               },
               "parent": "urn:pulumi:dev::recorder-test::pulumi:pulumi:Stack::recorder-test-dev",
-              "provider": "urn:pulumi:dev::recorder-test::pulumi:providers:random::default::00000000-0000-0000-0000-000000000000",
+              "provider": "urn:pulumi:dev::recorder-test::pulumi:providers:random::default::[resource-id]",
               "type": "random:index/randomInteger:RandomInteger",
               "urn": "urn:pulumi:dev::recorder-test::random:index/randomInteger:RandomInteger::pin"
             },
             "op": "same",
-            "provider": "urn:pulumi:dev::recorder-test::pulumi:providers:random::default::00000000-0000-0000-0000-000000000000",
+            "provider": "urn:pulumi:dev::recorder-test::pulumi:providers:random::default::[resource-id]",
             "type": "random:index/randomInteger:RandomInteger",
             "urn": "urn:pulumi:dev::recorder-test::random:index/randomInteger:RandomInteger::pin"
           }
@@ -663,7 +663,7 @@
                 "upper": true
               },
               "parent": "urn:pulumi:dev::recorder-test::pulumi:pulumi:Stack::recorder-test-dev",
-              "provider": "urn:pulumi:dev::recorder-test::pulumi:providers:random::default::00000000-0000-0000-0000-000000000000",
+              "provider": "urn:pulumi:dev::recorder-test::pulumi:providers:random::default::[resource-id]",
               "type": "random:index/randomPassword:RandomPassword",
               "urn": "urn:pulumi:dev::recorder-test::random:index/randomPassword:RandomPassword::password"
             },
@@ -716,12 +716,12 @@
                 "upper": true
               },
               "parent": "urn:pulumi:dev::recorder-test::pulumi:pulumi:Stack::recorder-test-dev",
-              "provider": "urn:pulumi:dev::recorder-test::pulumi:providers:random::default::00000000-0000-0000-0000-000000000000",
+              "provider": "urn:pulumi:dev::recorder-test::pulumi:providers:random::default::[resource-id]",
               "type": "random:index/randomPassword:RandomPassword",
               "urn": "urn:pulumi:dev::recorder-test::random:index/randomPassword:RandomPassword::password"
             },
             "op": "refresh",
-            "provider": "urn:pulumi:dev::recorder-test::pulumi:providers:random::default::00000000-0000-0000-0000-000000000000",
+            "provider": "urn:pulumi:dev::recorder-test::pulumi:providers:random::default::[resource-id]",
             "type": "random:index/randomPassword:RandomPassword",
             "urn": "urn:pulumi:dev::recorder-test::random:index/randomPassword:RandomPassword::password"
           }
@@ -782,7 +782,7 @@
                 "upper": true
               },
               "parent": "urn:pulumi:dev::recorder-test::pulumi:pulumi:Stack::recorder-test-dev",
-              "provider": "urn:pulumi:dev::recorder-test::pulumi:providers:random::default::00000000-0000-0000-0000-000000000000",
+              "provider": "urn:pulumi:dev::recorder-test::pulumi:providers:random::default::[resource-id]",
               "type": "random:index/randomPassword:RandomPassword",
               "urn": "urn:pulumi:dev::recorder-test::random:index/randomPassword:RandomPassword::password"
             },
@@ -835,12 +835,12 @@
                 "upper": true
               },
               "parent": "urn:pulumi:dev::recorder-test::pulumi:pulumi:Stack::recorder-test-dev",
-              "provider": "urn:pulumi:dev::recorder-test::pulumi:providers:random::default::00000000-0000-0000-0000-000000000000",
+              "provider": "urn:pulumi:dev::recorder-test::pulumi:providers:random::default::[resource-id]",
               "type": "random:index/randomPassword:RandomPassword",
               "urn": "urn:pulumi:dev::recorder-test::random:index/randomPassword:RandomPassword::password"
             },
             "op": "same",
-            "provider": "urn:pulumi:dev::recorder-test::pulumi:providers:random::default::00000000-0000-0000-0000-000000000000",
+            "provider": "urn:pulumi:dev::recorder-test::pulumi:providers:random::default::[resource-id]",
             "type": "random:index/randomPassword:RandomPassword",
             "urn": "urn:pulumi:dev::recorder-test::random:index/randomPassword:RandomPassword::password"
           }
@@ -886,7 +886,7 @@
                 "prefix": "rec-"
               },
               "parent": "urn:pulumi:dev::recorder-test::pulumi:pulumi:Stack::recorder-test-dev",
-              "provider": "urn:pulumi:dev::recorder-test::pulumi:providers:random::default::00000000-0000-0000-0000-000000000000",
+              "provider": "urn:pulumi:dev::recorder-test::pulumi:providers:random::default::[resource-id]",
               "type": "random:index/randomId:RandomId",
               "urn": "urn:pulumi:dev::recorder-test::random:index/randomId:RandomId::token"
             },
@@ -924,12 +924,12 @@
                 "prefix": "rec-"
               },
               "parent": "urn:pulumi:dev::recorder-test::pulumi:pulumi:Stack::recorder-test-dev",
-              "provider": "urn:pulumi:dev::recorder-test::pulumi:providers:random::default::00000000-0000-0000-0000-000000000000",
+              "provider": "urn:pulumi:dev::recorder-test::pulumi:providers:random::default::[resource-id]",
               "type": "random:index/randomId:RandomId",
               "urn": "urn:pulumi:dev::recorder-test::random:index/randomId:RandomId::token"
             },
             "op": "refresh",
-            "provider": "urn:pulumi:dev::recorder-test::pulumi:providers:random::default::00000000-0000-0000-0000-000000000000",
+            "provider": "urn:pulumi:dev::recorder-test::pulumi:providers:random::default::[resource-id]",
             "type": "random:index/randomId:RandomId",
             "urn": "urn:pulumi:dev::recorder-test::random:index/randomId:RandomId::token"
           }
@@ -975,7 +975,7 @@
                 "prefix": "rec-"
               },
               "parent": "urn:pulumi:dev::recorder-test::pulumi:pulumi:Stack::recorder-test-dev",
-              "provider": "urn:pulumi:dev::recorder-test::pulumi:providers:random::default::00000000-0000-0000-0000-000000000000",
+              "provider": "urn:pulumi:dev::recorder-test::pulumi:providers:random::default::[resource-id]",
               "type": "random:index/randomId:RandomId",
               "urn": "urn:pulumi:dev::recorder-test::random:index/randomId:RandomId::token"
             },
@@ -1013,12 +1013,12 @@
                 "prefix": "rec-"
               },
               "parent": "urn:pulumi:dev::recorder-test::pulumi:pulumi:Stack::recorder-test-dev",
-              "provider": "urn:pulumi:dev::recorder-test::pulumi:providers:random::default::00000000-0000-0000-0000-000000000000",
+              "provider": "urn:pulumi:dev::recorder-test::pulumi:providers:random::default::[resource-id]",
               "type": "random:index/randomId:RandomId",
               "urn": "urn:pulumi:dev::recorder-test::random:index/randomId:RandomId::token"
             },
             "op": "same",
-            "provider": "urn:pulumi:dev::recorder-test::pulumi:providers:random::default::00000000-0000-0000-0000-000000000000",
+            "provider": "urn:pulumi:dev::recorder-test::pulumi:providers:random::default::[resource-id]",
             "type": "random:index/randomId:RandomId",
             "urn": "urn:pulumi:dev::recorder-test::random:index/randomId:RandomId::token"
           }
@@ -1042,7 +1042,7 @@
       }
     ]
   },
-  "body_b64": "H4sIAAAAAAAA/+xcW28aORT+L+d50HKZEOLX7kqNVHXRRn1KImTsQ3Az4/H6QkCI/155LgnTkLQpkJlS5wHGc3F8jr/vO/Zh7DXgAqU1QK7XoDQmjuM//gyQNbBMzsQdkPVmE4HB/x1KhkC6EViRorE0VUC6m2gNGk3mNMOxfno6RUs5tdQfc7RUJMj/FrMZEOmSJAKJD/6S4EAAIhBSOd+O9SaCzNmyAIoa85Bp7o9jTqez3qh3Meie9y8GF2e9M+z3KZ/2L0aD0chX1JvG591hrz+Me4MRiykbdPn52Yz3cBrH/fMuRMCEmqO2uLRA4Nog02hvYROBQvuZpujPKrQdSVO8hQiUkEDifgQ2u0f5EZf+hjku/bWiZXDtv4s6qM7N9xYpnS0ER12U7Er5qpVLXCpI+XVlKbuHCJyWQPxndYHjghCNLNMcdceisYTsePS7ezocF74VWcKDa4/kWgUENM40mnmDDakRsreTkP8WPR342ALQBD4elY/G29ISMvYPGh2ZMzZLgVjtMCoAdF1V1xH8dhtNkKC8s/O8CQYV1dRm3hcdqONsMiksmmj6MDGWWpxwTIqmZNOvORTzG+8RFWrzHnjUOBPLo/+jje+qnU58zXWPQD8MXGo4/ckqywcM0VTyLCWE44y6xBLSLf86Oz6qvycylI8LyXH5V1EYoyX/VUc/y4wf1UOIQrulfAHGAca/NYxfHPWdtuW1yDY45DAzKEJQhN+XFyGwBRifBox3T59O2+xaVIubn6+NIjAKmaAJkBlNDEbglPIdkZe+VwffFCCwvgHD5pjSyQK1EZm8AXID/RvYQNRGDckWqLXgeFWZ2riYjCJIsgfv56K7UiE/FeVuXvjsUtSCVcXHhhfFL0UXdSOQLp0+1SKrp4qiRuMSW7bCJdY34Ae9fdqCdmW1kHclKYvCHvzeURshea5qzyAdSBlIGUh5DFK2eC79bm6oDUHOGp9YB7ELYhfELoxAAikDKf8AUrY16dHM8GPYXAYkpcvihYO0evPAIPJ8fFhap4Rse3r0ZUV5bl5F+1dMPW2aX0qLd6hLVJalPUC+sz5CKtj8QvgNmAyYPComWzz/fU9P1GLQeWNT4ED3QPcQggIm/yhMtnUC1Fj8GTX/K3AvfjHvMKjnHfr1vENvO+/Qf5ZpeJZggUlnO9lQ3FXmGnzhTYmlQUsTS7n6TJleKfuRmvk7JLJezSkdsnNfTiq90NWVuh7dBa9i6rQFfFwu3qheNqnWcuzx5sruGgl5XCeyZ345CE4QnCA4QXDeJjgtzl404pLaMPKi8V/yg6gHUQ+iHkQ9jCKD4ATBCYLTUsFpawKy+SFk77Db67xJ06cri59K6g+jbdFTOvuKzG7n5b3FvvucVpnx7qRKdMycKtxeMebvP8QCt5SqfCOiQiCH8ZXNTZkO446xuRnTYfxFJ9VJp5P8ZN0ijszfwJGJlCal/fPaPhc7XXRQT5y2olxWSL/chzVbtRCS70byq+OUgOmA6VZjusUJlePZXQ95B93AKqhDUIcTYUmIeAHTJ4jptk7+3ivc7dgibuvqIALj0pTq1WPkG2eJYKsxZfflroHcaWpFJq+QZZKbPN8izFjjQvggWK4fSelqih8yrZ2yjycrTnyYU3mHORnyviDDzdaqFOMYQ+SYz9Zrjb3dfAsAAP//Ni5UIjRWAAA=",
+  "body_b64": "H4sIAAAAAAAAA+1cW2/iOhD+L34GHRIoUL/uHmkrrfagU+1TWyETD8XbxMnxpQUh/vsZ59KSFroXoAHkl2InzmRm/H1jz6TJksAjSKMJvVmSTEFsOfztjhC6JFEqp+IeW6tVi2j4z4KMgNBOixiRgDYsybC3ai2JAp1aFcFIvVydgGGcGebaHNsiBv5ZTKeEShvHLSLhyZ0SnFBCWkTIzDo9lniv1JqyQzKm9VOquGv3OJtMg2Fw2e0Mwsvu5UVwAWHI+CS8HHaHQycomPQGnX4Q9ntBdxj1WNTt8MHFlAcw6fXCQQdvFIlsBsrAHLUkNxoiBeaO4F0zMN9YAu4oNtsS23c4PhOS0F6IRqcPIL/A3A2YwdydKzQjN+63kMFUbr6zKFPpo+Cgip5ZZE50ZmObCFr+XBsWPeBJq/Ae7m91gsMjpQoilAuqbdDZlG649NWYNl7mtEhj7l17INci5BHuU0T8rEFFaoQMNhLyn2KmPR+PADSejwflo3a2HAkZw72ujpHVJk0INcpCqwDQTSWuLfjdOppIDPLezHIVNOD0MJM6X7RJHWfjcWHRWLGnMeppYMwhLlRJJz9yKOYDHwAyUPoj8IgRVcwPfqOVm6qNTnzPdc9A3w9cajj9RZHlBZoqJnmaUBw8ZTbGEa8NKVFfjhOSw/yvojMCQ/+tWr9KgZ/JQRVR2EuI83j1eD0NvG7dx52JibVFqbvPHaLnuOf4CRDAr0keryeG1825zJnYV1uQes1nSUPUJ4NIsJjQKYs1XmmzzHk8773mu1MF5S5viY5mkLDxI/papPKW0FsS3pIV3uQIo0KKairExXVlauPhAf0ep0/Oz8V0JUJ+LfqdvPPNJqBEVHWfFS+634spwo60yeRFiqyuKrp4b4R+qQW2nAI/me0zCVHXRgl5X7Kv6OxA5A3SKM1LQTuur559nn2efTux7xgy2A+zt7Z7uGg8nfXhy4cvH7785sGzz7PvJNnXeKmhmZ1Dv7m6Q8LmxcP1pHrKrgF4vocrrXOP34+8zLg9Rrw1ryLyO6aeCXGvpIF7UCX8yt4OaN4oD1Uu8fEHK6cHnwfffsB3DFnnR5pcWz4GjSWensCewH718OA7cfA1nnY0tnQMm3/iGfS25u/dev4e1vP3YD1/D99k7G8KFWTcXk/ai1Flzu46v1Wg6R5pgSaPJ5NILTLzheFm6PAFoXdrM/uc3O3FmS1TXcXLg7vgXUydSUgele8BVP9BUb0WsMO/Y2yWiGpXsncsyPrI4iOLjyw+smyJLMdQM2jE9toO8LLxp9Y+TPsw7cO0D9N+A+gji48sPrJ86Aaw2RcbGt/9Bfv9bMpvRenJwsDXksz91noYQ+f+gMis17edxW6erMpS7dzJMtHWM4auXXvLyI3fx0tRCUNnLFdlyOv3rk1uCrba2uRmYPO7iquDVsX5wbpFHCI3AH9EwuLS/lnt+wUbXbRXT5xJjLiqIH21Cz3WpFCaf07iT7cYHrwevMcB3mMoYxzOwPpqtddvCnm+e76fGh38YuXBe8rgbTzl+qiVasMHt9bOdnGsTRKmFs+L1iiNRbQYIRjKb7Bxq5gRqbxGbSTXed1CaEzKHoVbv8p3DhK2mMCnVCmbmeeDlTc+zZi8hxzeudNpf7X2JoO2UQTAIU+Ga8rerf4HaH4ES4JTAAA=",
   "body_gzip": true,
   "status_code": 200,
   "response": {}

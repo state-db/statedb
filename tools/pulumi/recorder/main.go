@@ -283,6 +283,13 @@ func normalizeFixtureJSONValue(key string, v interface{}) interface{} {
 
 func normalizeFixtureString(key, value string) string {
 	value = uuidRe.ReplaceAllString(value, "00000000-0000-0000-0000-000000000000")
+	// Provider references embed the provider resource's id after "::" (e.g.
+	// "urn:...::pulumi:providers:random::default::<uuid>"). The id field itself
+	// normalizes to "[resource-id]" below, so normalize the embedded copy the
+	// same way — otherwise the fixture deployment fails Pulumi's
+	// unknown-provider integrity rule (see tools/pulumi/verify).
+	value = strings.ReplaceAll(
+		value, "::00000000-0000-0000-0000-000000000000", "::[resource-id]")
 	switch key {
 	case "b64Std":
 		if value != "" {

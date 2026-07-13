@@ -16,6 +16,7 @@ import io.statedb.persistence.stack.StackAssembler;
 import io.statedb.persistence.stack.StackCreator;
 import io.statedb.persistence.stack.StackRef;
 import io.statedb.persistence.update.StackUpdate;
+import io.statedb.testsupport.pulumi.PulumiDeploymentAssert;
 import jakarta.inject.Inject;
 import java.time.Instant;
 import java.util.Map;
@@ -77,11 +78,19 @@ class StackAssemblerTest {
     QuarkusTransaction.requiringNew().run(() -> Organization.delete("name = ?1", ORG_NAME));
   }
 
+  // Every assembled export must be a deployment Pulumi itself would load; routing all assembly
+  // through this wrapper makes each reducer test double as an integrity regression test.
+  private AssembledDeployment assemble() {
+    AssembledDeployment assembled = assembler.assemble(stackId);
+    PulumiDeploymentAssert.assertIntegrityPasses(assembled.deployment());
+    return assembled;
+  }
+
   // Empty export
 
   @Test
   void emptyStackReturnsEmptyDeployment() {
-    AssembledDeployment assembled = assembler.assemble(stackId);
+    AssembledDeployment assembled = assemble();
 
     // Empty stacks still export as Pulumi DeploymentV3.
     assertEquals(3, assembled.version());
@@ -100,7 +109,7 @@ class StackAssemblerTest {
     begin(update, 1L, "creating", res("a"));
     entry(update, JournalKind.SUCCESS, 1L, "{\"state\":" + res("a") + "}");
 
-    JsonNode resources = assembler.assemble(stackId).deployment().required("resources");
+    JsonNode resources = assemble().deployment().required("resources");
 
     assertEquals(1, resources.size());
     assertEquals(urn("a"), resources.get(0).required("urn").asText());
@@ -122,7 +131,7 @@ class StackAssemblerTest {
     successReplaceOld(
         update, 1L, 0L, resource("base", "\"sourcePosition\":\"project:///new.ts#2,1\""));
 
-    JsonNode deployment = assembler.assemble(stackId).deployment();
+    JsonNode deployment = assemble().deployment();
     JsonNode resources = deployment.required("resources");
 
     assertEquals(1, resources.size());
@@ -139,7 +148,7 @@ class StackAssemblerTest {
     write(update, "[" + res("a") + "," + res("b") + "," + res("c") + "," + res("d") + "]");
     entry(update, JournalKind.SUCCESS, 1L, "remove_old", 1L, "{}");
 
-    JsonNode resources = assembler.assemble(stackId).deployment().required("resources");
+    JsonNode resources = assemble().deployment().required("resources");
 
     assertEquals(3, resources.size());
     assertEquals(urn("a"), resources.get(0).required("urn").asText());
@@ -156,7 +165,7 @@ class StackAssemblerTest {
     success(update, 4L, res("d"));
     entry(update, JournalKind.SUCCESS, 5L, "remove_new", 2L, "{}");
 
-    JsonNode resources = assembler.assemble(stackId).deployment().required("resources");
+    JsonNode resources = assemble().deployment().required("resources");
 
     assertEquals(3, resources.size());
     assertEquals(urn("a"), resources.get(0).required("urn").asText());
@@ -176,7 +185,7 @@ class StackAssemblerTest {
     entry(update, JournalKind.SUCCESS, 5L, "delete_new", 1L, "{}");
     entry(update, JournalKind.SUCCESS, 6L, "pending_replacement_new", 2L, "{}");
 
-    JsonNode resources = assembler.assemble(stackId).deployment().required("resources");
+    JsonNode resources = assemble().deployment().required("resources");
 
     assertTrue(find(resources, "new-delete").required("delete").asBoolean());
     assertTrue(find(resources, "new-pending").required("pendingReplacement").asBoolean());
@@ -191,7 +200,7 @@ class StackAssemblerTest {
     begin(update, 2L, "creating", res("b"));
     entry(update, JournalKind.FAILURE, 1L, "{}");
 
-    JsonNode pending = assembler.assemble(stackId).deployment().required("pending_operations");
+    JsonNode pending = assemble().deployment().required("pending_operations");
 
     assertEquals(1, pending.size());
     assertEquals(urn("b"), pending.get(0).required("resource").required("urn").asText());
@@ -203,7 +212,7 @@ class StackAssemblerTest {
     begin(update, 1L, "creating", res("orphan"));
     entry(update, JournalKind.FAILURE, 1L, "{}");
 
-    JsonNode deployment = assembler.assemble(stackId).deployment();
+    JsonNode deployment = assemble().deployment();
 
     assertEquals(0, deployment.required("resources").size());
     assertFalse(deployment.has("pending_operations"));
@@ -215,7 +224,7 @@ class StackAssemblerTest {
     UUID update = update();
     begin(update, 1L, opType, res("r"));
 
-    JsonNode pending = assembler.assemble(stackId).deployment().required("pending_operations");
+    JsonNode pending = assemble().deployment().required("pending_operations");
 
     assertEquals(1, pending.size());
     assertEquals(opType, pending.get(0).required("type").asText());
@@ -230,7 +239,7 @@ class StackAssemblerTest {
     begin(update, 1L, "reading", res("r"));
     entry(update, JournalKind.REFRESH_SUCCESS, 1L, "{}");
 
-    JsonNode deployment = assembler.assemble(stackId).deployment();
+    JsonNode deployment = assemble().deployment();
 
     assertFalse(deployment.has("pending_operations"));
   }
@@ -248,7 +257,7 @@ class StackAssemblerTest {
         0L,
         "{\"state\":" + resource("a", "\"sourcePosition\":\"project:///refreshed.ts#2,1\"") + "}");
 
-    JsonNode resources = assembler.assemble(stackId).deployment().required("resources");
+    JsonNode resources = assemble().deployment().required("resources");
 
     assertEquals(1, resources.size());
     assertEquals(1, countUrn(resources, urn("a")));
@@ -263,7 +272,7 @@ class StackAssemblerTest {
 
     entry(update, JournalKind.REFRESH_SUCCESS, 1L, "remove_old", 0L, "{}");
 
-    JsonNode resources = assembler.assemble(stackId).deployment().required("resources");
+    JsonNode resources = assemble().deployment().required("resources");
 
     assertEquals(1, resources.size());
     assertEquals(urn("survivor"), resources.get(0).required("urn").asText());
@@ -282,7 +291,7 @@ class StackAssemblerTest {
         1L,
         "{\"state\":" + resource("a", "\"sourcePosition\":\"project:///refreshed.ts#2,1\"") + "}");
 
-    JsonNode resources = assembler.assemble(stackId).deployment().required("resources");
+    JsonNode resources = assemble().deployment().required("resources");
 
     assertEquals(1, resources.size());
     assertEquals(1, countUrn(resources, urn("a")));
@@ -298,7 +307,7 @@ class StackAssemblerTest {
 
     entry(update, JournalKind.REFRESH_SUCCESS, 1L, "remove_new", 1L, "{}");
 
-    JsonNode resources = assembler.assemble(stackId).deployment().required("resources");
+    JsonNode resources = assemble().deployment().required("resources");
 
     assertEquals(1, resources.size());
     assertEquals(urn("survivor"), resources.get(0).required("urn").asText());
@@ -319,7 +328,7 @@ class StackAssemblerTest {
             + res("x")
             + "}]}}");
 
-    JsonNode deployment = assembler.assemble(stackId).deployment();
+    JsonNode deployment = assemble().deployment();
 
     assertFalse(deployment.has("pending_operations"));
   }
@@ -352,7 +361,7 @@ class StackAssemblerTest {
             + "]");
     entry(update, JournalKind.REFRESH_SUCCESS, 1L, "remove_old", 0L, "{}");
 
-    JsonNode child = find(assembler.assemble(stackId).deployment().required("resources"), "child");
+    JsonNode child = find(assemble().deployment().required("resources"), "child");
     JsonNode inputDeps = child.required("propertyDependencies").required("input");
 
     assertFalse(child.required("dependencies").elements().hasNext());
@@ -380,7 +389,7 @@ class StackAssemblerTest {
                 "stack", "\"type\":\"pulumi:pulumi:Stack\",\"outputs\":{\"petName\":\"spot\"}")
             + "}");
 
-    JsonNode stack = find(assembler.assemble(stackId).deployment().required("resources"), "stack");
+    JsonNode stack = find(assemble().deployment().required("resources"), "stack");
 
     assertEquals("spot", stack.required("outputs").required("petName").asText());
   }
@@ -404,7 +413,7 @@ class StackAssemblerTest {
         0L,
         "{\"secretsProvider\":{\"type\":\"service\",\"state\":{\"url\":\"u\"},\"extra\":\"x\"}}");
 
-    JsonNode provider = assembler.assemble(stackId).deployment().required("secrets_providers");
+    JsonNode provider = assemble().deployment().required("secrets_providers");
 
     assertEquals("service", provider.required("type").asText());
     assertFalse(provider.has("extra"));
@@ -424,7 +433,7 @@ class StackAssemblerTest {
         0L,
         "{\"secretsProvider\":{\"type\":\"service\",\"state\":{\"url\":\"service-b\"}}}");
 
-    JsonNode replaced = assembler.assemble(stackId).deployment().required("secrets_providers");
+    JsonNode replaced = assemble().deployment().required("secrets_providers");
 
     assertEquals("service", replaced.required("type").asText());
     assertEquals("service-b", replaced.required("state").required("url").asText());
@@ -435,14 +444,14 @@ class StackAssemblerTest {
         0L,
         "{\"secretsProvider\":{\"type\":\"passphrase\",\"state\":{\"salt\":\"abc\"}}}");
 
-    JsonNode changedType = assembler.assemble(stackId).deployment().required("secrets_providers");
+    JsonNode changedType = assemble().deployment().required("secrets_providers");
 
     assertEquals("passphrase", changedType.required("type").asText());
     assertEquals("abc", changedType.required("state").required("salt").asText());
 
     entry(update, JournalKind.SECRETS_MANAGER, 0L, "{\"secretsProvider\":null}");
 
-    assertFalse(assembler.assemble(stackId).deployment().has("secrets_providers"));
+    assertFalse(assemble().deployment().has("secrets_providers"));
   }
 
   @Test
@@ -464,14 +473,14 @@ class StackAssemblerTest {
                 "\"type\":\"pulumi:pulumi:Stack\",\"outputs\":{\"password\":" + expected + "}")
             + "}");
 
-    JsonNode beforeWrite = assembler.assemble(stackId).deployment().required("resources");
+    JsonNode beforeWrite = assemble().deployment().required("resources");
     assertEquals(expected, find(beforeWrite, "component").required("inputs").required("password"));
     assertEquals(expected, find(beforeWrite, "stack").required("outputs").required("password"));
 
     write(
         update, "[" + resource("from-write", "\"outputs\":{\"password\":" + expected + "}") + "]");
 
-    JsonNode afterWrite = assembler.assemble(stackId).deployment().required("resources");
+    JsonNode afterWrite = assemble().deployment().required("resources");
 
     assertEquals(expected, find(afterWrite, "from-write").required("outputs").required("password"));
   }
@@ -485,7 +494,7 @@ class StackAssemblerTest {
     entry(update, JournalKind.REBUILT_BASE_STATE, 0L, "{}");
     success(update, 2L, res("b"));
 
-    JsonNode resources = assembler.assemble(stackId).deployment().required("resources");
+    JsonNode resources = assemble().deployment().required("resources");
 
     assertEquals(2, resources.size());
     assertEquals(urn("b"), resources.get(0).required("urn").asText());
@@ -505,7 +514,7 @@ class StackAssemblerTest {
         1L,
         "{\"state\":" + res("a-refreshed") + "}");
 
-    JsonNode resources = assembler.assemble(stackId).deployment().required("resources");
+    JsonNode resources = assemble().deployment().required("resources");
 
     assertEquals(1, resources.size());
     assertEquals(urn("a"), resources.get(0).required("urn").asText());
@@ -518,7 +527,7 @@ class StackAssemblerTest {
     UUID second = update();
     success(second, 1L, res("second"));
 
-    JsonNode resources = assembler.assemble(stackId).deployment().required("resources");
+    JsonNode resources = assemble().deployment().required("resources");
 
     assertEquals(2, resources.size());
     assertEquals(urn("second"), resources.get(0).required("urn").asText());
@@ -534,7 +543,7 @@ class StackAssemblerTest {
         resource("a", "\"aliases\":[\"" + urn("old-a") + "\"],\"viewOf\":\"" + urn("view") + "\""));
     success(update, 2L, resource("c", "\"dependencies\":[\"" + urn("old-a") + "\"]"));
 
-    AssembledDeployment assembled = assembler.assemble(stackId);
+    AssembledDeployment assembled = assemble();
     JsonNode resources = assembled.deployment().required("resources");
 
     // viewOf is a v4-only deployment feature, so it upgrades the export shape.
@@ -558,7 +567,7 @@ class StackAssemblerTest {
     successReplaceOld(
         update, 1L, 0L, resource("a", "\"sourcePosition\":\"project:///new.ts#2,1\""));
 
-    JsonNode resources = assembler.assemble(stackId).deployment().required("resources");
+    JsonNode resources = assemble().deployment().required("resources");
 
     assertEquals(1, resources.size());
     assertEquals(1, countUrn(resources, urn("a")));
@@ -578,7 +587,7 @@ class StackAssemblerTest {
     entry(update, JournalKind.BEGIN, 2L, "{}");
     successReplaceOld(update, 2L, 1L, res("b"));
 
-    JsonNode deployment = assembler.assemble(stackId).deployment();
+    JsonNode deployment = assemble().deployment();
     JsonNode resources = deployment.required("resources");
 
     assertEquals(2, resources.size());
@@ -603,7 +612,7 @@ class StackAssemblerTest {
     entry(update, JournalKind.BEGIN, 1L, "{}");
     successReplaceOld(update, 1L, 0L, resource("a", "\"dependencies\":[\"" + urn("b") + "\"]"));
 
-    JsonNode resources = assembler.assemble(stackId).deployment().required("resources");
+    JsonNode resources = assemble().deployment().required("resources");
 
     assertEquals(2, resources.size());
     assertEquals(urn("b"), resources.get(0).required("urn").asText());
@@ -652,7 +661,7 @@ class StackAssemblerTest {
     begin(update, 3L, "updating", resource("d", "\"dependencies\":[\"" + urn("c") + "\"]"));
     successReplaceOld(update, 3L, 3L, resource("d", "\"dependencies\":[\"" + urn("c") + "\"]"));
 
-    JsonNode deployment = assembler.assemble(stackId).deployment();
+    JsonNode deployment = assemble().deployment();
     JsonNode resources = deployment.required("resources");
 
     assertEquals(6, resources.size());
@@ -676,17 +685,21 @@ class StackAssemblerTest {
   }
 
   // Non-dependency same changes should be carried by the replacement state, not lost because the
-  // engine called the step "same".
+  // engine called the step "same". The engine processes providers and parents topologically before
+  // their consumers, so the update replays same-steps for provider2 and parent ahead of "a" —
+  // otherwise "a" would jump ahead of its references in the merged export.
   @Test
   void meaningfulSameChangesReplaceBaseResource() throws Exception {
     UUID update = update();
-    String provider1 = "urn:pulumi:dev::proj::pulumi:providers:pkg::provider::id1";
-    String provider2 = "urn:pulumi:dev::proj::pulumi:providers:pkg::provider2::id2";
+    String provider1Urn = "urn:pulumi:dev::proj::pulumi:providers:pkg::provider1";
+    String provider2Urn = "urn:pulumi:dev::proj::pulumi:providers:pkg::provider2";
+    String provider1 = provider1Urn + "::id1";
+    String provider2 = provider2Urn + "::id2";
     write(
         update,
         "["
             + resourceWithUrn(
-                urn("provider"), "pulumi:providers:pkg", "\"custom\":true,\"id\":\"id1\"")
+                provider1Urn, "pulumi:providers:pkg", "\"custom\":true,\"id\":\"id1\"")
             + ","
             + resourceWithUrn(urn("parent"), "pkg:index:Parent", "\"custom\":true")
             + ","
@@ -694,9 +707,15 @@ class StackAssemblerTest {
             + "]");
 
     entry(update, JournalKind.BEGIN, 1L, "{}");
-    successReplaceOld(
+    success(
         update,
         1L,
+        resourceWithUrn(provider2Urn, "pulumi:providers:pkg", "\"custom\":true,\"id\":\"id2\""));
+    successReplaceOld(
+        update, 2L, 1L, resourceWithUrn(urn("parent"), "pkg:index:Parent", "\"custom\":true"));
+    successReplaceOld(
+        update,
+        3L,
         2L,
         resourceWithUrn(
             urn("a"),
@@ -707,10 +726,10 @@ class StackAssemblerTest {
                 + urn("parent")
                 + "\",\"protect\":true,\"outputs\":{\"name\":\"changed\"}"));
 
-    JsonNode resources = assembler.assemble(stackId).deployment().required("resources");
+    JsonNode resources = assemble().deployment().required("resources");
     JsonNode a = find(resources, "a");
 
-    assertEquals(3, resources.size());
+    assertEquals(4, resources.size());
     assertFalse(a.required("custom").asBoolean());
     assertEquals(provider2, a.required("provider").asText());
     assertEquals(urn("parent"), a.required("parent").asText());
@@ -740,7 +759,7 @@ class StackAssemblerTest {
         0L,
         resourceWithUrn(newUrn, "pkg:index:a", "\"custom\":true,\"aliases\":[\"" + oldUrn + "\"]"));
 
-    JsonNode resources = assembler.assemble(stackId).deployment().required("resources");
+    JsonNode resources = assemble().deployment().required("resources");
     JsonNode a = find(resources, "a");
     JsonNode dependent = find(resources, "dependent");
 
@@ -757,14 +776,14 @@ class StackAssemblerTest {
     UUID update = update();
     write(update, "[" + resource("a", "\"sourcePosition\":\"project:///old.ts#1,1\"") + "]");
 
-    JsonNode beforeFlush = assembler.assemble(stackId).deployment().required("resources");
+    JsonNode beforeFlush = assemble().deployment().required("resources");
     assertEquals(1, beforeFlush.size());
     assertEquals(
         "project:///old.ts#1,1", find(beforeFlush, "a").required("sourcePosition").asText());
 
     write(update, "[" + resource("a", "\"sourcePosition\":\"project:///new.ts#1,1\"") + "]");
 
-    JsonNode afterFlush = assembler.assemble(stackId).deployment().required("resources");
+    JsonNode afterFlush = assemble().deployment().required("resources");
     assertEquals(1, afterFlush.size());
     assertEquals(1, countUrn(afterFlush, urn("a")));
     assertEquals(
@@ -778,8 +797,7 @@ class StackAssemblerTest {
     UUID update = update();
     entry(update, JournalKind.UNKNOWN, 0L, "{}");
 
-    IllegalStateException e =
-        assertThrows(IllegalStateException.class, () -> assembler.assemble(stackId));
+    IllegalStateException e = assertThrows(IllegalStateException.class, () -> assemble());
 
     assertTrue(e.getMessage().contains("stack=" + stackId));
     assertTrue(e.getMessage().contains("update=" + update));

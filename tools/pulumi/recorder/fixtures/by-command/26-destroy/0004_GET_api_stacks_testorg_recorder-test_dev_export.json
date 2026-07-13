@@ -120,7 +120,7 @@
             "length": [],
             "separator": []
           },
-          "provider": "urn:pulumi:dev::recorder-test::pulumi:providers:random::default::00000000-0000-0000-0000-000000000000",
+          "provider": "urn:pulumi:dev::recorder-test::pulumi:providers:random::default::[resource-id]",
           "sourcePosition": "project:///../home/runner/work/pulumi-yaml/pulumi-yaml/pkg/pulumiyaml/run.go#1020",
           "stackTrace": [
             {
@@ -232,7 +232,7 @@
             "special": [],
             "upper": []
           },
-          "provider": "urn:pulumi:dev::recorder-test::pulumi:providers:random::default::00000000-0000-0000-0000-000000000000",
+          "provider": "urn:pulumi:dev::recorder-test::pulumi:providers:random::default::[resource-id]",
           "sourcePosition": "project:///../home/runner/work/pulumi-yaml/pulumi-yaml/pkg/pulumiyaml/run.go#1020",
           "stackTrace": [
             {
@@ -332,7 +332,7 @@
             "min": [],
             "seed": []
           },
-          "provider": "urn:pulumi:dev::recorder-test::pulumi:providers:random::default::00000000-0000-0000-0000-000000000000",
+          "provider": "urn:pulumi:dev::recorder-test::pulumi:providers:random::default::[resource-id]",
           "sourcePosition": "project:///../home/runner/work/pulumi-yaml/pulumi-yaml/pkg/pulumiyaml/run.go#1020",
           "stackTrace": [
             {
@@ -466,7 +466,7 @@
             "special": [],
             "upper": []
           },
-          "provider": "urn:pulumi:dev::recorder-test::pulumi:providers:random::default::00000000-0000-0000-0000-000000000000",
+          "provider": "urn:pulumi:dev::recorder-test::pulumi:providers:random::default::[resource-id]",
           "sourcePosition": "project:///../home/runner/work/pulumi-yaml/pulumi-yaml/pkg/pulumiyaml/run.go#1020",
           "stackTrace": [
             {
@@ -574,7 +574,7 @@
             "keepers": [],
             "prefix": []
           },
-          "provider": "urn:pulumi:dev::recorder-test::pulumi:providers:random::default::00000000-0000-0000-0000-000000000000",
+          "provider": "urn:pulumi:dev::recorder-test::pulumi:providers:random::default::[resource-id]",
           "sourcePosition": "project:///../home/runner/work/pulumi-yaml/pulumi-yaml/pkg/pulumiyaml/run.go#1020",
           "stackTrace": [
             {

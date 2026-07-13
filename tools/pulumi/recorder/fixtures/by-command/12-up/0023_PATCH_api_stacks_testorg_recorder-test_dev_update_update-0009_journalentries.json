@@ -34,7 +34,7 @@
               "special": [],
               "upper": []
             },
-            "provider": "urn:pulumi:dev::recorder-test::pulumi:providers:random::default::00000000-0000-0000-0000-000000000000",
+            "provider": "urn:pulumi:dev::recorder-test::pulumi:providers:random::default::[resource-id]",
             "sourcePosition": "project:///../home/runner/work/pulumi-yaml/pulumi-yaml/pkg/pulumiyaml/run.go#1020",
             "stackTrace": [
               {
@@ -108,7 +108,7 @@
       }
     ]
   },
-  "body_b64": "H4sIAAAAAAAA/9RWS4/bNhD+L5OrTFIPe2We9pBLL23Q9LYwAoaayKolkh2S2iwW+u8FJTndFAHifdRAdTA5koffY0RxHgFNoA49yLtHOHWmASkysA5Jhc4akI9A6G0kjWmuow92ABkoYgYNOjQNGr0sAJGMdLGPQycbHKUk1JYapE1AH6QkZRo7yM40+JUvwQcM8vdvM+kwwCGDzrgYfMLr0bThCLLOwDvUnepBflG9xwyic0hrNGXgFKEJIH9GYn20Dh+D0qd//WfT4AgZOEouhIf334n8h9Ld4QmnFKyE7g7TnDx2TQov5bMm+LNLssEvKvZBSrFemx/8nC/IYCnSB+u7pXCJw5+og+ScM8aPdkBO0Rgkfm/pxBfgzYMa+u/np3aN55CiYa19l4tiBkl+/UEqvQ13j9fAnLL/HKaodteAEfv9FWC2xfbNUTzSiLQOCaQs6ueCtHZearANb7twjJ+ZtsOKdB58c+JjeTuWrChvmJhzlidnD6vqGuKe/Tq8RJwjG2zK7JVpo2rxU0tOM/d5rmJ9LYO1HQZreAxdz8npeexMQNLogl0MEflryFjb9sham3QySy1POm/HnNU5E098z4uqfBvRCWCD2voHH3ANrUsnndKdaW9HwQQTm0LktdiKmyIvy63Y1FiLva5Vvau2aWEbUuITgtub/5cNb1H74nU7/XLR5bN39ttvuv2zj5sXaa3K6+DU21d9yC7GEbuLjhzrAj9aH7AJ1vZa6SMmvJwVW7bnX3cV96QTkdANyJUfPikadhXz7/JiV8N0yCA8OAQJP2gkPwbqTLv2kksAWeq9ft6BXbaalPeWGpi+kdCEKiSY6Um//Mt7kFUGhIMd8Ve8B2li359v/NY35xse/4poNKaEOoMRyc+e5dNh+jsAAP//KpUlvZULAAA=",
+  "body_b64": "H4sIAAAAAAAAA9VWyW7bMBD9F/aqfXFknnLIpZc2aHozjIChJrJqiVS5KDEC/3uHWpqkKBA7cQ0UOpBDcea9GW7viYAwqgZN6OqJbGtREhp5RHagmKmlIPSJKNDSKg6uz602siXUKAseKaEDUYLgYwBilaCdbWxb0xJ6ShVwqUpQvgFt0GSilC1FEHgMR+MaDP32u0c7MGTtkVp01miH14CozIbQwiO6A16zhtB71mgEtx2SnKy9RzqmMBVC3yIx/ZqaG8P49o85ProRDKhcFczu6lWSz5RW6xecnDERWq33g3Nfl848lM/koOcq4eR7ZhucsZoXwK/LNRIbjWup63GFHNgP4IaGYRgE4Ua2ECorBKjwQaptOCL4O9Y2r/vbarIHE12CSn6KoyRyIK4w3xVzy4474wyYe++fwyTZ4hww0XJ5Bpg8yU+OokH1OG9sHEiaFMeCVHII1coyrGqzsXcBl+2ENDe63IZ9etmnQZJeBNHgM/6Za5hl50ju6O3wnuQwmpHOs2GisqyC20p1POjuhlUszlVgnNRKEVpT4xbq+NDWwgDCdkaOBYnij5CRsmoA47g8A6mq0OV52cdBESOF57rjOUxPk7QD8PE+1TttYDLx1sYnjfFaVJd9FODnJ1FcRHl0kcRpmkd+AUW05AUrFlnuAkvjHF8QzC/+rzKcYu2Tj530w5NOjz7Zpz90y6Ofm3flmqXnwSnyD11kB+NEi4OeHNkZxMITWRopG874BhxeHCR5sAwfF1moFXdETI2EmG5vmWoXWaBxdyxwF6KWMrsOhQf5i2K8Qbkqqkk0jgbKFRRZb0utw6JRii9JiXnOJLgC1MIIs38hjD9fEZp5qI1b2cMXeCBU2KaZB7425Tyg4adF8QjOAVUsllIPNYv36/0vMtid534LAAA=",
   "body_gzip": true,
   "status_code": 200,
   "response": {}

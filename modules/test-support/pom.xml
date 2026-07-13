@@ -24,6 +24,11 @@
             <groupId>org.yaml</groupId>
             <artifactId>snakeyaml</artifactId>
         </dependency>
+        <!-- PulumiDeploymentAssert runs the tools/pulumi/verify image via Testcontainers. -->
+        <dependency>
+            <groupId>org.testcontainers</groupId>
+            <artifactId>testcontainers</artifactId>
+        </dependency>
     </dependencies>
 
     <build>

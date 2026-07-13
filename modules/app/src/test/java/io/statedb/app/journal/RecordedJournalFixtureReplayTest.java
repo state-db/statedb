@@ -19,6 +19,7 @@ import io.statedb.persistence.stack.Project;
 import io.statedb.persistence.stack.StackAssembler;
 import io.statedb.persistence.stack.StackCreator;
 import io.statedb.testsupport.RepoRoot;
+import io.statedb.testsupport.pulumi.PulumiDeploymentAssert;
 import jakarta.inject.Inject;
 import jakarta.persistence.EntityManager;
 import java.nio.charset.StandardCharsets;
@@ -238,8 +239,7 @@ class RecordedJournalFixtureReplayTest {
                         && entry.hasNonNull("state")),
         "recorded refresh should include RefreshSuccess(removeOld, state) replacement rows");
 
-    JsonNode resources =
-        assembler.assemble(stackId(org, project, stack)).deployment().required("resources");
+    JsonNode resources = assemble(stackId(org, project, stack)).deployment().required("resources");
 
     assertNoDanglingExportReferences(resources);
   }
@@ -273,8 +273,8 @@ class RecordedJournalFixtureReplayTest {
 
     UUID unsplitStackId = stackId(orgName, project, stack + "-one");
     UUID splitStackId = stackId(orgName, project, stack + "-split");
-    AssembledDeployment unsplit = assembler.assemble(unsplitStackId);
-    AssembledDeployment split = assembler.assemble(splitStackId);
+    AssembledDeployment unsplit = assemble(unsplitStackId);
+    AssembledDeployment split = assemble(splitStackId);
     assertEquals(
         comparableDeployment(unsplit.deployment()),
         comparableDeployment(split.deployment()),
@@ -514,6 +514,13 @@ class RecordedJournalFixtureReplayTest {
                 + "/journalentries")
         .then()
         .statusCode(200);
+  }
+
+  // Deployments assembled from real recorded CLI journals must pass Pulumi's own integrity rules.
+  private AssembledDeployment assemble(UUID stackId) {
+    AssembledDeployment assembled = assembler.assemble(stackId);
+    PulumiDeploymentAssert.assertIntegrityPasses(assembled.deployment());
+    return assembled;
   }
 
   private UUID stackId(String orgName, String project, String stack) {

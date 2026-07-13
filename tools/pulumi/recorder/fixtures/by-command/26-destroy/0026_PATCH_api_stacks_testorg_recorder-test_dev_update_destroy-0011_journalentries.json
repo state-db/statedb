@@ -88,7 +88,7 @@
               "special": [],
               "upper": []
             },
-            "provider": "urn:pulumi:dev::recorder-test::pulumi:providers:random::default::00000000-0000-0000-0000-000000000000",
+            "provider": "urn:pulumi:dev::recorder-test::pulumi:providers:random::default::[resource-id]",
             "sourcePosition": "project:///../home/runner/work/pulumi-yaml/pulumi-yaml/pkg/pulumiyaml/run.go#1020",
             "stackTrace": [
               {
@@ -162,7 +162,7 @@
       }
     ]
   },
-  "body_b64": "H4sIAAAAAAAA/9RXXY/bKBf+L6e3jo0/kjhc9aIXb6VXbbXt3uxMFBE449DYwALOdBT5v6/wR2Zmt9tmOjOR1ooCD+bwnPPAwXAEVN5KdECvjrCXSgAlEWiDlnmpFdAjWHS6tRxDnQkhQzurPyO36D+23rQ+WMOW2zvj/8fcDqJg09Ye1hFwi8yjAArpaklmJJ2R9AshtP/9ARHw1nndAPW2xQgEGlQCFR98gtYqatq6bSQVeKDUItdWoJ15dJ5Sy5TQDZVK4LdkAO+Vxwot/e0Rokaq4I4MnlxNIc2kWEMEUg1BHKFGVfkd0LSIoNa3aCe/Gqn+P+C8Bx/aBq3kQLMefjbIJauBpj383ZjQNYtATf2GYfQBrZUCT/1hM4MI3ASHXu1gHkAXQaOFvJE/klBPs3CEzaZBz4DC8Roc32HDNge0Tmp1DfQa8mvoIILNZtB0Y9ntxnnmcSOwDnZH0NuvoTD9cHtEg7avFoJtb9IyXeVkma3y1TydY5Yxsc1WZV6WvXvbYkkWabYo0rzkBeM5Ecv5jUhxWxTZkoTZlmaH1uM3H+bB9YtoDV3XddHDFfTafP+yEF5j+rf3o5y3GMbceX0JfrjqDLOogsVPMnB8NRafPeP7v/WZCTxABMaGXcXfvXuU4fcpd7U+aR6q94qP6CT5iE+qjXgUPSD1sOs/VA6N7iFoJ8uu9/IgRYDnBj4auGkvogJvWFt7Ssn4zL7zNz0h+fsV+Ek7Oey4wYevyD1NkiSOk51uMLGtUmiTW233yUA8u2NN/bi+r0bcQ9uquNJvUpL1JGFivlgWtvGr4yU4u+jVabJicQkaslpdgGaezV+cxaE9oB2LQJJn5VNJKt0P1WiRVNLv2m3MdTMyTYUT++SQvz3kcZYvY9LbDG8mDYviEsE9eTn8SnDGaq+DZc1U1bIKN5U1PDbbfhbLSwnMddNolbRe1ok1vC+l8mg5Gq8HQUj6HGe0rmqMKx3ijLWtkhDn20Mal2lMHuieZkX+MkEHghly7e6cxxFqE46ojEtVvT2QmMRklpG0JHOyzNI8n5NZiSVZ8ZKVi2IeBtY+GD5wcL78b8nwEnOfPS/Tzw86f3Jmv3zSrZ78ufmlWIv8Mjzl/Fkb2dk8ZHHWJ0cbn+y08yi81jVnfIeBL42zebxKvi2KxFkeHPGywYS5ZsNssyhi9ybNFiV06wj8nUGg8J3r2ifm3K22YryvTRCicP76+Sns/BEpNdPY3ckhgTV6qarQdLr0vn/Xn90tNvqAH/AWqGrremr4WIupweGfLSqOwaCIYLxoAU27dfdXAAAA//+ubiaKWg8AAA==",
+  "body_b64": "H4sIAAAAAAAAA9VXS2/bOBD+L9yrrbdsSaccetgCRVtsupdNDIEmJzJridSSlJPA8H/foR5O0t1tnSYx0MQA9UnznuFwuCcgrRZgSHG1J1shOSmCGVEtaGqFkqTYEw1GdZqBe6acC/ee1pfANNhPnW0767jJmun71v5OzYbMHE9XW7KaEaSiFlAsCfNlMA9C/H0JgqL//YWkrDNWNaSwuoMZ4dCC5CDZYBPptCzaru4aUXDYFYUGpjQHPbdgLEIquWoKtBvu/AG8lxYq0MUfT1DRCunMEc6Sq8mlueArNEHIwYk9qUFWdkOKMJmRWt2CnuxqhPww4LgHH7sGtGCkiHp42QITtEbGHv7Zto4Uv8mJbhCjdqC14HCkJ+UcDTATHKi6gd2BA8pTXNyI74VQTVnYk7JswFIk3V8TwzbQ0BJVGkzZNSmuSXxNDshQlkNMS01vS2MxQSWH2vHtiVp/dUvbi9sC5kP3jwmn65swC/M4WEZ5nKdhClFE+TrKszjLevPWyTJYhNEiCeOMJZTFAV+mNzyEdZJEy8BlW7Qb0BburMuD6YtoRQ74N3tcQW+t738K4S3Sv36QcloxjHvn7UPw3aprqcbWgBw/2IHjp3G5tJRtv6GZIxua0WrXVez9uyc7/GHLXa2OMXePDxEf0THkIz5GbcRj0B2Sj0n/FWX30jwG3cR56K3cIbE+3fGRwUy9CIlvKCawKL6trgF8VkYMrdUp+wrMFr7ve56/UQ34upMStH+r9NYfNMzvaVM/fd5WI+4hsniV+i0MIpdt4zLwRVPXr7Gln0HnYfbmaqJkcQ41QZ6fQU0apa+uxYDGMh8XpySOsucqqVQvCo8bvxJ20609pppR07QYvvV38cUu9qJ46QU9z/BlimGSnMO5Z5fDzziH0qxynDWVVUcrKCvdMq9d91nMzhVgJGqU9DsrsIRa1q8CxxpU21o1BCQIX2KMUlUNKMf56Sld+c7Pi13oZSGa8BB33Ifx6zjtFMyxn5p7Y2GEeDzgLEqZkNXFLvDwfx4FYRakePiFcZwG8wyyIGcZzRZJ6gQr6xgfGZguf60wvEbuo5ft9NOdjp+9s19/0+XPPm5+ytckPo+eLH1RIztZT7A46chRrUVduCO5VapmFO8PTl/oRamX+3eLxDeaOUOsQIOoaUqqm0XiGayOBVYhzlL2vsXBg/zHvewzNQZbPR8vZhPEkQUHrR+PW6dLxNFskn04GoTXG7DYWdyr4+32/bt+SNfQ4JD4EW5JIbu6nl58qvn0wsDfHU6s4BjwajDeqHDcP6wO/wCEXb8kQw8AAA==",
   "body_gzip": true,
   "status_code": 200,
   "response": {}

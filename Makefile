@@ -4,6 +4,7 @@
 	format format-check \
 	pulumi-extract pulumi-compare pulumi-discover pulumi-api-test \
 	pulumi-recorder-run pulumi-recorder-run-no-build pulumi-recorder-catalog pulumi-recorder-verify pulumi-recorder-discover \
+	pulumi-verify-build pulumi-verify-test \
 	pulumi-workbench
 
 PULUMI_SCOPE         ?= $(CURDIR)/tools/pulumi/api-extract/scopes/state-backend.yaml
@@ -148,3 +149,15 @@ pulumi-recorder-verify:
 ## AI harness style end-to-end recording target.
 pulumi-recorder-discover:
 	$(MAKE) -C tools/pulumi/recorder discover
+
+## -------------------------
+## Pulumi Integrity Verifier
+## -------------------------
+
+## Build the integrity verifier Docker image (statedb-pulumi-verify).
+pulumi-verify-build:
+	$(MAKE) -C tools/pulumi/verify build
+
+## Run tests for the integrity verifier tool.
+pulumi-verify-test:
+	$(MAKE) -C tools/pulumi/verify verify

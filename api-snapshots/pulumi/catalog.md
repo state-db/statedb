@@ -827,13 +827,13 @@ _Replay request body preserved in `body_b64` (273 bytes)._
             },
             "outputs": {},
             "parent": "urn:pulumi:dev::recorder-test::pulumi:pulumi:Stack::recorder-test-dev",
-            "provider": "urn:pulumi:dev::recorder-test::pulumi:providers:random::default::00000000-0000-0000-0000-000000000000",
+            "provider": "urn:pulumi:dev::recorder-test::pulumi:providers:random::default::[resource-id]",
             "type": "random:index/randomPet:RandomPet",
             "urn": "urn:pulumi:dev::recorder-test::random:index/randomPet:RandomPet::pet"
           },
           "old": null,
           "op": "create",
-          "provider": "urn:pulumi:dev::recorder-test::pulumi:providers:random::default::00000000-0000-0000-0000-000000000000",
+          "provider": "urn:pulumi:dev::recorder-test::pulumi:providers:random::default::[resource-id]",
           "type": "random:index/randomPet:RandomPet",
           "urn": "urn:pulumi:dev::recorder-test::random:index/randomPet:RandomPet::pet"
         },
@@ -860,13 +860,13 @@ _Replay request body preserved in `body_b64` (273 bytes)._
               "separator": "-"
             },
             "parent": "urn:pulumi:dev::recorder-test::pulumi:pulumi:Stack::recorder-test-dev",
-            "provider": "urn:pulumi:dev::recorder-test::pulumi:providers:random::default::00000000-0000-0000-0000-000000000000",
+            "provider": "urn:pulumi:dev::recorder-test::pulumi:providers:random::default::[resource-id]",
             "type": "random:index/randomPet:RandomPet",
             "urn": "urn:pulumi:dev::recorder-test::random:index/randomPet:RandomPet::pet"
           },
           "old": null,
           "op": "create",
-          "provider": "urn:pulumi:dev::recorder-test::pulumi:providers:random::default::00000000-0000-0000-0000-000000000000",
+          "provider": "urn:pulumi:dev::recorder-test::pulumi:providers:random::default::[resource-id]",
           "type": "random:index/randomPet:RandomPet",
           "urn": "urn:pulumi:dev::recorder-test::random:index/randomPet:RandomPet::pet"
         },
@@ -890,13 +890,13 @@ _Replay request body preserved in `body_b64` (273 bytes)._
             },
             "outputs": {},
             "parent": "urn:pulumi:dev::recorder-test::pulumi:pulumi:Stack::recorder-test-dev",
-            "provider": "urn:pulumi:dev::recorder-test::pulumi:providers:random::default::00000000-0000-0000-0000-000000000000",
+            "provider": "urn:pulumi:dev::recorder-test::pulumi:providers:random::default::[resource-id]",
             "type": "random:index/randomString:RandomString",
             "urn": "urn:pulumi:dev::recorder-test::random:index/randomString:RandomString::word"
           },
           "old": null,
           "op": "create",
-          "provider": "urn:pulumi:dev::recorder-test::pulumi:providers:random::default::00000000-0000-0000-0000-000000000000",
+          "provider": "urn:pulumi:dev::recorder-test::pulumi:providers:random::default::[resource-id]",
           "type": "random:index/randomString:RandomString",
           "urn": "urn:pulumi:dev::recorder-test::random:index/randomString:RandomString::word"
         },
@@ -933,13 +933,13 @@ _Replay request body preserved in `body_b64` (273 bytes)._
               "upper": false
             },
             "parent": "urn:pulumi:dev::recorder-test::pulumi:pulumi:Stack::recorder-test-dev",
-            "provider": "urn:pulumi:dev::recorder-test::pulumi:providers:random::default::00000000-0000-0000-0000-000000000000",
+            "provider": "urn:pulumi:dev::recorder-test::pulumi:providers:random::default::[resource-id]",
             "type": "random:index/randomString:RandomString",
             "urn": "urn:pulumi:dev::recorder-test::random:index/randomString:RandomString::word"
           },
           "old": null,
           "op": "create",
-          "provider": "urn:pulumi:dev::recorder-test::pulumi:providers:random::default::00000000-0000-0000-0000-000000000000",
+          "provider": "urn:pulumi:dev::recorder-test::pulumi:providers:random::default::[resource-id]",
           "type": "random:index/randomString:RandomString",
           "urn": "urn:pulumi:dev::recorder-test::random:index/randomString:RandomString::word"
         },
@@ -963,13 +963,13 @@ _Replay request body preserved in `body_b64` (273 bytes)._
             },
             "outputs": {},
             "parent": "urn:pulumi:dev::recorder-test::pulumi:pulumi:Stack::recorder-test-dev",
-            "provider": "urn:pulumi:dev::recorder-test::pulumi:providers:random::default::00000000-0000-0000-0000-000000000000",
+            "provider": "urn:pulumi:dev::recorder-test::pulumi:providers:random::default::[resource-id]",
             "type": "random:index/randomInteger:RandomInteger",
             "urn": "urn:pulumi:dev::recorder-test::random:index/randomInteger:RandomInteger::pin"
           },
           "old": null,
           "op": "create",
-          "provider": "urn:pulumi:dev::recorder-test::pulumi:providers:random::default::00000000-0000-0000-0000-000000000000",
+          "provider": "urn:pulumi:dev::recorder-test::pulumi:providers:random::default::[resource-id]",
           "type": "random:index/randomInteger:RandomInteger",
           "urn": "urn:pulumi:dev::recorder-test::random:index/randomInteger:RandomInteger::pin"
         },
@@ -999,13 +999,13 @@ _Replay request body preserved in `body_b64` (273 bytes)._
               "seed": "recorder-pin"
             },
             "parent": "urn:pulumi:dev::recorder-test::pulumi:pulumi:Stack::recorder-test-dev",
-            "provider": "urn:pulumi:dev::recorder-test::pulumi:providers:random::default::00000000-0000-0000-0000-000000000000",
+            "provider": "urn:pulumi:dev::recorder-test::pulumi:providers:random::default::[resource-id]",
             "type": "random:index/randomInteger:RandomInteger",
             "urn": "urn:pulumi:dev::recorder-test::random:index/randomInteger:RandomInteger::pin"
           },
           "old": null,
           "op": "create",
-          "provider": "urn:pulumi:dev::recorder-test::pulumi:providers:random::default::00000000-0000-0000-0000-000000000000",
+          "provider": "urn:pulumi:dev::recorder-test::pulumi:providers:random::default::[resource-id]",
           "type": "random:index/randomInteger:RandomInteger",
           "urn": "urn:pulumi:dev::recorder-test::random:index/randomInteger:RandomInteger::pin"
         },
@@ -1036,13 +1036,13 @@ _Replay request body preserved in `body_b64` (273 bytes)._
             },
             "outputs": {},
             "parent": "urn:pulumi:dev::recorder-test::pulumi:pulumi:Stack::recorder-test-dev",
-            "provider": "urn:pulumi:dev::recorder-test::pulumi:providers:random::default::00000000-0000-0000-0000-000000000000",
+            "provider": "urn:pulumi:dev::recorder-test::pulumi:providers:random::default::[resource-id]",
             "type": "random:index/randomPassword:RandomPassword",
             "urn": "urn:pulumi:dev::recorder-test::random:index/randomPassword:RandomPassword::password"
           },
           "old": null,
           "op": "create",
-          "provider": "urn:pulumi:dev::recorder-test::pulumi:providers:random::default::00000000-0000-0000-0000-000000000000",
+          "provider": "urn:pulumi:dev::recorder-test::pulumi:providers:random::default::[resource-id]",
           "type": "random:index/randomPassword:RandomPassword",
           "urn": "urn:pulumi:dev::recorder-test::random:index/randomPassword:RandomPassword::password"
         },
@@ -1094,13 +1094,13 @@ _Replay request body preserved in `body_b64` (273 bytes)._
               "upper": true
             },
             "parent": "urn:pulumi:dev::recorder-test::pulumi:pulumi:Stack::recorder-test-dev",
-            "provider": "urn:pulumi:dev::recorder-test::pulumi:providers:random::default::00000000-0000-0000-0000-000000000000",
+            "provider": "urn:pulumi:dev::recorder-test::pulumi:providers:random::default::[resource-id]",
             "type": "random:index/randomPassword:RandomPassword",
             "urn": "urn:pulumi:dev::recorder-test::random:index/randomPassword:RandomPassword::password"
           },
           "old": null,
           "op": "create",
-          "provider": "urn:pulumi:dev::recorder-test::pulumi:providers:random::default::00000000-0000-0000-0000-000000000000",
+          "provider": "urn:pulumi:dev::recorder-test::pulumi:providers:random::default::[resource-id]",
           "type": "random:index/randomPassword:RandomPassword",
           "urn": "urn:pulumi:dev::recorder-test::random:index/randomPassword:RandomPassword::password"
         },
@@ -1127,13 +1127,13 @@ _Replay request body preserved in `body_b64` (273 bytes)._
             },
             "outputs": {},
             "parent": "urn:pulumi:dev::recorder-test::pulumi:pulumi:Stack::recorder-test-dev",
-            "provider": "urn:pulumi:dev::recorder-test::pulumi:providers:random::default::00000000-0000-0000-0000-000000000000",
+            "provider": "urn:pulumi:dev::recorder-test::pulumi:providers:random::default::[resource-id]",
             "type": "random:index/randomId:RandomId",
             "urn": "urn:pulumi:dev::recorder-test::random:index/randomId:RandomId::token"
           },
           "old": null,
           "op": "create",
-          "provider": "urn:pulumi:dev::recorder-test::pulumi:providers:random::default::00000000-0000-0000-0000-000000000000",
+          "provider": "urn:pulumi:dev::recorder-test::pulumi:providers:random::default::[resource-id]",
           "type": "random:index/randomId:RandomId",
           "urn": "urn:pulumi:dev::recorder-test::random:index/randomId:RandomId::token"
         },
@@ -1172,13 +1172,13 @@ _Replay request body preserved in `body_b64` (273 bytes)._
               "prefix": "rec-"
             },
             "parent": "urn:pulumi:dev::recorder-test::pulumi:pulumi:Stack::recorder-test-dev",
-            "provider": "urn:pulumi:dev::recorder-test::pulumi:providers:random::default::00000000-0000-0000-0000-000000000000",
+            "provider": "urn:pulumi:dev::recorder-test::pulumi:providers:random::default::[resource-id]",
             "type": "random:index/randomId:RandomId",
             "urn": "urn:pulumi:dev::recorder-test::random:index/randomId:RandomId::token"
           },
           "old": null,
           "op": "create",
-          "provider": "urn:pulumi:dev::recorder-test::pulumi:providers:random::default::00000000-0000-0000-0000-000000000000",
+          "provider": "urn:pulumi:dev::recorder-test::pulumi:providers:random::default::[resource-id]",
           "type": "random:index/randomId:RandomId",
           "urn": "urn:pulumi:dev::recorder-test::random:index/randomId:RandomId::token"
         },

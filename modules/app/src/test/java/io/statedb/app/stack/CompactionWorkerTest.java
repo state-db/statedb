@@ -5,11 +5,11 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.databind.node.ObjectNode;
 import io.quarkus.narayana.jta.QuarkusTransaction;
 import io.quarkus.test.junit.QuarkusTest;
 import io.statedb.persistence.identity.Organization;
 import io.statedb.persistence.journal.JournalEntry;
+import io.statedb.persistence.stack.AssembledDeployment;
 import io.statedb.persistence.stack.CompactionJob;
 import io.statedb.persistence.stack.CompactionJobEnqueuer;
 import io.statedb.persistence.stack.CompactionWorker;
@@ -19,6 +19,8 @@ import io.statedb.persistence.stack.StackCreator;
 import io.statedb.persistence.stack.StackRef;
 import io.statedb.persistence.stack.StackState;
 import io.statedb.persistence.update.StackUpdate;
+import io.statedb.testsupport.pulumi.DeploymentNormalizer;
+import io.statedb.testsupport.pulumi.PulumiDeploymentAssert;
 import jakarta.inject.Inject;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.LockModeType;
@@ -65,13 +67,13 @@ class CompactionWorkerTest {
     UUID update = update(stackId);
     entry(stackId, update, 1, 1L, "{\"state\":" + res("a") + "}");
 
-    JsonNode before = normalized(assembler.assemble(stackId).deployment());
+    JsonNode before = normalized(assemble(stackId).deployment());
 
     QuarkusTransaction.requiringNew().run(() -> enqueuer.enqueue(stackId));
 
     assertEquals(1, worker.drainOnce());
 
-    JsonNode after = normalized(assembler.assemble(stackId).deployment());
+    JsonNode after = normalized(assemble(stackId).deployment());
     assertEquals(before, after);
     assertEquals(1L, Snapshot.count("stackId", stackId));
     assertEquals(0L, stackState(stackId).journalEntriesSinceCompaction);
@@ -137,7 +139,7 @@ class CompactionWorkerTest {
         1L,
         "{\"operation\":{\"resource\":" + res("orphan") + ",\"type\":\"creating\"}}");
 
-    JsonNode before = normalized(assembler.assemble(stackId).deployment());
+    JsonNode before = normalized(assemble(stackId).deployment());
     assertEquals(1, before.required("pending_operations").size());
 
     QuarkusTransaction.requiringNew().run(() -> enqueuer.enqueue(stackId));
@@ -154,7 +156,7 @@ class CompactionWorkerTest {
                   urn("orphan"), basePending.get(0).required("resource").required("urn").asText());
             });
 
-    JsonNode after = normalized(assembler.assemble(stackId).deployment());
+    JsonNode after = normalized(assemble(stackId).deployment());
     assertEquals(before, after);
   }
 
@@ -214,7 +216,7 @@ class CompactionWorkerTest {
                     + "}")
             + "}");
 
-    JsonNode before = assembler.assemble(stackId).deployment();
+    JsonNode before = assemble(stackId).deployment();
     assertEquals(expectedProvider, before.required("secrets_providers"));
     assertEquals(
         expectedSecret,
@@ -238,7 +240,7 @@ class CompactionWorkerTest {
                       .required("password"));
             });
 
-    JsonNode after = assembler.assemble(stackId).deployment();
+    JsonNode after = assemble(stackId).deployment();
     assertEquals(expectedProvider, after.required("secrets_providers"));
     assertEquals(
         expectedSecret,
@@ -269,7 +271,7 @@ class CompactionWorkerTest {
     UUID newUpdate = update(stackId);
     entry(stackId, newUpdate, 1, 2L, "{\"state\":" + res("new") + "}");
 
-    JsonNode resources = assembler.assemble(stackId).deployment().required("resources");
+    JsonNode resources = assemble(stackId).deployment().required("resources");
 
     assertEquals(2, resources.size());
     assertEquals(urn("new"), resources.get(0).required("urn").asText());
@@ -386,6 +388,14 @@ class CompactionWorkerTest {
     return StackState.find("stackId", targetStackId).<StackState>firstResult();
   }
 
+  // Compaction must be invisible to Pulumi: every export assembled in these tests — before or
+  // after compaction — must pass Pulumi's own integrity rules.
+  private AssembledDeployment assemble(UUID targetStackId) {
+    AssembledDeployment assembled = assembler.assemble(targetStackId);
+    PulumiDeploymentAssert.assertIntegrityPasses(assembled.deployment());
+    return assembled;
+  }
+
   private CompactionJob loadCompactionJobByStack(UUID targetStackId) {
     return QuarkusTransaction.requiringNew()
         .call(() -> CompactionJob.find("stackId", targetStackId).<CompactionJob>firstResult());
@@ -396,9 +406,7 @@ class CompactionWorkerTest {
   }
 
   private JsonNode normalized(JsonNode node) {
-    ObjectNode copy = (ObjectNode) node.deepCopy();
-    copy.withObject("manifest").remove("time");
-    return copy;
+    return DeploymentNormalizer.normalize(node);
   }
 
   private String res(String name) {

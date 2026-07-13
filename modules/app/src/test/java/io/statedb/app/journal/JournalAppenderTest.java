@@ -27,6 +27,7 @@ import io.statedb.persistence.update.StackUpdate;
 import io.statedb.persistence.update.StackUpdateStarter;
 import io.statedb.persistence.update.StartUpdateRequest;
 import io.statedb.persistence.update.StartedUpdate;
+import io.statedb.testsupport.pulumi.PulumiDeploymentAssert;
 import jakarta.inject.Inject;
 import jakarta.persistence.EntityManager;
 import java.util.List;
@@ -474,7 +475,10 @@ class JournalAppenderTest {
     // succeeds, leaving a row in pending_operations. Replay-by-sequence_id still produces an empty
     // assembled pending_operations array, so pending_operations is not authoritative in this race.
     appender.append(
-        stackId, updateId, leaseId, List.of(entry(2, 1, 42L, "{\"state\":{\"urn\":\"urn:x\"}}")));
+        stackId,
+        updateId,
+        leaseId,
+        List.of(entry(2, 1, 42L, "{\"state\":{\"urn\":\"urn:x\",\"type\":\"t:x\"}}")));
     appender.append(
         stackId,
         updateId,
@@ -500,7 +504,7 @@ class JournalAppenderTest {
               assertEquals(1L, pending);
             });
 
-    AssembledDeployment assembled = assembler.assemble(stackId);
+    AssembledDeployment assembled = assemble(stackId);
     assertFalse(assembled.deployment().has("pending_operations"));
   }
 
@@ -818,6 +822,13 @@ class JournalAppenderTest {
                       .longValue();
               assertEquals(4L, seq);
             });
+  }
+
+  // Assembled exports must pass Pulumi's own integrity rules even mid-race.
+  private AssembledDeployment assemble(UUID targetStackId) {
+    AssembledDeployment assembled = assembler.assemble(targetStackId);
+    PulumiDeploymentAssert.assertIntegrityPasses(assembled.deployment());
+    return assembled;
   }
 
   private static String terminalPayload(int terminalKind) {
