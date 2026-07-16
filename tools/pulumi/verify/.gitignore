@@ -1,0 +1,2 @@
+# compiled binary (go build ./... writes it here; the Docker image builds from source)
+verify

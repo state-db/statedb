@@ -23,11 +23,16 @@ jobs:
       # Same environment as local development: the dev container defined in
       # .devcontainer/devcontainer.json (JDK 21, Maven, Docker-outside-of-Docker
       # for Quarkus Dev Services and the integrity-verifier container).
-      - name: Run module tests
+      #
+      # `verify` (not `test`) so the run includes the spotless:check binding and
+      # the failsafe lifecycle. The Pulumi CLI smoke and fault tiers stay at
+      # their opt-in defaults here (skipped); nightly.yml runs them across the
+      # CLI version matrix.
+      - name: Run module tests and verification
         uses: devcontainers/ci@v0.3
         with:
           push: never
-          runCmd: mvn -f modules/pom.xml test
+          runCmd: mvn -f modules/pom.xml verify
 
   verifier-tool:
     name: Integrity verifier (Go)
