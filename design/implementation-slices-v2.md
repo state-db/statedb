@@ -4,10 +4,18 @@ A more granular plan than `implementation-slices.md`. Each slice is a single PR:
 one migration (at most), one focused code change, the tests that prove it, and
 a step a human can run by hand to see it work.
 
-Already shipped:
+Slices marked ✅ have shipped. Before them came:
 
 - `23eede3` scaffold
 - `27f80ab` persistence: identity tables + base entities + constraint tests
+
+Work that shipped beyond this plan (no slice number): stack rename with
+checkpoint rewrite, stack tags, stack history endpoint, stack import, 501
+stubs for schedules/webhooks/unsupported features, the CLI recorder and
+Pulumi integrity verifier, the `pulumi-cli-smoke` module (smoke tier plus
+opt-in fault-injection tier emitting a State Safety Report), org service
+accounts, the embedded TanStack web console scaffold, and the recast of
+Cedar authorization into the AWS IAM model (see Slice 20's status note).
 
 Conventions for every slice below:
 
@@ -40,7 +48,7 @@ a cosmetic one.
 
 ## Phase 1 — Foundations for stack identity
 
-### Slice 3 · Stack-tree schema + entities
+### Slice 3 · Stack-tree schema + entities ✅
 
 **Why now.** Every Pulumi endpoint resolves a stack from `{org}/{project}/{stack}`. The first thing missing after identity is the stack tree itself.
 
@@ -72,7 +80,7 @@ a cosmetic one.
 
 ---
 
-### Slice 4 · Stack reference resolver
+### Slice 4 · Stack reference resolver ✅
 
 **Why now.** Pull lookup logic out of every future Pulumi endpoint. Console-api will need the same JOIN in Phase 8, so the resolver lives in `persistence/` — duplicating a tenant-isolated query across HTTP modules is a security risk.
 
@@ -92,7 +100,7 @@ a cosmetic one.
 
 ---
 
-### Slice 4.5 · Bootstrap admin + default org + initial API token
+### Slice 4.5 · Bootstrap admin + default org + initial API token ✅
 
 **Why now.** Slice 5 needs real `users`, `organizations`, `org_members`, `api_tokens` rows to validate tokens against. This slice is the production onboarding path; without it, the only way to a usable deployment is hand-rolled SQL.
 
@@ -134,7 +142,7 @@ STATE_DB_BOOTSTRAP_ADMIN_TOKEN_HASH=$(printf %s "$TOKEN" | shasum -a 256 | cut -
 
 ---
 
-### Slice 5 · TokenAuthFilter + login endpoints (Phase 2 — `pulumi login` succeeds)
+### Slice 5 · TokenAuthFilter + login endpoints (Phase 2 — `pulumi login` succeeds) ✅
 
 **Why now.** Every Pulumi route needs authn before it can return real data, and the three endpoints `pulumi login` calls (`/api/user`, `/api/user/organizations/default`, `/api/capabilities`) are read-only — they share the same auth surface. Shipping them together in one PR keeps the "first verifiable end-to-end CLI call" as a single reviewable unit; what was originally planned as Slices 5 and 6 collapses here.
 
@@ -176,7 +184,7 @@ PULUMI_ACCESS_TOKEN=<bootstrap-token> pulumi whoami
 
 After this phase, `pulumi stack init`, `pulumi stack ls`, and `pulumi stack rm` work against an empty stack.
 
-### Slice 7 · `POST /api/stacks/{org}/{project}` — stack create
+### Slice 7 · `POST /api/stacks/{org}/{project}` — stack create ✅
 
 **Scope**
 
@@ -205,7 +213,7 @@ pulumi stack init dev   # in a Pulumi project pointed at the backend
 
 ---
 
-### Slice 8 · `GET /api/stacks/{org}/{project}/{stack}` — stack head
+### Slice 8 · `GET /api/stacks/{org}/{project}/{stack}` — stack head ✅
 
 **Scope**
 
@@ -226,7 +234,7 @@ PULUMI_ACCESS_TOKEN=<tok> pulumi stack output --show-name
 
 ---
 
-### Slice 9 · `GET /api/user/stacks` — caller's stack list
+### Slice 9 · `GET /api/user/stacks` — caller's stack list ✅
 
 **Scope**
 
@@ -247,7 +255,7 @@ pulumi stack ls
 
 ---
 
-### Slice 10 · `DELETE /api/stacks/{org}/{project}/{stack}` — stack rm
+### Slice 10 · `DELETE /api/stacks/{org}/{project}/{stack}` — stack rm ✅
 
 **Scope**
 
@@ -275,7 +283,7 @@ pulumi stack ls
 
 ## Phase 4 — Contract test harness
 
-### Slice 11 · Fixture replay harness
+### Slice 11 · Fixture replay harness ✅
 
 **Why now.** Phase 5 is several endpoints whose wire shape is non-obvious. Investing in the harness once pays off through every subsequent slice.
 
@@ -305,7 +313,7 @@ pulumi stack ls
 
 Each slice in this phase moves one step closer to a real `pulumi up` cycle succeeding. After Slice 17.5 the full lifecycle works against the recorder's real resource program, including preview, refresh, destroy, secrets, journaling, completion, and export.
 
-### Slice 12 · `stack_updates` + start-op endpoints
+### Slice 12 · `stack_updates` + start-op endpoints ✅
 
 **Scope**
 
@@ -325,7 +333,7 @@ Each slice in this phase moves one step closer to a real `pulumi up` cycle succe
 
 ---
 
-### Slice 13 · `stack_locks` + acquire/release + LeaseTokenFilter
+### Slice 13 · `stack_locks` + acquire/release + LeaseTokenFilter ✅
 
 **Scope**
 
@@ -354,7 +362,7 @@ Each slice in this phase moves one step closer to a real `pulumi up` cycle succe
 
 ---
 
-### Slice 14 · Renew + cancel polish
+### Slice 14 · Renew + cancel polish ✅
 
 **Scope**
 
@@ -368,7 +376,7 @@ Each slice in this phase moves one step closer to a real `pulumi up` cycle succe
 
 ---
 
-### Slice 14.5 · Service secrets endpoints
+### Slice 14.5 · Service secrets endpoints ✅
 
 **Scope**
 
@@ -400,7 +408,7 @@ Each slice in this phase moves one step closer to a real `pulumi up` cycle succe
 
 ---
 
-### Slice 15 · `journal_entries` + `PATCH /journalentries`
+### Slice 15 · `journal_entries` + `PATCH /journalentries` ✅
 
 **Scope**
 
@@ -440,7 +448,7 @@ Each slice in this phase moves one step closer to a real `pulumi up` cycle succe
 
 ---
 
-### Slice 16 · `update_events` + `POST /events/batch`
+### Slice 16 · `update_events` + `POST /events/batch` ✅
 
 **Scope**
 
@@ -459,7 +467,7 @@ Each slice in this phase moves one step closer to a real `pulumi up` cycle succe
 
 ---
 
-### Slice 17 · `POST /complete`
+### Slice 17 · `POST /complete` ✅
 
 **Scope**
 
@@ -479,7 +487,7 @@ Each slice in this phase moves one step closer to a real `pulumi up` cycle succe
 
 ---
 
-### Slice 17.5 · `StackAssembler` + `GET /export`
+### Slice 17.5 · `StackAssembler` + `GET /export` ✅
 
 **Scope**
 
@@ -514,7 +522,7 @@ pulumi stack export | jq '.deployment.resources // []'
 
 ## Phase 6 — Authorization
 
-### Slice 18 · Cedar PDP wiring + minimal action set
+### Slice 18 · Cedar PDP wiring + minimal action set ✅
 
 **Scope**
 
@@ -553,6 +561,13 @@ pulumi stack export | jq '.deployment.resources // []'
 
 ### Slice 20 · Remaining action matrix + policies
 
+**Status.** Partially superseded. Authorization was recast into the AWS IAM
+model (`stack:*` / `serviceaccount:*` action namespaces, role policies per
+org role, managed/resource policies via Cedar templates, grants in
+`policy_grants`). Stack and service-account actions are covered; the
+org/provider/token/compaction actions below have not landed and need
+re-scoping against the IAM model before implementation.
+
 **Scope**
 
 - Add the rest of the `auth.md` action set: `Stack::Unlock`, `Stack::ReadHistory`, `Stack::ReadEvents`, `Token::*`, `Provider::Manage`, `Compaction::Trigger`, `Org::*`, `User::ReadOthers`.
@@ -567,7 +582,7 @@ pulumi stack export | jq '.deployment.resources // []'
 
 ## Phase 7 — Maintenance jobs
 
-### Slice 21 · Snapshots + compaction queue + worker
+### Slice 21 · Snapshots + compaction queue + worker ✅
 
 **Scope**
 
@@ -659,7 +674,7 @@ pulumi stack export | jq '.deployment.resources // []'
 
 ## Phase 8 — Console (Wave 2 begins)
 
-### Slice 23 · OIDC console foundation + `/api/user`
+### Slice 23 · OIDC console foundation + `/api/user` ✅
 
 **Scope**
 
@@ -714,7 +729,7 @@ pulumi stack export | jq '.deployment.resources // []'
 
 ---
 
-### Slice 26 · Console token list + revoke + `last_used_at` bookkeeping
+### Slice 26 · Console token list + revoke + `last_used_at` bookkeeping ✅
 
 **Scope**
 
@@ -728,7 +743,13 @@ pulumi stack export | jq '.deployment.resources // []'
 
 ---
 
-### Slice 27 · CLI token mint via OIDC re-auth
+### Slice 27 · CLI token mint via OIDC re-auth ✅
+
+**Status.** Shipped in a different shape: CLI SSO auth with credential
+scopes and single-use browser approvals (`console-api/auth/CliLoginResource`
+and friends), rather than the `prompt=none` OIDC re-auth mint described
+below. The scope below is kept for the record; treat the implementation as
+the source of truth.
 
 **Scope**
 
@@ -751,7 +772,7 @@ pulumi stack export | jq '.deployment.resources // []'
 
 ---
 
-### Slice 28 · `/api/workspaces` console read
+### Slice 28 · `/api/workspaces` console read ✅
 
 **Scope**
 
@@ -780,7 +801,7 @@ pulumi stack export | jq '.deployment.resources // []'
 
 ## Phase 9 — Validation and forward compat
 
-### Slice 30 · Fixture-driven E2E flow
+### Slice 30 · Fixture-driven E2E flow ✅
 
 **Scope**
 
