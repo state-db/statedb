@@ -820,6 +820,10 @@ the source of truth.
 
 ### Slice 31 · OpenTofu adapter bootstrap
 
+> The full Tofu implementation spec — protocol contract, settled design
+> decisions, schema, and the Slice 31.1–31.7 breakdown that follows this
+> slice — lives in `design/tofu-backend.md`. Read it before starting.
+
 **Scope**
 
 - New module `modules/tofu-api/` with route prefix `/tofu/...`.
