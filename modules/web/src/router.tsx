@@ -45,6 +45,16 @@ const accountTokensRedirectRoute = createRoute({
   },
 });
 
+// Newer Pulumi CLIs print /user/settings/tokens as the access-token page hint
+// (older ones print /account/tokens). Both land on the same console screen.
+const userSettingsTokensRedirectRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/user/settings/tokens",
+  beforeLoad: () => {
+    throw redirect({ to: "/console/account/tokens", replace: true });
+  },
+});
+
 const oneSegmentRedirectRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/$seg",
@@ -280,6 +290,7 @@ const adminLicenseRoute = createRoute({
 const routeTree = rootRoute.addChildren([
   rootIndexRedirectRoute,
   accountTokensRedirectRoute,
+  userSettingsTokensRedirectRoute,
   stackRedirectRoute,
   updateRedirectRoute,
   previewRedirectRoute,
@@ -328,6 +339,7 @@ function isReservedRootName(value: string) {
     "cli-login",
     "welcome",
     "account",
+    "user",
     "favicon.ico",
   ]).has(value);
 }
