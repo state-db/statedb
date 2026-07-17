@@ -52,7 +52,7 @@ Two HTTP surfaces, one domain core, one DB. Same JAR. Same native binary.
 | `/api/admin/...` | Admin-only console endpoints | OIDC session + admin allow-list | Subject `<iss>:<sub>` must be in `STATE_DB_ADMIN_SUBJECTS` env. |
 | `/api/auth/login/*`, `/api/auth/callback/*` | OIDC login + callback (one route per configured provider) | None (initiates auth) | Sets the encrypted session cookie on success. |
 | `/api/auth/cli-mint`, `/api/auth/cli-mint/callback` | OIDC `prompt=none` re-auth → mint a short-lived CLI token | OIDC session cookie | One-time-display page returns the raw token; see "CLI token issuance". |
-| `/api/auth/local` | Break-glass local login | Static credential from env (`STATE_DB_LOCAL_GLASS_PASSWORD_HASH`) | Only enabled when (a) Quarkus profile is not `prod` AND (b) request originates from `127.0.0.1`/`::1`. Both checks; either fail = 404. |
+| `/api/auth/local` | Break-glass local login (Quarkus form auth) | Static credential from env (`STATE_DB_LOCAL_GLASS_PASSWORD_HASH`, bcrypt) | Honored only while (a) the hash is set, (b) zero `oidc_providers` rows are enabled, and (c) the TCP source is loopback (unless `STATE_DB_LOCAL_GLASS_ALLOW_REMOTE=true`). Any check failing = 401. |
 | `/assets/*`, `/favicon.ico`, etc. | Static SPA bundle | None | Served from `META-INF/resources/` populated by the bun build. |
 | Anything else | SPA fallback → `index.html` | None | Catches client-side router paths. Filter explicitly does NOT match `/api/*` or `/pulumi/*`. |
 
@@ -331,27 +331,18 @@ Format: `<iss>:<sub>` per entry, comma-separated. The list is in-memory; rotatin
 
 ### Local break-glass
 
-Profile-gated. In `application-prod.yml` the local-glass route is excluded from the JAX-RS scan. In `dev` and a new `local-glass` profile, the route exists but is wrapped in:
+Not profile-gated (a forgotten profile flag is a lockout footgun) and not a hand-rolled endpoint: break-glass is Quarkus **form authentication** in SPA mode. `quarkus.http.auth.form` posts to `/api/auth/local` with empty page locations, so the mechanism answers with bare status codes (200 + encrypted `state-db-glass` cookie on success, 401 on any failure) instead of redirects. Two `IdentityProvider`s own the policy:
 
-```java
-@Provider
-@PreMatching
-public class LocalGlassFilter implements ContainerRequestFilter {
-    public void filter(ctx) {
-        if (!ctx.getUriInfo().getPath().startsWith("api/auth/local")) return;
-        var remote = ((HttpServerRequest) ctx.getProperty(...)).remoteAddress();
-        if (!isLoopback(remote)) ctx.abortWith(404);
-    }
-}
-```
+- `LocalGlassIdentityProvider` (login): verifies the POSTed password against the env hash and enforces the gate below. Success authenticates as the reserved bootstrap admin (`local:bootstrap:admin`), creating its `users` row idempotently.
+- `LocalGlassTrustedIdentityProvider` (cookie restore): re-checks the zero-providers gate on **every** request, so enabling an OIDC provider kills all outstanding break-glass sessions immediately.
 
-Loopback check uses `InetAddress.isLoopbackAddress()`. Reverse proxies are not trusted — the request's TCP source must literally be loopback. This makes it usable for `pulumi login http://localhost:8080/pulumi` style local dev and for bare-metal recovery (`ssh server; curl localhost:8080/api/auth/local`). It is not usable through any deployed ingress.
+The gate, all enforced server-side, any failure → 401:
 
-**Credential source: env, never DB.** Recovery credentials live where the operator can read them while the DB is down. The route reads:
+1. `STATE_DB_LOCAL_GLASS_PASSWORD_HASH` is set (bcrypt, Modular Crypt Format). Unset = feature off; `LocalGlassStartupValidator` also fails the boot if the hash is set without `STATE_DB_SESSION_ENCRYPTION_SECRET` (the form cookie is AES-256-encrypted with it — shared with the OIDC session cookie so one secret keeps both stable across replicas).
+2. Zero enabled `oidc_providers` rows. State-gated, not profile-gated: the route self-destructs once OIDC is configured, and IdP-down recovery re-opens it by deliberately disabling the provider row (`ssh` + `psql`).
+3. The request's raw TCP source is loopback (`InetAddress.isLoopbackAddress()`; `X-Forwarded-For` is never honored) — **unless** `STATE_DB_LOCAL_GLASS_ALLOW_REMOTE=true`. Loopback-only covers `ssh -L` tunnels, `kubectl port-forward`, and bare-metal recovery, but *not* `docker run -p` (published ports arrive from the bridge gateway); the explicit remote opt-in exists for the docker-compose evaluation path, where setting the password hash is already an operator decision.
 
-- `STATE_DB_LOCAL_GLASS_PASSWORD_HASH` — bcrypt/argon2 hash of the recovery password.
-
-The handler verifies the POSTed password against the env hash. On success it signs a session cookie bound to the first `<iss>:<sub>` listed in `STATE_DB_ADMIN_SUBJECTS` — local-glass cannot escalate beyond the existing admin allow-list. Rotation is via redeploy.
+**Credential source: env, never DB.** Recovery credentials live where the operator can read them while the DB is down. Rotation is via redeploy. Break-glass cannot escalate beyond what `AdminAllowList` already grants the bootstrap identity.
 
 ### Console API surface
 
@@ -536,7 +527,7 @@ Future work. Each is additive — solvable inside Wave 1's architecture without 
 |----------|-----------|
 | `/pulumi/...` prefix for backend | Keeps `/api/` for console; users configure `pulumi login https://host/pulumi` |
 | Self-service token issuance | Tokens minted from console after OIDC login; never out-of-band |
-| OIDC + loopback break-glass | OIDC is primary console authn; loopback-only env-credential fallback exists for admin recovery in non-prod profiles |
+| OIDC + loopback break-glass | OIDC is primary console authn; env-credential fallback (loopback-only by default) exists for first-run and admin recovery while no OIDC provider is enabled |
 | Multi-tenant, single-tenant default | First admin login auto-creates `default` org |
 | Postgres for blobs (no S3) | Per-resource journal entries are small; checkpoints periodically compacted |
 | Tofu via shared `workspaces` parent + separate state tables | Identity unified; state model type-specific because Pulumi/Tofu fundamentally differ |

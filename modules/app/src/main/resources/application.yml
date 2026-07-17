@@ -13,11 +13,31 @@ quarkus:
       proactive: false
       permission:
         console-public:
-          paths: /api/auth/login,/api/auth/login/*
+          paths: /api/auth/providers,/api/auth/login,/api/auth/login/*
           policy: permit
         console-authenticated:
           paths: /api/*
           policy: authenticated
+      # Local break-glass console login: form auth in SPA mode (empty page locations → bare
+      # status codes, no redirects). The mechanism is always assembled, but LocalGlass only
+      # honors it while STATE_DB_LOCAL_GLASS_PASSWORD_HASH is set, no oidc_providers row is
+      # enabled, and the TCP source is loopback (unless STATE_DB_LOCAL_GLASS_ALLOW_REMOTE=true).
+      form:
+        enabled: true
+        post-location: /api/auth/local
+        username-parameter: username
+        password-parameter: password
+        cookie-name: state-db-glass
+        timeout: PT12H
+        http-only-cookie: true
+        login-page: ""
+        error-page: ""
+        landing-page: ""
+      session:
+        # Form-auth cookie encryption. Same secret that encrypts the OIDC session cookie, so one
+        # env var keeps both stable across replicas; when unset Quarkus warns and uses a per-boot
+        # random key (LocalGlassStartupValidator fails the boot if break-glass is configured).
+        encryption-key: "${state-db.session.encryption-secret:}"
   oidc:
     # Console providers are data: ProviderTenantConfigResolver builds a web-app tenant per request
     # from the enabled oidc_providers rows. The static default tenant is intentionally disabled so

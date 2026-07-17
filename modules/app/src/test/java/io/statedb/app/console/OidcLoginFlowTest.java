@@ -92,7 +92,9 @@ class OidcLoginFlowTest {
     Response defaultLogin =
         given().redirects().follow(false).accept("text/html").when().get("/api/auth/login");
     defaultLogin.then().statusCode(303);
-    assertEquals("/api/auth/flow/" + PROVIDER, pathWithQuery(defaultLogin.getHeader("Location")));
+    assertEquals(
+        "/api/auth/flow/" + PROVIDER + "?returnTo=%2Fconsole",
+        pathWithQuery(defaultLogin.getHeader("Location")));
 
     Response login =
         given()
@@ -102,7 +104,9 @@ class OidcLoginFlowTest {
             .when()
             .get("/api/auth/login/" + PROVIDER);
     login.then().statusCode(303); // seeOther
-    assertEquals("/api/auth/flow/" + PROVIDER, pathWithQuery(login.getHeader("Location")));
+    assertEquals(
+        "/api/auth/flow/" + PROVIDER + "?returnTo=%2Fconsole",
+        pathWithQuery(login.getHeader("Location")));
 
     // 1b. The flow route hands off to quarkus-oidc: 302 to the mock IdP, plus the OIDC state
     // cookie.

@@ -78,7 +78,8 @@ these arrive at the **console root**, not under `/pulumi`.
 | `/{org}/{project}/{stack}/previews/{updateID}` | permalink after `pulumi preview` | redirect → `/console/.../previews/{updateID}` (`updateID` = `stack_updates.id` UUID) |
 | `/cli-login?cliSessionPort=&cliSessionNonce=&…` | browser-based `pulumi login` | Already implemented server-side (`CliLoginResource`); not an SPA route |
 | `/welcome/cli` | end of browser login | Already implemented server-side; not an SPA route |
-| `/account/tokens` | hint printed when the CLI prompts for an access token | redirect → `/console/account/tokens` |
+| `/account/tokens` | access-token hint printed by older CLIs | redirect → `/console/account/tokens` |
+| `/user/settings/tokens` | access-token hint printed by newer CLIs (observed in the wild; both variants must resolve) | redirect → `/console/account/tokens` |
 | `/{user}` | `b.URL()` (rare; e.g. some whoami paths) | 1-segment fallthrough: redirect → `/console/{seg}` (org view; target 404s if no such org) |
 
 **Permalink caveat to surface in onboarding UX:** for a custom backend the CLI
@@ -97,6 +98,7 @@ shapes below in `beforeLoad` and issues a client-side `redirect` with
 |---|---|---|
 | `/` | — | `/console` |
 | `/account/tokens` | exact | `/console/account/tokens` |
+| `/user/settings/tokens` | exact | `/console/account/tokens` |
 | `/{a}/{b}/{c}` | 3 segments | `/console/{a}/{b}/{c}` |
 | `/{a}/{b}/{c}/updates/{n}` | `n` integer | `/console/{a}/{b}/{c}/updates/{n}` |
 | `/{a}/{b}/{c}/previews/{id}` | `id` UUID | `/console/{a}/{b}/{c}/previews/{id}` |
@@ -110,7 +112,7 @@ empty state), keeping the redirect layer logic-free.
 small set — but the set is closed, tied only to protocol and infrastructure
 prefixes, and never grows with the screen inventory:
 `api`, `pulumi`, `tofu`, `console`, `assets`, `cli-login`, `welcome`,
-`account`, `favicon.ico`. (Server-side validation at org creation — backend
+`account`, `user`, `favicon.ico`. (Server-side validation at org creation — backend
 task. An org named `console` or `api` would break its own permalinks under any
 scheme, so these are inherent, not incidental.)
 
@@ -290,21 +292,31 @@ navigation, not fetch). Single provider: still show the button (no auto-redirect
 auto-redirect loops are hostile when the IdP errors). A `?returnTo=` param is
 honored post-login.
 
-**Break-glass variant.** When the providers list is empty, render a password
-`Input` + submit posting to `/api/auth/local`, with an `Alert` explaining this
-only works from localhost with no OIDC configured.
+**Break-glass variant.** When the providers list is empty **and** the server
+reports `breakGlass: true`, render a password `Input` whose submit fetch-POSTs
+urlencoded credentials to `/api/auth/local` (Quarkus form auth in SPA mode:
+200 sets the encrypted session cookie, 401 on any failure), with an `Alert`
+explaining it only works from localhost unless remote access was explicitly
+allowed at deploy time. A 401 shows an inline destructive `Alert` (wrong
+password / gate closed — indistinguishable by design); success navigates to
+`returnTo`. When providers are empty and `breakGlass: false`, render an
+empty state ("Configure an OIDC provider, or set
+`STATE_DB_LOCAL_GLASS_PASSWORD_HASH`") — never a form that cannot succeed.
 
-**Data.** Needs `GET /api/auth/providers` → `[{ name, displayName }]` (public,
-unauthenticated). **API gap — must be added** (trivial read of enabled
-`oidc_providers` rows, names only, no secrets).
+**Data.** `GET /api/auth/providers` → `{ providers: [{ name, displayName }],
+breakGlass: boolean }` (public, unauthenticated; implemented).
+`breakGlass` is true iff the password hash is configured and zero providers are
+enabled — the loopback gate is still enforced server-side on the POST.
 
 **States.** Loading: skeleton buttons. IdP error return (query param from
 callback): destructive `Alert` "Sign-in failed at {provider}". Empty providers →
-break-glass variant.
+break-glass variant or the no-sign-in-methods empty state per `breakGlass`.
 
 **Acceptance.** With 2 providers configured, both buttons render and complete the
-OIDC round-trip; with none, break-glass form renders; failed IdP round-trip shows
-the alert rather than a blank page.
+OIDC round-trip; with none + hash configured, break-glass form renders and a
+correct password lands on `/console` as the bootstrap admin; wrong password shows
+the inline alert; with neither, the empty state renders; failed IdP round-trip
+shows the alert rather than a blank page.
 
 ---
 
@@ -761,7 +773,7 @@ Screens above depend on these endpoints beyond what slices 26–29 already plan:
 
 | Endpoint | For | Notes |
 |---|---|---|
-| `GET /api/auth/providers` | S1 | public; enabled provider names only |
+| `GET /api/auth/providers` | S1 | ✅ done — public; `{ providers, breakGlass }` |
 | Enriched `GET /api/workspaces` DTO (lastUpdate, lock, resourceCount) | S2/S3 | extends slice 28 |
 | Single-run resolvers: `GET .../updates/{version}`, `GET .../previews/{updateId}` | S8 | permalink targets; version-int and uuid lookups |
 | Events cursor param `?after={seq}` | S8 live follow | fits slice 29 pagination |

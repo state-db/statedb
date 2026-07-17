@@ -22,6 +22,9 @@ import jakarta.ws.rs.WebApplicationException;
 import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.Response;
 import java.net.URI;
+import java.net.URLEncoder;
+import java.nio.charset.StandardCharsets;
+import java.util.List;
 import java.util.Optional;
 import org.eclipse.microprofile.config.inject.ConfigProperty;
 import org.eclipse.microprofile.jwt.JsonWebToken;
@@ -55,7 +58,13 @@ public class AuthRoutesResource {
 
   static final String CLI_LOGIN_PATH = "/api/auth/cli-login";
 
+  public record AuthProvider(String name, String displayName) {}
+
+  public record AuthProviders(List<AuthProvider> providers, boolean breakGlass) {}
+
   @Inject SecurityIdentity identity;
+
+  @Inject LocalGlass glass;
 
   @Inject CliTokenMinter minter;
 
@@ -67,30 +76,54 @@ public class AuthRoutesResource {
 
   @GET
   @Path("/login")
-  public Response login() {
+  public Response login(@QueryParam("returnTo") String returnTo) {
     return login(
         defaultProvider.orElseThrow(
             () ->
                 new ServiceUnavailableException(
-                    "STATE_DB_OIDC_DEFAULT_PROVIDER is not configured")));
+                    "STATE_DB_OIDC_DEFAULT_PROVIDER is not configured")),
+        returnTo);
   }
 
   @GET
   @Path("/login/{provider}")
-  public Response login(@PathParam("provider") String provider) {
+  public Response login(
+      @PathParam("provider") String provider, @QueryParam("returnTo") String returnTo) {
+    String target = consoleReturnTo(returnTo);
     if (!identity.isAnonymous()) {
-      return Response.seeOther(URI.create("/")).build();
+      return Response.seeOther(URI.create(target)).build();
     }
     if (OidcProvider.findEnabled(provider).isEmpty()) {
       throw new NotFoundException();
     }
-    return Response.seeOther(URI.create("/api/auth/flow/" + provider)).build();
+    return Response.seeOther(
+            URI.create(
+                "/api/auth/flow/"
+                    + provider
+                    + "?returnTo="
+                    + URLEncoder.encode(target, StandardCharsets.UTF_8)))
+        .build();
+  }
+
+  @GET
+  @Path("/providers")
+  @Blocking
+  @Produces(MediaType.APPLICATION_JSON)
+  public AuthProviders providers() {
+    List<AuthProvider> providers =
+        OidcProvider.<OidcProvider>list("enabled = true order by name").stream()
+            .map(provider -> new AuthProvider(provider.name, provider.name))
+            .toList();
+    // breakGlass tells the sign-in screen whether the /api/auth/local form has any chance of
+    // succeeding; the loopback/provider gate is still enforced server-side on the POST.
+    return new AuthProviders(providers, providers.isEmpty() && glass.passwordConfigured());
   }
 
   @GET
   @Path("/flow/{provider}")
-  public Response flow(@PathParam("provider") String provider) {
-    return Response.seeOther(URI.create("/")).build();
+  public Response flow(
+      @PathParam("provider") String provider, @QueryParam("returnTo") String returnTo) {
+    return Response.seeOther(URI.create(consoleReturnTo(returnTo))).build();
   }
 
   /**
@@ -159,6 +192,13 @@ public class AuthRoutesResource {
       return jwt;
     }
     throw new NotAuthorizedException("OIDC");
+  }
+
+  private static String consoleReturnTo(String value) {
+    if (value == null || value.isBlank() || !value.startsWith("/") || value.startsWith("//")) {
+      return "/console";
+    }
+    return value;
   }
 
   // Credential-issuing pages: must not be cached, leak a referrer, or be framable — a remote site

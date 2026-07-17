@@ -61,7 +61,48 @@ export interface CurrentUser {
   organizations: OrgMembership[];
 }
 
+export interface AuthProvider {
+  name: string;
+  displayName: string;
+}
+
+export interface AuthProviders {
+  providers: AuthProvider[];
+  /**
+   * True when the server would honor a break-glass login (operator password
+   * configured and no OIDC provider enabled). The loopback gate is still
+   * enforced server-side on the POST.
+   */
+  breakGlass: boolean;
+}
+
+/**
+ * Break-glass login: posts the operator password to the Quarkus form-auth
+ * endpoint (urlencoded, not JSON — the mechanism consumes it before JAX-RS).
+ * 200 sets the encrypted session cookie; 401 covers wrong password and closed
+ * gate (OIDC enabled / non-loopback source) alike.
+ */
+async function breakGlassLogin(password: string): Promise<void> {
+  const res = await fetch("/api/auth/local", {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body: new URLSearchParams({ username: "admin", password }),
+  });
+  if (res.status === 401) {
+    throw new UnauthorizedError();
+  }
+  if (!res.ok) {
+    throw new Error(res.statusText);
+  }
+}
+
 export const api = {
+  auth: {
+    providers: {
+      list: () => request<AuthProviders>("/auth/providers"),
+    },
+    breakGlass: breakGlassLogin,
+  },
   user: {
     get: () => request<CurrentUser>("/user"),
   },

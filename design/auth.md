@@ -34,9 +34,9 @@ Every authenticated request resolves to exactly one of these:
 | `User` | `<iss>:<sub>` (e.g. `https://accounts.google.com:115...`) | `users` table; created on first OIDC login | Console (session cookie) **or** Pulumi CLI (OIDC-derived `api_token` row, `kind='oidc'`) |
 | Service account | `local:service:<sub>` | Machine `users` row (reserved issuer `local:service`) + `org_members` row with `role='service'` + org-pinned `api_tokens` row, `kind='service_account'` | Pulumi CLI only |
 | `Lease` | `lease:<stack_id>:<update_id>` | `stack_locks` row | Pulumi CLI lease-scoped routes only |
-| `BreakGlass` | First `<iss>:<sub>` from `STATE_DB_ADMIN_SUBJECTS` | env hash + loopback | `/api/auth/local` only |
+| `BreakGlass` | Bootstrap admin (`local:bootstrap:admin`) | env hash (bcrypt) + loopback (or explicit remote opt-in), only while zero OIDC providers are enabled | `/api/auth/local` only |
 
-Users and service accounts go through the full Cedar PDP. `Lease` does not — see "Lease-token bypass" below. `BreakGlass` mints a session as the impersonated admin user and from there is indistinguishable from a regular admin login.
+Users and service accounts go through the full Cedar PDP. `Lease` does not — see "Lease-token bypass" below. `BreakGlass` authenticates as the reserved bootstrap admin identity and from there is indistinguishable from a regular admin login.
 
 > **Implementation note.** A service account is a *machine user*, not a separate Cedar principal
 > type: a `users` row under the reserved `local:service` issuer whose org membership carries the
@@ -182,7 +182,7 @@ without claiming to defend against a compromised local machine.
 
 #### Local break-glass
 
-The handler at `/api/auth/local` verifies the env-stored hash, then constructs a session for the first allow-listed admin via the same `quarkus-oidc` session-mint primitive that the regular OIDC callback uses. Loopback + non-prod-profile gating per `architecture.md`.
+`quarkus-oidc` has no primitive for minting its session cookie outside a real IdP code flow, so break-glass does not touch it. Instead it is Quarkus **form authentication** in SPA mode (`quarkus.http.auth.form`, all page locations empty → bare 401/200 status codes): the login POST to `/api/auth/local` is verified by `LocalGlassIdentityProvider` (bcrypt against `STATE_DB_LOCAL_GLASS_PASSWORD_HASH`, loopback/remote-opt-in and zero-enabled-providers gate), and on success the mechanism stores the principal in its own AES-256-encrypted cookie (`state-db-glass`), keyed by the same `STATE_DB_SESSION_ENCRYPTION_SECRET` that encrypts the OIDC session cookie, so it is stable across replicas. On every cookie restore `LocalGlassTrustedIdentityProvider` re-checks the zero-providers gate — enabling OIDC invalidates all outstanding break-glass sessions immediately. The resulting identity carries a synthetic `JsonWebToken` principal for the bootstrap admin (`local:bootstrap:admin`, `users` row created idempotently at login), so `SessionPrincipalFilter`, Cedar role resolution and the console API treat it exactly like an OIDC session. Gating rationale per `architecture.md`.
 
 #### CSRF protection
 
