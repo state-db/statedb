@@ -1,4 +1,4 @@
-.PHONY: infra-up infra-down db-up idp-up idp-down console-seed app app-stop check-app login init preview up destroy sql psql force-unlock reset
+.PHONY: infra-up infra-down db-up idp-up idp-down console-seed app app-stop check-app login init preview up destroy sql psql force-unlock reset glass-on glass-off
 
 REPO_ROOT := ../..
 IN_CONTAINER := $(REPO_ROOT)/bin/in-container
@@ -15,6 +15,10 @@ STACK        ?= dev
 STACK_REF    ?= $(ORG)/$(STACK)
 TOKEN        ?= state-db-workbench-token
 TOKEN_HASH   ?= 5ffbb9af69ff36cfa7e28cea7b3da597ed0d0489113674b3eb3a6c2b7e386ef5
+## Console break-glass password is literally "password" (dev-only; bcrypt via BcryptUtil).
+## Break-glass is gated off while the mock IdP provider row is enabled — toggle with
+## `cmd=glass-on` / `cmd=glass-off`.
+GLASS_PASSWORD_HASH ?= $$2a$$10$$T56PF8UE80K1VeLu6iMJjOLW68rR.xHzHUppcyvcd2ZAudpNUgn9O
 BACKEND_URL  ?= http://localhost:8080/pulumi
 
 ## Compose owns stable workbench infrastructure. The mock IdP is exposed only to the Bun dev server,
@@ -33,10 +37,12 @@ OIDC_CLIENT_SECRET ?= console-secret
 ## Sign in to the mock IdP with this subject to be treated as an admin in /api/user.
 ADMIN_SUB          ?= admin
 
-## Shell invocation that seeds the console admin into $(ORG). Shared by `app` (background) and
-## `console-seed`. The script path is resolved inside the dev container.
+## Shell invocation that seeds the console admin into $(ORG) and the static workbench CLI token
+## (the product mints CLI tokens through a console session; the workbench seeds one directly for
+## non-interactive make targets). Shared by `app` (background) and `console-seed`. The script path
+## is resolved inside the dev container.
 SEED_CONSOLE = DB_CONTAINER=$(DB_CONTAINER) DB_USER=$(DB_USER) DB_NAME=$(DB_NAME) ORG=$(ORG) \
-	OIDC_ISSUER=$(OIDC_ISSUER) ADMIN_SUB=$(ADMIN_SUB) \
+	OIDC_ISSUER=$(OIDC_ISSUER) ADMIN_SUB=$(ADMIN_SUB) TOKEN_HASH=$(TOKEN_HASH) \
 	sh "$$(git rev-parse --show-toplevel)/workbench/pulumi/seed-console.sh"
 
 PULUMI_ENV := export \
@@ -114,15 +120,13 @@ app: infra-up
 			QUARKUS_HTTP_PROXY_ENABLE_FORWARDED_PREFIX=true \
 			STATE_DB_BOOTSTRAP_ORG_NAME=$(ORG) \
 			STATE_DB_BOOTSTRAP_ORG_DISPLAY_NAME="Acme Workbench" \
-			STATE_DB_BOOTSTRAP_ADMIN_EMAIL=admin@example.test \
-			STATE_DB_BOOTSTRAP_ADMIN_DISPLAY_NAME="Workbench Admin" \
-			STATE_DB_BOOTSTRAP_ADMIN_TOKEN_HASH=$(TOKEN_HASH) \
 			STATE_DB_OIDC_BOOTSTRAP_NAME=$(OIDC_PROVIDER) \
 			STATE_DB_OIDC_BOOTSTRAP_ISSUER=$(OIDC_ISSUER) \
 			STATE_DB_OIDC_BOOTSTRAP_CLIENT_ID=$(OIDC_CLIENT_ID) \
 			STATE_DB_OIDC_BOOTSTRAP_CLIENT_SECRET=$(OIDC_CLIENT_SECRET) \
 			STATE_DB_OIDC_DEFAULT_PROVIDER=$(OIDC_PROVIDER) \
 			STATE_DB_SESSION_ENCRYPTION_SECRET=state-db-workbench-session-secret-32-bytes \
+				STATE_DB_LOCAL_GLASS_PASSWORD_HASH='\''$(GLASS_PASSWORD_HASH)'\'' \
 			STATE_DB_ADMIN_SUBJECTS=$(OIDC_ISSUER):$(ADMIN_SUB) \
 			mvn -f modules/pom.xml -pl app -am -Dquarkus.test.continuous-testing=disabled quarkus:dev & \
 		APP_PID=$$!; \
@@ -179,6 +183,20 @@ up: init
 ## Destroy the workbench stack resources through Pulumi.
 destroy: init
 	$(IN_CONTAINER) sh -lc 'cd "$$(git rev-parse --show-toplevel)/workbench/pulumi" && $(PULUMI_ENV); pulumi destroy --yes --skip-preview'
+
+## Disable the mock OIDC provider row so the break-glass login is live (password: "password").
+## Break-glass only works while zero providers are enabled; note the app re-enables the row on
+## every restart (OidcProviderBootstrap upserts enabled=true from env), so re-run after restarts.
+glass-on:
+	$(IN_CONTAINER) sh -lc 'docker exec -i $(DB_CONTAINER) psql -v ON_ERROR_STOP=1 -U $(DB_USER) -d $(DB_NAME) \
+		-c "UPDATE oidc_providers SET enabled = false, updated_at = now() WHERE name = '\''$(OIDC_PROVIDER)'\''"'
+	@echo "Break-glass is live: http://localhost:$(CONSOLE_PORT)/console/login — password: password"
+
+## Re-enable the mock OIDC provider row (break-glass self-destructs again).
+glass-off:
+	$(IN_CONTAINER) sh -lc 'docker exec -i $(DB_CONTAINER) psql -v ON_ERROR_STOP=1 -U $(DB_USER) -d $(DB_NAME) \
+		-c "UPDATE oidc_providers SET enabled = true, updated_at = now() WHERE name = '\''$(OIDC_PROVIDER)'\''"'
+	@echo "OIDC provider \"$(OIDC_PROVIDER)\" re-enabled; break-glass is gated off"
 
 ## Print curated database inspection queries for the current workbench DB.
 sql:

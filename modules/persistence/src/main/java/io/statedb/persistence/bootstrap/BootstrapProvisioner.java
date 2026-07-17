@@ -13,19 +13,19 @@ import org.hibernate.id.uuid.UuidVersion7Strategy;
 import org.jboss.logging.Logger;
 
 /**
- * Idempotent boot-time provisioning of the first organization, admin user, membership, and
- * service-account API token from env. Operators set five {@code STATE_DB_BOOTSTRAP_*} env vars; the
- * raw token never reaches this process — only its sha256 hash does.
+ * Idempotent boot-time provisioning of the first organization plus the bootstrap admin's user and
+ * membership rows from env. Operators set {@code STATE_DB_BOOTSTRAP_ORG_NAME} (and optionally a
+ * display name); no credential material is involved — CLI tokens are minted through a console
+ * session (break-glass or OIDC) via the {@code pulumi login} browser flow.
  *
  * <p>The bootstrap user lives under the reserved identity namespace {@code iss='local:bootstrap'},
  * {@code sub='admin'}. No real OIDC issuer can produce that pair, so there is no collision risk
- * with later real users. The provisioned token is {@code kind='service_account'} with a one-year
- * expiry; once OIDC is set up (Slice 23+) operators may revoke it or keep it as the CLI-side
- * recovery path for when the IdP is down.
+ * with later real users. It is the same identity the break-glass console login authenticates as
+ * ({@code LocalGlass}), and the membership seeded here is what gives that identity a default org on
+ * the Pulumi surface.
  *
- * <p>Re-running with the same env is a no-op. Re-running with a changed display-name or admin email
- * updates the existing rows in place. Re-running with a new token hash <em>adds</em> a row (old
- * token stays valid until manually revoked) — token rotation is operator-driven.
+ * <p>Re-running with the same env is a no-op. Re-running with a changed org display-name updates
+ * the existing row in place.
  *
  * <p>Concurrency: in multi-pod deployments the work is serialized cluster-wide by an {@link
  * AdvisoryLock} on {@link AdvisoryLock#BOOTSTRAP_KEY} — one pod runs {@link #provision}, the rest
@@ -45,8 +45,6 @@ public class BootstrapProvisioner {
   public static final String BOOTSTRAP_ISS = "local:bootstrap";
 
   public static final String BOOTSTRAP_SUB = "admin";
-
-  private static final String TOKEN_DESCRIPTION = "bootstrap";
 
   @Inject EntityManager em;
 
@@ -71,11 +69,10 @@ public class BootstrapProvisioner {
    */
   public void provision(BootstrapConfig config) {
     UUID orgId = upsertOrg(config);
-    UUID userId = upsertBootstrapUser(config);
+    UUID userId = upsertBootstrapUser();
     ensureMembership(orgId, userId);
-    ensureToken(config.adminTokenHash(), orgId, userId);
     LOG.infof(
-        "Bootstrap admin \"%s\" provisioned in org \"%s\"", config.adminEmail(), config.orgName());
+        "Bootstrap org \"%s\" provisioned with the bootstrap admin as owner", config.orgName());
   }
 
   private UUID upsertOrg(BootstrapConfig config) {
@@ -96,21 +93,19 @@ public class BootstrapProvisioner {
             .getSingleResult();
   }
 
-  private UUID upsertBootstrapUser(BootstrapConfig config) {
+  // Same row shape LocalGlass#ensureAdminUser creates on break-glass login: insert-if-absent, no
+  // update branch, so neither writer clobbers the other.
+  private UUID upsertBootstrapUser() {
     em.createNativeQuery(
             """
-            INSERT INTO users (id, iss, sub, email, display_name)
-            VALUES (:id, :iss, :sub, :email, :display)
-            ON CONFLICT (iss, sub) DO UPDATE
-              SET email = EXCLUDED.email,
-                  display_name = EXCLUDED.display_name,
-                  updated_at = now()
+            INSERT INTO users (id, iss, sub, display_name)
+            VALUES (:id, :iss, :sub, :display)
+            ON CONFLICT (iss, sub) DO NOTHING
             """)
         .setParameter("id", UuidVersion7Strategy.INSTANCE.generateUuid(null))
         .setParameter("iss", BOOTSTRAP_ISS)
         .setParameter("sub", BOOTSTRAP_SUB)
-        .setParameter("email", config.adminEmail())
-        .setParameter("display", config.adminDisplayName())
+        .setParameter("display", "Break-glass admin")
         .executeUpdate();
     return (UUID)
         em.createNativeQuery("SELECT id FROM users WHERE iss = :iss AND sub = :sub")
@@ -128,21 +123,6 @@ public class BootstrapProvisioner {
             """)
         .setParameter("org", orgId)
         .setParameter("user", userId)
-        .executeUpdate();
-  }
-
-  private void ensureToken(String tokenHash, UUID orgId, UUID userId) {
-    em.createNativeQuery(
-            """
-            INSERT INTO api_tokens (id, token_hash, description, user_id, org_id, kind, expires_at)
-            VALUES (:id, :hash, :desc, :user, :org, 'service_account', now() + interval '1 year')
-            ON CONFLICT (token_hash) DO NOTHING
-            """)
-        .setParameter("id", UuidVersion7Strategy.INSTANCE.generateUuid(null))
-        .setParameter("hash", tokenHash)
-        .setParameter("desc", TOKEN_DESCRIPTION)
-        .setParameter("user", userId)
-        .setParameter("org", orgId)
         .executeUpdate();
   }
 }

@@ -102,6 +102,8 @@ a cosmetic one.
 
 ### Slice 4.5 · Bootstrap admin + default org + initial API token ✅
 
+> **Superseded in part by Slice 25.** The env-provisioned API token (`STATE_DB_BOOTSTRAP_ADMIN_TOKEN_HASH`, plus the admin email/display-name vars) was removed once break-glass landed: the break-glass console session mints CLI tokens through the standard `pulumi login` browser flow, so one human credential covers the whole pre-OIDC story. Bootstrap now seeds only the org + bootstrap-admin user + membership from `STATE_DB_BOOTSTRAP_ORG_NAME` (+ optional `_ORG_DISPLAY_NAME`, defaulting to the name). The workbench, which needs a non-interactive CLI token, seeds one directly via `seed-console.sh`. The spec below is preserved as written.
+
 **Why now.** Slice 5 needs real `users`, `organizations`, `org_members`, `api_tokens` rows to validate tokens against. This slice is the production onboarding path; without it, the only way to a usable deployment is hand-rolled SQL.
 
 **Scope**
@@ -709,23 +711,24 @@ re-scoping against the IAM model before implementation.
 
 ---
 
-### Slice 25 · Local break-glass
+### Slice 25 · Local break-glass ✅
 
-**Why now.** This is also the mechanism for pre-OIDC console access (the role originally proposed as Slice 4.6, then deferred when we noticed the cookie had no consumer until this phase). It covers both first-touch console login on a fresh deployment with no IdP configured *and* IdP-down recovery on an established deployment.
+**Why now.** This is also the mechanism for pre-OIDC console access (the role originally proposed as Slice 4.6, then deferred when we noticed the cookie had no consumer until this phase). It covers both first-touch console login on a fresh deployment with no IdP configured *and* IdP-down recovery on an established deployment. Without it, a zero-IdP deployment has a console that is 100% inaccessible.
 
-**Scope**
+**Mechanism decision.** `quarkus-oidc` exposes no API to mint its session cookie outside a real IdP code flow, so break-glass is built on Quarkus **form authentication** in SPA mode (the Quarkus team's recommended primitive for IdP-less session login): `quarkus.http.auth.form` with `post-location: /api/auth/local` and empty `login-page`/`error-page`/`landing-page`, so the mechanism answers with bare status codes (200 + cookie / 401) instead of redirects. The cookie (`state-db-glass`, HttpOnly, SameSite=Strict, 12h timeout) is AES-256-encrypted with `quarkus.http.auth.session.encryption-key`, wired to the existing `STATE_DB_SESSION_ENCRYPTION_SECRET` so sessions are stable across replicas. Quarkus owns cookie crypto, expiry, and renewal; we own only policy:
 
-- `/api/auth/local` endpoint:
-  - `LocalGlassFilter` (`@PreMatching`) gates the route on two conditions; either failing → 404:
-    1. **Loopback.** Remote address must be loopback via `InetAddress.isLoopbackAddress()` on the raw socket. `X-Forwarded-For` is never honored.
-    2. **No working IdP.** `SELECT count(*) FROM oidc_providers WHERE enabled = true` must be 0. Tying the gate to system state rather than a profile flag means operators can't accidentally lock themselves out by forgetting a profile, and the route auto-disappears once OIDC is set up.
-  - Verifies POSTed password against `STATE_DB_LOCAL_GLASS_PASSWORD_HASH` (argon2).
-  - On success, mints a `quarkus-oidc` session bound to the first `<iss>:<sub>` from `STATE_DB_ADMIN_SUBJECTS`, falling back to the bootstrap admin (`local:bootstrap:admin`) if no explicit subjects are configured.
-- Boot WARN log line when the route is live (i.e., zero enabled providers).
+- `LocalGlass` — shared gate + bcrypt verify + idempotent bootstrap-admin `users`-row creation. Gate (any failure → 401): (1) `STATE_DB_LOCAL_GLASS_PASSWORD_HASH` set (bcrypt MCF); (2) zero enabled `oidc_providers` rows — state-gated, not profile-gated, so the route self-destructs once OIDC exists and IdP-down recovery re-opens it by disabling the provider row; (3) raw TCP source is loopback (`X-Forwarded-For` never honored) unless `STATE_DB_LOCAL_GLASS_ALLOW_REMOTE=true` (the `docker run -p` evaluation path — published ports arrive from the bridge gateway, not loopback).
+- `LocalGlassIdentityProvider` (`UsernamePasswordAuthenticationRequest`) — login-time check; all failure modes are the same 401. Success always authenticates as the bootstrap admin (`local:bootstrap:admin`) — never `STATE_DB_ADMIN_SUBJECTS` entries, which have no `users` row while zero providers exist.
+- `LocalGlassTrustedIdentityProvider` (`TrustedAuthenticationRequest`) — cookie restore; re-checks the zero-providers gate on every request, so enabling OIDC kills outstanding break-glass sessions immediately.
+- `LocalGlassPrincipal` — synthetic `JsonWebToken` carrying the bootstrap `iss`/`sub`, so `SessionPrincipalFilter`, Cedar, and `/api/user` treat the session exactly like an OIDC one.
+- `LocalGlassStartupValidator` — boot fails if the hash is set without the session secret; WARN log when break-glass is configured.
+- `GET /api/auth/providers` returns `{ providers, breakGlass }`; the SPA only renders the form when `breakGlass` is true.
 
-**Tests.** Unit test the `LocalGlassFilter` with a mocked request context and a stubbed enabled-provider counter: non-loopback → abort 404; loopback + 0 providers → pass-through; loopback + ≥1 enabled provider → abort 404. `@QuarkusTest` covers happy-path (200 + cookie), wrong password (401, timing-tolerant), unset hash (503), and the OIDC-provider-present case (404).
+**Tests.** `LocalGlassLoginTest` (`@QuarkusTest`, profile sets the hash): happy path 200 + cookie → `/api/user` resolves the bootstrap admin; wrong password → 401, no cookie; enabled provider row → new login 401 **and** existing cookie 401 **and** `breakGlass: false`. `LocalGlassDisabledTest`: unset hash → 401, `breakGlass: false`. `LocalGlassLoopbackTest`: unit-tests the loopback check with non-loopback addresses (RestAssured always connects over loopback, so the negative path can't be an integration test).
 
-**Manual verification.** With no `oidc_providers` rows: `curl -d '{"password":"..."}' http://localhost:8080/api/auth/local` → session cookie. Insert an `enabled=true` provider row, retry → 404. Same call through a non-loopback ingress → 404.
+**Manual verification.** With no `oidc_providers` rows and the hash set: `curl -i -d 'username=admin&password=...' http://localhost:8080/api/auth/local` → 200 + `state-db-glass` cookie; same call against the container's non-loopback interface (`curl http://$(hostname -i):8080/...`) → 401; insert an `enabled=true` provider row → 401 with the old cookie too.
+
+**Addendum — bootstrap token removed.** With break-glass in place, the env-provisioned bootstrap API token (Slice 4.5) became a redundant second credential for the same identity and was removed. The break-glass session carries a `JsonWebToken` principal, so the existing `/api/auth/cli-login` browser flow works off it unchanged: the pre-OIDC CLI story is break-glass sign-in → `pulumi login` → approve → 24h token, and the only bootstrap env left is org seeding (`STATE_DB_BOOTSTRAP_ORG_NAME`, optional display name). Deliberately **not** unified further: the glass password never authenticates `/pulumi/api/*` directly — low-entropy secret, bcrypt on a hot path, no revocation story. The workbench seeds its static non-interactive CLI token straight into `api_tokens` via `seed-console.sh`.
 
 ---
 

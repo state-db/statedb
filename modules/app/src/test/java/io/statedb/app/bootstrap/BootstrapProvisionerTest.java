@@ -2,6 +2,7 @@ package io.statedb.app.bootstrap;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import io.quarkus.arc.Arc;
@@ -9,7 +10,6 @@ import io.quarkus.narayana.jta.QuarkusTransaction;
 import io.quarkus.test.TestTransaction;
 import io.quarkus.test.junit.QuarkusTest;
 import io.statedb.persistence.AdvisoryLock;
-import io.statedb.persistence.auth.ApiToken;
 import io.statedb.persistence.bootstrap.BootstrapConfig;
 import io.statedb.persistence.bootstrap.BootstrapProvisioner;
 import io.statedb.persistence.identity.OrgMember;
@@ -17,8 +17,6 @@ import io.statedb.persistence.identity.Organization;
 import io.statedb.persistence.identity.User;
 import jakarta.inject.Inject;
 import jakarta.persistence.EntityManager;
-import java.time.Instant;
-import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.CountDownLatch;
@@ -47,13 +45,11 @@ class BootstrapProvisionerTest {
   @Inject EntityManager em;
 
   private static final String CONCURRENT_ORG = "acme-concurrent";
-  private static final String CONCURRENT_TOKEN_HASH = "sha256:" + "9".repeat(64);
 
   @Test
   @TestTransaction
   void coldBootCreatesOneRowInEachTable() {
-    BootstrapConfig config = config("acme-cold", "Acme Cold", "a");
-    provisioner.provision(config);
+    provisioner.provision(new BootstrapConfig("acme-cold", "Acme Cold"));
 
     Organization org = Organization.find("name", "acme-cold").firstResult();
     assertNotNull(org, "organization row missing");
@@ -66,33 +62,19 @@ class BootstrapProvisionerTest {
                 BootstrapProvisioner.BOOTSTRAP_SUB)
             .firstResult();
     assertNotNull(user, "bootstrap user row missing");
-    assertEquals(config.adminEmail(), user.email);
-    assertEquals(config.adminDisplayName(), user.displayName);
+    assertNull(user.email, "bootstrap user carries no email");
+    assertEquals("Break-glass admin", user.displayName);
 
     assertEquals(1, OrgMember.count("orgId = ?1 and userId = ?2", org.id, user.id));
     OrgMember m =
         OrgMember.<OrgMember>find("orgId = ?1 and userId = ?2", org.id, user.id).firstResult();
     assertEquals(OrgMember.Role.owner, m.role);
-
-    ApiToken token = ApiToken.find("tokenHash", config.adminTokenHash()).firstResult();
-    assertNotNull(token, "bootstrap token row missing");
-    assertEquals(ApiToken.Kind.service_account, token.kind);
-    assertEquals("bootstrap", token.description);
-    assertEquals(org.id, token.orgId);
-    assertEquals(user.id, token.userId);
-    assertNotNull(token.expiresAt);
-    assertTrue(
-        token.expiresAt.isAfter(Instant.now().plus(364, ChronoUnit.DAYS)),
-        "expires_at must be ~1 year out");
-    assertTrue(
-        token.expiresAt.isBefore(Instant.now().plus(366, ChronoUnit.DAYS)),
-        "expires_at must be ~1 year out");
   }
 
   @Test
   @TestTransaction
   void identicalReBootIsNoOp() {
-    BootstrapConfig config = config("acme-idemp", "Acme Idempotent", "b");
+    BootstrapConfig config = new BootstrapConfig("acme-idemp", "Acme Idempotent");
     provisioner.provision(config);
     provisioner.provision(config);
 
@@ -111,103 +93,31 @@ class BootstrapProvisionerTest {
             .firstResult();
     Organization org = Organization.find("name", "acme-idemp").firstResult();
     assertEquals(1, OrgMember.count("orgId = ?1 and userId = ?2", org.id, user.id));
-    assertEquals(1, ApiToken.count("tokenHash", config.adminTokenHash()));
   }
 
   @Test
   @TestTransaction
   void changedOrgDisplayNameIsUpdatedInPlace() {
-    provisioner.provision(config("acme-rename", "Original Name", "c"));
-    provisioner.provision(config("acme-rename", "New Name", "c"));
+    provisioner.provision(new BootstrapConfig("acme-rename", "Original Name"));
+    provisioner.provision(new BootstrapConfig("acme-rename", "New Name"));
 
     assertEquals(1, Organization.count("name", "acme-rename"));
     Organization org = Organization.find("name", "acme-rename").firstResult();
     assertEquals("New Name", org.displayName);
   }
 
-  @Test
-  @TestTransaction
-  void changedAdminEmailAndDisplayNameAreUpdatedInPlace() {
-    provisioner.provision(
-        new BootstrapConfig(
-            "acme-user-rename",
-            "Acme",
-            "old@acme.example",
-            "Old Display",
-            "sha256:" + "d".repeat(64)));
-    provisioner.provision(
-        new BootstrapConfig(
-            "acme-user-rename",
-            "Acme",
-            "new@acme.example",
-            "New Display",
-            "sha256:" + "d".repeat(64)));
-
-    User user =
-        User.find(
-                "iss = ?1 and sub = ?2",
-                BootstrapProvisioner.BOOTSTRAP_ISS,
-                BootstrapProvisioner.BOOTSTRAP_SUB)
-            .firstResult();
-    assertEquals("new@acme.example", user.email);
-    assertEquals("New Display", user.displayName);
-  }
-
-  /**
-   * Per the slice spec: re-running with a new token hash <em>adds</em> a row rather than rotating
-   * the previous one — token revocation is operator-driven and not in scope for 4.5.
-   */
-  @Test
-  @TestTransaction
-  void newTokenHashAddsRowWithoutRevokingPrior() {
-    BootstrapConfig first = config("acme-rotate", "Acme", "e");
-    BootstrapConfig second =
-        new BootstrapConfig(
-            first.orgName(),
-            first.orgDisplayName(),
-            first.adminEmail(),
-            first.adminDisplayName(),
-            "sha256:" + "f".repeat(64));
-    provisioner.provision(first);
-    provisioner.provision(second);
-
-    User user =
-        User.find(
-                "iss = ?1 and sub = ?2",
-                BootstrapProvisioner.BOOTSTRAP_ISS,
-                BootstrapProvisioner.BOOTSTRAP_SUB)
-            .firstResult();
-    assertEquals(2, ApiToken.count("userId", user.id));
-    assertNotNull(ApiToken.find("tokenHash", first.adminTokenHash()).firstResult());
-    assertNotNull(ApiToken.find("tokenHash", second.adminTokenHash()).firstResult());
-  }
-
-  private static BootstrapConfig config(String orgName, String orgDisplay, String hashSeed) {
-    return new BootstrapConfig(
-        orgName,
-        orgDisplay,
-        "ops@" + orgName + ".example",
-        orgName + " Ops",
-        "sha256:" + hashSeed.repeat(64));
-  }
-
   /**
    * Multi-pod race: N threads each take {@link AdvisoryLock#BOOTSTRAP_KEY} and invoke {@link
    * BootstrapProvisioner#provision} against the same fresh org. The lock serializes them and the
    * per-row idempotent upserts make followers no-op, so the end state must be exactly one org /
-   * membership / token. Cannot use {@code @TestTransaction} — multiple threads need real commits
-   * for the advisory lock to hand off, so we clean the committed rows in {@link #cleanup}.
+   * membership. Cannot use {@code @TestTransaction} — multiple threads need real commits for the
+   * advisory lock to hand off, so we clean the committed rows in {@link
+   * #cleanupConcurrentBootstrapRows}.
    */
   @Test
   void concurrentBootstraps_produceSingleSetOfRows() throws Exception {
     int callers = 4;
-    BootstrapConfig config =
-        new BootstrapConfig(
-            CONCURRENT_ORG,
-            "Acme Concurrent",
-            "ops@" + CONCURRENT_ORG + ".example",
-            "Acme Concurrent Ops",
-            CONCURRENT_TOKEN_HASH);
+    BootstrapConfig config = new BootstrapConfig(CONCURRENT_ORG, "Acme Concurrent");
 
     CountDownLatch start = new CountDownLatch(1);
     ExecutorService pool = Executors.newFixedThreadPool(callers);
@@ -257,27 +167,18 @@ class BootstrapProvisionerTest {
                   1,
                   OrgMember.count("orgId = ?1 and userId = ?2", org.id, user.id),
                   "exactly one membership for org+user");
-              assertEquals(
-                  1,
-                  ApiToken.count("tokenHash", CONCURRENT_TOKEN_HASH),
-                  "exactly one token row for the bootstrap hash");
             });
   }
 
   /**
    * The concurrent test commits real rows (advisory-lock semantics require commits, so
-   * {@code @TestTransaction} can't isolate it). Strip them so sibling tests' counts stay clean — in
-   * particular {@link #newTokenHashAddsRowWithoutRevokingPrior} which asserts the bootstrap user
-   * owns exactly two tokens.
+   * {@code @TestTransaction} can't isolate it). Strip them so sibling tests' counts stay clean.
    */
   @AfterEach
   void cleanupConcurrentBootstrapRows() {
     QuarkusTransaction.requiringNew()
         .run(
             () -> {
-              em.createNativeQuery("DELETE FROM api_tokens WHERE token_hash = ?1")
-                  .setParameter(1, CONCURRENT_TOKEN_HASH)
-                  .executeUpdate();
               em.createNativeQuery(
                       "DELETE FROM org_members WHERE org_id IN"
                           + " (SELECT id FROM organizations WHERE name = ?1)")
