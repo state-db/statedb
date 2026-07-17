@@ -16,13 +16,20 @@ export class UnauthorizedError extends Error {
 }
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 15_000);
+  const controller = init?.signal ? undefined : new AbortController();
+  const timeout = controller
+    ? window.setTimeout(() => controller.abort(), 15_000)
+    : undefined;
+  const headers = new Headers(init?.headers);
+  if (!headers.has("Content-Type")) {
+    headers.set("Content-Type", "application/json");
+  }
+
   try {
     const res = await fetch(`${BASE}${path}`, {
-      headers: { "Content-Type": "application/json", ...init?.headers },
       ...init,
-      signal: init?.signal ?? controller.signal,
+      headers,
+      signal: init?.signal ?? controller?.signal,
     });
     if (res.status === 401) {
       throw new UnauthorizedError();
@@ -34,7 +41,9 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     const text = await res.text();
     return (text ? JSON.parse(text) : undefined) as T;
   } finally {
-    clearTimeout(timeout);
+    if (timeout) {
+      window.clearTimeout(timeout);
+    }
   }
 }
 
@@ -64,5 +73,6 @@ export const api = {
  * not choose identity providers.
  */
 export function redirectToLogin(): void {
-  window.location.href = "/api/auth/login";
+  const returnTo = `${window.location.pathname}${window.location.search}`;
+  window.location.href = `/console/login?returnTo=${encodeURIComponent(returnTo)}`;
 }

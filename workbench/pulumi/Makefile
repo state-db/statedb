@@ -1,4 +1,4 @@
-.PHONY: infra-up infra-down db-up idp-up idp-down console-seed app check-app login init preview up destroy sql psql force-unlock reset
+.PHONY: infra-up infra-down db-up idp-up idp-down console-seed app app-stop check-app login init preview up destroy sql psql force-unlock reset
 
 REPO_ROOT := ../..
 IN_CONTAINER := $(REPO_ROOT)/bin/in-container
@@ -87,17 +87,23 @@ console-seed: db-up
 ## be an admin. Ctrl-C stops Quarkus and the console dev server (the IdP and DB stay up; `cmd=reset`
 ## tears everything down). The Pulumi CLI targets :8080 directly and is unaffected.
 app: infra-up
+	$(MAKE) app-stop
 	$(IN_CONTAINER) bash -lc 'cd "$$(git rev-parse --show-toplevel)" || exit 1; \
+		CONSOLE_PID=; SEED_PID=; APP_PID=; WATCHDOG_PID=; \
+		cleanup() { \
+			trap - EXIT INT TERM; \
+			[ -n "$$WATCHDOG_PID" ] && kill $$WATCHDOG_PID 2>/dev/null || true; \
+			kill $$CONSOLE_PID $$SEED_PID $$APP_PID 2>/dev/null || true; \
+			sleep 1; \
+			kill -KILL $$CONSOLE_PID $$SEED_PID $$APP_PID 2>/dev/null || true; \
+			wait $$CONSOLE_PID $$SEED_PID $$APP_PID $$WATCHDOG_PID 2>/dev/null || true; \
+		}; \
+		trap cleanup EXIT INT TERM; \
 		( cd modules/web && bun install >/dev/null 2>&1 && \
 			exec env PORT=$(CONSOLE_PORT) OIDC_PROXY_TARGET=http://host.docker.internal:$(IDP_UPSTREAM_PORT) bun dev.ts ) & \
 		CONSOLE_PID=$$!; \
 		( $(SEED_CONSOLE) ) & \
 		SEED_PID=$$!; \
-		cleanup() { \
-			kill $$CONSOLE_PID $$SEED_PID $$APP_PID 2>/dev/null || true; \
-			wait $$CONSOLE_PID $$SEED_PID $$APP_PID 2>/dev/null || true; \
-		}; \
-		trap cleanup EXIT INT TERM; \
 		env \
 			QUARKUS_DATASOURCE_DEVSERVICES_ENABLED=false \
 			QUARKUS_DATASOURCE_JDBC_URL=jdbc:postgresql://host.docker.internal:$(DB_PORT)/$(DB_NAME) \
@@ -120,7 +126,28 @@ app: infra-up
 			STATE_DB_ADMIN_SUBJECTS=$(OIDC_ISSUER):$(ADMIN_SUB) \
 			mvn -f modules/pom.xml -pl app -am -Dquarkus.test.continuous-testing=disabled quarkus:dev & \
 		APP_PID=$$!; \
-		wait -n $$CONSOLE_PID $$APP_PID'
+		RUNNER_PID=$$$$; \
+		( while kill -0 $$RUNNER_PID 2>/dev/null; do sleep 1; done; \
+			kill $$CONSOLE_PID $$SEED_PID $$APP_PID 2>/dev/null || true; \
+			sleep 1; \
+			kill -KILL $$CONSOLE_PID $$SEED_PID $$APP_PID 2>/dev/null || true ) & \
+		WATCHDOG_PID=$$!; \
+		wait -n $$CONSOLE_PID $$APP_PID; \
+		STATUS=$$?; \
+		cleanup; \
+		exit $$STATUS'
+
+## Stop stale foreground workbench processes inside the dev container. VS Code
+## port forwarding follows live listeners, so orphaned dev processes keep
+## :5173/:8080/:5005 busy even after the terminal that launched them is gone.
+app-stop:
+	-$(IN_CONTAINER) sh -lc 'pkill -TERM -f "[b]un dev.ts" || true; \
+		pkill -TERM -f "[q]uarkus:dev" || true; \
+		pkill -TERM -f "[s]tate-db-app-dev.jar" || true; \
+		sleep 1; \
+		pkill -KILL -f "[b]un dev.ts" || true; \
+		pkill -KILL -f "[q]uarkus:dev" || true; \
+		pkill -KILL -f "[s]tate-db-app-dev.jar" || true'
 
 ## Fail early with a useful message if the state-db app is not running.
 check-app:

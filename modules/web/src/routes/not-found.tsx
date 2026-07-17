@@ -1,16 +1,20 @@
 import { Link } from "@tanstack/react-router";
 
+import { EmptyState } from "@/components/console/EmptyState";
+import { Button } from "@/components/ui/button";
+
 export function NotFoundPage() {
   return (
-    <div className="space-y-2">
-      <h1 className="text-lg font-semibold">Not found</h1>
-      <p className="text-muted-foreground">
-        That page doesn&apos;t exist.{" "}
-        <Link to="/" className="text-primary underline-offset-4 hover:underline">
-          Go home
-        </Link>
-        .
-      </p>
-    </div>
+    <main className="p-6">
+      <EmptyState
+        title="Not found"
+        description="That page does not exist."
+        action={
+          <Button asChild variant="outline">
+            <Link to="/console">Go home</Link>
+          </Button>
+        }
+      />
+    </main>
   );
 }
