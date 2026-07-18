@@ -1,0 +1,73 @@
+name: shared-foundation
+runtime: yaml
+description: Local-only shared identity and certificate fixtures for the state-db console.
+
+config:
+  environment:
+    type: string
+  revision:
+    type: integer
+  servicePassword:
+    type: string
+    secret: true
+
+resources:
+  random-provider:
+    type: pulumi:providers:random
+    defaultProvider: true
+    options:
+      version: 4.21.0
+  tls-provider:
+    type: pulumi:providers:tls
+    defaultProvider: true
+    options:
+      version: 5.4.0
+  environment-id:
+    type: random:RandomId
+    properties:
+      byteLength: 6
+      prefix: ${environment}-
+      keepers:
+        environment: ${environment}
+  database-password:
+    type: random:RandomPassword
+    properties:
+      length: 24
+      minLower: 4
+      minUpper: 4
+      minNumeric: 4
+      minSpecial: 2
+      overrideSpecial: "_-"
+      keepers:
+        environment: ${environment}
+  signing-key:
+    type: tls:PrivateKey
+    properties:
+      algorithm: ECDSA
+      ecdsaCurve: P256
+  service-certificate:
+    type: tls:SelfSignedCert
+    properties:
+      privateKeyPem: ${signing-key.privateKeyPem}
+      validityPeriodHours: 8760
+      earlyRenewalHours: 168
+      allowedUses:
+        - key_encipherment
+        - digital_signature
+        - server_auth
+      dnsNames:
+        - ${environment}.internal.example
+        - api.${environment}.internal.example
+      subject:
+        commonName: ${environment}.internal.example
+        organization: Acme Workbench
+
+outputs:
+  environment: ${environment}
+  revision: ${revision}
+  environmentId: ${environment-id.hex}
+  certificatePem: ${service-certificate.certPem}
+  certificateExpiry: ${service-certificate.validityEndTime}
+  publicKeyFingerprint: ${signing-key.publicKeyFingerprintSha256}
+  databasePassword: ${database-password.result}
+  servicePassword: ${servicePassword}

@@ -1,0 +1,73 @@
+name: application-fleet
+runtime: yaml
+description: Local-only application topology consuming outputs from shared-foundation stacks.
+
+config:
+  environment:
+    type: string
+  revision:
+    type: integer
+  foundationStack:
+    type: string
+  servicePassword:
+    type: string
+    secret: true
+
+resources:
+  random-provider:
+    type: pulumi:providers:random
+    defaultProvider: true
+    options:
+      version: 4.21.0
+  foundation:
+    type: pulumi:pulumi:StackReference
+    properties:
+      name: ${foundationStack}
+  api-service:
+    type: random:RandomPet
+    properties:
+      length: 2
+      separator: "-"
+      prefix: api-${environment}
+      keepers:
+        environment: ${environment}
+  worker-service:
+    type: random:RandomPet
+    properties:
+      length: 2
+      separator: "-"
+      prefix: worker-${environment}
+      keepers:
+        environment: ${environment}
+    options:
+      dependsOn:
+        - ${api-service}
+  session-token:
+    type: random:RandomPassword
+    properties:
+      length: 20
+      special: false
+      keepers:
+        api: ${api-service.id}
+        worker: ${worker-service.id}
+  rollout-percentage:
+    type: random:RandomInteger
+    properties:
+      min: 100
+      max: 100
+      seed: ${environment}
+    options:
+      dependsOn:
+        - ${worker-service}
+
+outputs:
+  environment: ${environment}
+  revision: ${revision}
+  services:
+    api: ${api-service.id}
+    worker: ${worker-service.id}
+  rolloutPercentage: ${rollout-percentage.result}
+  foundationEnvironmentId: ${foundation.outputs["environmentId"]}
+  foundationCertificateExpiry: ${foundation.outputs["certificateExpiry"]}
+  sessionToken: ${session-token.result}
+  servicePassword: ${servicePassword}

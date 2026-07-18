@@ -1,4 +1,4 @@
-.PHONY: infra-up infra-down db-up idp-up idp-down console-seed app app-stop check-app login init preview up destroy sql psql force-unlock reset glass-on glass-off
+.PHONY: infra-up infra-down db-up idp-up idp-down console-seed app app-stop check-app login init preview up destroy fixtures-up fixtures-destroy sql psql force-unlock reset glass-on glass-off
 
 REPO_ROOT := ../..
 IN_CONTAINER := $(REPO_ROOT)/bin/in-container
@@ -182,6 +182,26 @@ up: init
 ## Destroy the workbench stack resources through Pulumi.
 destroy: init
 	$(IN_CONTAINER) sh -lc 'cd "$$(git rev-parse --show-toplevel)/workbench/pulumi" && $(PULUMI_ENV); pulumi destroy --yes --skip-preview'
+
+## Create or update the complete local-only fixture estate. The app must already be running.
+fixtures-up: check-app
+	$(IN_CONTAINER) sh -lc 'cd "$$(git rev-parse --show-toplevel)/workbench/pulumi" && \
+		export PULUMI_HOME="$$(pwd)/../.pulumi-home" PULUMI_CONFIG_PASSPHRASE=workbench; \
+		ORG=$(ORG) BACKEND_URL=$(BACKEND_URL) TOKEN=$(TOKEN) ./bootstrap-fixtures.sh'
+
+## Destroy resources in every fixture stack, preserving the empty stacks for inspection/reuse.
+fixtures-destroy: check-app
+	$(IN_CONTAINER) sh -lc 'cd "$$(git rev-parse --show-toplevel)/workbench/pulumi" && \
+		export PULUMI_ACCESS_TOKEN=$(TOKEN) PULUMI_CONFIG_PASSPHRASE=workbench \
+		PULUMI_HOME="$$(pwd)/../.pulumi-home" PULUMI_SKIP_UPDATE_CHECK=true PULUMI_SKIP_CONFIRMATIONS=true; \
+		pulumi login $(BACKEND_URL) >/dev/null; \
+		while IFS="|" read -r project stacks owner; do \
+			case "$$project" in ""|\#*) continue ;; esac; \
+			for stack in $$stacks; do \
+				echo "[fixtures] destroy $(ORG)/$$project/$$stack"; \
+				(cd "projects/$$project" && pulumi destroy --yes --skip-preview --stack "$(ORG)/$$stack"); \
+			done; \
+		done < fixtures.txt'
 
 ## Disable the mock OIDC provider row so the break-glass login is live (password: "password").
 ## Break-glass only works while zero providers are enabled; note the app re-enables the row on

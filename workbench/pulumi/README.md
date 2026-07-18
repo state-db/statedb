@@ -56,6 +56,43 @@ Destroy the Pulumi resources:
 make pulumi-workbench cmd=destroy
 ```
 
+## Console fixture estate
+
+Populate a more realistic set of projects and stacks after the workbench app is
+already running:
+
+```bash
+make pulumi-workbench cmd=fixtures-up
+```
+
+This uses the real Pulumi CLI and state-db backend to create the following
+local-only estate:
+
+| Project | Stacks | Contents |
+| --- | --- | --- |
+| `shared-foundation` | `dev`, `staging`, `prod` | Random identifiers and passwords, TLS keys, self-signed certificates, and secret outputs |
+| `artifact-pipeline` | `nightly`, `release` | Locally generated manifests, documentation, checksums, and an archive asset stored in state |
+| `application-fleet` | `dev`, `staging`, `prod` | Application-shaped resources, structured outputs, secrets, dependencies, and references to the matching foundation stack |
+
+New stacks are deployed twice, first at revision 1 and then revision 2, to give
+the console useful update history and output diffs. Re-running the command
+converges existing stacks directly to revision 2 and should produce no resource
+changes.
+
+No cloud credentials or cloud APIs are used. Pulumi may access its plugin
+download service on the first run to install the pinned `random`, `tls`, and
+`command` provider versions. The command provider writes only beneath
+`workbench/.generated/pulumi/`, which is ignored by Git.
+
+Destroy all fixture resources while keeping the empty stacks:
+
+```bash
+make pulumi-workbench cmd=fixtures-destroy
+```
+
+The fixture inventory is declared in `fixtures.txt`; the individual Pulumi YAML
+programs live under `projects/` and `bootstrap-fixtures.sh` drives deployment.
+
 Clear an interrupted workbench update/lock:
 
 ```bash

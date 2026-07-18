@@ -1,0 +1,72 @@
+name: artifact-pipeline
+runtime: yaml
+description: Local build artifacts and archives captured in Pulumi state without cloud resources.
+
+config:
+  environment:
+    type: string
+  revision:
+    type: integer
+  generatedRoot:
+    type: string
+  servicePassword:
+    type: string
+    secret: true
+
+resources:
+  command-provider:
+    type: pulumi:providers:command
+    defaultProvider: true
+    options:
+      version: 1.2.1
+  random-provider:
+    type: pulumi:providers:random
+    defaultProvider: true
+    options:
+      version: 4.21.0
+  build-id:
+    type: random:RandomId
+    properties:
+      byteLength: 5
+      prefix: build-
+      keepers:
+        environment: ${environment}
+  bundle:
+    type: command:local:Command
+    properties:
+      dir: ${generatedRoot}
+      create: >-
+        mkdir -p ${build-id.hex}/config ${build-id.hex}/docs &&
+        printf '{"environment":"${environment}","revision":${revision},"buildId":"${build-id.hex}"}\n' > ${build-id.hex}/config/manifest.json &&
+        printf '# ${environment} artifact bundle\n\nGenerated locally for state-db workbench revision ${revision}.\n' > ${build-id.hex}/docs/README.md &&
+        printf 'feature.console=true\nfeature.history=true\n' > ${build-id.hex}/config/features.properties
+      update: >-
+        mkdir -p ${build-id.hex}/config ${build-id.hex}/docs &&
+        printf '{"environment":"${environment}","revision":${revision},"buildId":"${build-id.hex}"}\n' > ${build-id.hex}/config/manifest.json &&
+        printf '# ${environment} artifact bundle\n\nGenerated locally for state-db workbench revision ${revision}.\n' > ${build-id.hex}/docs/README.md &&
+        printf 'feature.console=true\nfeature.history=true\n' > ${build-id.hex}/config/features.properties
+      delete: find ${build-id.hex} -type f -delete
+      archivePaths:
+        - ${build-id.hex}/**
+      assetPaths:
+        - ${build-id.hex}/config/manifest.json
+        - ${build-id.hex}/docs/README.md
+      triggers:
+        - ${revision}
+  checksum:
+    type: random:RandomUuid
+    properties:
+      keepers:
+        buildId: ${build-id.hex}
+    options:
+      dependsOn:
+        - ${bundle}
+
+outputs:
+  environment: ${environment}
+  revision: ${revision}
+  buildId: ${build-id.hex}
+  artifactArchive: ${bundle.archive}
+  artifactFiles: ${bundle.assets}
+  checksum: ${checksum.result}
+  publishCredential: ${servicePassword}
