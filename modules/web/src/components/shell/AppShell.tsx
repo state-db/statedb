@@ -41,6 +41,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { BrandMark } from "@/components/brand/BrandMark";
 import {
   Sidebar,
   SidebarContent,
@@ -177,11 +178,9 @@ function AppSidebar({ user }: { user: CurrentUser }) {
   return (
     <Sidebar>
       <SidebarHeader>
-        <div className="flex size-8 items-center justify-center rounded-md bg-sidebar-primary text-sidebar-primary-foreground">
-          <Database />
-        </div>
+        <BrandMark className="size-8 shrink-0" />
         <span className="font-semibold tracking-tight group-data-[sidebar-open=false]/sidebar-wrapper:sr-only">
-          state-db
+          state<span className="text-[#2563EB] dark:text-[#3B82F6]">db</span>
         </span>
       </SidebarHeader>
       <SidebarSeparator />

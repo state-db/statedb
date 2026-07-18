@@ -1,7 +1,8 @@
 import { FormEvent, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { AlertCircle, Database, Loader2 } from "lucide-react";
+import { AlertCircle, Loader2 } from "lucide-react";
 
+import { BrandMark } from "@/components/brand/BrandMark";
 import { ErrorAlert } from "@/components/console/ErrorAlert";
 import {
   Alert,
@@ -41,11 +42,9 @@ export function LoginPage() {
     <main className="flex min-h-full items-center justify-center bg-background p-6">
       <Card className="w-full max-w-sm">
         <CardHeader className="items-center text-center">
-          <div className="mb-2 flex h-10 w-10 items-center justify-center rounded-md border bg-muted">
-            <Database className="h-5 w-5" aria-hidden="true" />
-          </div>
+          <BrandMark className="mb-2 h-12 w-12" />
           <div className="text-sm font-semibold text-muted-foreground">
-            state-db
+            state<span className="text-[#2563EB] dark:text-[#3B82F6]">db</span>
           </div>
           <CardTitle className="text-xl">Sign in to state-db</CardTitle>
           <CardDescription>

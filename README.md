@@ -1,4 +1,11 @@
-# state-db
+<div align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="assets/brand/statedb-logo-dark.svg">
+    <img src="assets/brand/statedb-logo.svg" alt="statedb — self-hosted state backend" width="460">
+  </picture>
+</div>
+
+<img src="assets/brand/statedb-mascot.png" alt="The state-db otter mascot" align="right" width="130">
 
 A self-hosted state management backend compatible with the Pulumi and OpenTofu command-line tools. It implements HTTP state storage protocols and pairs them with a web console for browsing stacks and resources — without requiring a managed cloud service.
 
