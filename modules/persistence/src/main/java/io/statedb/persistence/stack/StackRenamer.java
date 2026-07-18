@@ -132,14 +132,12 @@ public class StackRenamer {
     snapshot.version = snapshotVersion;
     snapshot.checkpoint = deployment;
     snapshot.compactedFromJournalSeq = state.journalSeq;
+    snapshot.resourceCount = deployment.path("resources").size();
     snapshot.persistAndFlush();
 
     state.baseSnapshotId = snapshot.id;
     state.baseSnapshotVersion = snapshotVersion;
     state.journalEntriesSinceCompaction = 0;
-    state.cachedCheckpoint = null;
-    state.cachedAt = null;
-    state.cacheValid = false;
   }
 
   // Insert the rename as a terminal update. The per-stack version is MAX+1, race-safe under the

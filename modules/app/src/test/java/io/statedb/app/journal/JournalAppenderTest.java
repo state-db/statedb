@@ -647,33 +647,6 @@ class JournalAppenderTest {
   }
 
   @Test
-  void cacheInvalidationTriggerFiresOnInsert() {
-    // Seed cache_valid = true so we can observe the trigger flip it.
-    QuarkusTransaction.requiringNew()
-        .run(
-            () ->
-                em.createNativeQuery(
-                        "UPDATE stack_state SET cache_valid = true WHERE stack_id = ?1")
-                    .setParameter(1, stackId)
-                    .executeUpdate());
-
-    appender.append(
-        stackId, updateId, leaseId, List.of(entry(1, 1, 1L, "{\"state\":{\"urn\":\"urn:x\"}}")));
-
-    QuarkusTransaction.requiringNew()
-        .run(
-            () -> {
-              Boolean valid =
-                  (Boolean)
-                      em.createNativeQuery(
-                              "SELECT cache_valid FROM stack_state WHERE stack_id = ?1")
-                          .setParameter(1, stackId)
-                          .getSingleResult();
-              assertFalse(valid);
-            });
-  }
-
-  @Test
   void concurrentAppendsSerializeAndPreserveIntegrity() throws Exception {
     // Two PATCHes for the same update arriving on different threads/pods. FOR UPDATE on
     // stack_state must serialize them so both succeed and all rows persist.

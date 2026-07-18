@@ -255,8 +255,8 @@ CREATE INDEX idx_snapshots_stack_version ON snapshots (stack_id, version DESC);
 
 -- One row per stack (UNIQUE(stack_id) enforces singleton; surrogate `id` per
 -- Decision #14). Tracks the current base snapshot and journal position.
--- cached_checkpoint is a read optimization; the trg_journal_invalidates_cache
--- trigger ensures it is never stale.
+-- (An earlier cached_checkpoint/cache_valid read cache lived here; base
+-- snapshots superseded it before any writer populated it, and V014 dropped it.)
 CREATE TABLE stack_state (
     id                              UUID        PRIMARY KEY,
     stack_id                        UUID        NOT NULL UNIQUE REFERENCES stacks(id) ON DELETE CASCADE,
@@ -269,11 +269,6 @@ CREATE TABLE stack_state (
     journal_seq                     BIGINT      NOT NULL DEFAULT 0,
     journal_entries_since_compaction INTEGER    NOT NULL DEFAULT 0,
     auto_compact_threshold          INTEGER     NOT NULL DEFAULT 100,
-
-    -- Invalidated automatically by trg_journal_invalidates_cache on each journal INSERT.
-    cached_checkpoint               JSONB,
-    cached_at                       TIMESTAMPTZ,
-    cache_valid                     BOOLEAN     NOT NULL DEFAULT false,
 
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
@@ -562,25 +557,6 @@ CREATE TRIGGER trg_update_status_guard
     BEFORE UPDATE OF status ON stack_updates
     FOR EACH ROW EXECUTE FUNCTION trg_guard_update_status();
 
--- ---------------------------------------------------------------------------
--- 2. Cache invalidation: journal INSERT automatically clears cached_checkpoint
--- ---------------------------------------------------------------------------
-CREATE OR REPLACE FUNCTION trg_invalidate_stack_cache()
-RETURNS TRIGGER LANGUAGE plpgsql AS $$
-BEGIN
-    UPDATE stack_state
-       SET cache_valid = false,
-           updated_at  = now()
-     WHERE stack_id   = NEW.stack_id
-       AND cache_valid = true;
-    RETURN NEW;
-END
-$$;
-
-CREATE TRIGGER trg_journal_invalidates_cache
-    AFTER INSERT ON journal_entries
-    FOR EACH ROW EXECUTE FUNCTION trg_invalidate_stack_cache();
-
 -- Singleton row holding a serialized Tink `AES256_GCM` keyset for the
 -- `service` secrets provider. Seeded once by `BootstrapProvisioner` (under
 -- advisory lock) on first start; contents are opaque to the schema — Tink
@@ -705,7 +681,7 @@ The tables below split what the schema enforces from what application code must 
 | 2 | Cross-entity mismatch | Composite FK `(update_id, stack_id) → stack_updates(id, stack_id)` on `journal_entries`, `pending_operations`, `update_events`, and `stack_locks`; DB rejects rows whose `update_id` belongs to a different stack |
 | 6 | Duplicate singletons | `stack_state` and `stack_locks` both carry `UNIQUE (stack_id)` (the surrogate PK is the row's own `id`) |
 | 7 | Invalid status transitions | `trg_update_status_guard` rejects any UPDATE that tries to leave a terminal status or revert to `in-progress` |
-| 11 | Cache staleness | `trg_journal_invalidates_cache` sets `cache_valid = false` on every `journal_entries` INSERT for that stack |
+| 11 | Stale current-state reads | Reads assemble from `base_snapshot_id` + journal replay past `compacted_from_journal_seq`; no separate read cache to go stale (the old `cache_valid` cache was dropped in V014) |
 | 13 | Idempotent update creation | `client_request_id TEXT` + partial unique index `(stack_id, client_request_id) WHERE client_request_id IS NOT NULL`; app uses `INSERT ... ON CONFLICT DO NOTHING` |
 | 15 | Orphan/cleanup | Cascades cover the full tree; `stack_state.base_snapshot_id ON DELETE RESTRICT` prevents silent data loss from premature snapshot deletion |
 
@@ -750,7 +726,7 @@ The tables below split what the schema enforces from what application code must 
 
 1. `pulumi login http://localhost:<port>` → validates `/api/user`, `/api/user/organizations/default`
 2. `pulumi stack init dev` → `stacks` row inserted; `stack_state` row created; `(org, project, stack)` lookup returns the new stack
-3. `pulumi up` → full update lifecycle: preview + actual `stack_updates`, `stack_locks`, `journal_entries`, `/encrypt`; `stacks.version` increments after the actual update; `cache_valid` reset to false after each journal insert
+3. `pulumi up` → full update lifecycle: preview + actual `stack_updates`, `stack_locks`, `journal_entries`, `/encrypt`; `stacks.version` increments after the actual update; compaction installs a fresh base snapshot (with `resource_count`) after completion
 4. `pulumi stack export` → reconstructs checkpoint from `stack_state` + `journal_entries`; diff against expected output
 5. `pulumi destroy` → new `stack_updates` rows; `pending_operations` cleared; `stacks.version` increments
 6. `pulumi stack rm` → all rows cascade-deleted; verify nothing remains

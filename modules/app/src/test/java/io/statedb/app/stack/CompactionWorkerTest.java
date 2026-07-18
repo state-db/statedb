@@ -76,6 +76,8 @@ class CompactionWorkerTest {
     JsonNode after = normalized(assemble(stackId).deployment());
     assertEquals(before, after);
     assertEquals(1L, Snapshot.count("stackId", stackId));
+    Snapshot snapshot = Snapshot.find("stackId", stackId).<Snapshot>singleResult();
+    assertEquals(1, snapshot.resourceCount);
     assertEquals(0L, stackState(stackId).journalEntriesSinceCompaction);
     assertEquals(
         1L,

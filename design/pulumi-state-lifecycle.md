@@ -41,9 +41,10 @@ After `pulumi preview`, `pulumi up --skip-preview`, and `pulumi refresh
 | 3 | `refresh` | `succeeded` | `18..33` | Re-read current provider state, no changes |
 
 The stack's `stack_state.journal_seq` advanced to `34`, meaning the next
-server-assigned journal sequence starts there. `cache_valid=false` is expected:
-journal inserts invalidate the read cache. Snapshot compaction uses
-`base_snapshot_id` rather than this older cache field.
+server-assigned journal sequence starts there. (At the time of this workbench
+run, `stack_state` still carried a vestigial `cache_valid` read cache; V014
+dropped it — snapshot compaction via `base_snapshot_id` is the read
+optimization.)
 
 ## Stack State, Snapshots, and the Head Pointer
 
@@ -59,7 +60,6 @@ Important columns:
 | `base_snapshot_id` | FK to `snapshots.id`, or `NULL` before first compaction |
 | `base_snapshot_version` | Monotonic snapshot version for the stack |
 | `journal_entries_since_compaction` | Counter reset after compaction |
-| `cached_checkpoint`, `cached_at`, `cache_valid` | Older read-cache fields, invalidated on journal insert |
 
 The table is also the per-stack serialization point. Journal appends, update
 completion, and compaction all lock the same `stack_state` row before changing

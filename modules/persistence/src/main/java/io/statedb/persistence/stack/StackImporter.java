@@ -74,14 +74,12 @@ public class StackImporter {
     snapshot.version = snapshotVersion;
     snapshot.checkpoint = deployment.deepCopy();
     snapshot.compactedFromJournalSeq = state.journalSeq;
+    snapshot.resourceCount = snapshot.checkpoint.path("resources").size();
     snapshot.persistAndFlush();
 
     state.baseSnapshotId = snapshot.id;
     state.baseSnapshotVersion = snapshotVersion;
     state.journalEntriesSinceCompaction = 0;
-    state.cachedCheckpoint = null;
-    state.cachedAt = null;
-    state.cacheValid = false;
 
     stack.version++;
     return update.id;

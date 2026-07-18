@@ -25,4 +25,9 @@ public class Snapshot extends BaseEntity {
 
   @Column(name = "compacted_from_journal_seq", nullable = false)
   public long compactedFromJournalSeq;
+
+  // Set by every snapshot writer from checkpoint.resources.length; lets list
+  // screens report counts without loading the checkpoint JSONB.
+  @Column(name = "resource_count", nullable = false)
+  public int resourceCount;
 }

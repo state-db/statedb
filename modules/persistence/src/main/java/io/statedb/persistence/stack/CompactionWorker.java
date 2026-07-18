@@ -165,6 +165,7 @@ public class CompactionWorker {
     snapshot.version = snapshotVersion;
     snapshot.checkpoint = PulumiStateJson.withoutStackTraces(assembled.deployment());
     snapshot.compactedFromJournalSeq = journalSeq;
+    snapshot.resourceCount = snapshot.checkpoint.path("resources").size();
     snapshot.persistAndFlush();
 
     state.baseSnapshotId = snapshot.id;
