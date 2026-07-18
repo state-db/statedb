@@ -78,7 +78,7 @@ the template guard, `pulumi login` — but **no default permissions**.
 | `schema.cedar` | No structural change (roles are `entity Role in [Role]`); hierarchy is data |
 | `Authorizer` role chain | `guest` is the new base of the human ladder: `viewer memberOf guest`, `member memberOf viewer`, `owner memberOf member`. So `principal in Role::"guest"` means "any human member, including guests", while `principal in Role::"viewer"` continues to exclude guests. `service` and `admin` still stand alone |
 | Static policies | **Unchanged.** `viewer.cedar` still keys on `Role::"viewer"`, so a bare guest matches no policy and can do nothing |
-| Share templates | Guard changes from `when { principal in Role::"viewer" }` to `when { principal in Role::"guest" }` — same purpose (grantee must be a member; grant dies with the membership), now inclusive of guests |
+| Per-stack share templates | Guard changes from `when { principal in Role::"viewer" }` to `when { principal in Role::"guest" }` — same purpose (grantee must be a member; grant dies with the membership), now inclusive of guests. The managed `StackWriteAccess` template keeps the `viewer` guard — see below |
 | `PrincipalRoleResolver` | Unchanged (resolves whatever role the membership row holds) |
 
 Because `service` stands outside the guest chain, a `policy_grants` row naming
@@ -91,9 +91,12 @@ write share must be self-contained: its grantee may be a guest (no inherited
 read) or the stack may be private (member read retracted), and a principal who
 can `pulumi up` a stack must be able to read its checkpoint. The org-wide
 managed template `StackWriteAccess` stays write-only — bundling read there
-would silently bypass `private` visibility across the whole org. (Corollary:
-a managed write grant is only useful to viewer+; to a guest it grants writes on
-stacks they cannot see, which the 404 gate makes inert.)
+would silently bypass `private` visibility across the whole org — **and keeps
+its `Role::"viewer"` guard**: its `?resource` is the Org, so it matches
+`stack:Create` on the Org resource, where no stack-read 404 gate applies. A
+guest-inclusive guard there would let a guest with a managed grant create
+stacks. Guests therefore get per-stack shares only; org-wide write remains a
+viewer+ elevation, and `stack:Create` is never grantable to a guest.
 
 ### Grant flow
 
@@ -228,7 +231,8 @@ not `/api/workspaces`).
    exactly one stack (list + detail); member cannot see a private stack (404,
    not 403); owner and service see private stacks; revoked membership 404s
    immediately; write-granted guest can read/lock but not create or delete a
-   share; a share to a non-member stays inert.
+   share; a share to a non-member stays inert; a guest with a managed
+   `StackWriteAccess` grant still cannot create stacks (the viewer guard).
 
 ## 10. Migration summary
 

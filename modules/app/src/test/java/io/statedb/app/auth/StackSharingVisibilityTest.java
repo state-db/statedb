@@ -224,6 +224,22 @@ class StackSharingVisibilityTest {
     assertEquals(Set.of(), listedAcmeStacks(outsiderId));
   }
 
+  // The managed org-wide template guards on viewer, not guest: its ?resource is the Org, so it
+  // matches stack:Create where no stack-read 404 gate applies — a guest-inclusive guard would let
+  // a guest with a managed grant create stacks.
+  @Test
+  void managedWriteGrantToGuestIsInert() {
+    grant("StackWriteAccess", bareGuestId, null);
+    AuthenticatedPrincipal guest = session(bareGuestId, "bare-guest");
+    assertFalse(decideOnOrg(guest, "stack:Create"));
+    assertFalse(decide(guest, "stack:Lock", INTERNAL_STACK));
+    assertEquals(Set.of(), listedAcmeStacks(bareGuestId));
+
+    // The same grant elevates a viewer — the guard, not the template, is what excludes guests.
+    grant("StackWriteAccess", viewerId, null);
+    assertTrue(decideOnOrg(session(viewerId, "viewer"), "stack:Create"));
+  }
+
   // --- helpers ---
 
   private StackRef ref(String stackName) {

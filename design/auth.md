@@ -616,18 +616,22 @@ permit(principal in Role::"service", action in [Action::"stack:Read", Action::"s
 The role policies above are static and identity-based. Two further IAM concepts — **identity-based policies attached to a specific principal** ("managed policies") and **resource-based policies** (per-resource grants, ≈ an S3 bucket policy) — are implemented with Cedar **policy templates** plus a DB table of attachments.
 
 Templates live under `policies/templates/` and carry `?principal` / `?resource` slots. The
-`principal in Role::"guest"` guard means "the grantee is a human member of the resource's org" (any
-human role ⊆ guest): it enforces that managed/resource grants only ever apply to org members, and
-neutralizes a grant the moment the user leaves the org (there is no FK from `policy_grants` to
-`org_members`). Service accounts stand outside the guest chain, so grants naming them are inert.
+role guard means "the grantee is a member of the resource's org": it enforces that
+managed/resource grants only ever apply to org members, and neutralizes a grant the moment the
+user leaves the org (there is no FK from `policy_grants` to `org_members`). The per-stack share
+templates guard on `Role::"guest"` (any human tier, guests included); the managed org-wide
+template guards on `Role::"viewer"` — its `?resource` is the Org, so it matches `stack:Create`
+where no stack-read 404 gate applies, and a guest-inclusive guard would let guests create stacks.
+Service accounts stand outside the guest chain, so grants naming them are inert.
 
 ```cedar
 // StackWriteAccess — a managed (identity-based) policy: grant the write bundle across one
 // org. ?resource is the Org; `resource in ?resource` matches the org and every stack under
 // it via the entity hierarchy. Deliberately write-only: bundling read here would bypass
-// `private` visibility org-wide.
+// `private` visibility org-wide. Guards on viewer, not guest: org-wide write (incl.
+// stack:Create) is a viewer+ elevation, never grantable to guests.
 permit(principal == ?principal, action in Action::"stack:WriteAccess", resource in ?resource)
-when { principal in Role::"guest" };
+when { principal in Role::"viewer" };
 
 // StackReadResourcePolicy — resource-based policy: grant the read bundle on ONE stack.
 // ?resource is that Stack (exact match).
