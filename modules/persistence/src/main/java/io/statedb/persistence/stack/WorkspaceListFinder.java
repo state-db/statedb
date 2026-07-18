@@ -5,18 +5,17 @@ import io.statedb.persistence.update.StackUpdate;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 import java.time.Instant;
-import java.util.Collection;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
 /**
- * Lists console workspace rows visible to a set of orgs.
+ * Lists console workspace rows readable by a principal.
  *
- * <p>The base stack tree comes from {@link StackListFinder}, keeping tenant-isolation joins in one
- * place. Optional status details are batch-loaded by stack id so this endpoint can grow without
- * changing Pulumi's own list DTO shape.
+ * <p>The base stack tree comes from {@link StackListFinder} (which owns the read-visibility
+ * predicate), keeping tenant-isolation joins in one place. Optional status details are batch-loaded
+ * by stack id so this endpoint can grow without changing Pulumi's own list DTO shape.
  *
  * <p>Resource counts come from the base snapshot's materialized {@code resource_count}, so listing
  * never assembles a checkpoint. A snapshot is installed after every completed update, import, and
@@ -27,8 +26,8 @@ public class WorkspaceListFinder {
 
   @Inject StackListFinder stackListFinder;
 
-  public List<WorkspaceSummary> findForOrgs(Collection<UUID> orgIds) {
-    List<StackSummary> stacks = stackListFinder.findForOrgs(orgIds, null);
+  public List<WorkspaceSummary> findVisibleToUser(UUID userId) {
+    List<StackSummary> stacks = stackListFinder.findVisibleToUser(userId, null);
     if (stacks.isEmpty()) {
       return List.of();
     }

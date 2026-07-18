@@ -1,5 +1,7 @@
-// Roles are global and inherit, IAM-style: viewer ⊂ member ⊂ owner.
-// `admin` is the break-glass role and inherits from nothing.
+// Roles are global and inherit, IAM-style: guest ⊂ viewer ⊂ member ⊂ owner.
+// `guest` is the additive-only base tier — it matches no static policy; the
+// share-template guard keys on it ("any human member"). `admin` is the
+// break-glass role and inherits from nothing.
 entity Role in [Role];
 
 // A user is a global identity. Its role is resolved per request against the
@@ -15,7 +17,9 @@ entity Org { id: String };
 
 entity Project in [Org] { id: String };
 
-entity Stack in [Project] { id: String };
+// `visibility` ("internal" | "private") gates the viewer policy's org-wide read;
+// mirrored in SQL by the list finders and StackEntityLoader (design/stack-sharing.md).
+entity Stack in [Project] { id: String, visibility: String };
 
 // Actions are named IAM-style as `service:Operation`. `stack:*` is the all-of-
 // service wildcard (≈ IAM `"Action": "stack:*"`); the two `*Access` actions are

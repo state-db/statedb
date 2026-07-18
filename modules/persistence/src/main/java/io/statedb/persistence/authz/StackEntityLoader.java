@@ -6,6 +6,7 @@ import com.cedarpolicy.value.PrimString;
 import io.statedb.persistence.auth.AuthenticatedPrincipal;
 import io.statedb.persistence.identity.AdminAllowList;
 import io.statedb.persistence.identity.OrgMember;
+import io.statedb.persistence.policy.PolicyGrant;
 import io.statedb.persistence.stack.StackNotFoundException;
 import io.statedb.persistence.stack.StackRef;
 import io.statedb.persistence.stack.StackRefResolver;
@@ -41,9 +42,18 @@ public class StackEntityLoader implements EntityLoader<StackRef> {
     }
     StackRef r = ref.get();
     Optional<OrgMember.Role> role = roleResolver.resolve(principal, r.orgId());
-    // Hard org boundary: the principal must have a role in the resource's org (or be admin).
-    // A non-member never even sees the resource — the denial collapses to 404, not 403.
-    if (role.isEmpty() && !adminAllowList.isAdmin(principal.iss(), principal.sub())) {
+    // Read-visibility boundary: a stack the principal cannot READ does not resolve — the denial
+    // collapses to 404, not 403 (a 403 would confirm the hidden stack exists). This applies the
+    // same predicate as the list finders (design/stack-sharing.md §3/§9): non-members see nothing;
+    // guests see only granted stacks; members/viewers additionally lose private stacks unless
+    // granted. 403 stays reserved for within-visible-scope denials on non-read actions.
+    boolean admin = adminAllowList.isAdmin(principal.iss(), principal.sub());
+    if (!admin
+        && (role.isEmpty()
+            || !StackReadVisibility.canRead(
+                role.get(),
+                r.visibility(),
+                () -> PolicyGrant.hasStackReadShare(principal.userId(), r.stackId())))) {
       return Optional.empty();
     }
     return Optional.of(new LoadedResource(stackResource(r), role.orElse(null), r));
@@ -61,7 +71,8 @@ public class StackEntityLoader implements EntityLoader<StackRef> {
 
     // Each resource carries its resource name as an `id` attribute so policies can pattern-match it
     // IAM-style (e.g. a Deny on `resource.id like "statedb:stack:*/prod"`). The Cedar entity id and
-    // the attribute are the same resource name.
+    // the attribute are the same resource name. Stacks additionally carry `visibility`, which the
+    // viewer policy's `when` gates org-wide read on.
     Entity org = new Entity(orgUid, idAttr(ResourceName.org(ref.orgName())), Set.of());
     Entity project =
         new Entity(
@@ -71,7 +82,12 @@ public class StackEntityLoader implements EntityLoader<StackRef> {
     Entity stack =
         new Entity(
             stackUid,
-            idAttr(ResourceName.stack(ref.orgName(), ref.projectName(), ref.stackName())),
+            Map.of(
+                "id",
+                new PrimString(
+                    ResourceName.stack(ref.orgName(), ref.projectName(), ref.stackName())),
+                "visibility",
+                new PrimString(ref.visibility())),
             Set.of(projectUid));
 
     Set<Entity> entities = new HashSet<>();

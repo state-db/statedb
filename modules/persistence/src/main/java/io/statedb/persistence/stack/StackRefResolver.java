@@ -25,7 +25,8 @@ public class StackRefResolver {
           em.createQuery(
                   """
                   SELECT new io.statedb.persistence.stack.StackRef(
-                      s.id, s.workspaceId, s.orgId, o.name, p.name, s.name, s.version, s.activeUpdateId)
+                      s.id, s.workspaceId, s.orgId, o.name, p.name, s.name, s.version,
+                      s.activeUpdateId, s.visibility)
                   FROM Stack s
                   JOIN Project p ON p.id = s.projectId
                   JOIN Organization o ON o.id = s.orgId

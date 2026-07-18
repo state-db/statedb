@@ -41,6 +41,17 @@ public class Stack extends TimestampedEntity {
   @Column(columnDefinition = "jsonb")
   public Map<String, String> tags;
 
+  /** Org-wide member read — the default (GitHub's sense of "internal"). */
+  public static final String VISIBILITY_INTERNAL = "internal";
+
+  /** Readable only by owners, service accounts, and explicit policy_grants grantees. */
+  public static final String VISIBILITY_PRIVATE = "private";
+
+  // Plain String, not an enum: 'private' is a Java keyword, and the DB CHECK (V015)
+  // already closes the value set.
+  @Column(nullable = false)
+  public String visibility = VISIBILITY_INTERNAL;
+
   // Read-only navigation: writers set projectId directly so the DB UNIQUE constraint
   // on (project_id, name) and the composite FK targets in V002 remain the source of truth.
   @ManyToOne(fetch = FetchType.LAZY)

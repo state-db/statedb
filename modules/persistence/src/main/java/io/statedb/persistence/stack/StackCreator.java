@@ -57,7 +57,8 @@ public class StackCreator {
     state.journalSeq = 0L;
     state.persist();
 
-    return new StackRef(stack.id, workspace.id, orgId, orgName, projectName, stackName, 0, null);
+    return new StackRef(
+        stack.id, workspace.id, orgId, orgName, projectName, stackName, 0, null, stack.visibility);
   }
 
   private static boolean isUniqueViolation(Throwable t) {

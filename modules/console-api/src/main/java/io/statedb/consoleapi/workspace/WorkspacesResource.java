@@ -3,8 +3,6 @@ package io.statedb.consoleapi.workspace;
 import io.statedb.consoleapi.auth.SessionPrincipal;
 import io.statedb.persistence.auth.AuthenticatedPrincipal;
 import io.statedb.persistence.authz.CurrentPrincipal;
-import io.statedb.persistence.identity.OrgMembershipFinder;
-import io.statedb.persistence.identity.OrgMembershipView;
 import io.statedb.persistence.stack.WorkspaceListFinder;
 import io.statedb.persistence.stack.WorkspaceSummary;
 import jakarta.inject.Inject;
@@ -22,20 +20,15 @@ public class WorkspacesResource {
 
   @Inject CurrentPrincipal currentPrincipal;
 
-  @Inject OrgMembershipFinder orgMembershipFinder;
-
   @Inject WorkspaceListFinder workspaceListFinder;
 
   @GET
   @Produces(MediaType.APPLICATION_JSON)
   public List<WorkspaceResponse> list() {
     AuthenticatedPrincipal principal = currentPrincipal.get();
-    List<UUID> orgIds =
-        orgMembershipFinder.forUser(principal.userId()).stream()
-            .map(OrgMembershipView::id)
-            .toList();
-
-    return workspaceListFinder.findForOrgs(orgIds).stream()
+    // The finder's predicate mirrors the Cedar read policies (role floor + visibility + shares),
+    // so the console lists exactly the stacks the principal could open.
+    return workspaceListFinder.findVisibleToUser(principal.userId()).stream()
         .map(WorkspacesResource::toResponse)
         .toList();
   }

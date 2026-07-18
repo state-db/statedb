@@ -4,6 +4,7 @@ import io.statedb.persistence.BaseEntity;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.Table;
+import java.util.List;
 import java.util.UUID;
 
 /**
@@ -20,6 +21,25 @@ import java.util.UUID;
 @Entity
 @Table(name = "policy_grants")
 public class PolicyGrant extends BaseEntity {
+
+  /**
+   * The per-stack share templates whose grants include {@code stack:ReadOnlyAccess}. This is the
+   * read-granting set the list finders' SQL predicate and {@link
+   * io.statedb.persistence.authz.StackEntityLoader}'s 404 gate mirror — it must stay in lockstep
+   * with the templates' Cedar text (see design/stack-sharing.md §9).
+   */
+  public static final List<String> STACK_READ_TEMPLATE_IDS =
+      List.of("StackReadResourcePolicy", "StackWriteResourcePolicy");
+
+  /** Whether the user holds a read-granting per-stack share on the given stack. */
+  public static boolean hasStackReadShare(UUID userId, UUID stackId) {
+    return count(
+            "principalUserId = ?1 and resourceStackId = ?2 and templateId in ?3",
+            userId,
+            stackId,
+            STACK_READ_TEMPLATE_IDS)
+        > 0;
+  }
 
   @Column(name = "template_id", nullable = false)
   public String templateId;

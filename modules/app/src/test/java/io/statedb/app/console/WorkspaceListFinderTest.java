@@ -61,7 +61,7 @@ class WorkspaceListFinderTest {
     em.flush();
     em.clear();
 
-    List<WorkspaceSummary> rows = finder.findForOrgs(List.of(visible.id));
+    List<WorkspaceSummary> rows = finder.findVisibleToUser(user.id);
 
     assertEquals(2, rows.size());
     WorkspaceSummary prodRow = rows.get(0);

@@ -15,4 +15,5 @@ public record StackRef(
     String projectName,
     String stackName,
     int version,
-    UUID activeUpdateId) {}
+    UUID activeUpdateId,
+    String visibility) {}

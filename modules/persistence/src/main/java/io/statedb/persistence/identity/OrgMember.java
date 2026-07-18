@@ -33,7 +33,14 @@ public class OrgMember extends PanacheEntityBase {
      * accounts have their own Cedar grant set (see {@code policies/service.cedar}) so tightening or
      * loosening CI permissions never reshapes human permissions.
      */
-    service
+    service,
+    /**
+     * Additive-only human tier at the base of the ladder (guest ⊂ viewer ⊂ member ⊂ owner). A bare
+     * guest matches no static policy: membership gives tenancy, instant revocation, and {@code
+     * pulumi login}, while access is exactly the sum of the user's {@code policy_grants} rows. See
+     * {@code design/stack-sharing.md}.
+     */
+    guest
   }
 
   /** The role this user holds in the given org, if they are a member. */

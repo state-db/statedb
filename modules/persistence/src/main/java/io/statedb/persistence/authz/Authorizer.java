@@ -76,13 +76,18 @@ public class Authorizer {
   }
 
   static Set<Entity> roleHierarchy() {
+    // `guest` is the base of the human ladder: `in Role::"guest"` means "any human member,
+    // including guests" (the share-template guard), while `in Role::"viewer"` still excludes
+    // guests — a bare guest matches no static policy.
+    EntityUID guest = CedarEntities.role("guest");
     EntityUID viewer = CedarEntities.role("viewer");
     EntityUID member = CedarEntities.role("member");
     EntityUID owner = CedarEntities.role("owner");
     // `service` stands alone, like admin: CI grants come only from service.cedar, never from the
-    // human role ladder.
+    // human role ladder — and share grants naming a service account are inert (guard fails).
     return Set.of(
-        new Entity(viewer),
+        new Entity(guest),
+        new Entity(viewer, Set.of(guest)),
         new Entity(member, Set.of(viewer)),
         new Entity(owner, Set.of(member)),
         new Entity(CedarEntities.role("service")),

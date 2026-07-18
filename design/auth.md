@@ -267,8 +267,8 @@ policy). Membership is declared on each leaf/bundle in `schema.cedar` (`action "
 ```
 User::"<users.id>"          (the global user UUID — matches policy_grants.principal_user_id)
   parents:
-    - Role::"owner" | Role::"member" | Role::"viewer"   (the role the user holds in THIS request's
-      resource org, resolved per request — see "Role resolution"; absent if not a member)
+    - Role::"owner" | Role::"member" | Role::"viewer" | Role::"guest"   (the role the user holds in
+      THIS request's resource org, resolved per request — see "Role resolution"; absent if not a member)
     - Role::"admin"   (only if the principal is in STATE_DB_ADMIN_SUBJECTS)
   attributes: (none)
 
@@ -292,6 +292,8 @@ Stack::"statedb:stack:<org>/<project>/<stack>"
   attributes:
     id: String             (== the entity id; lets policies pattern-match it IAM-style,
                             e.g. resource.id like "statedb:stack:*/prod")
+    visibility: String     ("internal" | "private" — viewer.cedar gates read on it;
+                            see design/stack-sharing.md)
 
 Org::"statedb:org:<org_name>"
   attributes:
@@ -313,7 +315,8 @@ Provider::"<provider_name>"
 
 The user is a **global identity** (`User::<users.id>`), not an org-scoped one — a user may belong to
 several orgs with a different role in each. Roles are **global** entities (`Role::"member"`, not
-`OrgRole::"acme:member"`) and inherit: `Role::"owner"` ⊃ `Role::"member"` ⊃ `Role::"viewer"`. The
+`OrgRole::"acme:member"`) and inherit: `Role::"owner"` ⊃ `Role::"member"` ⊃ `Role::"viewer"` ⊃
+`Role::"guest"`. The
 principal carries exactly the role it holds **in the resource's org**, resolved per request and
 attached as a parent. So the role policies are pure RBAC — `permit(principal in Role::"member", …)`
 with no org clause, because the attached role is already org-correct. Resource entity ids are
@@ -324,11 +327,17 @@ Org hierarchy is kept so managed grants can scope through it. Tenancy is still t
 a stored field — the name is for resource-pattern matching only.
 
 ```
-Role::"viewer"   ←   Role::"member"   ←   Role::"owner"
+Role::"guest"   ←   Role::"viewer"   ←   Role::"member"   ←   Role::"owner"
 
 Role::"service"  (inherits from nothing — its own grant set)
 Role::"admin"    (inherits from nothing — uniformly allowed by the admin policy)
 ```
+
+`Role::"guest"` is the base of the human ladder and matches **no static policy**: a bare guest is a
+member (tenancy, revocation, `pulumi login`) with zero default permissions, whose access is exactly
+the sum of their `policy_grants` rows. `principal in Role::"guest"` means "any human member,
+including guests" — the share-template guard keys on it — while `principal in Role::"viewer"`
+continues to exclude guests. See `design/stack-sharing.md`.
 
 `Role::"service"` inherits from nothing: service accounts get their own grant set so a viewer can't
 accidentally do what a CI token can or vice versa. `Role::"admin"` likewise stands alone and is the
@@ -520,6 +529,10 @@ Loaders take the request's principal as a parameter. The status code distinction
 
 - If the resource's containing org is not the principal's `org`, the loader returns `Optional.empty()` regardless of whether the resource exists. The interceptor maps this to 404.
 - If the resource is in a visible org but does not exist, the loader also returns `Optional.empty()` → 404.
+- If the resource exists but the principal could not **read** it — a guest without a grant, or a
+  `private` stack and the principal is not owner/service/grantee — the loader likewise returns
+  `Optional.empty()` → 404, applying the same read-visibility predicate as the list finders
+  (see `design/stack-sharing.md` §3/§9). A 403 here would leak the stack's existence.
 - If the resource is in a visible org and exists, the loader returns the entity; the PDP then runs, and a denial on the specific action becomes 403.
 
 403 thus only ever reflects *within-visible-scope* denials — a viewer attempting to delete a stack they can read, for example.
@@ -567,9 +580,12 @@ permit(principal in Role::"owner", action in Action::"stack:*", resource);
 permit(principal in Role::"member", action in Action::"stack:WriteAccess", resource);
 
 // viewer.cedar — AWS ReadOnlyAccess analog: read stacks (and decrypt their
-// secrets). Members and owners inherit this via viewer ⊂ member ⊂ owner.
+// secrets). Members and owners inherit this via viewer ⊂ member ⊂ owner. The
+// `when` gates the org-wide read to internal stacks: private stacks are readable
+// only by owners, service accounts, and explicit grantees (design/stack-sharing.md).
 @id("ReadOnlyAccess")
-permit(principal in Role::"viewer", action in Action::"stack:ReadOnlyAccess", resource);
+permit(principal in Role::"viewer", action in Action::"stack:ReadOnlyAccess", resource)
+when { resource.visibility == "internal" };
 
 ```
 
@@ -600,22 +616,31 @@ permit(principal in Role::"service", action in [Action::"stack:Read", Action::"s
 The role policies above are static and identity-based. Two further IAM concepts — **identity-based policies attached to a specific principal** ("managed policies") and **resource-based policies** (per-resource grants, ≈ an S3 bucket policy) — are implemented with Cedar **policy templates** plus a DB table of attachments.
 
 Templates live under `policies/templates/` and carry `?principal` / `?resource` slots. The
-`principal in Role::"viewer"` guard means "the grantee is a member of the resource's org" (any role
-⊆ viewer): it enforces that managed/resource grants only ever apply to org members, and neutralizes
-a grant the moment the user leaves the org (there is no FK from `policy_grants` to `org_members`).
+`principal in Role::"guest"` guard means "the grantee is a human member of the resource's org" (any
+human role ⊆ guest): it enforces that managed/resource grants only ever apply to org members, and
+neutralizes a grant the moment the user leaves the org (there is no FK from `policy_grants` to
+`org_members`). Service accounts stand outside the guest chain, so grants naming them are inert.
 
 ```cedar
 // StackWriteAccess — a managed (identity-based) policy: grant the write bundle across one
 // org. ?resource is the Org; `resource in ?resource` matches the org and every stack under
-// it via the entity hierarchy.
+// it via the entity hierarchy. Deliberately write-only: bundling read here would bypass
+// `private` visibility org-wide.
 permit(principal == ?principal, action in Action::"stack:WriteAccess", resource in ?resource)
-when { principal in Role::"viewer" };
+when { principal in Role::"guest" };
 
-// StackReadResourcePolicy / StackWriteResourcePolicy — resource-based policies: grant the
-// read/write bundle on ONE stack. ?resource is that Stack (exact match). The write variant
-// elevates a viewer to write a single stack without org-wide write.
-permit(principal == ?principal, action in Action::"stack:WriteAccess", resource == ?resource)
-when { principal in Role::"viewer" };
+// StackReadResourcePolicy — resource-based policy: grant the read bundle on ONE stack.
+// ?resource is that Stack (exact match).
+permit(principal == ?principal, action in Action::"stack:ReadOnlyAccess", resource == ?resource)
+when { principal in Role::"guest" };
+
+// StackWriteResourcePolicy — read + write on ONE stack. Carries the read bundle too, so a
+// write share is self-contained: its grantee may be a guest (no inherited read) or the stack
+// may be private, and whoever can `pulumi up` a stack must be able to read its checkpoint.
+permit(principal == ?principal,
+       action in [Action::"stack:ReadOnlyAccess", Action::"stack:WriteAccess"],
+       resource == ?resource)
+when { principal in Role::"guest" };
 ```
 
 Attachments are rows in `policy_grants`, referenced by **DB-native FK** (not Cedar strings) so they
@@ -704,3 +729,4 @@ Wave 1 ships JVM-only. JVM startup and footprint are acceptable for a self-hoste
 | IAM-style fully-qualified resource names (`statedb:<service>:<path>`) + an `id` attribute on every resource | Borrows AWS's ARN *shape* (hierarchical, glob-matchable) without the Amazon-specific `arn:` token or empty region/account slots, so policies pattern-match resources the IAM way (`resource.id like "statedb:stack:*/prod"`) while staying state-db-native |
 | Explicit Deny (`forbid`) guardrails alongside the role `permit`s | Cedar `forbid` overrides every `permit` (even `AdministratorAccess`), giving IAM's deny-overrides-allow / SCP-style guardrails as first-class policy text |
 | User/resource policies as Cedar templates + a `policy_grants` link table | Per-principal "managed" grants and per-resource shares are data, not redeploys; reuses the library's first-class template-link mechanism and the prior-good-set reload guard |
+| `guest` role + `internal`/`private` stack visibility | Additive-only membership (contractor sees only granted stacks) and per-stack retraction of org-wide read; both SQL-expressible so listing stays predicate-driven, with within-org 404 collapse for unreadable stacks. See `design/stack-sharing.md` |

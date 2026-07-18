@@ -48,7 +48,7 @@ Forward compatibility for OpenTofu: the `workspaces` parent table provides type-
 | `compaction_jobs` | Background job queue for snapshot compaction |
 | `oidc_providers` | Configurable OIDC issuers; env-bootstrapped at startup, additional providers manageable via console |
 | `users` | OIDC-authenticated console users; natural key `(iss, sub)` |
-| `org_members` | User → org membership with role (owner/member/viewer) |
+| `org_members` | User → org membership with role (owner/member/viewer/service/guest) |
 | `workspaces` | Type-erased parent for state-managing entities (Pulumi stacks today, Tofu workspaces in Wave 3) |
 | `update_events` | Decoded events from `events/batch`; queryable per update; BRIN-indexed for time-based vacuum |
 | `service_secrets_keyset` | Singleton serialized Tink `AES256_GCM` keyset for the `service` secrets provider; seeded by `BootstrapProvisioner` on first start (see [`secrets.md`](secrets.md)) |
@@ -156,7 +156,10 @@ ALTER TABLE api_tokens
 CREATE TABLE org_members (
     org_id     UUID        NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
     user_id    UUID        NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-    role       TEXT        NOT NULL CHECK (role IN ('owner', 'member', 'viewer')),
+    -- 'service' (V012) is the CI machine-identity role outside the human ladder;
+    -- 'guest' (V015) is the additive-only human tier with no default permissions
+    -- (access = policy_grants rows only; see design/stack-sharing.md).
+    role       TEXT        NOT NULL CHECK (role IN ('owner', 'member', 'viewer', 'service', 'guest')),
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     PRIMARY KEY (org_id, user_id)
 );
@@ -217,6 +220,10 @@ CREATE TABLE stacks (
     version          INTEGER     NOT NULL DEFAULT 0,  -- increments on each completed non-preview op
     active_update_id UUID,                            -- points to in-progress stack_updates row; null when idle
     tags             JSONB,
+
+    -- Read visibility (V015): 'internal' = org-wide member read (the default);
+    -- 'private' = owners/service/grantees only. See design/stack-sharing.md.
+    visibility       TEXT        NOT NULL DEFAULT 'internal' CHECK (visibility IN ('internal', 'private')),
 
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),

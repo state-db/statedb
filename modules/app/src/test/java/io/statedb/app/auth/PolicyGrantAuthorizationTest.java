@@ -20,6 +20,7 @@ import io.statedb.persistence.identity.Organization;
 import io.statedb.persistence.identity.User;
 import io.statedb.persistence.policy.PolicyGrant;
 import io.statedb.persistence.policy.PolicySetCache;
+import io.statedb.persistence.stack.Stack;
 import io.statedb.persistence.stack.StackCreator;
 import io.statedb.persistence.stack.StackRefResolver;
 import jakarta.inject.Inject;
@@ -222,9 +223,9 @@ class PolicyGrantAuthorizationTest {
     return EntityTypeName.parse(type).orElseThrow().of(id);
   }
 
-  // Mirrors StackEntityLoader: resource-name ids + the matching `id` attribute, so resources line
-  // up
-  // with the name-keyed grant links assembled by PolicySetCache.
+  // Mirrors StackEntityLoader: resource-name ids + the matching `id` attribute (plus the
+  // `visibility` attribute the viewer policy's `when` reads), so resources line up with the
+  // name-keyed grant links assembled by PolicySetCache.
   private static CedarResource stack(String org, String name) {
     EntityUID o = uid("Org", ResourceName.org(org));
     EntityUID p = uid("Project", ResourceName.project(org, PROJECT));
@@ -233,7 +234,14 @@ class PolicyGrantAuthorizationTest {
         Set.of(
             new Entity(o, idAttr(ResourceName.org(org)), Set.of()),
             new Entity(p, idAttr(ResourceName.project(org, PROJECT)), Set.of(o)),
-            new Entity(s, idAttr(ResourceName.stack(org, PROJECT, name)), Set.of(p)));
+            new Entity(
+                s,
+                Map.of(
+                    "id",
+                    new PrimString(ResourceName.stack(org, PROJECT, name)),
+                    "visibility",
+                    new PrimString(Stack.VISIBILITY_INTERNAL)),
+                Set.of(p)));
     return new CedarResource(s, entities);
   }
 

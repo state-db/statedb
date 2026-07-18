@@ -368,9 +368,14 @@
       <div class="rung"><span class="chip role"><span class="dot"></span>member</span></div>
       <div class="conn">inherits</div>
       <div class="rung"><span class="chip role"><span class="dot"></span>viewer</span></div>
-      <p class="small" style="margin-top:12px">So <code class="m">in Role::"viewer"</code> admits
-      every <em>human</em> role; <code class="m">in Role::"member"</code> admits member + owner.
-      <span class="chip role"><span class="dot"></span>admin</span> and
+      <div class="conn">inherits</div>
+      <div class="rung"><span class="chip role"><span class="dot"></span>guest</span></div>
+      <p class="small" style="margin-top:12px">So <code class="m">in Role::"guest"</code> admits
+      every <em>human</em> role, while <code class="m">in Role::"viewer"</code> excludes guests —
+      a bare guest matches <em>no</em> static policy and sees only what
+      <code class="m">policy_grants</code> rows give them (the share-template guard keys on
+      <code class="m">Role::"guest"</code>). <code class="m">in Role::"member"</code> admits
+      member + owner. <span class="chip role"><span class="dot"></span>admin</span> and
       <span class="chip role"><span class="dot"></span>service</span> (CI machine identities) stand
       alone — the service grant set (<code class="m">service.cedar</code>: read, decrypt, lock,
       encrypt) evolves without ever reshaping human permissions.</p>
