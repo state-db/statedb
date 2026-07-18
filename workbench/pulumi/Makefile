@@ -25,7 +25,6 @@ BACKEND_URL  ?= http://localhost:8080/pulumi
 ## which proxies /default/* on the existing browser-facing :5173 origin. Quarkus and the browser
 ## therefore use the same issuer without another VS Code forwarded port.
 CONSOLE_PORT  ?= 5173
-IDP_IMAGE     ?= ghcr.io/navikt/mock-oauth2-server:2.1.10
 IDP_UPSTREAM_PORT ?= 58081
 ## Empty docker config dir: bypasses a credential helper that errors on anonymous ghcr.io pulls.
 IDP_DOCKER_CFG ?= /tmp/state-db-workbench-dockercfg
@@ -56,7 +55,7 @@ PULUMI_ENV := export \
 infra-up:
 	@$(IN_CONTAINER) sh -lc 'export DOCKER_CONFIG=$(IDP_DOCKER_CFG) \
 		DB_IMAGE=$(DB_IMAGE) DB_VOLUME=$(DB_VOLUME) DB_PORT=$(DB_PORT) DB_NAME=$(DB_NAME) DB_USER=$(DB_USER) DB_PASSWORD=$(DB_PASSWORD) \
-		IDP_IMAGE=$(IDP_IMAGE) IDP_UPSTREAM_PORT=$(IDP_UPSTREAM_PORT); \
+		IDP_UPSTREAM_PORT=$(IDP_UPSTREAM_PORT); \
 		mkdir -p "$$DOCKER_CONFIG"; \
 		for container in state-db-workbench-postgres state-db-workbench-idp; do \
 			if docker inspect "$$container" >/dev/null 2>&1 && \
@@ -65,7 +64,7 @@ infra-up:
 			fi; \
 			done; \
 		docker volume create $(DB_VOLUME) >/dev/null; \
-		docker compose -f "$$(git rev-parse --show-toplevel)/workbench/pulumi/compose.yml" up -d --wait; \
+		docker compose -f "$$(git rev-parse --show-toplevel)/workbench/pulumi/compose.yml" up -d --wait --build; \
 		for i in $$(seq 1 30); do curl -fsS http://host.docker.internal:$(IDP_UPSTREAM_PORT)/default/.well-known/openid-configuration >/dev/null && exit 0; sleep 1; done; \
 		echo "Mock IdP did not become ready"; exit 1'
 	@echo "Workbench infrastructure is ready (Postgres :$(DB_PORT), mock IdP behind :$(CONSOLE_PORT)/default)"
@@ -81,7 +80,7 @@ idp-up: infra-up
 idp-down:
 	-$(IN_CONTAINER) sh -lc 'export DOCKER_CONFIG=$(IDP_DOCKER_CFG); docker compose -f "$$(git rev-parse --show-toplevel)/workbench/pulumi/compose.yml" stop idp'
 
-## Seed the console OIDC admin ($(ADMIN_SUB)) as an owner of org $(ORG) so /api/user shows orgs.
+## Seed workbench OIDC users as members of org $(ORG) so /api/user shows orgs.
 ## Idempotent; `app` runs this automatically in the background, but you can re-run it standalone.
 console-seed: db-up
 	$(IN_CONTAINER) sh -lc '$(SEED_CONSOLE)'
@@ -89,8 +88,8 @@ console-seed: db-up
 ## Run the full console dev stack against the stable workbench Postgres: the mock IdP, Quarkus in dev
 ## mode (hot reload, :8080), and the bun console dev server (HMR, :$(CONSOLE_PORT)) proxying /api and
 ## /pulumi to Quarkus. Open the console at http://localhost:$(CONSOLE_PORT). The console OIDC provider
-## is auto-provisioned from the STATE_DB_OIDC_BOOTSTRAP_* vars; sign in with subject "$(ADMIN_SUB)" to
-## be an admin. Ctrl-C stops Quarkus and the console dev server (the IdP and DB stay up; `cmd=reset`
+## is auto-provisioned from the STATE_DB_OIDC_BOOTSTRAP_* vars; sign in as "$(ADMIN_SUB)",
+## "developer", or "viewer". Ctrl-C stops Quarkus and the console dev server (the IdP and DB stay up; `cmd=reset`
 ## tears everything down). The Pulumi CLI targets :8080 directly and is unaffected.
 app: infra-up
 	$(MAKE) app-stop

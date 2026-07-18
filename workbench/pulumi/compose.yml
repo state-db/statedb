@@ -19,8 +19,18 @@ services:
       retries: 30
 
   idp:
-    image: ${IDP_IMAGE:-ghcr.io/navikt/mock-oauth2-server:2.1.10}
+    build:
+      context: ../..
+      dockerfile: workbench/pulumi/mock-oauth2.Dockerfile
+    image: state-db-workbench-idp:local
     container_name: state-db-workbench-idp
+    environment:
+      JSON_CONFIG: >
+        {
+          "interactiveLogin": true,
+          "httpServer": "NettyWrapper",
+          "loginPagePath": "/app/workbench-login.html"
+        }
     ports:
       - "127.0.0.1:${IDP_UPSTREAM_PORT:-58081}:8080"
 

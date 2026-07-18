@@ -31,6 +31,17 @@ Open the console at `http://localhost:5173`. The Bun dev server proxies:
 The mock issuer is therefore `http://localhost:5173/default` for both Quarkus
 and the host browser. There is no separate port 8081 to forward or manage.
 
+The mock IdP has workbench profile defaults for these sign-in subjects:
+
+| Subject | Email | Display name | Workbench role |
+| --- | --- | --- | --- |
+| `admin` | `admin@example.com` | `Admin Owner` | site admin + org owner |
+| `developer` | `developer@example.com` | `Developer Member` | org member |
+| `viewer` | `viewer@example.com` | `View Only` | org viewer |
+
+You can still type ad hoc claims in the mock IdP JSON box, but these subjects
+do not require a body.
+
 Run Pulumi from another terminal:
 
 ```bash
