@@ -76,6 +76,30 @@ export interface AuthProviders {
   breakGlass: boolean;
 }
 
+export interface WorkspaceLastUpdate {
+  kind: string;
+  status: "succeeded" | "failed" | "in-progress" | "cancelled" | string;
+  startedAt: string;
+  version: number;
+}
+
+export interface WorkspaceLock {
+  lockedBy: string;
+  lockedAt: string;
+}
+
+export interface Workspace {
+  id: string;
+  kind: "pulumi" | "tofu" | string;
+  org: string;
+  project: string;
+  stack: string;
+  version: number;
+  resourceCount: number | null;
+  lastUpdate: WorkspaceLastUpdate | null;
+  lock: WorkspaceLock | null;
+}
+
 /**
  * Break-glass login: posts the operator password to the Quarkus form-auth
  * endpoint (urlencoded, not JSON — the mechanism consumes it before JAX-RS).
@@ -105,6 +129,9 @@ export const api = {
   },
   user: {
     get: () => request<CurrentUser>("/user"),
+  },
+  workspaces: {
+    list: () => request<Workspace[]>("/workspaces"),
   },
 } as const;
 
