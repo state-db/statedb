@@ -71,6 +71,18 @@ action "stack:Rename" in ["stack:WriteAccess"] appliesTo {
   resource: [Stack]
 };
 
+// Console-only operational actions. They are intentionally outside the write-access
+// bundle, so only the platform-admin policy's unrestricted permit grants them.
+action "stack:Unlock" appliesTo {
+  principal: [User],
+  resource: [Stack]
+};
+
+action "compaction:Trigger" appliesTo {
+  principal: [User],
+  resource: [Stack]
+};
+
 // Service-account (CI machine identity) management. Org-level operations: minting
 // a service account creates a machine user + membership + token inside one org.
 // Granted to owners (owner.cedar) and admins (admin.cedar's unconstrained action).

@@ -138,7 +138,7 @@ const stackRoute = createRoute({
   path: "$org/$project/$stack",
   validateSearch: (search: Record<string, unknown>): { tab?: StackTab } => ({
     tab:
-      search.tab === "outputs" || search.tab === "activity"
+      search.tab === "outputs" || search.tab === "activity" || search.tab === "settings"
         ? search.tab
         : undefined,
   }),

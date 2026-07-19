@@ -130,6 +130,9 @@ export interface PulumiResource {
 }
 
 export interface StackDetail {
+  id: string;
+  workspaceId: string;
+  createdAt: string;
   org: string;
   project: string;
   name: string;
@@ -139,6 +142,10 @@ export interface StackDetail {
   lock: WorkspaceLock | null;
   resources: PulumiResource[];
   pulumiVersion: string | null;
+  tags: Record<string, string>;
+  baseSnapshotVersion: number;
+  journalEntriesSinceCompaction: number;
+  autoCompactThreshold: number;
 }
 
 export interface UpdateHistoryRow {
@@ -217,6 +224,21 @@ export const api = {
         `/workspaces/${encodeURIComponent(org)}/${encodeURIComponent(project)}/${encodeURIComponent(stack)}/updates?${search}`,
       );
     },
+    forceUnlock: (org: string, project: string, stack: string) =>
+      request<void>(
+        `/admin/stacks/${encodeURIComponent(org)}/${encodeURIComponent(project)}/${encodeURIComponent(stack)}/lock`,
+        { method: "DELETE" },
+      ),
+    compact: (org: string, project: string, stack: string) =>
+      request<void>(
+        `/admin/stacks/${encodeURIComponent(org)}/${encodeURIComponent(project)}/${encodeURIComponent(stack)}/compact`,
+        { method: "POST" },
+      ),
+    delete: (org: string, project: string, stack: string) =>
+      request<void>(
+        `/pulumi/stacks/${encodeURIComponent(org)}/${encodeURIComponent(project)}/${encodeURIComponent(stack)}`,
+        { method: "DELETE" },
+      ),
   },
 } as const;
 

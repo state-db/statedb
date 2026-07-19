@@ -6,7 +6,9 @@ import io.statedb.consoleapi.auth.SessionPrincipal;
 import io.statedb.persistence.auth.AuthenticatedPrincipal;
 import io.statedb.persistence.authz.CurrentPrincipal;
 import io.statedb.persistence.stack.AssembledDeployment;
+import io.statedb.persistence.stack.Stack;
 import io.statedb.persistence.stack.StackAssembler;
+import io.statedb.persistence.stack.StackState;
 import io.statedb.persistence.stack.WorkspaceListFinder;
 import io.statedb.persistence.stack.WorkspaceSummary;
 import io.statedb.persistence.update.ConsoleUpdateHistoryFinder;
@@ -22,6 +24,7 @@ import jakarta.ws.rs.QueryParam;
 import jakarta.ws.rs.core.MediaType;
 import java.time.Instant;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 @Path("/api/workspaces")
@@ -61,7 +64,12 @@ public class WorkspacesResource {
     WorkspaceSummary summary = visibleStack(org, project, stack);
     AssembledDeployment assembled = stackAssembler.assemble(summary.stackId());
     JsonNode resources = assembled.deployment().path("resources");
+    Stack stackEntity = Stack.findById(summary.stackId());
+    StackState state = StackState.find("stackId", summary.stackId()).singleResult();
     return new StackDetailResponse(
+        summary.stackId(),
+        stackEntity.workspaceId,
+        stackEntity.createdAt,
         summary.orgName(),
         summary.projectName(),
         summary.stackName(),
@@ -78,7 +86,11 @@ public class WorkspacesResource {
             ? null
             : new LockResponse(summary.lock().lockedBy(), summary.lock().lockedAt()),
         resources.isArray() ? resources : JsonNodeFactory.instance.arrayNode(),
-        assembled.deployment().path("manifest").path("version").textValue());
+        assembled.deployment().path("manifest").path("version").textValue(),
+        stackEntity.tags == null ? Map.of() : stackEntity.tags,
+        state.baseSnapshotVersion,
+        state.journalEntriesSinceCompaction,
+        state.autoCompactThreshold);
   }
 
   @GET
@@ -186,6 +198,9 @@ public class WorkspacesResource {
   public record LockResponse(String lockedBy, Instant lockedAt) {}
 
   public record StackDetailResponse(
+      UUID id,
+      UUID workspaceId,
+      Instant createdAt,
       String org,
       String project,
       String name,
@@ -194,7 +209,11 @@ public class WorkspacesResource {
       LastUpdateResponse lastUpdate,
       LockResponse lock,
       JsonNode resources,
-      String pulumiVersion) {}
+      String pulumiVersion,
+      Map<String, String> tags,
+      int baseSnapshotVersion,
+      int journalEntriesSinceCompaction,
+      int autoCompactThreshold) {}
 
   public record ExportResponse(int version, JsonNode deployment) {}
 

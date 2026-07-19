@@ -1,4 +1,4 @@
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, useNavigate } from "@tanstack/react-router";
 import type { ColumnDef } from "@tanstack/react-table";
 import {
@@ -12,6 +12,8 @@ import {
   Lock,
   Network,
   Search,
+  Trash2,
+  Unlock,
 } from "lucide-react";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
@@ -24,14 +26,27 @@ import { isPulumiSecret, SecretBadge } from "@/components/console/SecretBadge";
 import { KindBadge, StatusBadge } from "@/components/console/StatusBadge";
 import { Timestamp } from "@/components/console/Timestamp";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
+import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   Collapsible,
   CollapsibleContent,
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import {
   Select,
@@ -66,12 +81,14 @@ import {
   NotFoundError,
   type PulumiResource,
   type PulumiValue,
+  type StackDetail,
   type UpdateHistoryRow,
 } from "@/lib/api";
 import { cn } from "@/lib/utils";
+import { useCurrentUser } from "@/hooks/useCurrentUser";
 
 type ViewMode = "flat" | "tree";
-export type StackTab = "resources" | "outputs" | "activity";
+export type StackTab = "resources" | "outputs" | "activity" | "settings";
 
 export function StackDetailPage({
   org,
@@ -92,6 +109,7 @@ export function StackDetailPage({
     refetchInterval: (current) =>
       current.state.data?.lastUpdate?.status === "in-progress" ? 3_000 : false,
   });
+  const user = useCurrentUser();
   const [filter, setFilter] = useState("");
   const [selectedUrn, setSelectedUrn] = useState<string | null>(null);
   const [viewMode, setViewMode] = useState<ViewMode>(() => {
@@ -211,7 +229,7 @@ export function StackDetailPage({
       <Tabs
         value={tab}
         onValueChange={(value) => {
-          if (value === "resources" || value === "outputs" || value === "activity") {
+          if (value === "resources" || value === "outputs" || value === "activity" || value === "settings") {
             onTabChange(value);
           }
         }}
@@ -220,7 +238,7 @@ export function StackDetailPage({
           <TabsTrigger value="resources">Resources</TabsTrigger>
           <TabsTrigger value="outputs">Outputs</TabsTrigger>
           <TabsTrigger value="activity">Activity</TabsTrigger>
-          <TabsTrigger value="settings" disabled>Settings</TabsTrigger>
+          <TabsTrigger value="settings">Settings</TabsTrigger>
         </TabsList>
       </Tabs>
 
@@ -275,8 +293,10 @@ export function StackDetailPage({
         </section>
       ) : tab === "outputs" ? (
         <StackOutputs outputs={outputs} />
-      ) : (
+      ) : tab === "activity" ? (
         <StackActivity org={org} project={project} stack={stack} />
+      ) : (
+        <StackSettings detail={detail} isAdmin={user.data?.siteAdmin === true} />
       )}
 
       <ResourceSheet
@@ -285,6 +305,155 @@ export function StackDetailPage({
         onOpenChange={(open) => !open && setSelectedUrn(null)}
         onNavigate={setSelectedUrn}
       />
+    </div>
+  );
+}
+
+function StackSettings({ detail, isAdmin }: { detail: StackDetail; isAdmin: boolean }) {
+  const queryClient = useQueryClient();
+  const navigate = useNavigate();
+  const [confirmation, setConfirmation] = useState("");
+  const queryKey = ["workspace", detail.org, detail.project, detail.name];
+
+  const unlock = useMutation({
+    mutationFn: () => api.workspaces.forceUnlock(detail.org, detail.project, detail.name),
+    onSuccess: async () => {
+      toast.success("Stack unlocked");
+      await queryClient.invalidateQueries({ queryKey });
+    },
+    onError: (error) => toast.error("Could not unlock stack", { description: error.message }),
+  });
+  const compact = useMutation({
+    mutationFn: () => api.workspaces.compact(detail.org, detail.project, detail.name),
+    onSuccess: () => toast.success("Compaction queued"),
+    onError: (error) => toast.error("Could not queue compaction", { description: error.message }),
+  });
+  const deleteStack = useMutation({
+    mutationFn: () => api.workspaces.delete(detail.org, detail.project, detail.name),
+    onSuccess: () => {
+      toast.success("Stack deleted");
+      void navigate({ to: "/console" });
+    },
+    onError: (error) => toast.error("Could not delete stack", { description: error.message }),
+  });
+  const empty = detail.resourceCount === 0;
+
+  return (
+    <section className="flex flex-col gap-4">
+      <Card>
+        <CardHeader>
+          <CardTitle>Details</CardTitle>
+          <CardDescription>Read-only stack metadata.</CardDescription>
+        </CardHeader>
+        <CardContent className="grid gap-4 sm:grid-cols-2">
+          <Detail label="Created"><Timestamp value={detail.createdAt} /></Detail>
+          <Detail label="Workspace ID"><span className="font-mono text-xs">{detail.workspaceId}</span></Detail>
+          <Detail label="Stack UUID"><CopyableId value={detail.id} /></Detail>
+          <Detail label="Tags">
+            <div className="flex flex-wrap gap-2">
+              {Object.entries(detail.tags).length === 0 ? (
+                <span className="text-muted-foreground">No tags</span>
+              ) : (
+                Object.entries(detail.tags).map(([key, value]) => (
+                  <Badge key={key} variant="secondary">{key}={value}</Badge>
+                ))
+              )}
+            </div>
+          </Detail>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Locking</CardTitle>
+          <CardDescription>Current Pulumi update lease state.</CardDescription>
+        </CardHeader>
+        <CardContent>
+          {detail.lock ? (
+            <p className="text-sm">Locked by <span className="font-medium">{detail.lock.lockedBy}</span> <Timestamp value={detail.lock.lockedAt} />.</p>
+          ) : (
+            <p className="text-sm text-muted-foreground">This stack is not locked.</p>
+          )}
+        </CardContent>
+        {isAdmin && detail.lock && (
+          <CardFooter>
+            <AlertDialog>
+              <AlertDialogTrigger asChild><Button variant="destructive"><Unlock data-icon="inline-start" />Force unlock</Button></AlertDialogTrigger>
+              <AlertDialogContent>
+                <AlertDialogHeader>
+                  <AlertDialogTitle>Force unlock {detail.name}?</AlertDialogTitle>
+                  <AlertDialogDescription>The holder&apos;s pulumi up will fail and may need to be run again. Only continue if the active operation is no longer healthy.</AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                  <AlertDialogCancel>Cancel</AlertDialogCancel>
+                  <AlertDialogAction className={buttonVariants({ variant: "destructive" })} disabled={unlock.isPending} onClick={() => unlock.mutate()}>Force unlock</AlertDialogAction>
+                </AlertDialogFooter>
+              </AlertDialogContent>
+            </AlertDialog>
+          </CardFooter>
+        )}
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Compaction</CardTitle>
+          <CardDescription>Snapshot and journal replay health.</CardDescription>
+        </CardHeader>
+        <CardContent className="grid gap-4 sm:grid-cols-3">
+          <Detail label="Base snapshot version">v{detail.baseSnapshotVersion}</Detail>
+          <Detail label="Journal entries">{detail.journalEntriesSinceCompaction}</Detail>
+          <Detail label="Auto-compact threshold">{detail.autoCompactThreshold}</Detail>
+        </CardContent>
+        {isAdmin && (
+          <CardFooter><Button variant="outline" disabled={compact.isPending} onClick={() => compact.mutate()}>Compact now</Button></CardFooter>
+        )}
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Danger zone</CardTitle>
+          <CardDescription>Deleting a stack permanently removes its state and history.</CardDescription>
+        </CardHeader>
+        {isAdmin && (
+          <CardFooter>
+            <AlertDialog onOpenChange={(open) => !open && setConfirmation("")}>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <span>
+                    <AlertDialogTrigger asChild>
+                      <Button variant="destructive" disabled={!empty}><Trash2 data-icon="inline-start" />Delete stack</Button>
+                    </AlertDialogTrigger>
+                  </span>
+                </TooltipTrigger>
+                {!empty && <TooltipContent>Pulumi only permits deleting an empty stack. Destroy its resources first.</TooltipContent>}
+              </Tooltip>
+              <AlertDialogContent>
+                <AlertDialogHeader>
+                  <AlertDialogTitle>Delete {detail.name} permanently?</AlertDialogTitle>
+                  <AlertDialogDescription>This removes the stack, its state, and its complete update history. This action cannot be undone.</AlertDialogDescription>
+                </AlertDialogHeader>
+                <div className="flex flex-col gap-2">
+                  <Label htmlFor="delete-stack-confirmation">Type <span className="font-mono">{detail.name}</span> to confirm</Label>
+                  <Input id="delete-stack-confirmation" value={confirmation} onChange={(event) => setConfirmation(event.target.value)} autoComplete="off" />
+                </div>
+                <AlertDialogFooter>
+                  <AlertDialogCancel>Cancel</AlertDialogCancel>
+                  <AlertDialogAction className={buttonVariants({ variant: "destructive" })} disabled={confirmation !== detail.name || deleteStack.isPending} onClick={() => deleteStack.mutate()}>Delete stack</AlertDialogAction>
+                </AlertDialogFooter>
+              </AlertDialogContent>
+            </AlertDialog>
+          </CardFooter>
+        )}
+      </Card>
+    </section>
+  );
+}
+
+function Detail({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div className="flex flex-col gap-1">
+      <span className="text-sm font-medium">{label}</span>
+      <div className="text-sm text-muted-foreground">{children}</div>
     </div>
   );
 }
