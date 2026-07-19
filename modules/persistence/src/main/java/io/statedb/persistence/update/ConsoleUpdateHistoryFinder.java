@@ -8,11 +8,34 @@ import jakarta.enterprise.context.ApplicationScoped;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.UUID;
 
 /** Loads the console audit history, including previews and their summary events. */
 @ApplicationScoped
 public class ConsoleUpdateHistoryFinder {
+
+  public Optional<StackUpdate> findUpdate(UUID stackId, int version) {
+    return StackUpdate.<StackUpdate>find(
+            "stackId = ?1 and version = ?2 and dryRun = false", stackId, version)
+        .firstResultOptional();
+  }
+
+  public Optional<StackUpdate> findPreview(UUID stackId, UUID updateId) {
+    return StackUpdate.<StackUpdate>find(
+            "stackId = ?1 and id = ?2 and dryRun = true", stackId, updateId)
+        .firstResultOptional();
+  }
+
+  public List<UpdateEvent> events(UUID stackId, UUID updateId, int after, int limit) {
+    return UpdateEvent.<UpdateEvent>find(
+            "stackId = ?1 and updateId = ?2 and sequence > ?3 order by sequence",
+            stackId,
+            updateId,
+            after)
+        .page(Page.ofSize(limit))
+        .list();
+  }
 
   public HistoryPage find(
       UUID stackId, StackUpdate.Kind kind, StackUpdate.Status status, int page, int pageSize) {

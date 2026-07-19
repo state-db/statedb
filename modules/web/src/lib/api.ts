@@ -166,6 +166,35 @@ export interface UpdateHistoryPage {
   total: number;
 }
 
+export interface RunDetail {
+  id: string;
+  version: number | null;
+  kind: string;
+  status: string;
+  message: string | null;
+  runtime: string | null;
+  pulumiVersion: string | null;
+  startedAt: string;
+  endedAt: string | null;
+  summary: { resourceChanges?: Record<string, number> } | null;
+  config: Record<string, unknown>;
+  options: Record<string, unknown>;
+  metadata: Record<string, unknown>;
+}
+
+export interface RunEvent {
+  sequence: number;
+  kind: string;
+  severity: string | null;
+  payload: Record<string, unknown>;
+}
+
+export interface RunEventsPage {
+  events: RunEvent[];
+  nextAfter: number | null;
+  expired: boolean;
+}
+
 /**
  * Break-glass login: posts the operator password to the Quarkus form-auth
  * endpoint (urlencoded, not JSON — the mechanism consumes it before JAX-RS).
@@ -224,6 +253,32 @@ export const api = {
         `/workspaces/${encodeURIComponent(org)}/${encodeURIComponent(project)}/${encodeURIComponent(stack)}/updates?${search}`,
       );
     },
+    run: (
+      org: string,
+      project: string,
+      stack: string,
+      locator: { version: number } | { previewId: string },
+      signal?: AbortSignal,
+    ) => {
+      const suffix = "version" in locator
+        ? `updates/${locator.version}`
+        : `previews/${encodeURIComponent(locator.previewId)}`;
+      return request<RunDetail>(
+        `/pulumi/stacks/${encodeURIComponent(org)}/${encodeURIComponent(project)}/${encodeURIComponent(stack)}/${suffix}`,
+        { signal },
+      );
+    },
+    runEvents: (
+      org: string,
+      project: string,
+      stack: string,
+      updateId: string,
+      after: number,
+      signal?: AbortSignal,
+    ) => request<RunEventsPage>(
+      `/pulumi/stacks/${encodeURIComponent(org)}/${encodeURIComponent(project)}/${encodeURIComponent(stack)}/updates/${encodeURIComponent(updateId)}/events?after=${after}`,
+      { signal },
+    ),
     forceUnlock: (org: string, project: string, stack: string) =>
       request<void>(
         `/admin/stacks/${encodeURIComponent(org)}/${encodeURIComponent(project)}/${encodeURIComponent(stack)}/lock`,

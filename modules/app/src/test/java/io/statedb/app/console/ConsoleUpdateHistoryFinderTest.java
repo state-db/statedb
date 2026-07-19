@@ -54,6 +54,11 @@ class ConsoleUpdateHistoryFinderTest {
     assertEquals(1, filtered.total());
     assertEquals(preview.id, filtered.updates().get(0).id);
 
+    assertEquals(oldUpdate.id, finder.findUpdate(stack.id, 1).orElseThrow().id);
+    assertEquals(preview.id, finder.findPreview(stack.id, preview.id).orElseThrow().id);
+    assertEquals(1, finder.events(stack.id, preview.id, 0, 50).size());
+    assertEquals(0, finder.events(stack.id, preview.id, 1, 50).size());
+
     var secondPage = finder.find(stack.id, null, null, 2, 2);
     assertEquals(oldUpdate.id, secondPage.updates().get(0).id);
   }

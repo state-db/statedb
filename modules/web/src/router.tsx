@@ -22,6 +22,7 @@ import { NotFoundPage } from "@/routes/not-found";
 import { PlaceholderPage } from "@/routes/placeholder";
 import { ProjectStacksPage } from "@/routes/scoped-stacks";
 import { StackDetailPage, type StackTab } from "@/routes/stack-detail";
+import { RunDetailPage } from "@/routes/run-detail";
 
 // Bare root renders an <Outlet />; the
 // shell wraps everything that needs the header/nav frame.
@@ -168,26 +169,30 @@ function StackDetailRoute() {
 const updateRoute = createRoute({
   getParentRoute: () => shellRoute,
   path: "$org/$project/$stack/updates/$version",
-  component: () => (
-    <PlaceholderPage
-      icon={ServerCog}
-      title="Update detail"
-      description="Run history and event logs fill in here in S8."
-    />
-  ),
+  beforeLoad: ({ params }) => {
+    if (!/^\d+$/.test(params.version)) throw notFound();
+  },
+  component: UpdateDetailRoute,
 });
+
+function UpdateDetailRoute() {
+  const { org, project, stack, version } = updateRoute.useParams();
+  return <RunDetailPage org={org} project={project} stack={stack} locator={{ version: Number(version) }} />;
+}
 
 const previewRoute = createRoute({
   getParentRoute: () => shellRoute,
   path: "$org/$project/$stack/previews/$updateId",
-  component: () => (
-    <PlaceholderPage
-      icon={ServerCog}
-      title="Preview detail"
-      description="Preview history and event logs fill in here in S8."
-    />
-  ),
+  beforeLoad: ({ params }) => {
+    if (!isUuid(params.updateId)) throw notFound();
+  },
+  component: PreviewDetailRoute,
 });
+
+function PreviewDetailRoute() {
+  const { org, project, stack, updateId } = previewRoute.useParams();
+  return <RunDetailPage org={org} project={project} stack={stack} locator={{ previewId: updateId }} />;
+}
 
 const accountTokensRoute = createRoute({
   getParentRoute: () => shellRoute,
