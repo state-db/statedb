@@ -1,6 +1,7 @@
 import {
   createRootRoute,
   createRoute,
+  Navigate,
   notFound,
   redirect,
   createRouter,
@@ -11,11 +12,10 @@ import {
   KeyRound,
   ServerCog,
   Settings,
-  Shield,
   Users,
 } from "lucide-react";
 
-import { AppShell } from "@/components/shell/AppShell";
+import { AppShell, useShell } from "@/components/shell/AppShell";
 import { HomePage } from "@/routes/home";
 import { LoginPage } from "@/routes/login";
 import { NotFoundPage } from "@/routes/not-found";
@@ -23,6 +23,7 @@ import { PlaceholderPage } from "@/routes/placeholder";
 import { ProjectStacksPage } from "@/routes/scoped-stacks";
 import { StackDetailPage, type StackTab } from "@/routes/stack-detail";
 import { RunDetailPage } from "@/routes/run-detail";
+import { AdminProvidersPage } from "@/routes/admin-providers";
 
 // Bare root renders an <Outlet />; the
 // shell wraps everything that needs the header/nav frame.
@@ -206,8 +207,19 @@ const accountTokensRoute = createRoute({
   ),
 });
 
-const adminIndexRoute = createRoute({
+const adminRoute = createRoute({
   getParentRoute: () => shellRoute,
+  id: "admin-only",
+  component: AdminRoute,
+});
+
+function AdminRoute() {
+  const { user } = useShell();
+  return user.siteAdmin ? <Outlet /> : <Navigate to="/console" replace />;
+}
+
+const adminIndexRoute = createRoute({
+  getParentRoute: () => adminRoute,
   path: "admin",
   beforeLoad: () => {
     throw redirect({ to: "/console/admin/providers", replace: true });
@@ -215,19 +227,13 @@ const adminIndexRoute = createRoute({
 });
 
 const adminProvidersRoute = createRoute({
-  getParentRoute: () => shellRoute,
+  getParentRoute: () => adminRoute,
   path: "admin/providers",
-  component: () => (
-    <PlaceholderPage
-      icon={Shield}
-      title="OIDC providers"
-      description="Provider administration fills in here in S10."
-    />
-  ),
+  component: AdminProvidersPage,
 });
 
 const adminOrgsRoute = createRoute({
-  getParentRoute: () => shellRoute,
+  getParentRoute: () => adminRoute,
   path: "admin/orgs",
   component: () => (
     <PlaceholderPage
@@ -239,7 +245,7 @@ const adminOrgsRoute = createRoute({
 });
 
 const adminUsersRoute = createRoute({
-  getParentRoute: () => shellRoute,
+  getParentRoute: () => adminRoute,
   path: "admin/users",
   component: () => (
     <PlaceholderPage
@@ -251,7 +257,7 @@ const adminUsersRoute = createRoute({
 });
 
 const adminTokensRoute = createRoute({
-  getParentRoute: () => shellRoute,
+  getParentRoute: () => adminRoute,
   path: "admin/tokens",
   component: () => (
     <PlaceholderPage
@@ -263,7 +269,7 @@ const adminTokensRoute = createRoute({
 });
 
 const adminOperationsRoute = createRoute({
-  getParentRoute: () => shellRoute,
+  getParentRoute: () => adminRoute,
   path: "admin/operations",
   component: () => (
     <PlaceholderPage
@@ -275,7 +281,7 @@ const adminOperationsRoute = createRoute({
 });
 
 const adminLicenseRoute = createRoute({
-  getParentRoute: () => shellRoute,
+  getParentRoute: () => adminRoute,
   path: "admin/license",
   component: () => (
     <PlaceholderPage
@@ -301,13 +307,15 @@ const routeTree = rootRoute.addChildren([
     updateRoute,
     previewRoute,
     accountTokensRoute,
-    adminIndexRoute,
-    adminProvidersRoute,
-    adminOrgsRoute,
-    adminUsersRoute,
-    adminTokensRoute,
-    adminOperationsRoute,
-    adminLicenseRoute,
+    adminRoute.addChildren([
+      adminIndexRoute,
+      adminProvidersRoute,
+      adminOrgsRoute,
+      adminUsersRoute,
+      adminTokensRoute,
+      adminOperationsRoute,
+      adminLicenseRoute,
+    ]),
   ]),
   notFoundRoute,
 ]);

@@ -155,7 +155,7 @@ export function DataTable<TData, TValue>({
           </TableBody>
         </Table>
       </div>
-      {(!pagination || pagination.pageCount > 1) && (
+      {(pagination ? pagination.pageCount > 1 : table.getPageCount() > 1) && (
         <div className="flex items-center justify-end gap-2">
           <Button
             type="button"

@@ -3,6 +3,7 @@ package io.statedb.app.console;
 import static io.restassured.RestAssured.given;
 import static org.hamcrest.Matchers.empty;
 import static org.hamcrest.Matchers.is;
+import static org.hamcrest.Matchers.nullValue;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
 import io.quarkus.elytron.security.common.BcryptUtil;
@@ -45,7 +46,16 @@ class LocalGlassLoginTest {
   public static class Profile implements QuarkusTestProfile {
     @Override
     public Map<String, String> getConfigOverrides() {
-      return Map.of("state-db.local-glass.password-hash", BcryptUtil.bcryptHash(PASSWORD));
+      // The resource treats the bootstrap name as reserved/env-managed, but this suite exercises
+      // the admin API through break-glass, which requires the gate open (no enabled provider). So
+      // name the reserved provider without letting OidcProviderBootstrap provision an enabled row.
+      return Map.of(
+          "state-db.local-glass.password-hash",
+          BcryptUtil.bcryptHash(PASSWORD),
+          "state-db.oidc.bootstrap.name",
+          "env-provider",
+          "quarkus.arc.exclude-types",
+          "io.statedb.persistence.bootstrap.OidcProviderBootstrap");
     }
   }
 
@@ -98,6 +108,142 @@ class LocalGlassLoginTest {
             });
 
     QuarkusTransaction.requiringNew().run(() -> Organization.delete("name", "ops-org"));
+  }
+
+  @Test
+  void adminManagesRuntimeOidcProvidersWithoutReadingSecrets() {
+    String cookie = login(PASSWORD).statusCode(200).extract().cookie(COOKIE);
+    String name = "console-provider-test";
+    try {
+      String id =
+          given()
+              .cookie(COOKIE, cookie)
+              .contentType("application/json")
+              .body(
+                  Map.of(
+                      "name",
+                      name,
+                      "issuerUrl",
+                      "https://console-provider.invalid/",
+                      "clientId",
+                      "console-client",
+                      "clientSecret",
+                      "never-return-this",
+                      "scopes",
+                      List.of("openid", "email"),
+                      "enabled",
+                      false))
+              .when()
+              .post("/api/admin/providers")
+              .then()
+              .statusCode(200)
+              .body("name", is(name))
+              .body("issuerUrl", is("https://console-provider.invalid"))
+              .body("clientSecret", nullValue())
+              .extract()
+              .path("id");
+
+      given()
+          .cookie(COOKIE, cookie)
+          .when()
+          .get("/api/admin/providers")
+          .then()
+          .statusCode(200)
+          .body("find { it.id == '" + id + "' }.clientSecret", nullValue());
+
+      given()
+          .cookie(COOKIE, cookie)
+          .contentType("application/json")
+          .body(Map.of("clientId", "rotated-client", "clientSecret", "rotated-secret"))
+          .when()
+          .patch("/api/admin/providers/" + id)
+          .then()
+          .statusCode(200)
+          .body("clientId", is("rotated-client"))
+          .body("clientSecret", nullValue());
+
+      given()
+          .cookie(COOKIE, cookie)
+          .when()
+          .delete("/api/admin/providers/" + id)
+          .then()
+          .statusCode(204);
+      assertEquals(
+          0L, QuarkusTransaction.requiringNew().call(() -> OidcProvider.count("name", name)));
+    } finally {
+      QuarkusTransaction.requiringNew().run(() -> OidcProvider.delete("name", name));
+    }
+  }
+
+  @Test
+  void adminCannotCreateProviderWithEnvManagedName() {
+    String cookie = login(PASSWORD).statusCode(200).extract().cookie(COOKIE);
+
+    given()
+        .cookie(COOKIE, cookie)
+        .contentType("application/json")
+        .body(
+            Map.of(
+                "name",
+                "env-provider",
+                "issuerUrl",
+                "https://reserved-provider.invalid",
+                "clientId",
+                "reserved-client",
+                "clientSecret",
+                "reserved-secret"))
+        .when()
+        .post("/api/admin/providers")
+        .then()
+        .statusCode(403);
+
+    assertEquals(
+        0L,
+        QuarkusTransaction.requiringNew().call(() -> OidcProvider.count("name", "env-provider")));
+  }
+
+  @Test
+  void adminCannotRenameProviderToEnvManagedName() {
+    String cookie = login(PASSWORD).statusCode(200).extract().cookie(COOKIE);
+    String name = "console-rename-test";
+    try {
+      String id =
+          given()
+              .cookie(COOKIE, cookie)
+              .contentType("application/json")
+              .body(
+                  Map.of(
+                      "name",
+                      name,
+                      "issuerUrl",
+                      "https://console-rename.invalid",
+                      "clientId",
+                      "rename-client",
+                      "clientSecret",
+                      "rename-secret"))
+              .when()
+              .post("/api/admin/providers")
+              .then()
+              .statusCode(200)
+              .body("enabled", is(false))
+              .extract()
+              .path("id");
+
+      given()
+          .cookie(COOKIE, cookie)
+          .contentType("application/json")
+          .body(Map.of("name", "env-provider"))
+          .when()
+          .patch("/api/admin/providers/" + id)
+          .then()
+          .statusCode(403);
+
+      assertEquals(
+          0L,
+          QuarkusTransaction.requiringNew().call(() -> OidcProvider.count("name", "env-provider")));
+    } finally {
+      QuarkusTransaction.requiringNew().run(() -> OidcProvider.delete("name", name));
+    }
   }
 
   @Test

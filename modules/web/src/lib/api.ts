@@ -86,6 +86,27 @@ export interface AuthProviders {
   breakGlass: boolean;
 }
 
+export interface OidcProvider {
+  id: string;
+  name: string;
+  issuerUrl: string;
+  clientId: string;
+  scopes: string[];
+  enabled: boolean;
+  envManaged: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface OidcProviderWrite {
+  name?: string;
+  issuerUrl?: string;
+  clientId?: string;
+  clientSecret?: string;
+  scopes?: string[];
+  enabled?: boolean;
+}
+
 export interface WorkspaceLastUpdate {
   kind: string;
   status: "succeeded" | "failed" | "in-progress" | "cancelled" | string;
@@ -224,6 +245,25 @@ export const api = {
   },
   user: {
     get: () => request<CurrentUser>("/user"),
+  },
+  admin: {
+    providers: {
+      list: () => request<OidcProvider[]>("/admin/providers"),
+      create: (provider: OidcProviderWrite) =>
+        request<OidcProvider>("/admin/providers", {
+          method: "POST",
+          body: JSON.stringify(provider),
+        }),
+      update: (id: string, provider: OidcProviderWrite) =>
+        request<OidcProvider>(`/admin/providers/${encodeURIComponent(id)}`, {
+          method: "PATCH",
+          body: JSON.stringify(provider),
+        }),
+      delete: (id: string) =>
+        request<void>(`/admin/providers/${encodeURIComponent(id)}`, {
+          method: "DELETE",
+        }),
+    },
   },
   workspaces: {
     list: (filters?: { org?: string; project?: string }) => {
