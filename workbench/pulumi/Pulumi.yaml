@@ -56,6 +56,11 @@ outputs:
   petName: ${pet.id}
   word: ${word.result}
   pin: ${pin.result}
+  service:
+    name: ${pet.id}
+    ports:
+      - 8080
+      - 8443
   password:
     value: ${password.result}
     secret: true

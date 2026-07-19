@@ -3,13 +3,17 @@ import { Link } from "@tanstack/react-router";
 import {
   ChevronDown,
   ChevronRight,
+  Check,
+  Copy,
   Download,
+  EyeOff,
   List,
   Lock,
   Network,
   Search,
 } from "lucide-react";
 import { useMemo, useState } from "react";
+import { toast } from "sonner";
 
 import { CopyableId } from "@/components/console/CopyableId";
 import { EmptyState } from "@/components/console/EmptyState";
@@ -20,6 +24,11 @@ import { Timestamp } from "@/components/console/Timestamp";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/collapsible";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
@@ -45,6 +54,7 @@ import { api, NotFoundError, type PulumiResource, type PulumiValue } from "@/lib
 import { cn } from "@/lib/utils";
 
 type ViewMode = "flat" | "tree";
+type StackTab = "resources" | "outputs";
 
 export function StackDetailPage({
   org,
@@ -62,6 +72,7 @@ export function StackDetailPage({
       current.state.data?.lastUpdate?.status === "in-progress" ? 3_000 : false,
   });
   const [filter, setFilter] = useState("");
+  const [tab, setTab] = useState<StackTab>("resources");
   const [selectedUrn, setSelectedUrn] = useState<string | null>(null);
   const [viewMode, setViewMode] = useState<ViewMode>(() => {
     const saved = window.localStorage.getItem("statedb.resources.view");
@@ -84,6 +95,7 @@ export function StackDetailPage({
       );
   }, [filter, resources]);
   const selected = resources.find((resource) => resource.urn === selectedUrn) ?? null;
+  const outputs = stackOutputs(resources);
 
   if (query.isLoading) return <StackDetailSkeleton />;
   if (query.error instanceof NotFoundError) {
@@ -169,63 +181,72 @@ export function StackDetailPage({
         )}
       </header>
 
-      <Tabs value="resources">
+      <Tabs
+        value={tab}
+        onValueChange={(value) => {
+          if (value === "resources" || value === "outputs") setTab(value);
+        }}
+      >
         <TabsList>
           <TabsTrigger value="resources">Resources</TabsTrigger>
-          <TabsTrigger value="outputs" disabled>Outputs</TabsTrigger>
+          <TabsTrigger value="outputs">Outputs</TabsTrigger>
           <TabsTrigger value="activity" disabled>Activity</TabsTrigger>
           <TabsTrigger value="settings" disabled>Settings</TabsTrigger>
         </TabsList>
       </Tabs>
 
-      <section className="flex flex-col gap-3">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div className="relative w-full max-w-sm">
-            <Search className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
-            <Input
-              className="pl-9"
-              placeholder="Filter by type or name…"
-              value={filter}
-              onChange={(event) => setFilter(event.target.value)}
-              aria-label="Filter resources by type or name"
-            />
+      {tab === "resources" ? (
+        <section className="flex flex-col gap-3">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div className="relative w-full max-w-sm">
+              <Search className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+              <Input
+                className="pl-9"
+                placeholder="Filter by type or name…"
+                value={filter}
+                onChange={(event) => setFilter(event.target.value)}
+                aria-label="Filter resources by type or name"
+              />
+            </div>
+            <ToggleGroup
+              type="single"
+              variant="outline"
+              value={viewMode}
+              onValueChange={(value) => {
+                if (value !== "flat" && value !== "tree") return;
+                setViewMode(value);
+                window.localStorage.setItem("statedb.resources.view", value);
+              }}
+              aria-label="Resource view"
+            >
+              <ToggleGroupItem value="flat" aria-label="Flat view">
+                <List /> Flat
+              </ToggleGroupItem>
+              <ToggleGroupItem value="tree" aria-label="Tree view">
+                <Network /> Tree
+              </ToggleGroupItem>
+            </ToggleGroup>
           </div>
-          <ToggleGroup
-            type="single"
-            variant="outline"
-            value={viewMode}
-            onValueChange={(value) => {
-              if (value !== "flat" && value !== "tree") return;
-              setViewMode(value);
-              window.localStorage.setItem("statedb.resources.view", value);
-            }}
-            aria-label="Resource view"
-          >
-            <ToggleGroupItem value="flat" aria-label="Flat view">
-              <List /> Flat
-            </ToggleGroupItem>
-            <ToggleGroupItem value="tree" aria-label="Tree view">
-              <Network /> Tree
-            </ToggleGroupItem>
-          </ToggleGroup>
-        </div>
 
-        {resources.length === 0 ? (
-          <EmptyState
-            title="No resources"
-            description="Run pulumi up on this stack to deploy resources."
-          />
-        ) : visible.length === 0 ? (
-          <EmptyState
-            title="No resources match"
-            description="Try a different type or resource name."
-          />
-        ) : viewMode === "flat" ? (
-          <ResourceTable resources={visible} onSelect={setSelectedUrn} />
-        ) : (
-          <ResourceTree resources={visible} allResources={resources} onSelect={setSelectedUrn} />
-        )}
-      </section>
+          {resources.length === 0 ? (
+            <EmptyState
+              title="No resources"
+              description="Run pulumi up on this stack to deploy resources."
+            />
+          ) : visible.length === 0 ? (
+            <EmptyState
+              title="No resources match"
+              description="Try a different type or resource name."
+            />
+          ) : viewMode === "flat" ? (
+            <ResourceTable resources={visible} onSelect={setSelectedUrn} />
+          ) : (
+            <ResourceTree resources={visible} allResources={resources} onSelect={setSelectedUrn} />
+          )}
+        </section>
+      ) : (
+        <StackOutputs outputs={outputs} />
+      )}
 
       <ResourceSheet
         resource={selected}
@@ -234,6 +255,95 @@ export function StackDetailPage({
         onNavigate={setSelectedUrn}
       />
     </div>
+  );
+}
+
+function StackOutputs({ outputs }: { outputs: Record<string, PulumiValue> }) {
+  const entries = Object.entries(outputs).sort(([left], [right]) => left.localeCompare(right));
+
+  return (
+    <section className="flex flex-col gap-4">
+      <Alert>
+        <EyeOff />
+        <AlertDescription>
+          Secret outputs can be read with <code>pulumi stack output --show-secrets</code>.
+        </AlertDescription>
+      </Alert>
+      {entries.length === 0 ? (
+        <EmptyState
+          title="This stack has no outputs"
+          description="Export values with pulumi.export(...)."
+        />
+      ) : (
+        <div className="rounded-md border">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead className="w-1/3">Key</TableHead>
+                <TableHead>Value</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {entries.map(([key, value]) => (
+                <TableRow key={key}>
+                  <TableCell className="font-medium">{key}</TableCell>
+                  <TableCell className="min-w-0">
+                    <OutputValue value={value} />
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </div>
+      )}
+    </section>
+  );
+}
+
+function OutputValue({ value }: { value: PulumiValue }) {
+  if (containsSecret(value)) return <SecretBadge />;
+  if (value !== null && typeof value === "object") {
+    const raw = serializeOutput(value);
+    return (
+      <Collapsible>
+        <div className="flex items-center gap-1">
+          <CollapsibleTrigger asChild>
+            <Button type="button" variant="ghost" size="sm">
+              <ChevronRight data-icon="inline-start" />
+              JSON
+            </Button>
+          </CollapsibleTrigger>
+          <CopyButton value={raw} label="Copy JSON output" />
+        </div>
+        <CollapsibleContent>
+          <pre className="mt-2 max-h-80 overflow-auto whitespace-pre rounded-md border bg-muted/30 p-3 font-mono text-xs leading-relaxed">
+            <code>{JSON.stringify(value, null, 2)}</code>
+          </pre>
+        </CollapsibleContent>
+      </Collapsible>
+    );
+  }
+  const raw = serializeOutput(value);
+  return (
+    <div className="flex min-w-0 items-center gap-1">
+      <code className="min-w-0 flex-1 truncate font-mono text-xs" title={raw}>{raw}</code>
+      <CopyButton value={raw} label="Copy output" />
+    </div>
+  );
+}
+
+function CopyButton({ value, label }: { value: string; label: string }) {
+  const [copied, setCopied] = useState(false);
+  async function copy() {
+    await navigator.clipboard.writeText(value);
+    setCopied(true);
+    toast("Copied");
+    window.setTimeout(() => setCopied(false), 1200);
+  }
+  return (
+    <Button type="button" variant="ghost" size="icon" onClick={copy} aria-label={label}>
+      {copied ? <Check /> : <Copy />}
+    </Button>
   );
 }
 
@@ -598,6 +708,14 @@ export function resourceName(resource: PulumiResource) {
 export function resourceType(resource: PulumiResource) {
   const parts = resource.urn.split("::");
   return resource.type ?? parts[parts.length - 2] ?? "unknown";
+}
+
+export function stackOutputs(resources: PulumiResource[]): Record<string, PulumiValue> {
+  return resources.find((resource) => resourceType(resource) === "pulumi:pulumi:Stack")?.outputs ?? {};
+}
+
+export function serializeOutput(value: PulumiValue): string {
+  return value !== null && typeof value === "object" ? JSON.stringify(value) : String(value);
 }
 
 function resourceProvider(resource: PulumiResource) {
