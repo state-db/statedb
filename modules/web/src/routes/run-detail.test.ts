@@ -9,6 +9,7 @@ import {
   propertyChanges,
   resourceChanges,
   resourceRows,
+  stackOutputsDiff,
   stackOutputsFromEvents,
   stripAnsi,
 } from "@/routes/run-detail";
@@ -16,6 +17,11 @@ import {
 describe("run detail presentation", () => {
   test("strips terminal escape sequences without changing whitespace", () => {
     expect(stripAnsi("\u001b[31merror\u001b[0m\n  detail")).toBe("error\n  detail");
+  });
+
+  test("strips pulumi colorization tokens from diagnostics", () => {
+    expect(stripAnsi('<{%fg 3%}>warning: <{%reset%}>property "number" is deprecated'))
+      .toBe('warning: property "number" is deprecated');
   });
 
   test("masks secret config and unwraps ordinary config values", () => {
@@ -88,6 +94,39 @@ describe("run detail presentation", () => {
     expect(rows[0]).toMatchObject({ marker: "~ ", name: "worker", status: "updated", done: true });
   });
 
+  test("times a resource operation from its pre-event to its completion event and surfaces changed keys", () => {
+    const metadata = {
+      op: "update",
+      urn: "urn:pulumi:prod::app::aws:lambda/function:Function::worker",
+      type: "aws:lambda/function:Function",
+      new: { parent: "" },
+      diffs: ["environment", "timeout"],
+    };
+    const rows = resourceRows([
+      { sequence: 1, kind: "resourcePre", severity: null, payload: { timestamp: 1000, resourcePreEvent: { metadata } } },
+      { sequence: 2, kind: "resOutputs", severity: null, payload: { timestamp: 1006, resOutputsEvent: { metadata } } },
+    ], false);
+    expect(rows[0]).toMatchObject({ seconds: 6, diffs: ["environment", "timeout"] });
+  });
+
+  test("diffs stack outputs against the prior run, treating a first-ever run as unchanged", () => {
+    const outputsEvent = (old: Record<string, unknown>, current: Record<string, unknown>): RunEvent => ({
+      sequence: 1,
+      kind: "resOutputs",
+      severity: null,
+      payload: { resOutputsEvent: { metadata: { type: "pulumi:pulumi:Stack", old: { outputs: old }, new: { outputs: current } } } },
+    });
+    expect(stackOutputsDiff([outputsEvent({}, { endpoint: "https://a.test" })]))
+      .toEqual([{ key: "endpoint", kind: "same", oldValue: undefined, newValue: "https://a.test" }]);
+    expect(stackOutputsDiff([outputsEvent({ endpoint: "https://a.test" }, { endpoint: "https://b.test" })]))
+      .toEqual([{ key: "endpoint", kind: "update", oldValue: "https://a.test", newValue: "https://b.test" }]);
+    expect(stackOutputsDiff([outputsEvent({ endpoint: "https://a.test" }, { endpoint: "https://a.test", region: "us-east-1" })]))
+      .toEqual([
+        { key: "endpoint", kind: "same", oldValue: "https://a.test", newValue: "https://a.test" },
+        { key: "region", kind: "add", oldValue: undefined, newValue: "us-east-1" },
+      ]);
+  });
+
   test("derives property changes and final stack outputs", () => {
     const metadata = {
       op: "update",
@@ -106,6 +145,19 @@ describe("run detail presentation", () => {
       severity: null,
       payload: { resOutputsEvent: { metadata: { op: "same", type: "pulumi:pulumi:Stack", new: { outputs: { endpoint: "https://example.test" } } } } },
     }])).toEqual({ endpoint: "https://example.test" });
+  });
+
+  test("masks the engine's unknown-value sentinel in preview outputs", () => {
+    expect(stackOutputsFromEvents([{
+      sequence: 9,
+      kind: "resOutputs",
+      severity: null,
+      payload: { resOutputsEvent: { metadata: { type: "pulumi:pulumi:Stack", new: { outputs: {
+        token: "04da6b54-80e4-46f7-96ec-b56ff0331ba9",
+        nested: { report: "04da6b54-80e4-46f7-96ec-b56ff0331ba9" },
+        plain: "kept",
+      } } } } },
+    }])).toEqual({ token: "[unknown]", nested: { report: "[unknown]" }, plain: "kept" });
   });
 
   test("formats property changes as an inline JSON diff", () => {

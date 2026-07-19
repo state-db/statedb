@@ -51,6 +51,9 @@ type ResourceDisplayRow = ResourceChange & {
   info: string;
   done: boolean;
   failed: boolean;
+  startTimestamp?: number;
+  seconds?: number;
+  diffs: string[];
 };
 type PropertyChange = { path: string; kind: string; oldValue: unknown; newValue: unknown };
 
@@ -157,6 +160,8 @@ function RunView({
   expired: boolean; eventsError: unknown;
 }) {
   const summary = changeSummary(run);
+  const live = run.status === "in-progress";
+  const now = useNow(live);
   return (
     <div className="flex flex-col gap-6">
       <header className="flex flex-col gap-3">
@@ -174,7 +179,7 @@ function RunView({
           </div>
           <div className="flex items-center gap-2">
             <StatusBadge status={run.status} />
-            <span className="text-sm text-muted-foreground">· {formatRunDuration(run.startedAt, run.endedAt)}</span>
+            <span className="text-sm tabular-nums text-muted-foreground">· {formatRunDuration(run.startedAt, run.endedAt, now)}</span>
           </div>
         </div>
         <Separator />
@@ -196,7 +201,7 @@ function RunView({
           <RunLog events={events} expired={expired} error={eventsError} live={run.status === "in-progress"} preview={run.version === null} />
         </TabsContent>
         <TabsContent value="changes" className="mt-4">
-          <RunChanges events={events} collapseReplacements={run.version === null || run.status !== "in-progress"} />
+          <RunChanges events={events} collapseReplacements={run.version === null || run.status !== "in-progress"} live={live} preview={run.version === null} />
         </TabsContent>
         <TabsContent value="configuration" className="mt-4">
           <Configuration run={run} events={events} />
@@ -208,7 +213,9 @@ function RunView({
 
 function RunLog({ events, expired, error, live, preview }: { events: RunEvent[]; expired: boolean; error: unknown; live: boolean; preview: boolean }) {
   const [filter, setFilter] = useState("all");
+  const [expandedRows, setExpandedRows] = useState<Record<string, boolean>>({});
   const viewport = useRef<HTMLDivElement>(null);
+  const follow = useRef(true);
   const rows = useMemo(() => resourceRows(events, preview), [events, preview]);
   const messages = events.filter((event) => {
     if (event.kind === "stdout" || event.kind === "error") return true;
@@ -217,11 +224,37 @@ function RunLog({ events, expired, error, live, preview }: { events: RunEvent[];
     return body.ephemeral !== true && event.severity !== "debug";
   });
   const visibleMessages = filter === "diagnostics" ? messages.filter((event) => event.kind === "diagnostic" || event.kind === "error") : messages;
+  const rowUrns = new Set(rows.map((row) => row.urn));
+  const inlineMessages = new Map<string, RunEvent[]>();
+  for (const event of messages) {
+    const urn = diagnosticUrn(event);
+    if (urn && rowUrns.has(urn)) inlineMessages.set(urn, [...(inlineMessages.get(urn) ?? []), event]);
+  }
+  // Resource-attributed diagnostics render inline under their rows; the bottom
+  // section keeps stack-level messages and raw stdout.
+  const sectionMessages = filter === "diagnostics"
+    ? visibleMessages
+    : visibleMessages.filter((event) => {
+      const urn = diagnosticUrn(event);
+      return !(urn && rowUrns.has(urn));
+    });
   const summary = [...events].reverse().find((event) => event.kind === "summary");
   const jumpToBottom = () => viewport.current?.scrollIntoView({ block: "end" });
 
+  // Follow the tail only while the reader is already at the bottom — scrolling
+  // up to read pauses auto-scroll, like a terminal.
   useEffect(() => {
-    if (live) jumpToBottom();
+    const scroller = viewport.current?.closest("[data-radix-scroll-area-viewport]");
+    if (!scroller) return;
+    const onScroll = () => {
+      follow.current = scroller.scrollTop + scroller.clientHeight >= scroller.scrollHeight - 48;
+    };
+    scroller.addEventListener("scroll", onScroll, { passive: true });
+    return () => scroller.removeEventListener("scroll", onScroll);
+  }, []);
+
+  useEffect(() => {
+    if (live && follow.current) jumpToBottom();
   }, [events.length, live]);
 
   if (expired) {
@@ -234,28 +267,63 @@ function RunLog({ events, expired, error, live, preview }: { events: RunEvent[];
           <ToggleGroupItem value="all">All</ToggleGroupItem>
           <ToggleGroupItem value="diagnostics">Diagnostics only</ToggleGroupItem>
         </ToggleGroup>
-        <Button variant="outline" size="sm" onClick={jumpToBottom}><ArrowDown data-icon="inline-start" />Jump to bottom</Button>
+        <Button variant="outline" size="sm" onClick={() => { follow.current = true; jumpToBottom(); }}><ArrowDown data-icon="inline-start" />Jump to bottom</Button>
       </div>
       {error !== null && <ErrorAlert title="Live log disconnected" error={error} />}
       <ScrollArea className="h-[32rem] rounded-lg border bg-zinc-950 text-zinc-100">
         <div className="flex min-w-[42rem] flex-col p-4 font-mono text-xs leading-5">
+          {/* One shared grid so column tracks align across all rows — per-row
+              grids would resolve the auto-sized status column independently. */}
           {filter === "all" && rows.length > 0 && (
-            <div className="mb-4 grid grid-cols-[2rem_minmax(12rem,1fr)_minmax(10rem,1fr)_minmax(9rem,auto)] gap-2 border-b border-zinc-800 pb-2 text-zinc-500">
-              <span />
-              <span>Type</span>
-              <span>Name</span>
-              <span>{preview ? "Plan" : "Status"}</span>
+            <div className="grid grid-cols-[2rem_minmax(12rem,1fr)_minmax(10rem,1fr)_minmax(9rem,auto)] gap-x-2">
+              <div className="col-span-4 mb-3 grid grid-cols-subgrid border-b border-zinc-800 pb-2 text-zinc-500">
+                <span />
+                <span>Type</span>
+                <span>Name</span>
+                <span>{preview ? "Plan" : "Status"}</span>
+              </div>
+              {rows.map((row) => {
+                const rowMessages = inlineMessages.get(row.urn) ?? [];
+                const expanded = expandedRows[row.urn] ?? row.failed;
+                return (
+                  <Fragment key={`${row.urn}-${row.op}`}>
+                    <ResourceLogRow
+                      row={row}
+                      rows={rows}
+                      preview={preview}
+                      expandable={rowMessages.length > 0}
+                      expanded={expanded}
+                      onToggle={() => setExpandedRows((current) => ({ ...current, [row.urn]: !expanded }))}
+                    />
+                    {expanded && rowMessages.length > 0 && (
+                      <div className="col-span-4 mb-1 ml-8 border-l border-zinc-800 pl-3">
+                        {rowMessages.map((event) => <LogLine key={event.sequence} event={event} preview={preview} />)}
+                      </div>
+                    )}
+                  </Fragment>
+                );
+              })}
             </div>
           )}
-          {filter === "all" && rows.map((row) => <ResourceLogRow key={`${row.urn}-${row.op}`} row={row} rows={rows} />)}
-          {visibleMessages.length > 0 && (
+          {sectionMessages.length > 0 && (
             <section className={cn("flex flex-col", filter === "all" && rows.length > 0 && "mt-5 border-t border-zinc-800 pt-4")}>
               {filter === "all" && <h3 className="mb-2 font-sans text-xs font-medium uppercase tracking-wide text-zinc-500">Diagnostics and output</h3>}
-              <DiagnosticOutput events={visibleMessages} rows={rows} preview={preview} />
+              <DiagnosticOutput events={sectionMessages} rows={rows} preview={preview} />
             </section>
           )}
+          {filter === "all" && <OutputsSection events={events} />}
           {filter === "all" && summary && <SummaryLogLine event={summary} preview={preview} />}
-          {rows.length === 0 && visibleMessages.length === 0 && !summary && <p className="text-zinc-500">Waiting for events…</p>}
+          {rows.length === 0 && visibleMessages.length === 0 && !summary && !live && <p className="text-zinc-500">Waiting for events…</p>}
+          {live && (
+            <div className={cn(
+              "flex items-center gap-2 text-sky-300",
+              (rows.length > 0 || visibleMessages.length > 0 || summary) && "mt-4 border-t border-zinc-800 pt-3",
+            )}
+            >
+              <LiveDot />
+              <span>{preview ? "Preview" : "Update"} in progress · {filter === "all" && rows.length === 0 ? "waiting for the first engine events…" : "new events appear here as the engine reports them"}</span>
+            </div>
+          )}
           <div ref={viewport} />
         </div>
       </ScrollArea>
@@ -286,14 +354,55 @@ function DiagnosticOutput({ events, rows, preview }: { events: RunEvent[]; rows:
   );
 }
 
-function ResourceLogRow({ row, rows }: { row: ResourceDisplayRow; rows: ResourceDisplayRow[] }) {
+function OutputsSection({ events }: { events: RunEvent[] }) {
+  const diff = useMemo(() => stackOutputsDiff(events), [events]);
+  if (diff.length === 0) return null;
+  return (
+    <section className="mt-5 flex flex-col border-t border-zinc-800 pt-4">
+      <h3 className="mb-2 font-sans text-xs font-medium uppercase tracking-wide text-zinc-500">Outputs</h3>
+      {diff.map((entry) => {
+        const marker = entry.kind === "add" ? "+ " : entry.kind === "remove" ? "- " : entry.kind === "update" ? "~ " : "  ";
+        return (
+          <div className="grid grid-cols-[1.25rem_minmax(0,1fr)] gap-2 py-0.5" key={entry.key}>
+            <span className={cn("select-none font-semibold", markerClass(marker))} aria-hidden="true">{marker}</span>
+            <span className="whitespace-pre-wrap break-words">
+              {entry.key}:{" "}
+              {entry.kind === "update"
+                ? <>{displayValue(entry.oldValue)} <span className="text-zinc-500">{"=>"}</span> {displayValue(entry.newValue)}</>
+                : displayValue(entry.kind === "remove" ? entry.oldValue : entry.newValue)}
+            </span>
+          </div>
+        );
+      })}
+    </section>
+  );
+}
+
+function ResourceLogRow({ row, rows, preview, expandable, expanded, onToggle }: {
+  row: ResourceDisplayRow;
+  rows: ResourceDisplayRow[];
+  preview: boolean;
+  expandable: boolean;
+  expanded: boolean;
+  onToggle: () => void;
+}) {
   const depth = resourceDepth(row, rows);
   return (
-    <div className="grid grid-cols-[2rem_minmax(12rem,1fr)_minmax(10rem,1fr)_minmax(9rem,auto)] gap-2 py-1">
+    <div
+      className={cn("col-span-4 grid grid-cols-subgrid py-1", expandable && "cursor-pointer rounded-sm hover:bg-zinc-900")}
+      onClick={expandable ? onToggle : undefined}
+      title={expandable ? "Show this resource's output" : undefined}
+    >
       <span className={cn("font-semibold", markerClass(row.marker))}>{row.failed ? "! " : row.marker}</span>
       <span className="truncate" title={row.type}>{row.type}</span>
       <span className="truncate" style={{ paddingLeft: `${depth * 1.25}rem` }} title={row.name}>{row.name}</span>
-      <span className={cn(!row.done && "text-zinc-400", row.failed && "text-red-400")}>{row.status}{!row.done && "…"}{row.info && <span className="text-zinc-500"> · {row.info}</span>}</span>
+      <span className={cn(!row.done && "animate-pulse text-zinc-400", row.failed && "text-red-400")}>
+        {row.status}{!row.done && "…"}
+        {!preview && row.done && row.seconds !== undefined && <span className="text-zinc-500"> · {row.seconds < 1 ? "<1s" : formatSeconds(row.seconds)}</span>}
+        {row.diffs.length > 0 && <span className="text-zinc-500"> · diff: {formatDiffKeys(row.diffs)}</span>}
+        {row.info && <span className="text-zinc-500"> · {row.info}</span>}
+        {expandable && <ChevronDown className={cn("ml-1 inline size-3 text-zinc-500 transition-transform", expanded && "rotate-180")} aria-hidden="true" />}
+      </span>
     </div>
   );
 }
@@ -317,7 +426,7 @@ function SummaryLogLine({ event, preview }: { event: RunEvent; preview: boolean 
   return <div className="mt-5 border-t border-zinc-800 pt-4"><LogLine event={event} preview={preview} /></div>;
 }
 
-function RunChanges({ events, collapseReplacements }: { events: RunEvent[]; collapseReplacements: boolean }) {
+function RunChanges({ events, collapseReplacements, live, preview }: { events: RunEvent[]; collapseReplacements: boolean; live: boolean; preview: boolean }) {
   const [showUnchanged, setShowUnchanged] = useState(false);
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
   const changes = useMemo(() => resourceChanges(events, collapseReplacements), [events, collapseReplacements]);
@@ -373,8 +482,34 @@ function RunChanges({ events, collapseReplacements }: { events: RunEvent[]; coll
           </TableBody>
         </Table>
       </div>
+      {live && (
+        <p className="flex items-center gap-2 text-sm text-muted-foreground">
+          <LiveDot className="text-primary" />
+          {preview ? "Preview" : "Update"} in progress · more changes may still arrive
+        </p>
+      )}
     </div>
   );
+}
+
+function LiveDot({ className }: { className?: string }) {
+  return (
+    <span className={cn("relative flex size-2", className)} aria-hidden="true">
+      <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-current opacity-60" />
+      <span className="relative inline-flex size-2 rounded-full bg-current" />
+    </span>
+  );
+}
+
+function useNow(active: boolean) {
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    if (!active) return;
+    setNow(Date.now());
+    const id = window.setInterval(() => setNow(Date.now()), 1_000);
+    return () => window.clearInterval(id);
+  }, [active]);
+  return now;
 }
 
 function resourcePropertyChanges(change: ResourceChange) {
@@ -485,6 +620,9 @@ function PresentedValue({ value }: { value: unknown }) {
   if (typeof value === "boolean") {
     return <Badge variant={value ? "info" : "muted"}>{String(value)}</Badge>;
   }
+  if (isRecord(value) || Array.isArray(value)) {
+    return <pre className="whitespace-pre-wrap break-words text-left">{JSON.stringify(value, null, 2)}</pre>;
+  }
   return <>{displayValue(value)}</>;
 }
 
@@ -565,7 +703,9 @@ function configValue(value: unknown) {
 }
 function displayValue(value: unknown) { return typeof value === "string" ? value : JSON.stringify(value, null, 2); }
 
-export function stripAnsi(value: string) { return value.replace(/[\u001B\u009B][[\]()#;?]*(?:(?:(?:[a-zA-Z\d]*(?:;[-a-zA-Z\d\/#&.:=?%@~_]+)*)?\u0007)|(?:(?:\d{1,4}(?:[;:]\d{0,4})*)?[\dA-PR-TZcf-nq-uy=><~]))/g, ""); }
+// Strips both real ANSI escape sequences and Pulumi's internal colorization
+// tokens (`<{%fg 3%}>`, `<{%reset%}>`, …) that the CLI embeds in event payloads.
+export function stripAnsi(value: string) { return value.replace(/[\u001B\u009B][[\]()#;?]*(?:(?:(?:[a-zA-Z\d]*(?:;[-a-zA-Z\d\/#&.:=?%@~_]+)*)?\u0007)|(?:(?:\d{1,4}(?:[;:]\d{0,4})*)?[\dA-PR-TZcf-nq-uy=><~]))/g, "").replace(/<\{%.*?%\}>/g, ""); }
 
 export function formatEventLine(event: RunEvent, preview: boolean): { marker: string; text: string } | null {
   const envelope = event.payload[`${event.kind}Event`];
@@ -637,6 +777,9 @@ export function resourceRows(events: RunEvent[], preview: boolean): ResourceDisp
       ? done ? "done" : "running"
       : preview ? previewOperation(op) : failed ? `${operationVerb(op, false)} failed` : operationVerb(op, done);
     const nameParts = urn.split("::");
+    const timestamp = typeof event.payload.timestamp === "number" ? event.payload.timestamp : undefined;
+    const startTimestamp = event.kind === "resourcePre" ? timestamp : current?.startTimestamp;
+    const diffs = Array.isArray(metadata.diffs) ? metadata.diffs.map(String) : Object.keys(isRecord(metadata.detailedDiff) ? metadata.detailedDiff : {});
     rows.set(urn, {
       sequence: current?.sequence ?? event.sequence,
       urn,
@@ -649,6 +792,9 @@ export function resourceRows(events: RunEvent[], preview: boolean): ResourceDisp
       info: diagnosticInfo(diagnostics.get(urn)),
       done,
       failed,
+      startTimestamp,
+      seconds: done && startTimestamp !== undefined && timestamp !== undefined ? Math.max(0, timestamp - startTimestamp) : current?.seconds,
+      diffs: diffs.length > 0 ? diffs : current?.diffs ?? [],
       detail: body,
     });
   }
@@ -713,6 +859,34 @@ export function stackOutputsFromEvents(events: RunEvent[]): Record<string, unkno
     return isRecord(state.outputs) ? maskPulumiSecrets(state.outputs) as Record<string, unknown> : {};
   }
   return {};
+}
+
+type OutputDiffEntry = { key: string; kind: "add" | "remove" | "update" | "same"; oldValue: unknown; newValue: unknown };
+
+// Top-level-only diff of the stack's final outputs, mirroring the CLI's closing
+// `Outputs:` block. Nested object/array changes are not diffed field-by-field —
+// a changed nested value is shown whole, which is enough to spot that it moved.
+export function stackOutputsDiff(events: RunEvent[]): OutputDiffEntry[] {
+  for (let index = events.length - 1; index >= 0; index--) {
+    const event = events[index];
+    if (event.kind !== "resOutputs") continue;
+    const body = isRecord(event.payload.resOutputsEvent) ? event.payload.resOutputsEvent : {};
+    const metadata = isRecord(body.metadata) ? body.metadata : {};
+    if (metadata.type !== "pulumi:pulumi:Stack") continue;
+    const oldOutputs = isRecord(metadata.old) && isRecord(metadata.old.outputs) ? metadata.old.outputs : {};
+    const newOutputs = isRecord(metadata.new) && isRecord(metadata.new.outputs) ? metadata.new.outputs : {};
+    const hadPriorOutputs = Object.keys(oldOutputs).length > 0;
+    const keys = [...new Set([...Object.keys(oldOutputs), ...Object.keys(newOutputs)])].sort();
+    return keys.map((key) => {
+      const oldValue = maskPulumiSecrets(oldOutputs[key]);
+      const newValue = maskPulumiSecrets(newOutputs[key]);
+      const kind: OutputDiffEntry["kind"] = !hadPriorOutputs || JSON.stringify(oldValue) === JSON.stringify(newValue)
+        ? "same"
+        : !(key in oldOutputs) ? "add" : !(key in newOutputs) ? "remove" : "update";
+      return { key, kind, oldValue, newValue };
+    });
+  }
+  return [];
 }
 function urnType(urn: string) { const parts = urn.split("::"); const types = parts[parts.length - 2]?.split("$") ?? []; return types[types.length - 1] ?? "unknown"; }
 function isRecord(value: unknown): value is Record<string, unknown> { return typeof value === "object" && value !== null && !Array.isArray(value); }
@@ -780,6 +954,16 @@ function resourceDepth(row: ResourceDisplayRow, rows: ResourceDisplayRow[]) {
   while (parent && byUrn.has(parent) && depth < 8) { depth++; parent = byUrn.get(parent)?.parent ?? ""; }
   return depth;
 }
+function diagnosticUrn(event: RunEvent): string {
+  if (event.kind === "stdout") return "";
+  const body = isRecord(event.payload.diagnosticEvent) ? event.payload.diagnosticEvent : {};
+  return String(body.urn ?? "");
+}
+function formatDiffKeys(diffs: string[]) {
+  const shown = diffs.slice(0, 4);
+  const more = diffs.length - shown.length;
+  return more > 0 ? `${shown.join(", ")}, +${more} more` : shown.join(", ");
+}
 function diagnosticCounts(events: RunEvent[]) {
   const counts = new Map<string, { errors: number; warnings: number; messages: number }>();
   for (const event of events) {
@@ -811,7 +995,11 @@ function readPropertyPath(value: unknown, path: string): unknown {
   }, value);
 }
 function inferDiffKind(oldValue: unknown, newValue: unknown) { return oldValue === undefined ? "add" : newValue === undefined ? "delete" : "update"; }
+// The engine's stand-in for values it cannot know during a preview (computed
+// outputs, to-be-created secrets): plugin.UnknownStringValue in pulumi/pulumi.
+const PULUMI_UNKNOWN_VALUE = "04da6b54-80e4-46f7-96ec-b56ff0331ba9";
 function maskPulumiSecrets(value: unknown): unknown {
+  if (value === PULUMI_UNKNOWN_VALUE) return "[unknown]";
   if (Array.isArray(value)) return value.map(maskPulumiSecrets);
   if (!isRecord(value)) return value;
   if ("secure" in value || "ciphertext" in value || value["4dabf18193072939515e22adb298388d"] === "1") return "[secret]";
