@@ -141,6 +141,24 @@ export interface StackDetail {
   pulumiVersion: string | null;
 }
 
+export interface UpdateHistoryRow {
+  id: string;
+  version: number | null;
+  kind: string;
+  status: string;
+  message: string | null;
+  summary: { resourceChanges?: Record<string, number> } | null;
+  startedAt: string;
+  endedAt: string | null;
+}
+
+export interface UpdateHistoryPage {
+  updates: UpdateHistoryRow[];
+  page: number;
+  pageSize: number;
+  total: number;
+}
+
 /**
  * Break-glass login: posts the operator password to the Quarkus form-auth
  * endpoint (urlencoded, not JSON — the mechanism consumes it before JAX-RS).
@@ -186,6 +204,19 @@ export const api = {
       ),
     exportUrl: (org: string, project: string, stack: string) =>
       `${BASE}/workspaces/${encodeURIComponent(org)}/${encodeURIComponent(project)}/${encodeURIComponent(stack)}/export`,
+    updates: (
+      org: string,
+      project: string,
+      stack: string,
+      filters: { page: number; kind?: string; status?: string },
+    ) => {
+      const search = new URLSearchParams({ page: String(filters.page) });
+      if (filters.kind) search.set("kind", filters.kind);
+      if (filters.status) search.set("status", filters.status);
+      return request<UpdateHistoryPage>(
+        `/workspaces/${encodeURIComponent(org)}/${encodeURIComponent(project)}/${encodeURIComponent(stack)}/updates?${search}`,
+      );
+    },
   },
 } as const;
 

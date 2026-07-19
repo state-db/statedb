@@ -9,7 +9,10 @@ import io.statedb.persistence.stack.AssembledDeployment;
 import io.statedb.persistence.stack.StackAssembler;
 import io.statedb.persistence.stack.WorkspaceListFinder;
 import io.statedb.persistence.stack.WorkspaceSummary;
+import io.statedb.persistence.update.ConsoleUpdateHistoryFinder;
+import io.statedb.persistence.update.StackUpdate;
 import jakarta.inject.Inject;
+import jakarta.ws.rs.BadRequestException;
 import jakarta.ws.rs.GET;
 import jakarta.ws.rs.NotFoundException;
 import jakarta.ws.rs.Path;
@@ -30,6 +33,8 @@ public class WorkspacesResource {
   @Inject WorkspaceListFinder workspaceListFinder;
 
   @Inject StackAssembler stackAssembler;
+
+  @Inject ConsoleUpdateHistoryFinder updateHistoryFinder;
 
   @GET
   @Produces(MediaType.APPLICATION_JSON)
@@ -86,6 +91,52 @@ public class WorkspacesResource {
     WorkspaceSummary summary = visibleStack(org, project, stack);
     AssembledDeployment assembled = stackAssembler.assemble(summary.stackId());
     return new ExportResponse(assembled.version(), assembled.deployment());
+  }
+
+  @GET
+  @Path("/{org}/{project}/{stack}/updates")
+  @Produces(MediaType.APPLICATION_JSON)
+  public UpdateHistoryResponse updates(
+      @PathParam("org") String org,
+      @PathParam("project") String project,
+      @PathParam("stack") String stack,
+      @QueryParam("page") Integer requestedPage,
+      @QueryParam("kind") String requestedKind,
+      @QueryParam("status") String requestedStatus) {
+    WorkspaceSummary workspace = visibleStack(org, project, stack);
+    int page = requestedPage == null ? 1 : requestedPage;
+    if (page < 1) {
+      throw new BadRequestException("page must be positive");
+    }
+    StackUpdate.Kind kind = parseEnum(StackUpdate.Kind.class, requestedKind, "kind");
+    StackUpdate.Status status = parseEnum(StackUpdate.Status.class, requestedStatus, "status");
+    int pageSize = 50;
+    var history = updateHistoryFinder.find(workspace.stackId(), kind, status, page, pageSize);
+    List<UpdateHistoryRow> rows =
+        history.updates().stream()
+            .map(
+                update ->
+                    new UpdateHistoryRow(
+                        update.id,
+                        update.dryRun ? null : update.version,
+                        update.kind.wireValue(),
+                        update.status.wireValue(),
+                        update.message != null ? update.message : update.description,
+                        history.summaries().get(update.id),
+                        update.startedAt,
+                        update.endedAt))
+            .toList();
+    return new UpdateHistoryResponse(rows, page, pageSize, history.total());
+  }
+
+  private static <E extends Enum<E>> E parseEnum(
+      Class<E> type, String value, String parameterName) {
+    if (value == null || value.isBlank()) return null;
+    try {
+      return Enum.valueOf(type, value.replace('-', '_').toUpperCase());
+    } catch (IllegalArgumentException ignored) {
+      throw new BadRequestException("invalid " + parameterName);
+    }
   }
 
   private WorkspaceSummary visibleStack(String org, String project, String stack) {
@@ -146,4 +197,17 @@ public class WorkspacesResource {
       String pulumiVersion) {}
 
   public record ExportResponse(int version, JsonNode deployment) {}
+
+  public record UpdateHistoryResponse(
+      List<UpdateHistoryRow> updates, int page, int pageSize, long total) {}
+
+  public record UpdateHistoryRow(
+      UUID id,
+      Integer version,
+      String kind,
+      String status,
+      String message,
+      JsonNode summary,
+      Instant startedAt,
+      Instant endedAt) {}
 }

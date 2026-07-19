@@ -21,7 +21,7 @@ import { LoginPage } from "@/routes/login";
 import { NotFoundPage } from "@/routes/not-found";
 import { PlaceholderPage } from "@/routes/placeholder";
 import { ProjectStacksPage } from "@/routes/scoped-stacks";
-import { StackDetailPage } from "@/routes/stack-detail";
+import { StackDetailPage, type StackTab } from "@/routes/stack-detail";
 
 // Bare root renders an <Outlet />; the
 // shell wraps everything that needs the header/nav frame.
@@ -136,12 +136,33 @@ function ProjectStacksRoute() {
 const stackRoute = createRoute({
   getParentRoute: () => shellRoute,
   path: "$org/$project/$stack",
+  validateSearch: (search: Record<string, unknown>): { tab?: StackTab } => ({
+    tab:
+      search.tab === "outputs" || search.tab === "activity"
+        ? search.tab
+        : undefined,
+  }),
   component: StackDetailRoute,
 });
 
 function StackDetailRoute() {
   const { org, project, stack } = stackRoute.useParams();
-  return <StackDetailPage org={org} project={project} stack={stack} />;
+  const { tab } = stackRoute.useSearch();
+  const navigate = stackRoute.useNavigate();
+  return (
+    <StackDetailPage
+      org={org}
+      project={project}
+      stack={stack}
+      tab={tab ?? "resources"}
+      onTabChange={(nextTab) =>
+        void navigate({
+          search: nextTab === "resources" ? {} : { tab: nextTab },
+          replace: true,
+        })
+      }
+    />
+  );
 }
 
 const updateRoute = createRoute({

@@ -1,5 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
-import { Link } from "@tanstack/react-router";
+import { Link, useNavigate } from "@tanstack/react-router";
+import type { ColumnDef } from "@tanstack/react-table";
 import {
   ChevronDown,
   ChevronRight,
@@ -16,10 +17,11 @@ import { useMemo, useState } from "react";
 import { toast } from "sonner";
 
 import { CopyableId } from "@/components/console/CopyableId";
+import { DataTable } from "@/components/console/DataTable";
 import { EmptyState } from "@/components/console/EmptyState";
 import { ErrorAlert } from "@/components/console/ErrorAlert";
 import { isPulumiSecret, SecretBadge } from "@/components/console/SecretBadge";
-import { StatusBadge } from "@/components/console/StatusBadge";
+import { KindBadge, StatusBadge } from "@/components/console/StatusBadge";
 import { Timestamp } from "@/components/console/Timestamp";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
@@ -31,6 +33,14 @@ import {
 } from "@/components/ui/collapsible";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import {
+  Select,
+  SelectContent,
+  SelectGroup,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
 import {
   Sheet,
@@ -50,20 +60,31 @@ import {
 } from "@/components/ui/table";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
-import { api, NotFoundError, type PulumiResource, type PulumiValue } from "@/lib/api";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import {
+  api,
+  NotFoundError,
+  type PulumiResource,
+  type PulumiValue,
+  type UpdateHistoryRow,
+} from "@/lib/api";
 import { cn } from "@/lib/utils";
 
 type ViewMode = "flat" | "tree";
-type StackTab = "resources" | "outputs";
+export type StackTab = "resources" | "outputs" | "activity";
 
 export function StackDetailPage({
   org,
   project,
   stack,
+  tab,
+  onTabChange,
 }: {
   org: string;
   project: string;
   stack: string;
+  tab: StackTab;
+  onTabChange: (tab: StackTab) => void;
 }) {
   const query = useQuery({
     queryKey: ["workspace", org, project, stack],
@@ -72,7 +93,6 @@ export function StackDetailPage({
       current.state.data?.lastUpdate?.status === "in-progress" ? 3_000 : false,
   });
   const [filter, setFilter] = useState("");
-  const [tab, setTab] = useState<StackTab>("resources");
   const [selectedUrn, setSelectedUrn] = useState<string | null>(null);
   const [viewMode, setViewMode] = useState<ViewMode>(() => {
     const saved = window.localStorage.getItem("statedb.resources.view");
@@ -146,12 +166,19 @@ export function StackDetailPage({
               )}
             </div>
           </div>
-          <Button variant="outline" asChild>
-            <a href={api.workspaces.exportUrl(org, project, stack)} download>
-              <Download data-icon="inline-start" />
-              Export
-            </a>
-          </Button>
+          {tab === "resources" && (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button variant="outline" asChild>
+                  <a href={api.workspaces.exportUrl(org, project, stack)} download>
+                    <Download data-icon="inline-start" />
+                    Download state
+                  </a>
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>Download the raw Pulumi checkpoint JSON.</TooltipContent>
+            </Tooltip>
+          )}
         </div>
         {detail.lock && (
           <Alert>
@@ -184,13 +211,15 @@ export function StackDetailPage({
       <Tabs
         value={tab}
         onValueChange={(value) => {
-          if (value === "resources" || value === "outputs") setTab(value);
+          if (value === "resources" || value === "outputs" || value === "activity") {
+            onTabChange(value);
+          }
         }}
       >
         <TabsList>
           <TabsTrigger value="resources">Resources</TabsTrigger>
           <TabsTrigger value="outputs">Outputs</TabsTrigger>
-          <TabsTrigger value="activity" disabled>Activity</TabsTrigger>
+          <TabsTrigger value="activity">Activity</TabsTrigger>
           <TabsTrigger value="settings" disabled>Settings</TabsTrigger>
         </TabsList>
       </Tabs>
@@ -244,8 +273,10 @@ export function StackDetailPage({
             <ResourceTree resources={visible} allResources={resources} onSelect={setSelectedUrn} />
           )}
         </section>
-      ) : (
+      ) : tab === "outputs" ? (
         <StackOutputs outputs={outputs} />
+      ) : (
+        <StackActivity org={org} project={project} stack={stack} />
       )}
 
       <ResourceSheet
@@ -256,6 +287,132 @@ export function StackDetailPage({
       />
     </div>
   );
+}
+
+const UPDATE_KINDS = ["update", "preview", "refresh", "destroy", "import", "rename"];
+const UPDATE_STATUSES = ["in-progress", "succeeded", "failed", "cancelled"];
+
+function StackActivity({ org, project, stack }: { org: string; project: string; stack: string }) {
+  const navigate = useNavigate();
+  const [page, setPage] = useState(1);
+  const [kind, setKind] = useState("all");
+  const [status, setStatus] = useState("all");
+  const history = useQuery({
+    queryKey: ["stack-updates", org, project, stack, page, kind, status],
+    queryFn: () =>
+      api.workspaces.updates(org, project, stack, {
+        page,
+        kind: kind === "all" ? undefined : kind,
+        status: status === "all" ? undefined : status,
+      }),
+    refetchInterval: (query) =>
+      query.state.data?.updates.some((update) => update.status === "in-progress") ? 3_000 : false,
+  });
+
+  const columns = useMemo<ColumnDef<UpdateHistoryRow>[]>(
+    () => [
+      {
+        accessorKey: "version",
+        header: "Version",
+        cell: ({ row }) => (
+          <span className="font-mono">{row.original.version == null ? "—" : `v${row.original.version}`}</span>
+        ),
+      },
+      { accessorKey: "kind", header: "Kind", cell: ({ row }) => <KindBadge kind={row.original.kind} /> },
+      { accessorKey: "status", header: "Status", cell: ({ row }) => <StatusBadge status={row.original.status} /> },
+      {
+        accessorKey: "message",
+        header: "Message",
+        cell: ({ row }) => {
+          const message = row.original.message;
+          if (!message) return <span className="text-muted-foreground">—</span>;
+          return (
+            <Tooltip>
+              <TooltipTrigger asChild><span className="block max-w-72 truncate">{message}</span></TooltipTrigger>
+              <TooltipContent className="max-w-sm">{message}</TooltipContent>
+            </Tooltip>
+          );
+        },
+      },
+      { id: "changes", header: "Changes", cell: ({ row }) => <ChangeSummary summary={row.original.summary} /> },
+      { id: "duration", header: "Duration", cell: ({ row }) => formatDuration(row.original.startedAt, row.original.endedAt) },
+      { accessorKey: "startedAt", header: "Started", cell: ({ row }) => <Timestamp value={row.original.startedAt} /> },
+    ],
+    [],
+  );
+
+  if (history.isLoading) return <ActivitySkeleton />;
+  if (history.error || !history.data) {
+    return <ErrorAlert title="Could not load activity" error={history.error} onRetry={() => void history.refetch()} />;
+  }
+  const pageCount = Math.max(1, Math.ceil(history.data.total / history.data.pageSize));
+  return (
+    <DataTable
+      columns={columns}
+      data={history.data.updates}
+      emptyTitle="No updates yet"
+      emptyDescription="Update and preview runs for this stack will appear here."
+      toolbar={
+        <div className="flex flex-wrap gap-2">
+          <HistorySelect label="All kinds" value={kind} values={UPDATE_KINDS} onChange={(value) => { setKind(value); setPage(1); }} />
+          <HistorySelect label="All statuses" value={status} values={UPDATE_STATUSES} onChange={(value) => { setStatus(value); setPage(1); }} />
+        </div>
+      }
+      pagination={{ page, pageCount, onPageChange: setPage }}
+      onRowClick={(update) => {
+        if (update.version == null) {
+          void navigate({ to: "/console/$org/$project/$stack/previews/$updateId", params: { org, project, stack, updateId: update.id } });
+        } else {
+          void navigate({ to: "/console/$org/$project/$stack/updates/$version", params: { org, project, stack, version: String(update.version) } });
+        }
+      }}
+    />
+  );
+}
+
+function HistorySelect({ label, value, values, onChange }: { label: string; value: string; values: string[]; onChange: (value: string) => void }) {
+  return (
+    <Select value={value} onValueChange={onChange}>
+      <SelectTrigger className="w-44" aria-label={label}><SelectValue /></SelectTrigger>
+      <SelectContent><SelectGroup><SelectItem value="all">{label}</SelectItem>{values.map((item) => <SelectItem key={item} value={item}>{item}</SelectItem>)}</SelectGroup></SelectContent>
+    </Select>
+  );
+}
+
+function ChangeSummary({ summary }: { summary: UpdateHistoryRow["summary"] }) {
+  const changes = summary?.resourceChanges;
+  if (!changes) return <span className="text-muted-foreground">—</span>;
+  const { added, changed, deleted } = calculateChangeSummary(changes);
+  if (added + changed + deleted === 0) return <span className="font-mono text-muted-foreground">no changes</span>;
+  return (
+    <span className="flex gap-1 font-mono">
+      {added > 0 && <Badge variant="success">+{added}</Badge>}
+      {changed > 0 && <Badge variant="warning">~{changed}</Badge>}
+      {deleted > 0 && <Badge variant="destructive">-{deleted}</Badge>}
+    </span>
+  );
+}
+
+export function calculateChangeSummary(changes: Record<string, number>) {
+  return {
+    added: (changes.create ?? 0) + (changes["create-replacement"] ?? 0),
+    // A replacement already contributes to create-replacement and delete-replaced. Counting the
+    // accompanying replace marker as an update would report the same resource three times.
+    changed: changes.update ?? 0,
+    deleted: (changes.delete ?? 0) + (changes["delete-replaced"] ?? 0),
+  };
+}
+
+export function formatDuration(startedAt: string, endedAt: string | null): string {
+  if (!endedAt) return "—";
+  const seconds = Math.max(0, Math.round((Date.parse(endedAt) - Date.parse(startedAt)) / 1000));
+  if (seconds < 60) return `${seconds}s`;
+  const minutes = Math.floor(seconds / 60);
+  return `${minutes}m ${seconds % 60}s`;
+}
+
+function ActivitySkeleton() {
+  return <div className="flex flex-col gap-2">{Array.from({ length: 5 }, (_, index) => <Skeleton key={index} className="h-12 w-full" />)}</div>;
 }
 
 function StackOutputs({ outputs }: { outputs: Record<string, PulumiValue> }) {

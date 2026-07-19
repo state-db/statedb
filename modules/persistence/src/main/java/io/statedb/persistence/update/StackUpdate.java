@@ -52,6 +52,10 @@ public class StackUpdate extends TimestampedEntity {
     Status(String dbValue) {
       this.dbValue = dbValue;
     }
+
+    public String wireValue() {
+      return dbValue;
+    }
   }
 
   @Column(name = "stack_id", nullable = false)

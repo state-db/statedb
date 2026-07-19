@@ -3,11 +3,13 @@ import { describe, expect, test } from "bun:test";
 import { PULUMI_SECRET_SIG } from "@/components/console/SecretBadge";
 import {
   containsSecret,
+  calculateChangeSummary,
   maskSecrets,
   resourceName,
   resourceType,
   serializeOutput,
   stackOutputs,
+  formatDuration,
 } from "@/routes/stack-detail";
 
 describe("stack resource presentation", () => {
@@ -50,5 +52,20 @@ describe("stack resource presentation", () => {
       '{"endpoint":"api","ports":[80,443]}',
     );
     expect(serializeOutput(42)).toBe("42");
+  });
+
+  test("formats completed and in-progress update durations", () => {
+    expect(formatDuration("2026-07-18T10:00:00Z", "2026-07-18T10:01:05Z")).toBe("1m 5s");
+    expect(formatDuration("2026-07-18T10:00:00Z", null)).toBe("—");
+  });
+
+  test("does not count a replacement again as an update", () => {
+    expect(
+      calculateChangeSummary({
+        "create-replacement": 1,
+        replace: 1,
+        "delete-replaced": 1,
+      }),
+    ).toEqual({ added: 1, changed: 0, deleted: 1 });
   });
 });

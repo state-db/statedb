@@ -10,6 +10,7 @@ import {
 } from "@tanstack/react-table";
 import { ArrowUpDown } from "lucide-react";
 import { useState } from "react";
+import type { ReactNode } from "react";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -44,6 +45,9 @@ export function DataTable<TData, TValue>({
   filterPlaceholder = "Filter...",
   emptyTitle = "No rows",
   emptyDescription = "There is no data to show yet.",
+  toolbar,
+  onRowClick,
+  pagination,
 }: {
   columns: ColumnDef<TData, TValue>[];
   data: TData[];
@@ -51,6 +55,13 @@ export function DataTable<TData, TValue>({
   filterPlaceholder?: string;
   emptyTitle?: string;
   emptyDescription?: string;
+  toolbar?: ReactNode;
+  onRowClick?: (row: TData) => void;
+  pagination?: {
+    page: number;
+    pageCount: number;
+    onPageChange: (page: number) => void;
+  };
 }) {
   const [sorting, setSorting] = useState<SortingState>([]);
 
@@ -58,7 +69,7 @@ export function DataTable<TData, TValue>({
     data,
     columns,
     getCoreRowModel: getCoreRowModel(),
-    getPaginationRowModel: getPaginationRowModel(),
+    getPaginationRowModel: pagination ? undefined : getPaginationRowModel(),
     getSortedRowModel: getSortedRowModel(),
     getFilteredRowModel: getFilteredRowModel(),
     onSortingChange: setSorting,
@@ -67,13 +78,17 @@ export function DataTable<TData, TValue>({
     },
     initialState: {
       pagination: {
+        pageIndex: pagination ? pagination.page - 1 : 0,
         pageSize: 50,
       },
     },
+    manualPagination: Boolean(pagination),
+    pageCount: pagination?.pageCount,
   });
 
   return (
     <div className="flex flex-col gap-3">
+      {toolbar}
       {filterColumn && (
         <Input
           placeholder={filterPlaceholder}
@@ -108,6 +123,16 @@ export function DataTable<TData, TValue>({
                 <TableRow
                   key={row.id}
                   data-state={row.getIsSelected() && "selected"}
+                  className={onRowClick ? "cursor-pointer" : undefined}
+                  role={onRowClick ? "button" : undefined}
+                  tabIndex={onRowClick ? 0 : undefined}
+                  onClick={() => onRowClick?.(row.original)}
+                  onKeyDown={(event) => {
+                    if (onRowClick && (event.key === "Enter" || event.key === " ")) {
+                      event.preventDefault();
+                      onRowClick(row.original);
+                    }
+                  }}
                 >
                   {row.getVisibleCells().map((cell) => (
                     <TableCell key={cell.id}>
@@ -130,26 +155,34 @@ export function DataTable<TData, TValue>({
           </TableBody>
         </Table>
       </div>
-      <div className="flex items-center justify-end gap-2">
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          onClick={() => table.previousPage()}
-          disabled={!table.getCanPreviousPage()}
-        >
-          Previous
-        </Button>
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          onClick={() => table.nextPage()}
-          disabled={!table.getCanNextPage()}
-        >
-          Next
-        </Button>
-      </div>
+      {(!pagination || pagination.pageCount > 1) && (
+        <div className="flex items-center justify-end gap-2">
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={() =>
+              pagination ? pagination.onPageChange(pagination.page - 1) : table.previousPage()
+            }
+            disabled={pagination ? pagination.page <= 1 : !table.getCanPreviousPage()}
+          >
+            Previous
+          </Button>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={() =>
+              pagination ? pagination.onPageChange(pagination.page + 1) : table.nextPage()
+            }
+            disabled={
+              pagination ? pagination.page >= pagination.pageCount : !table.getCanNextPage()
+            }
+          >
+            Next
+          </Button>
+        </div>
+      )}
     </div>
   );
 }
