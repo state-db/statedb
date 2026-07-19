@@ -7,6 +7,9 @@ config:
     type: string
   revision:
     type: integer
+  rotation:
+    type: string
+    default: "1"
   servicePassword:
     type: string
     secret: true
@@ -29,6 +32,7 @@ resources:
       prefix: ${environment}-
       keepers:
         environment: ${environment}
+        rotation: ${rotation}
   database-password:
     type: random:RandomPassword
     properties:
@@ -40,6 +44,7 @@ resources:
       overrideSpecial: "_-"
       keepers:
         environment: ${environment}
+        rotation: ${rotation}
   signing-key:
     type: tls:PrivateKey
     properties:

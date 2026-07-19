@@ -9,6 +9,9 @@ config:
     type: integer
   generatedRoot:
     type: string
+  publishGate:
+    type: string
+    default: pass
   servicePassword:
     type: string
     secret: true
@@ -61,6 +64,18 @@ resources:
     options:
       dependsOn:
         - ${bundle}
+  publish-gate:
+    type: command:local:Command
+    properties:
+      create: >-
+        [ "${publishGate}" = pass ] ||
+        { echo "release gate rejected ${build-id.hex}: policy check failed" >&2; exit 1; }
+      triggers:
+        - ${publishGate}
+      logging: stdoutAndStderr
+    options:
+      dependsOn:
+        - ${bundle}
 
 outputs:
   environment: ${environment}
@@ -69,4 +84,5 @@ outputs:
   artifactArchive: ${bundle.archive}
   artifactFiles: ${bundle.assets}
   checksum: ${checksum.result}
+  releaseGate: ${publishGate}
   publishCredential: ${servicePassword}

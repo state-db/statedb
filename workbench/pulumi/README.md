@@ -73,11 +73,25 @@ local-only estate:
 | `shared-foundation` | `dev`, `staging`, `prod` | Random identifiers and passwords, TLS keys, self-signed certificates, and secret outputs |
 | `artifact-pipeline` | `nightly`, `release` | Locally generated manifests, documentation, checksums, and an archive asset stored in state |
 | `application-fleet` | `dev`, `staging`, `prod` | Application-shaped resources, structured outputs, secrets, dependencies, and references to the matching foundation stack |
+| `deploy-simulator` | `dev` | Chained local commands that sleep per step; drives the long-running churn runs below |
 
-New stacks are deployed twice, first at revision 1 and then revision 2, to give
-the console useful update history and output diffs. Re-running the command
-converges existing stacks directly to revision 2 and should produce no resource
-changes.
+Newly created stacks are walked through a choreographed history so the console
+has a realistic variety of runs to render, each with its own update message:
+
+- **All projects** — initial create, then a config-only update.
+- **`shared-foundation`** — a rotation revision that replaces the environment id
+  and database password, a `pulumi refresh`, and a recorded preview of a further
+  rotation that is never applied.
+- **`artifact-pipeline/nightly`** — an update that **fails by design** (the
+  release gate rejects the build; expect one red `pulumi up` during bootstrap),
+  followed by a successful retry.
+- **`artifact-pipeline/release`** — a targeted `pulumi destroy` of the checksum
+  resource, then an update that restores it.
+- **`application-fleet/dev`** — a full destroy and rebuild.
+
+Re-running the command skips the history and converges existing stacks to the
+final revision, which should produce no resource changes. The first run takes a
+few minutes since it performs ~30 real Pulumi operations.
 
 No cloud credentials or cloud APIs are used. Pulumi may access its plugin
 download service on the first run to install the pinned `random`, `tls`, and
@@ -92,6 +106,34 @@ make pulumi-workbench cmd=fixtures-destroy
 
 The fixture inventory is declared in `fixtures.txt`; the individual Pulumi YAML
 programs live under `projects/` and `bootstrap-fixtures.sh` drives deployment.
+
+### Long-running churn runs
+
+To watch a live run in the console (in-progress status, event streaming,
+resource rows appearing as they complete), use the deploy-simulator churn
+targets:
+
+```bash
+make pulumi-workbench cmd=churn-preview
+make pulumi-workbench cmd=churn-up
+```
+
+Both target `deploy-simulator/dev`, set a fresh `deployNonce` so every step
+reports a change (a mix of in-place updates and replacements), and sleep
+`CHURN_SECONDS` (default 6) per simulated step:
+
+- `churn-preview` stays in-progress for roughly 6×`CHURN_SECONDS` (~36s at the
+  default) — only the six chained invoke-based checks execute during a preview;
+  the rollout commands themselves never run until `up`.
+- `churn-up` runs for roughly 11×`CHURN_SECONDS` (~66s at the default) as the
+  checks re-run and each rollout step executes in sequence, logging
+  per-resource output that shows up as diagnostics.
+
+Stretch the window when you need more time to poke around:
+
+```bash
+make pulumi-workbench cmd=churn-preview args="CHURN_SECONDS=15"
+```
 
 Clear an interrupted workbench update/lock:
 

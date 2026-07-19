@@ -9,6 +9,9 @@ config:
     type: integer
   foundationStack:
     type: string
+  rotation:
+    type: string
+    default: "1"
   servicePassword:
     type: string
     secret: true
@@ -39,6 +42,7 @@ resources:
       prefix: worker-${environment}
       keepers:
         environment: ${environment}
+        rotation: ${rotation}
     options:
       dependsOn:
         - ${api-service}

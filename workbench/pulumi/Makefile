@@ -1,4 +1,4 @@
-.PHONY: infra-up infra-down db-up idp-up idp-down console-seed app app-stop check-app login init preview up destroy fixtures-up fixtures-destroy sql psql force-unlock reset glass-on glass-off
+.PHONY: infra-up infra-down db-up idp-up idp-down console-seed app app-stop check-app login init preview up destroy fixtures-up fixtures-destroy churn-preview churn-up sql psql force-unlock reset glass-on glass-off
 
 REPO_ROOT := ../..
 IN_CONTAINER := $(REPO_ROOT)/bin/in-container
@@ -20,6 +20,11 @@ TOKEN_HASH   ?= 5ffbb9af69ff36cfa7e28cea7b3da597ed0d0489113674b3eb3a6c2b7e386ef5
 ## `cmd=glass-on` / `cmd=glass-off`.
 GLASS_PASSWORD_HASH ?= $$2a$$10$$T56PF8UE80K1VeLu6iMJjOLW68rR.xHzHUppcyvcd2ZAudpNUgn9O
 BACKEND_URL  ?= http://localhost:8080/pulumi
+
+## deploy-simulator churn runs: per-step sleep and target stack.
+CHURN_SECONDS   ?= 6
+CHURN_STACK     ?= dev
+CHURN_STACK_REF ?= $(ORG)/$(CHURN_STACK)
 
 ## Compose owns stable workbench infrastructure. The mock IdP is exposed only to the Bun dev server,
 ## which proxies /default/* on the existing browser-facing :5173 origin. Quarkus and the browser
@@ -44,12 +49,16 @@ SEED_CONSOLE = DB_CONTAINER=$(DB_CONTAINER) DB_USER=$(DB_USER) DB_NAME=$(DB_NAME
 	OIDC_ISSUER=$(OIDC_ISSUER) ADMIN_SUB=$(ADMIN_SUB) TOKEN_HASH=$(TOKEN_HASH) \
 	sh "$$(git rev-parse --show-toplevel)/workbench/pulumi/seed-console.sh"
 
+## PULUMI_CONSOLE_DOMAIN points every CLI-printed permalink (e.g. "View Live: ...")
+## at the console dev server instead of the CLI's built-in default (localhost:3000),
+## which nothing in the workbench listens on.
 PULUMI_ENV := export \
 	PULUMI_ACCESS_TOKEN=$(TOKEN) \
 	PULUMI_CONFIG_PASSPHRASE=workbench \
 	PULUMI_HOME="$$(pwd)/../.pulumi-home" \
 	PULUMI_SKIP_UPDATE_CHECK=true \
-	PULUMI_SKIP_CONFIRMATIONS=true
+	PULUMI_SKIP_CONFIRMATIONS=true \
+	PULUMI_CONSOLE_DOMAIN=localhost:$(CONSOLE_PORT)
 
 ## Start the stable Postgres and mock IdP services declared in compose.yml.
 infra-up:
@@ -165,7 +174,7 @@ check-app:
 
 ## Log the local Pulumi CLI into the workbench backend.
 login: check-app
-	$(IN_CONTAINER) sh -lc 'cd "$$(git rev-parse --show-toplevel)/workbench/pulumi" && mkdir -p ../.pulumi-home && PULUMI_ACCESS_TOKEN=$(TOKEN) PULUMI_HOME="$$(pwd)/../.pulumi-home" PULUMI_SKIP_UPDATE_CHECK=true pulumi login $(BACKEND_URL)'
+	$(IN_CONTAINER) sh -lc 'cd "$$(git rev-parse --show-toplevel)/workbench/pulumi" && mkdir -p ../.pulumi-home && PULUMI_ACCESS_TOKEN=$(TOKEN) PULUMI_HOME="$$(pwd)/../.pulumi-home" PULUMI_SKIP_UPDATE_CHECK=true PULUMI_CONSOLE_DOMAIN=localhost:$(CONSOLE_PORT) pulumi login $(BACKEND_URL)'
 
 ## Create/select the workbench stack.
 init: login
@@ -186,14 +195,15 @@ destroy: init
 ## Create or update the complete local-only fixture estate. The app must already be running.
 fixtures-up: check-app
 	$(IN_CONTAINER) sh -lc 'cd "$$(git rev-parse --show-toplevel)/workbench/pulumi" && \
-		export PULUMI_HOME="$$(pwd)/../.pulumi-home" PULUMI_CONFIG_PASSPHRASE=workbench; \
+		export PULUMI_HOME="$$(pwd)/../.pulumi-home" PULUMI_CONFIG_PASSPHRASE=workbench PULUMI_CONSOLE_DOMAIN=localhost:$(CONSOLE_PORT); \
 		ORG=$(ORG) BACKEND_URL=$(BACKEND_URL) TOKEN=$(TOKEN) ./bootstrap-fixtures.sh'
 
 ## Destroy resources in every fixture stack, preserving the empty stacks for inspection/reuse.
 fixtures-destroy: check-app
 	$(IN_CONTAINER) sh -lc 'cd "$$(git rev-parse --show-toplevel)/workbench/pulumi" && \
 		export PULUMI_ACCESS_TOKEN=$(TOKEN) PULUMI_CONFIG_PASSPHRASE=workbench \
-		PULUMI_HOME="$$(pwd)/../.pulumi-home" PULUMI_SKIP_UPDATE_CHECK=true PULUMI_SKIP_CONFIRMATIONS=true; \
+		PULUMI_HOME="$$(pwd)/../.pulumi-home" PULUMI_SKIP_UPDATE_CHECK=true PULUMI_SKIP_CONFIRMATIONS=true \
+		PULUMI_CONSOLE_DOMAIN=localhost:$(CONSOLE_PORT); \
 		pulumi login $(BACKEND_URL) >/dev/null; \
 		while IFS="|" read -r project stacks owner; do \
 			case "$$project" in ""|\#*) continue ;; esac; \
@@ -202,6 +212,34 @@ fixtures-destroy: check-app
 				(cd "projects/$$project" && pulumi destroy --yes --skip-preview --stack "$(ORG)/$$stack"); \
 			done; \
 		done < fixtures.txt'
+
+## Kick off a long-running preview on the deploy-simulator fixture project. A fresh
+## deployNonce makes every simulated step report a change, and the invoke-based checks
+## each sleep CHURN_SECONDS during the preview itself, so the run stays in-progress
+## while you watch it live in the console.
+churn-preview: check-app
+	$(IN_CONTAINER) sh -lc 'cd "$$(git rev-parse --show-toplevel)/workbench/pulumi/projects/deploy-simulator" && \
+		export PULUMI_ACCESS_TOKEN=$(TOKEN) PULUMI_CONFIG_PASSPHRASE=workbench \
+			PULUMI_HOME="$$(git rev-parse --show-toplevel)/workbench/.pulumi-home" \
+			PULUMI_SKIP_UPDATE_CHECK=true PULUMI_SKIP_CONFIRMATIONS=true PULUMI_CONSOLE_DOMAIN=localhost:$(CONSOLE_PORT); \
+		pulumi login $(BACKEND_URL) >/dev/null; \
+		pulumi stack select $(CHURN_STACK_REF) >/dev/null 2>&1 || pulumi stack init $(CHURN_STACK_REF); \
+		pulumi config set stepSeconds $(CHURN_SECONDS); \
+		pulumi config set deployNonce "churn-$$(date +%s)"; \
+		pulumi preview --message "Slow churn preview"'
+
+## Deploy the simulator with a fresh nonce: every rollout step sleeps CHURN_SECONDS and
+## logs its progress, so the update stays in-progress with visible resource churn.
+churn-up: check-app
+	$(IN_CONTAINER) sh -lc 'cd "$$(git rev-parse --show-toplevel)/workbench/pulumi/projects/deploy-simulator" && \
+		export PULUMI_ACCESS_TOKEN=$(TOKEN) PULUMI_CONFIG_PASSPHRASE=workbench \
+			PULUMI_HOME="$$(git rev-parse --show-toplevel)/workbench/.pulumi-home" \
+			PULUMI_SKIP_UPDATE_CHECK=true PULUMI_SKIP_CONFIRMATIONS=true PULUMI_CONSOLE_DOMAIN=localhost:$(CONSOLE_PORT); \
+		pulumi login $(BACKEND_URL) >/dev/null; \
+		pulumi stack select $(CHURN_STACK_REF) >/dev/null 2>&1 || pulumi stack init $(CHURN_STACK_REF); \
+		pulumi config set stepSeconds $(CHURN_SECONDS); \
+		pulumi config set deployNonce "churn-$$(date +%s)"; \
+		pulumi up --yes --skip-preview --message "Slow churn deployment"'
 
 ## Disable the mock OIDC provider row so the break-glass login is live (password: "password").
 ## Break-glass only works while zero providers are enabled; note the app re-enables the row on

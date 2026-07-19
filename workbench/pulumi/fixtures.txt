@@ -2,3 +2,4 @@
 shared-foundation|dev staging prod|platform
 artifact-pipeline|nightly release|developer-experience
 application-fleet|dev staging prod|applications
+deploy-simulator|dev|release-engineering

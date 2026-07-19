@@ -1,0 +1,155 @@
+name: deploy-simulator
+runtime: yaml
+description: Slow, chatty local rollout for watching in-progress runs in the console.
+
+# Every simulated step sleeps `stepSeconds`, and the invoke-based checks in
+# `variables` run during previews too — so both `pulumi preview` and `pulumi up`
+# stay in-progress long enough to watch live in the console. Changing
+# `deployNonce` makes every step report a change (a mix of in-place updates and
+# trigger-driven replacements). `logging: stdoutAndStderr` surfaces each step's
+# output as per-resource diagnostics.
+
+config:
+  environment:
+    type: string
+    default: dev
+  revision:
+    type: integer
+    default: 1
+  stepSeconds:
+    type: integer
+    default: 0
+  deployNonce:
+    type: string
+    default: seed
+
+variables:
+  preflight-report:
+    fn::invoke:
+      function: command:local:run
+      arguments:
+        command: sleep ${stepSeconds} && echo "preflight checks passed (${deployNonce})"
+      return: stdout
+  manifest-report:
+    fn::invoke:
+      function: command:local:run
+      arguments:
+        command: sleep ${stepSeconds} && echo "manifests validated; ${preflight-report}"
+      return: stdout
+  capacity-report:
+    fn::invoke:
+      function: command:local:run
+      arguments:
+        command: sleep ${stepSeconds} && echo "capacity confirmed; ${manifest-report}"
+      return: stdout
+  quota-report:
+    fn::invoke:
+      function: command:local:run
+      arguments:
+        command: sleep ${stepSeconds} && echo "quota headroom verified; ${capacity-report}"
+      return: stdout
+  policy-report:
+    fn::invoke:
+      function: command:local:run
+      arguments:
+        command: sleep ${stepSeconds} && echo "policy scan clean; ${quota-report}"
+      return: stdout
+  canary-report:
+    fn::invoke:
+      function: command:local:run
+      arguments:
+        command: sleep ${stepSeconds} && echo "canary analysis healthy; ${policy-report}"
+      return: stdout
+
+resources:
+  command-provider:
+    type: pulumi:providers:command
+    defaultProvider: true
+    options:
+      version: 1.2.1
+  random-provider:
+    type: pulumi:providers:random
+    defaultProvider: true
+    options:
+      version: 4.21.0
+  canary-token:
+    type: random:RandomPassword
+    properties:
+      length: 16
+      special: false
+      # Deprecated alias of `numeric`, kept deliberately to exercise warning
+      # diagnostics in the console.
+      number: true
+      keepers:
+        nonce: ${deployNonce}
+  preflight-gate:
+    type: command:local:Command
+    properties:
+      create: sleep ${stepSeconds} && echo "preflight gate open (${deployNonce})"
+      update: sleep ${stepSeconds} && echo "preflight gate re-validated (${deployNonce})"
+      environment:
+        PREFLIGHT_REPORT: ${preflight-report}
+      logging: stdoutAndStderr
+  database-migration:
+    type: command:local:Command
+    properties:
+      create: sleep ${stepSeconds} && echo "database schema migrated (${deployNonce})"
+      update: sleep ${stepSeconds} && echo "database schema migration re-applied (${deployNonce})"
+      environment:
+        MANIFEST_REPORT: ${manifest-report}
+      logging: stdoutAndStderr
+    options:
+      dependsOn:
+        - ${preflight-gate}
+  api-rollout:
+    type: command:local:Command
+    properties:
+      create: sleep ${stepSeconds} && echo "api fleet rolled out (${deployNonce})"
+      triggers:
+        - ${deployNonce}
+        - ${capacity-report}
+      logging: stdoutAndStderr
+    options:
+      dependsOn:
+        - ${database-migration}
+  worker-rollout:
+    type: command:local:Command
+    properties:
+      create: sleep ${stepSeconds} && echo "worker fleet rolled out (${deployNonce})"
+      triggers:
+        - ${deployNonce}
+      logging: stdoutAndStderr
+    options:
+      dependsOn:
+        - ${api-rollout}
+  smoke-tests:
+    type: command:local:Command
+    properties:
+      create: >-
+        sleep ${stepSeconds} &&
+        echo "smoke tests passed (${deployNonce})" &&
+        echo "smoke: p99 latency above baseline" >&2
+      update: >-
+        sleep ${stepSeconds} &&
+        echo "smoke tests re-run (${deployNonce})" &&
+        echo "smoke: p99 latency above baseline" >&2
+      environment:
+        CANARY_REPORT: ${canary-report}
+      logging: stdoutAndStderr
+    options:
+      dependsOn:
+        - ${worker-rollout}
+
+outputs:
+  environment: ${environment}
+  revision: ${revision}
+  deployNonce: ${deployNonce}
+  rolloutReports:
+    preflight: ${preflight-report}
+    manifests: ${manifest-report}
+    capacity: ${capacity-report}
+    quota: ${quota-report}
+    policy: ${policy-report}
+    canary: ${canary-report}
+  smokeReport: ${smoke-tests.stdout}
+  canaryToken: ${canary-token.result}
