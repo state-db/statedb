@@ -5,6 +5,7 @@
 	pulumi-extract pulumi-compare pulumi-discover pulumi-api-test \
 	pulumi-recorder-run pulumi-recorder-run-no-build pulumi-recorder-catalog pulumi-recorder-verify pulumi-recorder-discover \
 	pulumi-verify-build pulumi-verify-test \
+	pulumi-compat-sweep \
 	pulumi-workbench
 
 PULUMI_SCOPE         ?= $(CURDIR)/tools/pulumi/api-extract/scopes/state-backend.yaml
@@ -161,3 +162,16 @@ pulumi-verify-build:
 ## Run tests for the integrity verifier tool.
 pulumi-verify-test:
 	$(MAKE) -C tools/pulumi/verify verify
+
+## -------------------------
+## Pulumi Compatibility Sweep
+## -------------------------
+
+## One-command compat check against a Pulumi release: pin audit + source-level
+## endpoint diff + trial recorder capture diffed against committed fixtures.
+## Outputs stay in the gitignored scratch dir; pass --publish when adopting.
+## Usage: make pulumi-compat-sweep [TO=v3.253.0]   (default: latest release)
+##        make pulumi-compat-sweep SWEEP_ARGS=--skip-record
+##        make pulumi-compat-sweep TO=v3.253.0 SWEEP_ARGS=--publish
+pulumi-compat-sweep:
+	tools/pulumi/compat/sweep.sh $(if $(TO),--to $(TO)) $(SWEEP_ARGS)

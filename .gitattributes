@@ -1,0 +1,3 @@
+# Recorded/derived Pulumi protocol artifacts — collapse in GitHub diffs.
+tools/pulumi/recorder/fixtures/** linguist-generated=true
+api-snapshots/** linguist-generated=true

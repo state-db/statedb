@@ -42,6 +42,15 @@ make pulumi-recorder-catalog
 make pulumi-recorder-verify
 ```
 
+## Version overrides
+
+`run.sh` (and the `run`/`run-no-build` targets) accept environment overrides:
+`PULUMI_VERSION` (CLI version to capture with; images are tagged
+`pulumi-recorder:<version>` so cached builds coexist), `FIXTURES_DIR`, and
+`SNAPSHOTS_DIR`. Trial captures against candidate versions should redirect the
+output dirs — `tools/pulumi/compat/sweep.sh` does this for you and diffs the
+result against the committed baseline.
+
 ## Reproducibility Notes
 
 - The recorder uses fixed test values: org `testorg`, project `recorder-test`, stack `dev`.

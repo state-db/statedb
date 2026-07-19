@@ -1,0 +1,536 @@
+[
+  {
+    "method": "GET",
+    "path": "/api/capabilities",
+    "name": "getCapabilities",
+    "category": "other"
+  },
+  {
+    "method": "GET",
+    "path": "/api/user",
+    "name": "getCurrentUser",
+    "category": "account"
+  },
+  {
+    "method": "GET",
+    "path": "/api/user/stacks",
+    "name": "listUserStacks",
+    "category": "account"
+  },
+  {
+    "method": "GET",
+    "path": "/api/user/organizations/default",
+    "name": "getDefaultOrg",
+    "category": "account"
+  },
+  {
+    "method": "GET",
+    "path": "/api/stacks/{orgName}",
+    "name": "listOrganizationStacks",
+    "category": "stacks"
+  },
+  {
+    "method": "POST",
+    "path": "/api/stacks/{orgName}",
+    "name": "createStack",
+    "category": "stacks"
+  },
+  {
+    "method": "DELETE",
+    "path": "/api/stacks/{orgName}/{projectName}/{stackName}",
+    "name": "deleteStack",
+    "category": "stacks"
+  },
+  {
+    "method": "GET",
+    "path": "/api/stacks/{orgName}/{projectName}/{stackName}",
+    "name": "getStack",
+    "category": "stacks"
+  },
+  {
+    "method": "GET",
+    "path": "/api/stacks/{orgName}/{projectName}/{stackName}/export",
+    "name": "exportStack",
+    "category": "state_io"
+  },
+  {
+    "method": "POST",
+    "path": "/api/stacks/{orgName}/{projectName}/{stackName}/import",
+    "name": "importStack",
+    "category": "state_io"
+  },
+  {
+    "method": "POST",
+    "path": "/api/stacks/{orgName}/{projectName}/{stackName}/encrypt",
+    "name": "encryptValue",
+    "category": "secrets"
+  },
+  {
+    "method": "POST",
+    "path": "/api/stacks/{orgName}/{projectName}/{stackName}/decrypt",
+    "name": "decryptValue",
+    "category": "secrets"
+  },
+  {
+    "method": "GET",
+    "path": "/api/stacks/{orgName}/{projectName}/{stackName}/logs",
+    "name": "getStackLogs",
+    "category": "stacks"
+  },
+  {
+    "method": "GET",
+    "path": "/api/stacks/{orgName}/{projectName}/{stackName}/updates",
+    "name": "getStackUpdates",
+    "category": "update_create"
+  },
+  {
+    "method": "GET",
+    "path": "/api/stacks/{orgName}/{projectName}/{stackName}/updates/latest",
+    "name": "getLatestStackUpdate",
+    "category": "update_create"
+  },
+  {
+    "method": "GET",
+    "path": "/api/stacks/{orgName}/{projectName}/{stackName}/updates/{version}",
+    "name": "getStackUpdate",
+    "category": "update_create"
+  },
+  {
+    "method": "GET",
+    "path": "/api/stacks/{orgName}/{projectName}/{stackName}/updates/{version}/contents/files",
+    "name": "getUpdateContentsFiles",
+    "category": "update_create"
+  },
+  {
+    "method": "GET",
+    "path": "/api/stacks/{orgName}/{projectName}/{stackName}/updates/{version}/contents/file/{path:.*}",
+    "name": "getUpdateContentsFilePath",
+    "category": "update_create"
+  },
+  {
+    "method": "GET",
+    "path": "/api/orgs/{orgName}/members",
+    "name": "listOrganizationMembers",
+    "category": "account"
+  },
+  {
+    "method": "GET",
+    "path": "/api/orgs/{orgName}/templates",
+    "name": "listTemplates",
+    "category": "account"
+  },
+  {
+    "method": "GET",
+    "path": "/api/orgs/{orgName}/templates/download",
+    "name": "downloadTemplates",
+    "category": "account"
+  },
+  {
+    "method": "POST",
+    "path": "/api/stacks/{orgName}/{projectName}/{stackName}/batch-decrypt",
+    "name": "batchDecrypt",
+    "category": "stacks"
+  },
+  {
+    "method": "POST",
+    "path": "/api/stacks/{orgName}/{projectName}/{stackName}/batch-encrypt",
+    "name": "batchEncrypt",
+    "category": "stacks"
+  },
+  {
+    "method": "HEAD",
+    "path": "/api/stacks/{orgName}/{projectName}",
+    "name": "projectExists",
+    "category": "stacks"
+  },
+  {
+    "method": "POST",
+    "path": "/api/stacks/{orgName}/{projectName}/{stackName}/rename",
+    "name": "renameStack",
+    "category": "stacks"
+  },
+  {
+    "method": "PATCH",
+    "path": "/api/stacks/{orgName}/{projectName}/{stackName}/tags",
+    "name": "updateStackTags",
+    "category": "stacks"
+  },
+  {
+    "method": "PUT",
+    "path": "/api/stacks/{orgName}/{projectName}/{stackName}/config",
+    "name": "updateStackConfig",
+    "category": "stacks"
+  },
+  {
+    "method": "PUT",
+    "path": "/api/stacks/{orgName}/{projectName}/{stackName}/deployments/settings",
+    "name": "updateDeploymentSettings",
+    "category": "deployments"
+  },
+  {
+    "method": "POST",
+    "path": "/api/stacks/{orgName}/{projectName}/{stackName}/deployments/settings/encrypt",
+    "name": "encryptDeploymentSecret",
+    "category": "secrets"
+  },
+  {
+    "method": "DELETE",
+    "path": "/api/stacks/{orgName}/{projectName}/{stackName}/deployments/settings",
+    "name": "destroyDeploymentSettings",
+    "category": "deployments"
+  },
+  {
+    "method": "GET",
+    "path": "/api/stacks/{orgName}/{projectName}/{stackName}/deployments",
+    "name": "listStackDeployments",
+    "category": "deployments"
+  },
+  {
+    "method": "POST",
+    "path": "/api/stacks/{orgName}/{projectName}/{stackName}/deployments/{deploymentId}/cancel",
+    "name": "cancelStackDeployment",
+    "category": "update_lifecycle"
+  },
+  {
+    "method": "POST",
+    "path": "/api/stacks/{orgName}/{projectName}/{stackName}/destroy",
+    "name": "createDestroy",
+    "category": "update_create"
+  },
+  {
+    "method": "POST",
+    "path": "/api/stacks/{orgName}/{projectName}/{stackName}/preview",
+    "name": "createPreview",
+    "category": "update_create"
+  },
+  {
+    "method": "POST",
+    "path": "/api/stacks/{orgName}/{projectName}/{stackName}/update",
+    "name": "createUpdate",
+    "category": "update_create"
+  },
+  {
+    "method": "GET",
+    "path": "/api/stacks/{orgName}/{projectName}/{stackName}/update/{updateID}",
+    "name": "getUpdateStatus_update",
+    "category": "update_lifecycle"
+  },
+  {
+    "method": "GET",
+    "path": "/api/stacks/{orgName}/{projectName}/{stackName}/preview/{updateID}",
+    "name": "getUpdateStatus_preview",
+    "category": "update_lifecycle"
+  },
+  {
+    "method": "GET",
+    "path": "/api/stacks/{orgName}/{projectName}/{stackName}/destroy/{updateID}",
+    "name": "getUpdateStatus_destroy",
+    "category": "update_lifecycle"
+  },
+  {
+    "method": "GET",
+    "path": "/api/stacks/{orgName}/{projectName}/{stackName}/refresh/{updateID}",
+    "name": "getUpdateStatus_refresh",
+    "category": "update_lifecycle"
+  },
+  {
+    "method": "POST",
+    "path": "/api/stacks/{orgName}/{projectName}/{stackName}/update/{updateID}",
+    "name": "startUpdate_update",
+    "category": "update_lifecycle"
+  },
+  {
+    "method": "POST",
+    "path": "/api/stacks/{orgName}/{projectName}/{stackName}/preview/{updateID}",
+    "name": "startUpdate_preview",
+    "category": "update_lifecycle"
+  },
+  {
+    "method": "POST",
+    "path": "/api/stacks/{orgName}/{projectName}/{stackName}/destroy/{updateID}",
+    "name": "startUpdate_destroy",
+    "category": "update_lifecycle"
+  },
+  {
+    "method": "POST",
+    "path": "/api/stacks/{orgName}/{projectName}/{stackName}/refresh/{updateID}",
+    "name": "startUpdate_refresh",
+    "category": "update_lifecycle"
+  },
+  {
+    "method": "PATCH",
+    "path": "/api/stacks/{orgName}/{projectName}/{stackName}/update/{updateID}/checkpoint",
+    "name": "patchCheckpoint_update",
+    "category": "checkpoint"
+  },
+  {
+    "method": "PATCH",
+    "path": "/api/stacks/{orgName}/{projectName}/{stackName}/preview/{updateID}/checkpoint",
+    "name": "patchCheckpoint_preview",
+    "category": "checkpoint"
+  },
+  {
+    "method": "PATCH",
+    "path": "/api/stacks/{orgName}/{projectName}/{stackName}/destroy/{updateID}/checkpoint",
+    "name": "patchCheckpoint_destroy",
+    "category": "checkpoint"
+  },
+  {
+    "method": "PATCH",
+    "path": "/api/stacks/{orgName}/{projectName}/{stackName}/refresh/{updateID}/checkpoint",
+    "name": "patchCheckpoint_refresh",
+    "category": "checkpoint"
+  },
+  {
+    "method": "PATCH",
+    "path": "/api/stacks/{orgName}/{projectName}/{stackName}/update/{updateID}/checkpointdelta",
+    "name": "patchCheckpointDelta_update",
+    "category": "checkpoint"
+  },
+  {
+    "method": "PATCH",
+    "path": "/api/stacks/{orgName}/{projectName}/{stackName}/preview/{updateID}/checkpointdelta",
+    "name": "patchCheckpointDelta_preview",
+    "category": "checkpoint"
+  },
+  {
+    "method": "PATCH",
+    "path": "/api/stacks/{orgName}/{projectName}/{stackName}/destroy/{updateID}/checkpointdelta",
+    "name": "patchCheckpointDelta_destroy",
+    "category": "checkpoint"
+  },
+  {
+    "method": "PATCH",
+    "path": "/api/stacks/{orgName}/{projectName}/{stackName}/refresh/{updateID}/checkpointdelta",
+    "name": "patchCheckpointDelta_refresh",
+    "category": "checkpoint"
+  },
+  {
+    "method": "PATCH",
+    "path": "/api/stacks/{orgName}/{projectName}/{stackName}/update/{updateID}/checkpointverbatim",
+    "name": "patchCheckpointVerbatim_update",
+    "category": "checkpoint"
+  },
+  {
+    "method": "PATCH",
+    "path": "/api/stacks/{orgName}/{projectName}/{stackName}/preview/{updateID}/checkpointverbatim",
+    "name": "patchCheckpointVerbatim_preview",
+    "category": "checkpoint"
+  },
+  {
+    "method": "PATCH",
+    "path": "/api/stacks/{orgName}/{projectName}/{stackName}/destroy/{updateID}/checkpointverbatim",
+    "name": "patchCheckpointVerbatim_destroy",
+    "category": "checkpoint"
+  },
+  {
+    "method": "PATCH",
+    "path": "/api/stacks/{orgName}/{projectName}/{stackName}/refresh/{updateID}/checkpointverbatim",
+    "name": "patchCheckpointVerbatim_refresh",
+    "category": "checkpoint"
+  },
+  {
+    "method": "POST",
+    "path": "/api/stacks/{orgName}/{projectName}/{stackName}/update/{updateID}/complete",
+    "name": "completeUpdate_update",
+    "category": "update_lifecycle"
+  },
+  {
+    "method": "POST",
+    "path": "/api/stacks/{orgName}/{projectName}/{stackName}/preview/{updateID}/complete",
+    "name": "completeUpdate_preview",
+    "category": "update_lifecycle"
+  },
+  {
+    "method": "POST",
+    "path": "/api/stacks/{orgName}/{projectName}/{stackName}/destroy/{updateID}/complete",
+    "name": "completeUpdate_destroy",
+    "category": "update_lifecycle"
+  },
+  {
+    "method": "POST",
+    "path": "/api/stacks/{orgName}/{projectName}/{stackName}/refresh/{updateID}/complete",
+    "name": "completeUpdate_refresh",
+    "category": "update_lifecycle"
+  },
+  {
+    "method": "POST",
+    "path": "/api/stacks/{orgName}/{projectName}/{stackName}/update/{updateID}/events",
+    "name": "postEngineEvent_update",
+    "category": "events"
+  },
+  {
+    "method": "POST",
+    "path": "/api/stacks/{orgName}/{projectName}/{stackName}/preview/{updateID}/events",
+    "name": "postEngineEvent_preview",
+    "category": "events"
+  },
+  {
+    "method": "POST",
+    "path": "/api/stacks/{orgName}/{projectName}/{stackName}/destroy/{updateID}/events",
+    "name": "postEngineEvent_destroy",
+    "category": "events"
+  },
+  {
+    "method": "POST",
+    "path": "/api/stacks/{orgName}/{projectName}/{stackName}/refresh/{updateID}/events",
+    "name": "postEngineEvent_refresh",
+    "category": "events"
+  },
+  {
+    "method": "POST",
+    "path": "/api/stacks/{orgName}/{projectName}/{stackName}/update/{updateID}/events/batch",
+    "name": "postEngineEventBatch_update",
+    "category": "events"
+  },
+  {
+    "method": "POST",
+    "path": "/api/stacks/{orgName}/{projectName}/{stackName}/preview/{updateID}/events/batch",
+    "name": "postEngineEventBatch_preview",
+    "category": "events"
+  },
+  {
+    "method": "POST",
+    "path": "/api/stacks/{orgName}/{projectName}/{stackName}/destroy/{updateID}/events/batch",
+    "name": "postEngineEventBatch_destroy",
+    "category": "events"
+  },
+  {
+    "method": "POST",
+    "path": "/api/stacks/{orgName}/{projectName}/{stackName}/refresh/{updateID}/events/batch",
+    "name": "postEngineEventBatch_refresh",
+    "category": "events"
+  },
+  {
+    "method": "PATCH",
+    "path": "/api/stacks/{orgName}/{projectName}/{stackName}/update/{updateID}/journalentries",
+    "name": "patchJournalEntries_update",
+    "category": "update_lifecycle"
+  },
+  {
+    "method": "PATCH",
+    "path": "/api/stacks/{orgName}/{projectName}/{stackName}/preview/{updateID}/journalentries",
+    "name": "patchJournalEntries_preview",
+    "category": "update_lifecycle"
+  },
+  {
+    "method": "PATCH",
+    "path": "/api/stacks/{orgName}/{projectName}/{stackName}/destroy/{updateID}/journalentries",
+    "name": "patchJournalEntries_destroy",
+    "category": "update_lifecycle"
+  },
+  {
+    "method": "PATCH",
+    "path": "/api/stacks/{orgName}/{projectName}/{stackName}/refresh/{updateID}/journalentries",
+    "name": "patchJournalEntries_refresh",
+    "category": "update_lifecycle"
+  },
+  {
+    "method": "POST",
+    "path": "/api/stacks/{orgName}/{projectName}/{stackName}/update/{updateID}/renew_lease",
+    "name": "renewLease_update",
+    "category": "locking"
+  },
+  {
+    "method": "POST",
+    "path": "/api/stacks/{orgName}/{projectName}/{stackName}/preview/{updateID}/renew_lease",
+    "name": "renewLease_preview",
+    "category": "locking"
+  },
+  {
+    "method": "POST",
+    "path": "/api/stacks/{orgName}/{projectName}/{stackName}/destroy/{updateID}/renew_lease",
+    "name": "renewLease_destroy",
+    "category": "locking"
+  },
+  {
+    "method": "POST",
+    "path": "/api/stacks/{orgName}/{projectName}/{stackName}/refresh/{updateID}/renew_lease",
+    "name": "renewLease_refresh",
+    "category": "locking"
+  },
+  {
+    "method": "GET",
+    "path": "/api/console/orgs/{orgName}/integrations/github-app",
+    "name": "getGHAppIntegration",
+    "category": "other"
+  },
+  {
+    "method": "POST",
+    "path": "/api/orgs/{orgName}/policypacks",
+    "name": "publishPolicyPack",
+    "category": "policy"
+  },
+  {
+    "method": "POST",
+    "path": "/api/orgs/{orgName}/policypacks/{policyPackName}/{versionTag}/complete",
+    "name": "completePolicyPackPublish",
+    "category": "update_lifecycle"
+  },
+  {
+    "method": "GET",
+    "path": "/api/orgs/{orgName}/resources/summary",
+    "name": "getUsageSummaryResourceHours",
+    "category": "account"
+  },
+  {
+    "method": "GET",
+    "path": "/api/orgs/{orgName}/search/resources",
+    "name": "getSearchResources",
+    "category": "search"
+  },
+  {
+    "method": "GET",
+    "path": "/api/orgs/{orgName}/search/resources/parse",
+    "name": "getSearchResourcesParse",
+    "category": "search"
+  },
+  {
+    "method": "GET",
+    "path": "/api/orgs/{orgName}/search/resourcesv2",
+    "name": "getOrgResourceSearchV2",
+    "category": "search"
+  },
+  {
+    "method": "GET",
+    "path": "/api/preview/insights/{orgName}/accounts",
+    "name": "listInsightsAccounts",
+    "category": "update_lifecycle"
+  },
+  {
+    "method": "GET",
+    "path": "/api/preview/insights/{orgName}/accounts/{accountName}/scans/{scanId}/logs",
+    "name": "getScanLogs",
+    "category": "update_lifecycle"
+  },
+  {
+    "method": "POST",
+    "path": "/api/registry/packages/{source}/{publisher}/{name}/versions",
+    "name": "publishPackage",
+    "category": "registry"
+  },
+  {
+    "method": "POST",
+    "path": "/api/registry/packages/{source}/{publisher}/{name}/versions/{version}/complete",
+    "name": "completePackagePublish",
+    "category": "update_lifecycle"
+  },
+  {
+    "method": "DELETE",
+    "path": "/api/registry/packages/{source}/{publisher}/{name}/versions/{version}",
+    "name": "deletePackageVersion",
+    "category": "registry"
+  },
+  {
+    "method": "POST",
+    "path": "/api/registry/templates/{source}/{publisher}/{name}/versions",
+    "name": "publishTemplate",
+    "category": "registry"
+  },
+  {
+    "method": "POST",
+    "path": "/api/registry/templates/{source}/{publisher}/{name}/versions/{version}/complete",
+    "name": "completeTemplatePublish",
+    "category": "update_lifecycle"
+  }
+]

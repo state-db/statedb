@@ -29,6 +29,11 @@ After a fresh clone, regenerate only the catalog (no Docker required):
 go run ./catalog -fixtures fixtures -out ../../api-snapshots/pulumi/catalog.md
 ```
 
+To capture with a *different* CLI version without touching the committed
+fixtures/catalog, don't call run.sh directly — use the compat sweep
+(`make pulumi-compat-sweep TO=v3.NNN.0`, see `tools/pulumi/compat/`), which
+redirects output to a scratch dir and diffs against the committed baseline.
+
 ---
 
 ## File layout

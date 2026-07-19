@@ -248,7 +248,7 @@ func normalizeFixtureJSONValue(key string, v interface{}) interface{} {
 				continue
 			}
 			switch k {
-			case "timestamp":
+			case "timestamp", "durationSeconds":
 				out[k] = float64(0)
 				continue
 			case "created", "modified":
@@ -315,6 +315,11 @@ func normalizeFixtureString(key, value string) string {
 		if value != "" {
 			return "[resource-id]"
 		}
+	case "salt":
+		// Passphrase-provider salt is freshly generated per capture session.
+		if value != "" {
+			return "[salt]"
+		}
 	case "result":
 		if value != "" && value != "succeeded" && value != "failed" && value != "cancelled" {
 			return "[result]"
@@ -322,6 +327,13 @@ func normalizeFixtureString(key, value string) string {
 	case "petName":
 		if value != "" {
 			return "[pet-name]"
+		}
+	case "sourcePosition":
+		// Engine-event diagnostic positions embed toolchain module paths
+		// (grpc/sdk versions, pseudo-versions) that churn on every CLI or
+		// provider rebuild.
+		if value != "" {
+			return "[source-position]"
 		}
 	case "word":
 		if value != "" {
@@ -340,6 +352,11 @@ func stabilizeConcurrentPulumiProbe(path string) {
 	}
 	if strings.HasSuffix(path, "/batch-decrypt") {
 		time.Sleep(40 * time.Millisecond)
+	}
+	// The CLI fires encrypt concurrently with journal writes during destroy;
+	// delay it so journalentries lands first deterministically.
+	if strings.HasSuffix(path, "/encrypt") {
+		time.Sleep(25 * time.Millisecond)
 	}
 	parts := strings.Split(strings.Trim(path, "/"), "/")
 	if len(parts) == 6 && parts[0] == "api" && parts[1] == "stacks" {
