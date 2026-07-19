@@ -9,6 +9,7 @@ public record WorkspaceSummary(
     UUID orgId,
     String orgName,
     String projectName,
+    Instant projectCreatedAt,
     String stackName,
     Workspace.Kind workspaceKind,
     int version,

@@ -21,6 +21,7 @@ import { HomePage } from "@/routes/home";
 import { LoginPage } from "@/routes/login";
 import { NotFoundPage } from "@/routes/not-found";
 import { PlaceholderPage } from "@/routes/placeholder";
+import { ProjectStacksPage } from "@/routes/scoped-stacks";
 
 // Bare root renders an <Outlet />; the
 // shell wraps everything that needs the header/nav frame.
@@ -52,21 +53,6 @@ const userSettingsTokensRedirectRoute = createRoute({
   path: "/user/settings/tokens",
   beforeLoad: () => {
     throw redirect({ to: "/console/account/tokens", replace: true });
-  },
-});
-
-const oneSegmentRedirectRoute = createRoute({
-  getParentRoute: () => rootRoute,
-  path: "/$seg",
-  beforeLoad: ({ params }) => {
-    if (isReservedRootName(params.seg)) {
-      throw notFound();
-    }
-    throw redirect({
-      to: "/console/$org",
-      params: { org: params.seg },
-      replace: true,
-    });
   },
 });
 
@@ -136,28 +122,16 @@ const loginRoute = createRoute({
   component: LoginPage,
 });
 
-const orgRoute = createRoute({
-  getParentRoute: () => shellRoute,
-  path: "$org",
-  beforeLoad: ({ params }) => {
-    if (typeof window !== "undefined") {
-      localStorage.setItem("state-db-selected-org", params.org);
-    }
-    throw redirect({ to: "/console", replace: true });
-  },
-});
-
 const projectRoute = createRoute({
   getParentRoute: () => shellRoute,
   path: "$org/$project",
-  component: () => (
-    <PlaceholderPage
-      icon={LayoutDashboard}
-      title="Project stacks"
-      description="Stacks in this project fill in here in S3."
-    />
-  ),
+  component: ProjectStacksRoute,
 });
+
+function ProjectStacksRoute() {
+  const { org, project } = projectRoute.useParams();
+  return <ProjectStacksPage org={org} project={project} />;
+}
 
 const stackRoute = createRoute({
   getParentRoute: () => shellRoute,
@@ -294,11 +268,9 @@ const routeTree = rootRoute.addChildren([
   stackRedirectRoute,
   updateRedirectRoute,
   previewRedirectRoute,
-  oneSegmentRedirectRoute,
   loginRoute,
   shellRoute.addChildren([
     indexRoute,
-    orgRoute,
     projectRoute,
     stackRoute,
     updateRoute,
@@ -327,19 +299,4 @@ function isUuid(value: string) {
   return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
     value,
   );
-}
-
-function isReservedRootName(value: string) {
-  return new Set([
-    "api",
-    "pulumi",
-    "tofu",
-    "console",
-    "assets",
-    "cli-login",
-    "welcome",
-    "account",
-    "user",
-    "favicon.ico",
-  ]).has(value);
 }

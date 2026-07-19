@@ -37,15 +37,21 @@ public class StackListFinder {
           + "                 and m.role in :humanRoles))) ";
 
   public List<StackSummary> findVisibleToUser(UUID userId, String projectFilter) {
-    return find(userId, null, projectFilter);
+    return find(userId, null, null, projectFilter);
+  }
+
+  public List<StackSummary> findVisibleToUser(
+      UUID userId, String orgNameFilter, String projectFilter) {
+    return find(userId, null, orgNameFilter, projectFilter);
   }
 
   // Single-org credentials (service-account tokens) additionally clamp to the token's org.
   public List<StackSummary> findVisibleToUserInOrg(UUID userId, UUID orgId, String projectFilter) {
-    return find(userId, orgId, projectFilter);
+    return find(userId, orgId, null, projectFilter);
   }
 
-  private List<StackSummary> find(UUID userId, UUID orgId, String projectFilter) {
+  private List<StackSummary> find(
+      UUID userId, UUID orgId, String orgNameFilter, String projectFilter) {
     String hql =
         "from Stack s "
             + "join fetch s.project p "
@@ -53,6 +59,7 @@ public class StackListFinder {
             + "join fetch s.workspace w "
             + "where "
             + (orgId != null ? "s.orgId = :org and " : "")
+            + (orgNameFilter != null ? "o.name = :orgName and " : "")
             + (projectFilter != null ? "p.name = :project and " : "")
             + READABLE_BY_USER
             + "order by o.name, p.name, s.name";
@@ -72,6 +79,9 @@ public class StackListFinder {
     if (orgId != null) {
       params = params.and("org", orgId);
     }
+    if (orgNameFilter != null) {
+      params = params.and("orgName", orgNameFilter);
+    }
     if (projectFilter != null) {
       params = params.and("project", projectFilter);
     }
@@ -84,6 +94,7 @@ public class StackListFinder {
                     s.orgId,
                     s.project.organization.name,
                     s.project.name,
+                    s.project.createdAt,
                     s.name,
                     s.workspace.kind,
                     s.version,

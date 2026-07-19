@@ -15,6 +15,13 @@ export class UnauthorizedError extends Error {
   }
 }
 
+export class NotFoundError extends Error {
+  constructor() {
+    super("not found");
+    this.name = "NotFoundError";
+  }
+}
+
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const controller = init?.signal ? undefined : new AbortController();
   const timeout = controller
@@ -33,6 +40,9 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     });
     if (res.status === 401) {
       throw new UnauthorizedError();
+    }
+    if (res.status === 404) {
+      throw new NotFoundError();
     }
     if (!res.ok) {
       const body = await res.json().catch(() => ({ error: res.statusText }));
@@ -93,6 +103,7 @@ export interface Workspace {
   kind: "pulumi" | "tofu" | string;
   org: string;
   project: string;
+  projectCreatedAt: string;
   stack: string;
   version: number;
   resourceCount: number | null;
@@ -131,7 +142,14 @@ export const api = {
     get: () => request<CurrentUser>("/user"),
   },
   workspaces: {
-    list: () => request<Workspace[]>("/workspaces"),
+    list: (filters?: { org?: string; project?: string }) => {
+      const search = new URLSearchParams();
+      if (filters?.org) search.set("org", filters.org);
+      if (filters?.project) search.set("project", filters.project);
+      const encoded = search.toString();
+      const query = encoded ? `?${encoded}` : "";
+      return request<Workspace[]>(`/workspaces${query}`);
+    },
   },
 } as const;
 

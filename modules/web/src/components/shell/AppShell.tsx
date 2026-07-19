@@ -84,7 +84,6 @@ export function useShell() {
 
 export function AppShell() {
   const { data: user, error, isLoading } = useCurrentUser();
-  const location = useLocation();
   const [selectedOrg, setSelectedOrgState] = useState<string | null>(() => {
     if (typeof window === "undefined") {
       return null;
@@ -97,19 +96,6 @@ export function AppShell() {
       redirectToLogin();
     }
   }, [error]);
-
-  useEffect(() => {
-    const match = /^\/console\/([^/]+)/.exec(location.pathname);
-    const orgFromPath = match?.[1];
-    if (
-      orgFromPath &&
-      !["account", "admin", "login"].includes(orgFromPath) &&
-      orgFromPath !== selectedOrg
-    ) {
-      setSelectedOrgState(orgFromPath);
-      localStorage.setItem("state-db-selected-org", orgFromPath);
-    }
-  }, [location.pathname, selectedOrg]);
 
   const setSelectedOrg = (org: string | null) => {
     setSelectedOrgState(org);
@@ -249,7 +235,7 @@ function OrgSwitcher({ organizations }: { organizations: OrgMembership[] }) {
   const selected = organizations.find((org) => org.name === selectedOrg);
 
   useEffect(() => {
-    if (organizations.length === 1 && selectedOrg !== organizations[0].name) {
+    if (organizations.length === 1 && selectedOrg === null) {
       setSelectedOrg(organizations[0].name);
     }
   }, [organizations, selectedOrg, setSelectedOrg]);
@@ -444,6 +430,9 @@ function isBreadcrumbScreen(to: string) {
     return true;
   }
   if (to === "/console/account") {
+    return false;
+  }
+  if (/^\/console\/[^/]+$/.test(to)) {
     return false;
   }
   if (to.endsWith("/updates") || to.endsWith("/previews")) {

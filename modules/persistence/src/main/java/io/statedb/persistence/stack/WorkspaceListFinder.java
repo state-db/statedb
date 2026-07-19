@@ -27,7 +27,11 @@ public class WorkspaceListFinder {
   @Inject StackListFinder stackListFinder;
 
   public List<WorkspaceSummary> findVisibleToUser(UUID userId) {
-    List<StackSummary> stacks = stackListFinder.findVisibleToUser(userId, null);
+    return findVisibleToUser(userId, null, null);
+  }
+
+  public List<WorkspaceSummary> findVisibleToUser(UUID userId, String org, String project) {
+    List<StackSummary> stacks = stackListFinder.findVisibleToUser(userId, org, project);
     if (stacks.isEmpty()) {
       return List.of();
     }
@@ -45,6 +49,7 @@ public class WorkspaceListFinder {
                     s.orgId(),
                     s.orgName(),
                     s.projectName(),
+                    s.projectCreatedAt(),
                     s.stackName(),
                     s.workspaceKind(),
                     s.version(),

@@ -80,6 +80,15 @@ class WorkspaceListFinderTest {
     assertEquals("alice@example.test", stagingRow.lock().lockedBy());
     assertEquals(0L, stagingRow.resourceCount());
     assertNull(stagingRow.lastUpdate());
+
+    assertEquals(
+        List.of("prod", "staging"),
+        finder.findVisibleToUser(user.id, "workspace-visible", "networking").stream()
+            .map(WorkspaceSummary::stackName)
+            .toList());
+    assertEquals(
+        List.of(), finder.findVisibleToUser(user.id, "workspace-visible", "missing-project"));
+    assertEquals(List.of(), finder.findVisibleToUser(user.id, "workspace-hidden", null));
   }
 
   private static Organization org(String name, String displayName) {

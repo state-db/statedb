@@ -7,8 +7,10 @@ import io.statedb.persistence.stack.WorkspaceListFinder;
 import io.statedb.persistence.stack.WorkspaceSummary;
 import jakarta.inject.Inject;
 import jakarta.ws.rs.GET;
+import jakarta.ws.rs.NotFoundException;
 import jakarta.ws.rs.Path;
 import jakarta.ws.rs.Produces;
+import jakarta.ws.rs.QueryParam;
 import jakarta.ws.rs.core.MediaType;
 import java.time.Instant;
 import java.util.List;
@@ -24,13 +26,17 @@ public class WorkspacesResource {
 
   @GET
   @Produces(MediaType.APPLICATION_JSON)
-  public List<WorkspaceResponse> list() {
+  public List<WorkspaceResponse> list(
+      @QueryParam("org") String org, @QueryParam("project") String project) {
     AuthenticatedPrincipal principal = currentPrincipal.get();
     // The finder's predicate mirrors the Cedar read policies (role floor + visibility + shares),
     // so the console lists exactly the stacks the principal could open.
-    return workspaceListFinder.findVisibleToUser(principal.userId()).stream()
-        .map(WorkspacesResource::toResponse)
-        .toList();
+    List<WorkspaceSummary> summaries =
+        workspaceListFinder.findVisibleToUser(principal.userId(), org, project);
+    if ((org != null || project != null) && summaries.isEmpty()) {
+      throw new NotFoundException();
+    }
+    return summaries.stream().map(WorkspacesResource::toResponse).toList();
   }
 
   private static WorkspaceResponse toResponse(WorkspaceSummary summary) {
@@ -39,6 +45,7 @@ public class WorkspacesResource {
         summary.workspaceKind().name(),
         summary.orgName(),
         summary.projectName(),
+        summary.projectCreatedAt(),
         summary.stackName(),
         summary.version(),
         summary.resourceCount(),
@@ -59,6 +66,7 @@ public class WorkspacesResource {
       String kind,
       String org,
       String project,
+      Instant projectCreatedAt,
       String stack,
       int version,
       Long resourceCount,

@@ -47,7 +47,7 @@ export function HomePage() {
   const [search, setSearch] = useState("");
   const query = useQuery({
     queryKey: ["workspaces"],
-    queryFn: api.workspaces.list,
+    queryFn: () => api.workspaces.list(),
     refetchInterval: (result) => {
       const rows = result.state.data ?? [];
       if (rows.length === 0) {
@@ -68,8 +68,6 @@ export function HomePage() {
         .sort(compareWorkspace),
     [rows, search, selectedOrg],
   );
-  const grouped = useMemo(() => groupByProject(visibleRows), [visibleRows]);
-
   useEffect(() => {
     if (query.error instanceof UnauthorizedError) {
       redirectToLogin();
@@ -113,7 +111,7 @@ export function HomePage() {
           description="Try a different stack, project, or organization name."
         />
       ) : (
-        <StacksTable grouped={grouped} showKind={hasMultipleKinds(rows)} />
+        <StacksTable rows={visibleRows} grouped showKind={hasMultipleKinds(rows)} />
       )}
     </div>
   );
@@ -142,13 +140,16 @@ function StacksHeader({
   );
 }
 
-function StacksTable({
+export function StacksTable({
+  rows,
   grouped,
   showKind,
 }: {
-  grouped: ProjectGroup[];
+  rows: Workspace[];
+  grouped: boolean;
   showKind: boolean;
 }) {
+  const projectGroups = groupByProject(rows);
   return (
     <div className="rounded-md border">
       <Table>
@@ -161,9 +162,11 @@ function StacksTable({
           </TableRow>
         </TableHeader>
         <TableBody>
-          {grouped.map((group) => (
-            <ProjectRows key={`${group.org}/${group.project}`} group={group} showKind={showKind} />
-          ))}
+          {grouped
+            ? projectGroups.map((group) => (
+                <ProjectRows key={`${group.org}/${group.project}`} group={group} showKind={showKind} />
+              ))
+            : rows.map((row) => <StackRow key={row.id} row={row} showKind={showKind} />)}
         </TableBody>
       </Table>
     </div>
@@ -269,7 +272,7 @@ function LockIndicator({ lock }: { lock: NonNullable<Workspace["lock"]> }) {
   );
 }
 
-function StacksTableSkeleton() {
+export function StacksTableSkeleton() {
   return (
     <div className="rounded-md border">
       <Table>
@@ -416,7 +419,7 @@ function groupByProject(rows: Workspace[]): ProjectGroup[] {
   return Array.from(groups.values());
 }
 
-function matchesSearch(row: Workspace, search: string) {
+export function matchesSearch(row: Workspace, search: string) {
   const term = search.trim().toLowerCase();
   if (!term) {
     return true;
@@ -425,7 +428,7 @@ function matchesSearch(row: Workspace, search: string) {
     .some((value) => value.toLowerCase().includes(term));
 }
 
-function compareWorkspace(a: Workspace, b: Workspace) {
+export function compareWorkspace(a: Workspace, b: Workspace) {
   return (
     a.org.localeCompare(b.org) ||
     a.project.localeCompare(b.project) ||
@@ -433,6 +436,6 @@ function compareWorkspace(a: Workspace, b: Workspace) {
   );
 }
 
-function hasMultipleKinds(rows: Workspace[]) {
+export function hasMultipleKinds(rows: Workspace[]) {
   return new Set(rows.map((row) => row.kind)).size > 1;
 }

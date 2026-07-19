@@ -1,5 +1,6 @@
 package io.statedb.persistence.stack;
 
+import java.time.Instant;
 import java.util.UUID;
 
 /**
@@ -15,6 +16,7 @@ public record StackSummary(
     UUID orgId,
     String orgName,
     String projectName,
+    Instant projectCreatedAt,
     String stackName,
     Workspace.Kind workspaceKind,
     int version,
