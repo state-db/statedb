@@ -6,14 +6,19 @@ import jakarta.persistence.EntityManager;
 import java.util.List;
 import java.util.UUID;
 
-/** Lists an org's service accounts (machine users holding the {@code service} role). */
+/**
+ * Lists an org's service accounts (machine users holding the {@code service} role).
+ *
+ * <p>Uses a bare {@code EntityManager}: the listing is a constructor projection across users ×
+ * org_members × api_tokens joined with {@code ON} clauses, which Panache's {@code project()} cannot
+ * express (it rejects queries that already carry a {@code select new} clause), and a read-only
+ * listing has no need to hydrate three entity types.
+ */
 @ApplicationScoped
 public class ServiceAccountFinder {
 
   @Inject EntityManager em;
 
-  // Constructor projection across users × org_members × api_tokens; a read-only listing has no
-  // need to hydrate three entity types.
   public List<ServiceAccountView> forOrg(UUID orgId) {
     return em.createQuery(
             """

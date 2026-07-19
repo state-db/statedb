@@ -22,6 +22,7 @@ import jakarta.ws.rs.WebApplicationException;
 import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.Response;
 import java.net.URI;
+import java.net.URISyntaxException;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.util.List;
@@ -196,6 +197,13 @@ public class AuthRoutesResource {
 
   private static String consoleReturnTo(String value) {
     if (value == null || value.isBlank() || !value.startsWith("/") || value.startsWith("//")) {
+      return "/console";
+    }
+    try {
+      // Values that pass the prefix guard can still be URI-invalid (spaces, control characters);
+      // reject them here rather than letting Response.seeOther's URI.create throw a 500.
+      new URI(value);
+    } catch (URISyntaxException e) {
       return "/console";
     }
     return value;

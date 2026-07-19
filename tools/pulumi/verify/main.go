@@ -1,7 +1,9 @@
 // verify checks a Pulumi deployment JSON against Pulumi's own snapshot
 // integrity rules (snapshot.VerifyIntegrity). It accepts either a raw
 // DeploymentV3 object or the `pulumi stack export` envelope
-// {"version": 3, "deployment": {...}}.
+// {"version": 3, "deployment": {...}}. Envelope version 4 (v3 body plus a
+// feature list, emitted for stacks using views/hooks/taint/replace-with)
+// is accepted too.
 //
 // Exit codes: 0 integrity ok, 1 integrity violation (rule on stdout),
 // 2 unusable input.
@@ -76,8 +78,8 @@ func unwrap(raw []byte) (json.RawMessage, error) {
 	if envelope.Deployment == nil {
 		return raw, nil
 	}
-	if envelope.Version != 3 {
-		return nil, fmt.Errorf("unsupported deployment envelope version %d (want 3)", envelope.Version)
+	if envelope.Version != 3 && envelope.Version != 4 {
+		return nil, fmt.Errorf("unsupported deployment envelope version %d (want 3 or 4)", envelope.Version)
 	}
 	return envelope.Deployment, nil
 }

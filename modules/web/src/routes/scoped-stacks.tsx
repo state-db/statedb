@@ -1,7 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
 import { FolderX, Search } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 
 import { EmptyState } from "@/components/console/EmptyState";
 import { ErrorAlert } from "@/components/console/ErrorAlert";
@@ -14,12 +14,8 @@ import {
   StacksTable,
   StacksTableSkeleton,
 } from "@/routes/home";
-import {
-  api,
-  NotFoundError,
-  redirectToLogin,
-  UnauthorizedError,
-} from "@/lib/api";
+import { useUnauthorizedRedirect } from "@/hooks/useUnauthorizedRedirect";
+import { api, NotFoundError, UnauthorizedError } from "@/lib/api";
 
 export function ProjectStacksPage({
   org,
@@ -41,9 +37,7 @@ export function ProjectStacksPage({
         : false,
   });
 
-  useEffect(() => {
-    if (query.error instanceof UnauthorizedError) redirectToLogin();
-  }, [query.error]);
+  const unauthorized = useUnauthorizedRedirect(query.error);
 
   const rows = query.data ?? [];
   const visibleRows = useMemo(
@@ -51,7 +45,7 @@ export function ProjectStacksPage({
     [rows, search],
   );
 
-  if (query.error instanceof UnauthorizedError) return null;
+  if (unauthorized) return null;
   if (query.error instanceof NotFoundError) {
     return (
       <EmptyState

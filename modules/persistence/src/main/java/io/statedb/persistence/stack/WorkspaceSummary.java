@@ -6,7 +6,6 @@ import java.util.UUID;
 /** Console-facing workspace row assembled from stack metadata plus optional live status. */
 public record WorkspaceSummary(
     UUID stackId,
-    UUID orgId,
     String orgName,
     String projectName,
     Instant projectCreatedAt,

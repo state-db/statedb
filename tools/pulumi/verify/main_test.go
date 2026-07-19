@@ -66,8 +66,16 @@ func TestMagicMismatchFails(t *testing.T) {
 	}
 }
 
+func TestVersion4EnvelopeIsUnwrapped(t *testing.T) {
+	envelope := fmt.Sprintf(`{"version": 4, "features": ["views"], "deployment": %s}`, deploymentJSON(stackResource))
+	message, code := check([]byte(envelope))
+	if code != 0 {
+		t.Fatalf("want exit 0, got %d: %s", code, message)
+	}
+}
+
 func TestUnsupportedEnvelopeVersionIsRejected(t *testing.T) {
-	_, code := check([]byte(`{"version": 4, "deployment": {}}`))
+	_, code := check([]byte(`{"version": 5, "deployment": {}}`))
 	if code != 2 {
 		t.Fatalf("want exit 2, got %d", code)
 	}

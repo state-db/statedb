@@ -63,8 +63,8 @@ import { Toaster } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { useTheme } from "@/components/theme/ThemeProvider";
 import { useCurrentUser } from "@/hooks/useCurrentUser";
+import { useUnauthorizedRedirect } from "@/hooks/useUnauthorizedRedirect";
 import type { CurrentUser, OrgMembership } from "@/lib/api";
-import { redirectToLogin, UnauthorizedError } from "@/lib/api";
 
 type ShellContextValue = {
   user: CurrentUser;
@@ -91,11 +91,7 @@ export function AppShell() {
     return localStorage.getItem("state-db-selected-org");
   });
 
-  useEffect(() => {
-    if (error instanceof UnauthorizedError) {
-      redirectToLogin();
-    }
-  }, [error]);
+  const unauthorized = useUnauthorizedRedirect(error);
 
   const setSelectedOrg = (org: string | null) => {
     setSelectedOrgState(org);
@@ -106,7 +102,7 @@ export function AppShell() {
     }
   };
 
-  if (isLoading || error instanceof UnauthorizedError) {
+  if (isLoading || unauthorized) {
     return (
       <div className="flex min-h-full flex-col gap-4 p-6">
         <Skeleton className="h-8 w-48" />

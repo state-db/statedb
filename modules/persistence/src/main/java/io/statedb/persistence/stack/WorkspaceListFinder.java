@@ -46,7 +46,6 @@ public class WorkspaceListFinder {
             s ->
                 new WorkspaceSummary(
                     s.stackId(),
-                    s.orgId(),
                     s.orgName(),
                     s.projectName(),
                     s.projectCreatedAt(),
@@ -61,7 +60,12 @@ public class WorkspaceListFinder {
 
   private Map<UUID, WorkspaceSummary.LastUpdate> latestUpdates(List<UUID> stackIds) {
     Map<UUID, WorkspaceSummary.LastUpdate> latest = new HashMap<>();
-    StackUpdate.<StackUpdate>find("stackId in ?1 order by startedAt desc", stackIds)
+    // Correlated subquery keeps this to one row per stack; without it every stack's full update
+    // history (jsonb columns included) is hydrated on a list the console polls.
+    StackUpdate.<StackUpdate>find(
+            "from StackUpdate u where u.stackId in ?1 and u.startedAt = "
+                + "(select max(u2.startedAt) from StackUpdate u2 where u2.stackId = u.stackId)",
+            stackIds)
         .list()
         .forEach(
             u ->

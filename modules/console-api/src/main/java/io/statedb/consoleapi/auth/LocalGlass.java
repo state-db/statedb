@@ -4,7 +4,6 @@ import io.quarkus.elytron.security.common.BcryptUtil;
 import io.quarkus.narayana.jta.QuarkusTransaction;
 import io.statedb.persistence.bootstrap.BootstrapProvisioner;
 import io.statedb.persistence.identity.OidcProvider;
-import io.statedb.persistence.identity.User;
 import io.vertx.core.net.SocketAddress;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
@@ -41,6 +40,8 @@ import org.eclipse.microprofile.config.inject.ConfigProperty;
  */
 @ApplicationScoped
 public class LocalGlass {
+
+  @Inject BootstrapProvisioner provisioner;
 
   @Inject
   @ConfigProperty(name = "state-db.local-glass.password-hash")
@@ -79,24 +80,11 @@ public class LocalGlass {
    * Idempotently creates the bootstrap admin {@code users} row the break-glass session resolves to.
    * {@code SessionPrincipalFilter} and {@code CurrentUserResource} reject sessions without a user
    * row, and the row only otherwise exists when {@code STATE_DB_BOOTSTRAP_*} provisioning ran.
+   * Delegates to {@link BootstrapProvisioner#upsertBootstrapUser()} so concurrent logins (and
+   * boot-time provisioning) converge on one atomic {@code ON CONFLICT} insert.
    */
   public void ensureAdminUser() {
-    QuarkusTransaction.requiringNew()
-        .run(
-            () -> {
-              long existing =
-                  User.count(
-                      "iss = ?1 and sub = ?2",
-                      BootstrapProvisioner.BOOTSTRAP_ISS,
-                      BootstrapProvisioner.BOOTSTRAP_SUB);
-              if (existing == 0) {
-                User user = new User();
-                user.iss = BootstrapProvisioner.BOOTSTRAP_ISS;
-                user.sub = BootstrapProvisioner.BOOTSTRAP_SUB;
-                user.displayName = "Break-glass admin";
-                user.persist();
-              }
-            });
+    QuarkusTransaction.requiringNew().run(provisioner::upsertBootstrapUser);
   }
 
   public static boolean isLoopback(SocketAddress remote) {

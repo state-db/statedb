@@ -41,13 +41,13 @@ import org.yaml.snakeyaml.Yaml;
 /**
  * Replays Pulumi CLI recorder fixtures against the running {@code @QuarkusTest} server.
  *
- * <p>Single-command replay ({@link #command}) sends each recorded exchange as-is. Session replay
- * ({@link #commands}) chains command directories in recorded order and reconciles the recorder
- * stub's deterministic ids with the live server's generated ones: when a response returns an {@code
- * updateID} or lease {@code token}, the recorded→live mapping is learned and substituted into the
- * paths and {@code Authorization} headers of subsequent requests. Lease-scoped routes (sub-paths of
- * {@code .../update/{updateID}}) authenticate with {@code update-token <live lease>}; everything
- * else uses {@code token <rawToken>}.
+ * <p>Session replay ({@link #commands}) chains command directories in recorded order, sends each
+ * recorded exchange as-is, and reconciles the recorder stub's deterministic ids with the live
+ * server's generated ones: when a response returns an {@code updateID} or lease {@code token}, the
+ * recorded→live mapping is learned and substituted into the paths and {@code Authorization} headers
+ * of subsequent requests. Lease-scoped routes (sub-paths of {@code .../update/{updateID}})
+ * authenticate with {@code update-token <live lease>}; everything else uses {@code token
+ * <rawToken>}.
  *
  * <p>Exchanges against the secrets encrypt/decrypt endpoints are skipped: the recorded ciphertexts
  * were minted by the recorder stub and the live server cannot decrypt them. Secrets round-trips are
@@ -79,10 +79,6 @@ public final class FixtureReplay {
     this.commands = commands;
     this.rawToken = rawToken;
     this.masks = ResponseMasks.load();
-  }
-
-  public static FixtureReplay command(String command) {
-    return new FixtureReplay(List.of(command), DEFAULT_TOKEN);
   }
 
   public static FixtureReplay commands(String... commands) {

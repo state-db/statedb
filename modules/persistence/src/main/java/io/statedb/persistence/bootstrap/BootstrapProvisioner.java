@@ -93,9 +93,13 @@ public class BootstrapProvisioner {
             .getSingleResult();
   }
 
-  // Same row shape LocalGlass#ensureAdminUser creates on break-glass login: insert-if-absent, no
-  // update branch, so neither writer clobbers the other.
-  private UUID upsertBootstrapUser() {
+  /**
+   * Insert-if-absent for the bootstrap admin {@code users} row. Also called on every break-glass
+   * login ({@code LocalGlass#ensureAdminUser}); the single {@code ON CONFLICT} statement keeps
+   * concurrent logins and boot-time provisioning from racing each other. Requires an active
+   * transaction.
+   */
+  public UUID upsertBootstrapUser() {
     em.createNativeQuery(
             """
             INSERT INTO users (id, iss, sub, display_name)

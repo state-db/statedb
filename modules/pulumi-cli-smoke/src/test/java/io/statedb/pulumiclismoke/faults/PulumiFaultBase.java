@@ -7,7 +7,6 @@ import io.statedb.persistence.identity.Organization;
 import io.statedb.persistence.stack.Project;
 import io.statedb.persistence.stack.Stack;
 import io.statedb.pulumiclismoke.PulumiSmokeBase;
-import jakarta.persistence.NoResultException;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.UUID;
@@ -36,10 +35,6 @@ public abstract class PulumiFaultBase extends PulumiSmokeBase {
         "sh", "-lc", "cd /workspace && nohup " + command + " > /tmp/detached.log 2>&1 &");
   }
 
-  protected String detachedLog() throws Exception {
-    return pulumi.execInContainer("sh", "-lc", "cat /tmp/detached.log 2>/dev/null").getStdout();
-  }
-
   protected void awaitTrue(String what, Duration timeout, Callable<Boolean> condition)
       throws Exception {
     Instant deadline = Instant.now().plus(timeout);
@@ -65,20 +60,6 @@ public abstract class PulumiFaultBase extends PulumiSmokeBase {
             });
   }
 
-  protected boolean stackExists(String project, String stack) {
-    try {
-      stackId(project, stack);
-      return true;
-    } catch (NoResultException e) {
-      return false;
-    }
-  }
-
-  protected long journalEntryCount(UUID stackId) {
-    return QuarkusTransaction.requiringNew()
-        .call(() -> io.statedb.persistence.journal.JournalEntry.count("stackId", stackId));
-  }
-
   protected boolean lockExists(UUID stackId) {
     return QuarkusTransaction.requiringNew()
         .call(() -> io.statedb.persistence.lock.StackLock.count("stackId", stackId) > 0);
@@ -96,11 +77,6 @@ public abstract class PulumiFaultBase extends PulumiSmokeBase {
                     "expiresAt = ?1, maxExpiresAt = ?1 where stackId = ?2",
                     Instant.now().minusSeconds(1),
                     stackId));
-  }
-
-  protected long pendingOperationCount(UUID stackId) {
-    return QuarkusTransaction.requiringNew()
-        .call(() -> io.statedb.persistence.journal.PendingOperation.count("stackId", stackId));
   }
 
   /**

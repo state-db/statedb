@@ -7,7 +7,7 @@ import {
   Search,
   Terminal,
 } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { toast } from "sonner";
 
 import { EmptyState } from "@/components/console/EmptyState";
@@ -39,8 +39,8 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { api, UnauthorizedError, type Workspace } from "@/lib/api";
-import { redirectToLogin } from "@/lib/api";
+import { useUnauthorizedRedirect } from "@/hooks/useUnauthorizedRedirect";
+import { api, type Workspace } from "@/lib/api";
 
 export function HomePage() {
   const { selectedOrg } = useShell();
@@ -68,13 +68,9 @@ export function HomePage() {
         .sort(compareWorkspace),
     [rows, search, selectedOrg],
   );
-  useEffect(() => {
-    if (query.error instanceof UnauthorizedError) {
-      redirectToLogin();
-    }
-  }, [query.error]);
+  const unauthorized = useUnauthorizedRedirect(query.error);
 
-  if (query.error instanceof UnauthorizedError) {
+  if (unauthorized) {
     return null;
   }
 
@@ -256,6 +252,10 @@ function StackRow({ row, showKind }: { row: Workspace; showKind: boolean }) {
 }
 
 function LockIndicator({ lock }: { lock: NonNullable<Workspace["lock"]> }) {
+  const lockedAt = new Date(lock.lockedAt);
+  const lockedAtLabel = Number.isNaN(lockedAt.getTime())
+    ? lock.lockedAt
+    : lockedAt.toISOString();
   return (
     <Tooltip>
       <TooltipTrigger asChild>
@@ -265,8 +265,7 @@ function LockIndicator({ lock }: { lock: NonNullable<Workspace["lock"]> }) {
         </Badge>
       </TooltipTrigger>
       <TooltipContent>
-        Locked by {lock.lockedBy} since{" "}
-        {new Date(lock.lockedAt).toISOString()}
+        Locked by {lock.lockedBy} since {lockedAtLabel}
       </TooltipContent>
     </Tooltip>
   );
