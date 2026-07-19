@@ -23,7 +23,9 @@ export function CopyableId({
 
   return (
     <span className={cn("inline-flex min-w-0 items-center gap-1", className)}>
-      <code className="truncate font-mono text-xs">{value}</code>
+      <code className="min-w-0 flex-1 truncate font-mono text-xs" title={value}>
+        {value}
+      </code>
       <Button type="button" variant="ghost" size="icon" onClick={copy}>
         {copied ? <Check /> : <Copy />}
         <span className="sr-only">Copy identifier</span>

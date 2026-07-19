@@ -111,6 +111,36 @@ export interface Workspace {
   lock: WorkspaceLock | null;
 }
 
+export type PulumiValue = null | boolean | number | string | PulumiValue[] | {
+  [key: string]: PulumiValue;
+};
+
+export interface PulumiResource {
+  urn: string;
+  type?: string;
+  custom?: boolean;
+  parent?: string;
+  provider?: string;
+  dependencies?: string[];
+  inputs?: Record<string, PulumiValue>;
+  outputs?: Record<string, PulumiValue>;
+  created?: string;
+  modified?: string;
+  [key: string]: unknown;
+}
+
+export interface StackDetail {
+  org: string;
+  project: string;
+  name: string;
+  version: number;
+  resourceCount: number | null;
+  lastUpdate: WorkspaceLastUpdate | null;
+  lock: WorkspaceLock | null;
+  resources: PulumiResource[];
+  pulumiVersion: string | null;
+}
+
 /**
  * Break-glass login: posts the operator password to the Quarkus form-auth
  * endpoint (urlencoded, not JSON — the mechanism consumes it before JAX-RS).
@@ -150,6 +180,12 @@ export const api = {
       const query = encoded ? `?${encoded}` : "";
       return request<Workspace[]>(`/workspaces${query}`);
     },
+    get: (org: string, project: string, stack: string) =>
+      request<StackDetail>(
+        `/workspaces/${encodeURIComponent(org)}/${encodeURIComponent(project)}/${encodeURIComponent(stack)}`,
+      ),
+    exportUrl: (org: string, project: string, stack: string) =>
+      `${BASE}/workspaces/${encodeURIComponent(org)}/${encodeURIComponent(project)}/${encodeURIComponent(stack)}/export`,
   },
 } as const;
 

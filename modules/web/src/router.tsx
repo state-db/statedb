@@ -9,7 +9,6 @@ import {
 import {
   Building2,
   KeyRound,
-  LayoutDashboard,
   ServerCog,
   Settings,
   Shield,
@@ -22,6 +21,7 @@ import { LoginPage } from "@/routes/login";
 import { NotFoundPage } from "@/routes/not-found";
 import { PlaceholderPage } from "@/routes/placeholder";
 import { ProjectStacksPage } from "@/routes/scoped-stacks";
+import { StackDetailPage } from "@/routes/stack-detail";
 
 // Bare root renders an <Outlet />; the
 // shell wraps everything that needs the header/nav frame.
@@ -136,14 +136,13 @@ function ProjectStacksRoute() {
 const stackRoute = createRoute({
   getParentRoute: () => shellRoute,
   path: "$org/$project/$stack",
-  component: () => (
-    <PlaceholderPage
-      icon={LayoutDashboard}
-      title="Stack detail"
-      description="Resources, outputs, activity, and settings tabs fill in here in S4 through S7."
-    />
-  ),
+  component: StackDetailRoute,
 });
+
+function StackDetailRoute() {
+  const { org, project, stack } = stackRoute.useParams();
+  return <StackDetailPage org={org} project={project} stack={stack} />;
+}
 
 const updateRoute = createRoute({
   getParentRoute: () => shellRoute,
