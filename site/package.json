@@ -1,0 +1,19 @@
+{
+  "name": "statedb-site",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "astro dev",
+    "build": "astro build && pagefind --site dist",
+    "preview": "astro preview"
+  },
+  "dependencies": {
+    "@astrojs/starlight": "^0.36.0",
+    "@fontsource-variable/bricolage-grotesque": "^5.2.0",
+    "@fontsource-variable/jetbrains-mono": "^5.2.0",
+    "astro": "^5.14.0",
+    "pagefind": "^1.3.0",
+    "sharp": "^0.34.0"
+  }
+}

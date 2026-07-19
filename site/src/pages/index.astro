@@ -1,0 +1,919 @@
+---
+import "@fontsource-variable/bricolage-grotesque";
+import "@fontsource-variable/jetbrains-mono";
+import logoDark from "../assets/statedb-logo-dark.svg";
+import mascot from "../assets/statedb-mascot.png";
+
+const github = "https://github.com/state-db/state-db";
+
+const reportRows = [
+  { scenario: "CLI killed mid-update", outcome: "recovers after lease expiry" },
+  { scenario: "Two concurrent up runs", outcome: "exactly one wins" },
+  { scenario: "Provider error mid-deploy", outcome: "completed resources retained" },
+  { scenario: "Tampered checkpoint import", outcome: "rejected, prior state intact" },
+  { scenario: "Secrets after compaction", outcome: "decrypt from a fresh machine" },
+];
+
+const tiers = [
+  {
+    label: "CONTRACT REPLAY",
+    body: "Every HTTP exchange from recorded real-CLI sessions — up, preview, refresh, destroy, rename, export, import — is replayed against the server and must reproduce byte-for-byte, modulo documented volatile fields.",
+  },
+  {
+    label: "INTEGRITY VERIFICATION",
+    body: "Every deployment the server assembles in tests is checked with the CLI's own snapshot integrity verifier. Stored state is state the CLI itself would agree to load.",
+  },
+  {
+    label: "CLI SMOKE",
+    body: "The real CLI, running in Docker, drives the backend per command family on every build — stack lifecycle, tags, history, stack references, secrets.",
+  },
+  {
+    label: "FAULT INJECTION",
+    body: "Adversarial scenarios with the real CLI: killed mid-update, concurrent updates, failed deployments, corrupted imports. Each run emits a State Safety Report, and a nightly matrix repeats every scenario across every supported CLI version.",
+  },
+];
+---
+
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>statedb — self-hosted state backend with a web console</title>
+    <meta
+      name="description"
+      content="statedb stores your infrastructure state in your own Postgres, behind your own firewall, and pairs it with a web console. Compatible with the Pulumi CLI — no workflow changes."
+    />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="canonical" href="https://statedb.app/" />
+    <meta property="og:title" content="statedb — your infrastructure's state, on your infrastructure" />
+    <meta
+      property="og:description"
+      content="Self-hosted state backend and web console. Your database, your network, your data — verified against the real CLI every night."
+    />
+    <meta property="og:url" content="https://statedb.app/" />
+    <meta property="og:type" content="website" />
+  </head>
+  <body>
+    <header class="nav">
+      <div class="shell nav-row">
+        <a class="nav-logo" href="/">
+          <img src={logoDark.src} alt="statedb" width="150" height="42" />
+        </a>
+        <nav class="nav-links" aria-label="Main">
+          <a href="/docs/">Docs</a>
+          <a href="/docs/compatibility/">Compatibility</a>
+          <a href="/docs/license/">License</a>
+          <a href={github}>GitHub</a>
+        </nav>
+      </div>
+    </header>
+
+    <main>
+      <section class="hero">
+        <div class="shell hero-grid">
+          <div class="hero-copy">
+            <p class="eyebrow">Self-hosted state backend</p>
+            <h1>Your infrastructure's state, on your&nbsp;infrastructure.</h1>
+            <p class="hero-sub">
+              statedb keeps your infrastructure state in your own Postgres, behind your own
+              firewall, and pairs it with a web console for browsing stacks, resources, and
+              history. It speaks the Pulumi CLI's backend protocol — your team changes one
+              login command and nothing else.
+            </p>
+            <div class="terminal" role="img" aria-label="Terminal: pulumi login pointed at your statedb instance">
+              <span class="t-line"><span class="t-prompt">$</span> pulumi login https://statedb.internal.example.com</span>
+              <span class="t-line t-out">Logged in to statedb.internal.example.com</span>
+            </div>
+            <p class="terminal-caption">The only change your team makes.</p>
+            <div class="cta-row">
+              <a class="btn btn-solid" href="/docs/quickstart/">Get started</a>
+              <a class="btn btn-ghost" href="#proof">How we prove compatibility</a>
+            </div>
+          </div>
+
+          <aside class="report" aria-label="State Safety Report, all scenarios passing">
+            <div class="report-head">
+              <span class="report-title">State Safety Report</span>
+              <span class="report-meta">fault-injection matrix</span>
+            </div>
+            <ul class="report-rows">
+              {reportRows.map((row) => (
+                <li class="report-row">
+                  <span class="r-scenario">{row.scenario}</span>
+                  <span class="r-dots" aria-hidden="true"></span>
+                  <span class="r-outcome">{row.outcome}</span>
+                  <span class="r-pass">PASS</span>
+                </li>
+              ))}
+            </ul>
+            <p class="report-foot">
+              Every scenario &times; every supported CLI version, nightly.
+            </p>
+          </aside>
+        </div>
+      </section>
+
+      <section class="gap">
+        <div class="shell">
+          <h2>Self-hosted <em>or</em> a console. You used to have to choose.</h2>
+          <div class="gap-grid">
+            <div class="gap-card">
+              <h3>Object-store backends</h3>
+              <p>
+                S3, filesystem, and database backends store state and stop there. No history
+                you can browse, no resource view, no visibility for the rest of the team.
+              </p>
+            </div>
+            <div class="gap-card">
+              <h3>Managed cloud</h3>
+              <p>
+                A polished console — but your state lives on someone else's servers, and the
+                bill scales with your resource count.
+              </p>
+            </div>
+            <div class="gap-card gap-card-us">
+              <h3>statedb</h3>
+              <p>
+                The backend and the console in one self-hosted service. Your database, your
+                network, your data — with the visibility of a managed product.
+              </p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="proof" id="proof">
+        <div class="shell">
+          <p class="eyebrow eyebrow-ink">How we prove compatibility</p>
+          <h2>Trust is a test suite, not a promise.</h2>
+          <p class="section-lead">
+            A state backend earns trust through its failure modes, not its happy paths.
+            statedb is tested in four tiers against the real CLI — not against our idea of
+            the protocol.
+          </p>
+          <div class="tier-list">
+            {tiers.map((tier) => (
+              <div class="tier">
+                <span class="tier-label">{tier.label}</span>
+                <p>{tier.body}</p>
+              </div>
+            ))}
+          </div>
+          <p class="section-foot">
+            The full scenario catalog and how to run these tiers yourself:
+            <a href="/docs/compatibility/">compatibility docs</a>.
+          </p>
+        </div>
+      </section>
+
+      <section class="lockin">
+        <div class="shell lockin-grid">
+          <div>
+            <p class="eyebrow">No lock-in</p>
+            <h2>Leaving takes one command. That's the point.</h2>
+            <p class="band-sub">
+              statedb stores state in the CLI's native checkpoint format — not a proprietary
+              schema you'd have to escape from. Export works from day one, so the cost of
+              leaving stays at one command and we have to keep earning the next
+              <code>pulumi up</code>.
+            </p>
+          </div>
+          <div class="terminal terminal-tall" role="img" aria-label="Terminal: exporting state and moving to another backend">
+            <span class="t-line"><span class="t-prompt">$</span> pulumi stack export --file prod.checkpoint.json</span>
+            <span class="t-line t-comment"># standard checkpoint JSON — yours to keep</span>
+            <span class="t-line"><span class="t-prompt">$</span> pulumi login s3://your-bucket</span>
+            <span class="t-line t-comment"># any other backend</span>
+            <span class="t-line"><span class="t-prompt">$</span> pulumi stack import --file prod.checkpoint.json</span>
+            <span class="t-line t-comment"># carry on</span>
+          </div>
+        </div>
+      </section>
+
+      <section class="console">
+        <div class="shell">
+          <h2>A console for humans, next to the backend for machines.</h2>
+          <p class="section-lead">
+            One process serves both. Nothing extra to deploy, nothing extra to secure.
+          </p>
+          <ul class="feature-grid">
+            <li>
+              <h3>Current resources</h3>
+              <p>Every resource in a stack, parsed from the checkpoint — types, parents, providers.</p>
+            </li>
+            <li>
+              <h3>Update history &amp; diffs</h3>
+              <p>Who ran what, when, and what changed — browsable without touching a terminal.</p>
+            </li>
+            <li>
+              <h3>Stack outputs</h3>
+              <p>Output values at a glance, with secrets masked.</p>
+            </li>
+            <li>
+              <h3>Activity per stack</h3>
+              <p>Settings, tags, and the operations log — the paper trail your audits ask for.</p>
+            </li>
+          </ul>
+        </div>
+      </section>
+
+      <section class="auth">
+        <div class="shell">
+          <h2>Authentication that fits how teams actually run.</h2>
+          <div class="auth-grid">
+            <div class="auth-card">
+              <h3>Native CLI login</h3>
+              <p>
+                <code>pulumi login</code> opens your browser, you approve, the CLI gets a
+                token. <code>PULUMI_ACCESS_TOKEN</code> works for CI, same as you're used to.
+              </p>
+            </div>
+            <div class="auth-card">
+              <h3>Your identity provider</h3>
+              <p>
+                Console sign-in is OIDC. Point statedb at the IdP you already run — Okta,
+                Entra, Keycloak, anything that speaks the protocol.
+              </p>
+            </div>
+            <div class="auth-card">
+              <h3>Break-glass, done carefully</h3>
+              <p>
+                A loopback-only local login for when your IdP is down — enabled by an env
+                var, and it stands down automatically while OIDC is configured.
+              </p>
+            </div>
+            <div class="auth-card">
+              <h3>Service accounts</h3>
+              <p>
+                Long-lived tokens for CI pipelines, managed in the console instead of a
+                spreadsheet.
+              </p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="license">
+        <div class="shell license-inner">
+          <h2>Free to run. Honest about the rest.</h2>
+          <p>
+            statedb is source-available under the Elastic License 2.0. Self-host it free for
+            up to <strong>ten active stacks per deployment</strong>; beyond that, a
+            commercial license funds the project. The one hard restriction: you can't resell
+            statedb as a managed service.
+          </p>
+          <div class="cta-row">
+            <a class="btn btn-solid" href="/docs/license/">License &amp; pricing</a>
+            <a class="btn btn-outline" href={`${github}/blob/main/LICENSE`}>Read the full terms</a>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <footer class="footer">
+      <div class="shell footer-grid">
+        <div class="footer-brand">
+          <img src={logoDark.src} alt="statedb" width="130" height="37" />
+          <p class="footer-tag">Your state. Your database. Your network.</p>
+        </div>
+        <nav class="footer-links" aria-label="Footer">
+          <a href="/docs/">Documentation</a>
+          <a href="/docs/quickstart/">Quickstart</a>
+          <a href="/docs/compatibility/">Compatibility</a>
+          <a href={github}>GitHub</a>
+          <a href={`${github}/blob/main/SECURITY.md`}>Security</a>
+        </nav>
+        <img class="footer-mascot" src={mascot.src} alt="" width="96" height="96" loading="lazy" />
+      </div>
+      <div class="shell footer-legal">
+        <p>
+          Pulumi is a trademark of Pulumi Corporation. OpenTofu is a trademark of The Linux
+          Foundation. statedb is an independent project and is not affiliated with, endorsed
+          by, or sponsored by either.
+        </p>
+        <p>&copy; 2026 statedb. Source-available under the Elastic License 2.0.</p>
+      </div>
+    </footer>
+  </body>
+</html>
+
+<style>
+  :root {
+    --ink: #182b4d;
+    --ink-deep: #101f39;
+    --paper: #f7f9fc;
+    --card: #ffffff;
+    --blue: #2563eb;
+    --blue-bright: #3b82f6;
+    --mist: #dbe4f2;
+    --mist-dark: rgba(219, 228, 242, 0.22);
+    --cream: #f7f3e8;
+    --pass: #1a7f4b;
+    --pass-bright: #4ade80;
+    --text-on-ink: #e8eef8;
+    --muted-on-ink: #a7b6d1;
+    --muted: #4a5b7a;
+    --display: "Bricolage Grotesque Variable", "Avenir Next", "Segoe UI", sans-serif;
+    --mono: "JetBrains Mono Variable", ui-monospace, "SF Mono", Menlo, monospace;
+    --body: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  }
+
+  * {
+    box-sizing: border-box;
+  }
+
+  html {
+    scroll-behavior: smooth;
+  }
+
+  body {
+    margin: 0;
+    font-family: var(--body);
+    font-size: 1.0625rem;
+    line-height: 1.6;
+    color: var(--ink);
+    background: var(--paper);
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .shell {
+    max-width: 72rem;
+    margin: 0 auto;
+    padding-inline: 1.5rem;
+  }
+
+  h1,
+  h2,
+  h3 {
+    font-family: var(--display);
+    line-height: 1.12;
+    margin: 0 0 1rem;
+    letter-spacing: -0.01em;
+  }
+
+  h2 {
+    font-size: clamp(1.75rem, 3.2vw, 2.4rem);
+    font-weight: 600;
+    max-width: 34ch;
+  }
+
+  h3 {
+    font-size: 1.125rem;
+    font-weight: 600;
+    margin-bottom: 0.5rem;
+  }
+
+  p {
+    margin: 0 0 1rem;
+  }
+
+  a {
+    color: var(--blue);
+  }
+
+  code {
+    font-family: var(--mono);
+    font-size: 0.9em;
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--blue-bright);
+    outline-offset: 3px;
+    border-radius: 2px;
+  }
+
+  .eyebrow {
+    font-family: var(--mono);
+    font-size: 0.75rem;
+    font-weight: 600;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: var(--blue-bright);
+    margin-bottom: 1.25rem;
+  }
+
+  .eyebrow-ink {
+    color: var(--blue);
+  }
+
+  /* ---------- nav + hero (navy) ---------- */
+
+  .nav {
+    background: var(--ink);
+  }
+
+  .nav-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding-block: 1.25rem;
+  }
+
+  .nav-logo {
+    display: inline-flex;
+    line-height: 0;
+  }
+
+  .nav-links {
+    display: flex;
+    gap: 1.75rem;
+  }
+
+  .nav-links a {
+    color: var(--text-on-ink);
+    text-decoration: none;
+    font-size: 0.95rem;
+  }
+
+  .nav-links a:hover {
+    color: #ffffff;
+    text-decoration: underline;
+    text-underline-offset: 4px;
+  }
+
+  .hero {
+    background: var(--ink);
+    color: var(--text-on-ink);
+    padding-block: 4.5rem 5.5rem;
+    overflow: hidden;
+  }
+
+  .hero-grid {
+    display: grid;
+    grid-template-columns: minmax(0, 1.05fr) minmax(0, 0.95fr);
+    gap: 4rem;
+    align-items: center;
+  }
+
+  .hero h1 {
+    color: #ffffff;
+    font-size: clamp(2.2rem, 4.8vw, 3.6rem);
+    font-weight: 650;
+    max-width: 22ch;
+  }
+
+  .hero-sub {
+    color: var(--muted-on-ink);
+    max-width: 52ch;
+    margin-bottom: 1.75rem;
+  }
+
+  .terminal {
+    font-family: var(--mono);
+    font-size: 0.85rem;
+    line-height: 1.7;
+    background: var(--ink-deep);
+    border: 1px solid var(--mist-dark);
+    border-radius: 8px;
+    padding: 1rem 1.25rem;
+    display: flex;
+    flex-direction: column;
+    overflow-x: auto;
+  }
+
+  .t-line {
+    white-space: nowrap;
+    color: var(--text-on-ink);
+  }
+
+  .t-prompt {
+    color: var(--blue-bright);
+    margin-right: 0.5ch;
+    user-select: none;
+  }
+
+  .t-out {
+    color: var(--muted-on-ink);
+  }
+
+  .t-comment {
+    color: #6d7fa0;
+  }
+
+  .terminal-caption {
+    font-size: 0.85rem;
+    color: var(--muted-on-ink);
+    margin: 0.6rem 0 1.75rem;
+  }
+
+  .cta-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.85rem;
+  }
+
+  .btn {
+    display: inline-block;
+    font-family: var(--display);
+    font-weight: 600;
+    font-size: 0.95rem;
+    text-decoration: none;
+    padding: 0.7rem 1.4rem;
+    border-radius: 6px;
+    transition: transform 120ms ease, background-color 120ms ease;
+  }
+
+  .btn:hover {
+    transform: translateY(-1px);
+  }
+
+  .btn-solid {
+    background: var(--blue);
+    color: #ffffff;
+  }
+
+  .btn-solid:hover {
+    background: var(--blue-bright);
+  }
+
+  .btn-ghost {
+    color: var(--text-on-ink);
+    border: 1px solid var(--mist-dark);
+  }
+
+  .btn-ghost:hover {
+    border-color: var(--muted-on-ink);
+  }
+
+  .btn-outline {
+    color: var(--ink);
+    border: 1px solid var(--mist);
+    background: transparent;
+  }
+
+  /* ---------- safety report (signature) ---------- */
+
+  .report {
+    background: var(--card);
+    color: var(--ink);
+    border-radius: 10px;
+    box-shadow:
+      0 1px 2px rgba(9, 18, 36, 0.3),
+      0 18px 48px rgba(9, 18, 36, 0.45);
+    padding: 1.5rem 1.6rem 1.25rem;
+    font-family: var(--mono);
+  }
+
+  .report-head {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 1rem;
+    background: var(--cream);
+    margin: -1.5rem -1.6rem 1.1rem;
+    padding: 0.85rem 1.6rem;
+    border-radius: 10px 10px 0 0;
+    border-bottom: 1px solid var(--mist);
+  }
+
+  .report-title {
+    font-family: var(--display);
+    font-weight: 700;
+    font-size: 0.95rem;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+  }
+
+  .report-meta {
+    font-size: 0.7rem;
+    color: var(--muted);
+    letter-spacing: 0.05em;
+  }
+
+  .report-rows {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+  }
+
+  .report-row {
+    display: flex;
+    align-items: baseline;
+    gap: 0.6ch;
+    font-size: 0.78rem;
+    padding-block: 0.55rem;
+  }
+
+  .report-row + .report-row {
+    border-top: 1px solid var(--paper);
+  }
+
+  .r-scenario {
+    white-space: nowrap;
+  }
+
+  .r-dots {
+    flex: 1;
+    min-width: 1.5ch;
+    border-bottom: 1px dotted var(--mist);
+    transform: translateY(-0.3em);
+  }
+
+  .r-outcome {
+    color: var(--muted);
+    text-align: right;
+  }
+
+  .r-pass {
+    color: var(--pass);
+    font-weight: 700;
+    font-size: 0.72rem;
+    letter-spacing: 0.06em;
+    flex-shrink: 0;
+  }
+
+  .r-pass::before {
+    content: "✓ ";
+  }
+
+  .report-foot {
+    margin: 1rem 0 0;
+    padding-top: 0.85rem;
+    border-top: 1px solid var(--mist);
+    font-size: 0.72rem;
+    color: var(--muted);
+  }
+
+  /* ---------- paper sections ---------- */
+
+  .gap,
+  .proof,
+  .console,
+  .auth,
+  .license {
+    padding-block: 5rem;
+  }
+
+  .gap-grid,
+  .auth-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr));
+    gap: 1.25rem;
+    margin-top: 2.25rem;
+  }
+
+  .gap-card,
+  .auth-card {
+    background: var(--card);
+    border: 1px solid var(--mist);
+    border-radius: 10px;
+    padding: 1.5rem 1.5rem 0.75rem;
+  }
+
+  .gap-card p,
+  .auth-card p {
+    color: var(--muted);
+    font-size: 0.95rem;
+  }
+
+  .gap-card-us {
+    border-color: var(--blue);
+    border-width: 1.5px;
+  }
+
+  .gap-card-us h3 {
+    color: var(--blue);
+    font-family: var(--mono);
+    font-weight: 700;
+  }
+
+  .gap h2 em {
+    font-style: italic;
+    color: var(--blue);
+  }
+
+  .proof {
+    border-top: 1px solid var(--mist);
+    border-bottom: 1px solid var(--mist);
+    background: var(--card);
+  }
+
+  .section-lead {
+    color: var(--muted);
+    max-width: 58ch;
+  }
+
+  .tier-list {
+    margin-top: 2.5rem;
+    display: grid;
+    gap: 0;
+  }
+
+  .tier {
+    display: grid;
+    grid-template-columns: 15rem minmax(0, 1fr);
+    gap: 2rem;
+    padding-block: 1.5rem;
+    border-top: 1px solid var(--mist);
+  }
+
+  .tier:last-child {
+    border-bottom: 1px solid var(--mist);
+  }
+
+  .tier-label {
+    font-family: var(--mono);
+    font-size: 0.78rem;
+    font-weight: 700;
+    letter-spacing: 0.14em;
+    color: var(--ink);
+    padding-top: 0.2rem;
+  }
+
+  .tier p {
+    margin: 0;
+    color: var(--muted);
+    max-width: 62ch;
+  }
+
+  .section-foot {
+    margin-top: 2rem;
+    font-size: 0.95rem;
+    color: var(--muted);
+  }
+
+  /* ---------- lock-in band (navy) ---------- */
+
+  .lockin {
+    background: var(--ink);
+    color: var(--text-on-ink);
+    padding-block: 4.5rem;
+  }
+
+  .lockin h2 {
+    color: #ffffff;
+  }
+
+  .lockin-grid {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    gap: 3.5rem;
+    align-items: center;
+  }
+
+  .band-sub {
+    color: var(--muted-on-ink);
+    max-width: 48ch;
+  }
+
+  .band-sub code {
+    color: var(--text-on-ink);
+  }
+
+  .terminal-tall {
+    font-size: 0.82rem;
+  }
+
+  /* ---------- console + auth ---------- */
+
+  .feature-grid {
+    list-style: none;
+    margin: 2.25rem 0 0;
+    padding: 0;
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr));
+    gap: 2rem 2.5rem;
+  }
+
+  .feature-grid h3 {
+    border-top: 2px solid var(--blue);
+    padding-top: 0.75rem;
+  }
+
+  .feature-grid p {
+    color: var(--muted);
+    font-size: 0.95rem;
+    margin: 0;
+  }
+
+  .auth {
+    background: var(--card);
+    border-top: 1px solid var(--mist);
+  }
+
+  /* ---------- license ---------- */
+
+  .license-inner {
+    max-width: 46rem;
+    text-align: center;
+  }
+
+  .license-inner h2 {
+    margin-inline: auto;
+  }
+
+  .license-inner p {
+    color: var(--muted);
+    margin-bottom: 1.75rem;
+  }
+
+  .license-inner .cta-row {
+    justify-content: center;
+  }
+
+  /* ---------- footer ---------- */
+
+  .footer {
+    background: var(--ink);
+    color: var(--muted-on-ink);
+    padding-block: 3.5rem 2.5rem;
+  }
+
+  .footer-grid {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 2rem;
+    padding-bottom: 2.5rem;
+    border-bottom: 1px solid var(--mist-dark);
+  }
+
+  .footer-tag {
+    font-family: var(--mono);
+    font-size: 0.8rem;
+    margin-top: 0.75rem;
+  }
+
+  .footer-links {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+  }
+
+  .footer-links a {
+    color: var(--text-on-ink);
+    text-decoration: none;
+    font-size: 0.92rem;
+  }
+
+  .footer-links a:hover {
+    text-decoration: underline;
+    text-underline-offset: 4px;
+  }
+
+  .footer-mascot {
+    border-radius: 12px;
+    opacity: 0.9;
+  }
+
+  .footer-legal {
+    padding-top: 1.75rem;
+    font-size: 0.8rem;
+  }
+
+  .footer-legal p {
+    margin-bottom: 0.5rem;
+    max-width: 70ch;
+  }
+
+  /* ---------- motion ---------- */
+
+  @media (prefers-reduced-motion: no-preference) {
+    .hero-copy,
+    .report {
+      animation: rise 600ms ease-out both;
+    }
+
+    .report {
+      animation-delay: 150ms;
+    }
+
+    @keyframes rise {
+      from {
+        opacity: 0;
+        transform: translateY(14px);
+      }
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+  }
+
+  /* ---------- responsive ---------- */
+
+  @media (max-width: 56rem) {
+    .hero-grid,
+    .lockin-grid {
+      grid-template-columns: 1fr;
+      gap: 2.5rem;
+    }
+
+    .tier {
+      grid-template-columns: 1fr;
+      gap: 0.5rem;
+    }
+
+    .nav-links {
+      gap: 1.1rem;
+    }
+
+    .report-row {
+      flex-wrap: wrap;
+    }
+
+    .r-outcome {
+      text-align: left;
+    }
+  }
+</style>

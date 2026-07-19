@@ -1,0 +1,35 @@
+/* statedb brand theme for Starlight */
+
+:root {
+  --sl-font: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  /* brand blues (light theme) */
+  --sl-color-accent-low: #dbe4f2;
+  --sl-color-accent: #2563eb;
+  --sl-color-accent-high: #182b4d;
+}
+
+:root[data-theme="dark"] {
+  --sl-color-accent-low: #16233d;
+  --sl-color-accent: #3b82f6;
+  --sl-color-accent-high: #b7c3d8;
+  --sl-color-bg: #101f39;
+  --sl-color-bg-nav: #182b4d;
+  --sl-color-bg-sidebar: #101f39;
+}
+
+/* Display face for headings only; body stays quiet. */
+.sl-markdown-content h1,
+.sl-markdown-content h2,
+.sl-markdown-content h3,
+.sl-markdown-content h4,
+h1[data-page-title],
+.hero h1 {
+  font-family: "Bricolage Grotesque Variable", var(--sl-font);
+  letter-spacing: -0.01em;
+}
+
+code,
+pre,
+kbd {
+  font-family: "JetBrains Mono Variable", ui-monospace, "SF Mono", Menlo, monospace;
+}
