@@ -89,6 +89,79 @@ Rules for agents:
   start it (Zed: "Rebuild Container"; or `devcontainer up --workspace-folder
   .`). Do not retry on the host.
 
+### Codex worktrees: dedicated container and ports
+
+Use the lifecycle scripts from a linked Codex worktree:
+
+```
+./bin/worktree-dev-up
+./bin/worktree-dev-down
+```
+
+`worktree-dev-up` creates/discovers a dev container labelled for the current
+worktree, starts the shared workbench Postgres and mock IdP, creates a database
+named for the worktree, and starts Bun and Quarkus against that database. It
+also gives the worktree's OIDC provider a unique name. This database isolation
+is required: never point a worktree at the main `statedb` database or bootstrap
+the main `mock` provider, because bootstrap reconciliation would overwrite the
+main checkout's issuer and callback URL.
+
+The worktree console uses `127.0.0.1` while main uses `localhost`. Keep this
+hostname separation even though both resolve to loopback: browser cookies do
+not include ports, so using `localhost` for both consoles lets OIDC state and
+session cookies from one checkout interfere with the other.
+
+`worktree-dev-down` stops the worktree processes, drops only its isolated
+database, and removes only its labelled dev container. It deliberately leaves
+the shared Postgres volume/container, mock IdP, and cached devcontainer image in
+place. Run it when the worktree is finished so containers, processes, and test
+data do not accumulate.
+
+Each Codex worktree needs its own dev container. Never run worktree code in a
+container whose `devcontainer.local_folder` label points at the main checkout
+or another worktree. Stop/remove another worktree's container only when the
+user has said that worktree is finished.
+
+When the default ports are already owned by another checkout, publish the two
+application ports with `1` prepended:
+
+- container `8080` -> host `18080`
+- container `5173` -> host `15173`
+- do **not** prepend `1` to `55432` (`155432` is not a valid TCP port). Reuse
+  the shared workbench Postgres on `55432`, or choose another valid free port.
+
+The scripts automate the following setup. If diagnosing them, note that the
+devcontainer CLI has no `--publish` option. To create those mappings while
+keeping `./bin/in-container` able to discover the container:
+
+1. Temporarily add `--publish=18080:8080` and `--publish=15173:5173` to
+   `runArgs` in the standard `.devcontainer/devcontainer.json`.
+2. Run `devcontainer up --workspace-folder <absolute-worktree-path>`.
+3. Immediately revert only those temporary config lines. The running container
+   retains its port mappings and its label still references the standard config
+   path. Confirm the config has no diff before feature work.
+4. Verify with `docker port <container-id>` and run all project commands through
+   `./bin/in-container` as usual.
+
+Do not start from an alternate config pathname: `devcontainer exec` includes
+the config path in container discovery, so a container labelled with a temporary
+config can be invisible to `./bin/in-container` even though it is running.
+
+Git worktrees may contain a `.git` file whose `gitdir` is an absolute host path.
+If that path is not mounted into the container, in-container `git rev-parse`
+fails and workbench Make targets that use it resolve paths incorrectly. Prefer
+starting the container with the Git common directory bind-mounted at the same
+absolute path (or use `--mount-git-worktree-common-dir` when the worktree was
+created with relative paths). Read-only Git commands may instead run on the
+host, but that does not fix Make targets that call Git inside the container.
+
+For the full workbench on the prefixed console port, the browser-visible OIDC
+issuer is `http://127.0.0.1:15173/default`. Quarkus must be able to reach that
+same issuer from inside the container; a container-local forward from `15173`
+to Bun on `5173` (for example with `socat`) keeps discovery and browser redirects
+on one issuer. Open the console at `http://127.0.0.1:15173`; the backend is at
+`http://localhost:18080`.
+
 Deliberate exception: `tools/pulumi/api-extract` (pure-Go host tool) and
 `tools/pulumi/recorder` (builds and runs its own docker image) are not routed
 through the gateway — they manage their own execution environments.

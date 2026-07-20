@@ -1,0 +1,73 @@
+#!/usr/bin/env bash
+# Starts an isolated full dev stack for the current linked worktree.
+
+set -euo pipefail
+
+source "$(cd "$(dirname "$0")" && pwd)/worktree-dev-common"
+
+container_id="$(docker ps \
+  --filter "label=devcontainer.local_folder=$REPO_ROOT" \
+  --format '{{.ID}}' | head -n 1)"
+
+if [[ -z "$container_id" ]]; then
+  config="$REPO_ROOT/.devcontainer/devcontainer.json"
+  backup="$(mktemp)"
+  cp "$config" "$backup"
+  restore_config() {
+    cp "$backup" "$config"
+    rm -f "$backup"
+  }
+  trap restore_config EXIT INT TERM
+
+  perl -0pi -e \
+    's#"runArgs": \["--add-host=host\.docker\.internal:host-gateway"\],#"runArgs": ["--add-host=host.docker.internal:host-gateway", "--publish='"$WORKTREE_APP_PORT"':8080", "--publish='"$WORKTREE_CONSOLE_PORT"':5173"],#' \
+    "$config"
+  if cmp -s "$config" "$backup"; then
+    echo "error: could not add worktree port mappings to devcontainer config" >&2
+    exit 1
+  fi
+
+  git_common_dir="$(git -C "$REPO_ROOT" rev-parse --path-format=absolute --git-common-dir)"
+  devcontainer up \
+    --workspace-folder "$REPO_ROOT" \
+    --mount "type=bind,source=$git_common_dir,target=$git_common_dir"
+
+  restore_config
+  trap - EXIT INT TERM
+fi
+
+infra_ready=false
+postgres_state="$(docker inspect -f '{{.State.Running}} {{if .State.Health}}{{.State.Health.Status}}{{end}}' \
+  state-db-workbench-postgres 2>/dev/null || true)"
+idp_running="$(docker inspect -f '{{.State.Running}}' \
+  state-db-workbench-idp 2>/dev/null || true)"
+if [[ "$postgres_state" == "true healthy" && "$idp_running" == true ]] \
+    && curl -fsS "http://localhost:$WORKTREE_IDP_PORT/default/.well-known/openid-configuration" \
+      >/dev/null 2>&1; then
+  infra_ready=true
+fi
+
+if [[ "$infra_ready" != true ]]; then
+  "$REPO_ROOT/bin/in-container" sh -lc \
+    'cd /workspaces/state-db && make -C workbench/pulumi infra-up'
+else
+  echo "shared workbench Postgres and mock IdP are already healthy; leaving them untouched"
+fi
+
+"$REPO_ROOT/bin/in-container" sh -lc \
+  "if ! docker exec state-db-workbench-postgres psql -U statedb -d postgres -tAc \"SELECT 1 FROM pg_database WHERE datname='$WORKTREE_DB'\" | grep -q 1; then docker exec state-db-workbench-postgres createdb -U statedb -O statedb '$WORKTREE_DB'; fi"
+
+"$REPO_ROOT/bin/in-container" env \
+  WORKTREE_KEY="$WORKTREE_KEY" \
+  WORKTREE_DB="$WORKTREE_DB" \
+  WORKTREE_PROVIDER="$WORKTREE_PROVIDER" \
+  WORKTREE_CONSOLE_PORT="$WORKTREE_CONSOLE_PORT" \
+  WORKTREE_DB_PORT="$WORKTREE_DB_PORT" \
+  WORKTREE_IDP_PORT="$WORKTREE_IDP_PORT" \
+  WORKTREE_ISSUER="$WORKTREE_ISSUER" \
+  ./bin/worktree-dev-services start
+
+echo "worktree $WORKTREE_KEY is starting"
+echo "console: http://$WORKTREE_CONSOLE_HOST:$WORKTREE_CONSOLE_PORT"
+echo "backend: http://localhost:$WORKTREE_APP_PORT"
+echo "database: $WORKTREE_DB (shared Postgres container, isolated database)"

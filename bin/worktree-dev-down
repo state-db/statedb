@@ -1,0 +1,35 @@
+#!/usr/bin/env bash
+# Tears down only the current linked worktree's app processes, container, and database.
+
+set -euo pipefail
+
+source "$(cd "$(dirname "$0")" && pwd)/worktree-dev-common"
+
+container_id="$(docker ps -a \
+  --filter "label=devcontainer.local_folder=$REPO_ROOT" \
+  --format '{{.ID}}' | head -n 1)"
+
+if [[ -n "$container_id" && "$(docker inspect -f '{{.State.Running}}' "$container_id")" == true ]]; then
+  "$REPO_ROOT/bin/in-container" env \
+    WORKTREE_KEY="$WORKTREE_KEY" \
+    WORKTREE_DB="$WORKTREE_DB" \
+    WORKTREE_PROVIDER="$WORKTREE_PROVIDER" \
+    WORKTREE_CONSOLE_PORT="$WORKTREE_CONSOLE_PORT" \
+    WORKTREE_DB_PORT="$WORKTREE_DB_PORT" \
+    WORKTREE_IDP_PORT="$WORKTREE_IDP_PORT" \
+    WORKTREE_ISSUER="$WORKTREE_ISSUER" \
+    ./bin/worktree-dev-services stop || true
+fi
+
+if docker inspect state-db-workbench-postgres >/dev/null 2>&1; then
+  docker exec state-db-workbench-postgres psql -U statedb -d postgres \
+    -v ON_ERROR_STOP=1 \
+    -c "DROP DATABASE IF EXISTS $WORKTREE_DB WITH (FORCE)"
+fi
+
+if [[ -n "$container_id" ]]; then
+  docker rm -f "$container_id"
+fi
+
+echo "removed worktree $WORKTREE_KEY container and database $WORKTREE_DB"
+echo "shared workbench Postgres and mock IdP were left running"
