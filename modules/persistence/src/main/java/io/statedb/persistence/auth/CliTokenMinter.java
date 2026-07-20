@@ -6,6 +6,7 @@ import jakarta.inject.Inject;
 import jakarta.transaction.Transactional;
 import java.time.Duration;
 import java.time.Instant;
+import java.util.UUID;
 
 /**
  * Mints a 24-hour, account-scoped {@code kind=oidc} CLI token for a user after a console SSO
@@ -30,7 +31,7 @@ public class CliTokenMinter {
   @Inject ApiTokenHasher hasher;
 
   /** The raw token to display once, plus the expiry to surface to the user. */
-  public record MintedCliToken(String rawToken, Instant expiresAt) {}
+  public record MintedCliToken(UUID id, String rawToken, Instant expiresAt) {}
 
   @Transactional
   public MintedCliToken mint(String iss, String sub, String description) {
@@ -52,6 +53,6 @@ public class CliTokenMinter {
     token.expiresAt = expiresAt;
     token.persist();
 
-    return new MintedCliToken(rawToken, expiresAt);
+    return new MintedCliToken(token.id, rawToken, expiresAt);
   }
 }

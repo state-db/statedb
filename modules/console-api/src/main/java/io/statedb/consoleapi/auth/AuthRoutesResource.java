@@ -120,6 +120,29 @@ public class AuthRoutesResource {
     return new AuthProviders(providers, providers.isEmpty() && glass.passwordConfigured());
   }
 
+  /**
+   * Mints a short-lived CLI token from the current console session and reveals it once to the SPA.
+   *
+   * <p>No CSRF token is required: the Lax session cookie is not sent on cross-site POSTs.
+   */
+  @POST
+  @Path("/cli-mint")
+  @Blocking
+  public Response cliMint() {
+    JsonWebToken jwt = sessionJwt();
+    MintedCliToken minted = minter.mint(jwt.getIssuer(), jwt.getSubject(), "CLI token");
+    String target =
+        "/console/account/tokens?minted="
+            + minted.id()
+            + "#token="
+            + CliLoginResource.enc(minted.rawToken());
+    return Response.status(Response.Status.FOUND)
+        .location(URI.create(target))
+        .header("Cache-Control", "no-store")
+        .header("Referrer-Policy", "no-referrer")
+        .build();
+  }
+
   @GET
   @Path("/flow/{provider}")
   public Response flow(

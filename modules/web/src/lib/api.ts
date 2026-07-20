@@ -107,6 +107,15 @@ export interface OidcProviderWrite {
   enabled?: boolean;
 }
 
+export interface ApiToken {
+  id: string;
+  description: string;
+  kind: "oidc" | "service_account";
+  createdAt: string;
+  expiresAt: string | null;
+  lastUsedAt: string | null;
+}
+
 export interface WorkspaceLastUpdate {
   kind: string;
   status: "succeeded" | "failed" | "in-progress" | "cancelled" | string;
@@ -245,6 +254,11 @@ export const api = {
   },
   user: {
     get: () => request<CurrentUser>("/user"),
+  },
+  tokens: {
+    list: () => request<ApiToken[]>("/tokens"),
+    revoke: (id: string) =>
+      request<void>(`/tokens/${encodeURIComponent(id)}`, { method: "DELETE" }),
   },
   admin: {
     providers: {

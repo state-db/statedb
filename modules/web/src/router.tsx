@@ -24,6 +24,7 @@ import { ProjectStacksPage } from "@/routes/scoped-stacks";
 import { StackDetailPage, type StackTab } from "@/routes/stack-detail";
 import { RunDetailPage } from "@/routes/run-detail";
 import { AdminProvidersPage } from "@/routes/admin-providers";
+import { AccountTokensPage } from "@/routes/account-tokens";
 
 // Bare root renders an <Outlet />; the
 // shell wraps everything that needs the header/nav frame.
@@ -198,13 +199,7 @@ function PreviewDetailRoute() {
 const accountTokensRoute = createRoute({
   getParentRoute: () => shellRoute,
   path: "account/tokens",
-  component: () => (
-    <PlaceholderPage
-      icon={KeyRound}
-      title="Personal access tokens"
-      description="CLI token minting and personal tokens fill in here in S9."
-    />
-  ),
+  component: AccountTokensPage,
 });
 
 const adminRoute = createRoute({
