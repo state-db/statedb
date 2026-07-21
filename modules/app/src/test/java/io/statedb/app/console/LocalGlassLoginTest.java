@@ -1,17 +1,17 @@
 package io.statedb.app.console;
 
 import static io.restassured.RestAssured.given;
+import static io.statedb.app.console.LocalGlassTestSupport.COOKIE;
+import static io.statedb.app.console.LocalGlassTestSupport.PASSWORD;
+import static io.statedb.app.console.LocalGlassTestSupport.login;
 import static org.hamcrest.Matchers.empty;
 import static org.hamcrest.Matchers.is;
 import static org.hamcrest.Matchers.nullValue;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
-import io.quarkus.elytron.security.common.BcryptUtil;
 import io.quarkus.narayana.jta.QuarkusTransaction;
 import io.quarkus.test.junit.QuarkusTest;
-import io.quarkus.test.junit.QuarkusTestProfile;
 import io.quarkus.test.junit.TestProfile;
-import io.restassured.response.ValidatableResponse;
 import io.statedb.persistence.identity.OidcProvider;
 import io.statedb.persistence.identity.Organization;
 import io.statedb.persistence.lock.StackLock;
@@ -36,28 +36,10 @@ import org.junit.jupiter.api.Test;
  * LocalGlassLoopbackTest}.
  */
 @QuarkusTest
-@TestProfile(LocalGlassLoginTest.Profile.class)
+@TestProfile(LocalGlassTestSupport.Profile.class)
 class LocalGlassLoginTest {
 
-  static final String PASSWORD = "glass-recovery-pw";
-  static final String COOKIE = "state-db-glass";
   private static final String PROVIDER = "glass-test-provider";
-
-  public static class Profile implements QuarkusTestProfile {
-    @Override
-    public Map<String, String> getConfigOverrides() {
-      // The resource treats the bootstrap name as reserved/env-managed, but this suite exercises
-      // the admin API through break-glass, which requires the gate open (no enabled provider). So
-      // name the reserved provider without letting OidcProviderBootstrap provision an enabled row.
-      return Map.of(
-          "state-db.local-glass.password-hash",
-          BcryptUtil.bcryptHash(PASSWORD),
-          "state-db.oidc.bootstrap.name",
-          "env-provider",
-          "quarkus.arc.exclude-types",
-          "io.statedb.persistence.bootstrap.OidcProviderBootstrap");
-    }
-  }
 
   @Inject EntityManager em;
 
@@ -262,18 +244,6 @@ class LocalGlassLoginTest {
     } finally {
       deleteProvider();
     }
-  }
-
-  private ValidatableResponse login(String password) {
-    return given()
-        .contentType("application/x-www-form-urlencoded")
-        .formParam("username", "admin")
-        .formParam("password", password)
-        .redirects()
-        .follow(false)
-        .when()
-        .post("/api/auth/local")
-        .then();
   }
 
   private void seedEnabledProvider() {

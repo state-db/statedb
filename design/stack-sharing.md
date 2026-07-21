@@ -4,7 +4,7 @@ Status: **engine implemented** (guest role, visibility, listing predicate, 404
 collapse); the management surface (§7 shares API/console, visibility toggle) is
 **pending**. Companion docs: [`auth.md`](auth.md) (Cedar model, roles,
 `policy_grants`), [`db-schema.md`](db-schema.md), [`console-ux.md`](console-ux.md)
-(S7/S11 surfaces this spec extends).
+(S7/S17 surfaces this spec extends).
 
 ## 1. Requirement
 
@@ -172,8 +172,9 @@ Grants and visibility are psql-managed today. Additions:
   (offering to add them as `guest` if absent is a console affordance, not an
   API side effect).
 - **Console:** a "Sharing" card on the stack Settings tab (S7) listing grants
-  (grantee, scope, created, revoke), plus grant visibility in the admin org
-  panel (S11). Add both to `console-ux.md`'s API-gap table when sliced.
+  (grantee, scope, created, revoke), plus read-only grant visibility on the
+  owner-or-admin organization member detail (S17). Add both to
+  `console-ux.md`'s API-gap table when sliced.
 
 ## 8. Multi-pod grant propagation
 

@@ -1,7 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
-import { FolderX, Search } from "lucide-react";
-import { useMemo, useState } from "react";
+import { FolderX, Search, Users } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
 
 import { EmptyState } from "@/components/console/EmptyState";
 import { ErrorAlert } from "@/components/console/ErrorAlert";
@@ -15,7 +15,92 @@ import {
   StacksTableSkeleton,
 } from "@/routes/home";
 import { useUnauthorizedRedirect } from "@/hooks/useUnauthorizedRedirect";
+import { useShell } from "@/components/shell/AppShell";
 import { api, NotFoundError, UnauthorizedError } from "@/lib/api";
+import { canManageOrganizationMembers } from "@/routes/org-members";
+
+export function OrgStacksPage({ org }: { org: string }) {
+  const { user, setSelectedOrg } = useShell();
+  const [search, setSearch] = useState("");
+  const query = useQuery({
+    queryKey: ["workspaces", { org }],
+    queryFn: () => api.workspaces.list({ org }),
+    retry: (failureCount, error) =>
+      !(error instanceof UnauthorizedError || error instanceof NotFoundError) &&
+      failureCount < 2,
+    refetchInterval: (result) =>
+      result.state.data?.some((row) => row.lastUpdate?.status === "in-progress")
+        ? 3_000
+        : false,
+  });
+
+  const unauthorized = useUnauthorizedRedirect(query.error);
+  const rows = query.data ?? [];
+  const visibleRows = useMemo(
+    () => rows.filter((row) => matchesSearch(row, search)).sort(compareWorkspace),
+    [rows, search],
+  );
+
+  useEffect(() => setSelectedOrg(org), [org]);
+
+  if (unauthorized) return null;
+  if (query.error instanceof NotFoundError) {
+    return (
+      <EmptyState
+        icon={FolderX}
+        title="No such organization"
+        description={`The organization ${org} does not exist or you cannot access it.`}
+        action={
+          <Button asChild variant="outline">
+            <Link to="/console">Back to all stacks</Link>
+          </Button>
+        }
+      />
+    );
+  }
+  if (query.error) {
+    return (
+      <ErrorAlert
+        title="Could not load stacks"
+        error={query.error}
+        onRetry={() => void query.refetch()}
+      />
+    );
+  }
+
+  return (
+    <div className="flex flex-col gap-4">
+      <OrgHeader
+        org={org}
+        rows={rows}
+        search={search}
+        onSearchChange={setSearch}
+        showManageMembers={canManageOrganizationMembers(user, org)}
+      />
+      {query.isLoading ? (
+        <StacksTableSkeleton />
+      ) : rows.length === 0 ? (
+        <EmptyState
+          icon={FolderX}
+          title="No stacks in this organization"
+          description="Stacks appear here after they are created with the CLI."
+        />
+      ) : visibleRows.length === 0 ? (
+        <EmptyState
+          icon={Search}
+          title="No stacks match"
+          description="Try a different stack or project name."
+        />
+      ) : (
+        <StacksTable
+          rows={visibleRows}
+          grouped
+          showKind={hasMultipleKinds(rows)}
+        />
+      )}
+    </div>
+  );
+}
 
 export function ProjectStacksPage({
   org,
@@ -128,6 +213,51 @@ function ScopedHeader({
           placeholder="Search stacks..."
           className="pl-8"
         />
+      </div>
+    </div>
+  );
+}
+
+function OrgHeader({
+  org,
+  rows,
+  search,
+  onSearchChange,
+  showManageMembers,
+}: {
+  org: string;
+  rows: Awaited<ReturnType<typeof api.workspaces.list>>;
+  search: string;
+  onSearchChange: (value: string) => void;
+  showManageMembers: boolean;
+}) {
+  const projects = new Set(rows.map((row) => row.project)).size;
+  return (
+    <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+      <div className="flex flex-col gap-1">
+        <h1 className="text-2xl font-semibold tracking-tight">{org}</h1>
+        <p className="text-sm text-muted-foreground">
+          {`${projects} ${pluralize("project", projects)} · ${rows.length} ${pluralize("stack", rows.length)}`}
+        </p>
+      </div>
+      <div className="flex w-full items-center gap-2 sm:w-auto">
+        {showManageMembers && (
+          <Button asChild variant="outline">
+            <Link to="/console/admin/orgs/$org" params={{ org }}>
+              <Users data-icon="inline-start" />
+              Manage members
+            </Link>
+          </Button>
+        )}
+        <div className="relative min-w-0 flex-1 sm:w-80">
+          <Search className="pointer-events-none absolute left-2.5 top-2.5 text-muted-foreground" />
+          <Input
+            value={search}
+            onChange={(event) => onSearchChange(event.target.value)}
+            placeholder="Search stacks..."
+            className="pl-8"
+          />
+        </div>
       </div>
     </div>
   );

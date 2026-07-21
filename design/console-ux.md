@@ -121,7 +121,7 @@ scheme, so these are inherent, not incidental.)
 ```
 /console                                        Stacks (home) — cross-org flat list
 /console/login                                  Sign-in (provider chooser + break-glass)
-/console/{org}                                  Org overview: projects + stacks
+/console/{org}                                  Org-scoped stacks home (grouped by project)
 /console/{org}/{project}                        Project view: stacks in project
 /console/{org}/{project}/{stack}                Stack detail (tabs: resources | outputs | activity | settings)
 /console/{org}/{project}/{stack}/updates/{version}    Run detail (update/refresh/destroy)
@@ -129,7 +129,8 @@ scheme, so these are inherent, not incidental.)
 /console/account/tokens                         Personal access tokens + CLI token mint
 /console/admin                                  Admin index (redirect to first section)
 /console/admin/providers                        OIDC providers
-/console/admin/orgs                             Organizations + members
+/console/admin/orgs                             Organizations (tenant lifecycle)
+/console/admin/orgs/{org}                       Members & guest grants (owner-or-admin)
 /console/admin/users                            Users
 /console/admin/tokens                           Service-account tokens
 /console/admin/operations                       Locks + compaction + retention health
@@ -178,6 +179,14 @@ Replace the current top-bar-only `AppShell` with a shadcn **Sidebar** layout
   lists `user.organizations`. Selecting an org filters the Stacks screen and
   breadcrumb root. When the user has exactly one org, render a static label.
   Persist selection in localStorage; deep links to `/console/{org}/...` override it.
+  **Site admins get an all-orgs switcher**: when `user.siteAdmin`, the list is
+  sourced from `GET /api/admin/orgs` (all tenants), not `user.organizations` — a
+  site admin's power comes from the `STATE_DB_ADMIN_SUBJECTS` allow-list, not from
+  `org_members` rows, so the switcher must not be membership-limited when they
+  browse or manage another tenant. Selecting an org navigates to its scoped stacks
+  home (`/console/{org}`), whose owner/admin-only "Manage members" action opens
+  `/console/admin/orgs/{org}`. The single-org static-label collapse applies to
+  non-admins only.
 - **User menu** (header right, `Avatar` + `DropdownMenu`): email, role badges,
   theme toggle (light/dark, `next-themes` pattern), Sign out (`/api/auth/logout`).
 - **Breadcrumb** (shadcn `Breadcrumb`): mirrors the URL hierarchy; each segment
@@ -242,12 +251,13 @@ Monospace stack (`font-mono`) for all technical identifiers and the log viewer.
 | S8 | Run detail (update + preview permalinks) | `/console/{org}/{project}/{stack}/updates/{version}`, `.../previews/{id}` | 1 |
 | S9 | Personal tokens + CLI mint | `/console/account/tokens` | 1 |
 | S10 | Admin — OIDC providers | `/console/admin/providers` | 2 |
-| S11 | Admin — Organizations & members | `/console/admin/orgs` | 2 |
+| S11 | Admin — Organizations (tenant lifecycle) | `/console/admin/orgs` | 2 |
 | S12 | Admin — Users | `/console/admin/users` | 2 |
 | S13 | Admin — Service tokens | `/console/admin/tokens` | 2 |
 | S14 | Admin — Operations (locks, compaction, retention) | `/console/admin/operations` | 2 |
 | S15 | Admin — License & usage | `/console/admin/license` | 3 |
 | S16 | First-run onboarding / empty deployment | overlays `/console` | 2 |
+| S17 | Org — Members & sharing (owner-or-admin) | `/console/admin/orgs/{org}` | 2 |
 
 Tier 1 = MVP console (matches implementation slices 26–29). Tier 2 = full
 operator story. Tier 3 = commercial readiness (slices 34–35).
@@ -373,13 +383,18 @@ the org switcher/search preset.
 
 **Layout.** Same `DataTable` as S2 filtered to the org (grouped by project) or
 project (flat). Header adds context: org/project name, counts
-(`N projects · M stacks`), created date. No new components.
+(`N projects · M stacks`), created date. No tabs: `/console/{org}` remains the
+org-scoped stacks home. Owners of that org and site admins see a "Manage members"
+action linking to S17; other roles see only the stack browsing controls. The
+**project** route has no membership controls (membership is org-scoped).
 
 **Data.** Same endpoint as S2 with `?org=` / `?project=` filters. 404 → screen
 EmptyState "No such project" with link home.
 
-**Acceptance.** Deep-linking `/console/{org}/{project}` lands on the filtered
-list; unknown names 404 cleanly.
+**Acceptance.** Deep-linking `/console/{org}` lands on the grouped org stack
+list, including a useful empty state when it has zero stacks; only an owner of
+that org or a site admin sees "Manage members." Deep-linking
+`/console/{org}/{project}` lands on the filtered list; unknown names 404 cleanly.
 
 ---
 
@@ -641,27 +656,45 @@ client secret is never visible after save.
 
 ---
 
-### S11 · Admin — Organizations & members — `/console/admin/orgs`
+### S11 · Admin — Organizations — `/console/admin/orgs`
 
-**Purpose.** Tenant + membership management; this is where access is granted
-(org membership gates token validity).
+**Purpose.** Tenant lifecycle: mint and retire organizations. Member and
+guest-share management do **not** live on this list screen — that is
+owner-or-admin work on the organization detail route (S17). This list screen is
+site-admin-only (`STATE_DB_ADMIN_SUBJECTS`); minting a new tenant has no natural
+per-org owner, so it stays a deployment-level act.
 
-**Layout.** Master-detail: orgs `DataTable` (name | display name | members |
-stacks | created) with "Create organization" `Dialog` (name — validated against
-the frozen reserved list in §2.2 — + display name). Row click expands to a members panel:
-members `DataTable` (user email/name | role `Select` inline (owner/member/
-viewer) | remove). "Add member" `Dialog`: user `Command` combobox (search
-existing users by email) + role select. Removing a member → `AlertDialog`
-noting it immediately invalidates their tokens for this org.
+**Layout.** Orgs `DataTable` (name | display name | members | stacks | created)
+with two actions:
 
-**Data.** **API gaps** — `GET/POST /api/admin/orgs`,
-`GET/POST/PATCH/DELETE /api/admin/orgs/{id}/members`. (Architecture lists only
-users/providers/tokens today; membership management currently has no owner —
-flag to backend.)
+- **"Create organization"** `Dialog` (name + display name). Name validated
+  client-side against the frozen reserved list (§2.2) *and* the org-name grammar
+  (V011); the server re-validates both. Creating an org adds **no members** — the
+  new org is empty. An admin assigns its first `owner` afterward by opening the
+  row's member count, or by selecting the org in the all-orgs switcher and using
+  "Manage members" on its scoped stacks home (S17).
+- **"Delete"** (row action, destructive) — enabled **only when the org has zero
+  stacks** (`Tooltip` explains the guard otherwise). `AlertDialog` with
+  type-the-org-name confirm and explicit consequence copy ("permanently deletes
+  the organization, its memberships, and all service tokens"). Deleting a
+  populated org is impossible by design — destroy/delete its stacks first (mirrors
+  the empty-only stack-delete guard, S7). The `ON DELETE CASCADE` from
+  `organizations` would otherwise wipe every stack, all state, history, and grants
+  behind one click.
 
-**Acceptance.** New org appears in the switcher after re-fetch of `/api/user`;
-role change reflects on the member row; removing a member toasts the token
-consequence.
+Each row's **members** count links to `/console/admin/orgs/{org}` (S17) —
+navigation into the single management surface, not an embedded panel here.
+
+**Data.** `GET/POST /api/admin/orgs` and `DELETE /api/admin/orgs/{id}`
+(admin-only; the empty-only guard is mirrored server-side). Counts (`members`,
+`stacks`) are aggregates on the list DTO. **Built full-stack in Slice 29.5** —
+these three endpoints ship with the screen, not as a separate backend session;
+member CRUD lives in S17.
+
+**Acceptance.** A created org appears immediately in a site admin's org switcher
+(all-orgs, §3.1) and has zero members until one is assigned on S17; delete is
+disabled with a tooltip while the org has stacks, and an empty org deletes after
+type-to-confirm.
 
 ---
 
@@ -672,7 +705,7 @@ consequence.
 **Layout.** `DataTable`: user (Avatar + name + email) | identity (`iss` short +
 `sub` mono, copyable — what an admin pastes into `STATE_DB_ADMIN_SUBJECTS`) |
 orgs (badges with role) | last login | created. Read-only except a per-row
-"Manage memberships" link into S11's panel. `Alert` at top: "Admins are
+"Manage memberships" link into the applicable S17 organization detail. `Alert` at top: "Admins are
 configured via `STATE_DB_ADMIN_SUBJECTS`, not here" — with the current admin
 list rendered read-only if the API exposes it (**nice-to-have API**:
 `GET /api/admin/settings` returning non-secret operational config).
@@ -767,6 +800,86 @@ welcome toast.
 
 ---
 
+### S17 · Org — Members & sharing — `/console/admin/orgs/{org}`
+
+**Purpose.** The single home for "who belongs to this org, at what role, and what
+have they been granted." Membership is what gates a principal's *access* to the
+org's stacks — resolved per request, never baked into a token (see the remove-copy
+below). This is the S11-successor for everything member/share related; S11 keeps
+only tenant lifecycle.
+
+**Who operates it.** Org `owner`s (their own org) and site admins (any org).
+Authorized by a new owner-only Cedar action `org:ManageMembers`
+(`appliesTo { resource: [Org] }`, added to `owner.cedar` next to
+`serviceaccount:*`) plus `admin.cedar`'s unconstrained permit; loaded by the
+existing `OrgEntityLoader`, role resolved by `PrincipalRoleResolver`. Precedent:
+`serviceaccount:Create` already lets an owner write an `org_members` row (role
+`service`) with no site-admin involved — human membership is the same shape.
+Despite its `/console/admin/...` pathname, this detail route is deliberately
+**outside** the site-admin-only route wrapper: an owner who is not a site admin
+must reach it. On `/console/{org}`, an eligible owner sees a "Manage members"
+action; a site admin can use the same action after selecting any org in the
+all-orgs switcher, or follow the members-count link from S11. A site admin needs
+no membership in the org — `admin.cedar` authorizes regardless. A non-owner
+member who deep-links the detail route is returned to `/console/{org}`; the API
+remains the server-authoritative authorization boundary.
+
+**Layout.** Standalone organization detail page. `/console/{org}` stays focused
+on stack browsing and supplies the owner/admin-only entry action; there is no
+Stacks/Members tab shell.
+
+- Members `DataTable` — **humans only** (`role IN ('owner','member','viewer',
+  'guest')`): user (Avatar + email/name) | role `Select` inline
+  (owner/member/viewer/guest) | granted stacks (guest rows: count → expander) |
+  joined | remove. **Service accounts never appear here** — they are wholly owned
+  by S13 (`serviceaccount:*` mint/revoke). Surfacing them would duplicate that
+  function and render a row with no meaningful action (you can't demote a service
+  account to viewer).
+- **"Add member"** `Dialog`: user `Command` combobox (search existing users by
+  email) + role `Select`. Choosing `guest` onboards a contractor to the
+  additive-only tier (stack-sharing.md §4) — a bare guest sees nothing until
+  granted a stack on S7.
+- **Per-member guest grants** (read-only here): expanding a `guest` row lists that
+  member's `policy_grants` (stack, template — read / read+secrets / write,
+  created). This is the S17-side of stack-sharing.md §7, **visibility only** —
+  grants are *minted* on the stack's Settings → Sharing card (S7), which owns
+  `stack:ManageShares`. Whether a revoke affordance also lives here (a grant
+  delete is one `policy_grants` row and closes the 404 gate immediately, §4) is an
+  S7/§7-slice decision.
+- **Remove member** → `AlertDialog` stating the real mechanism: *"Revokes their
+  access to every stack in {org} on their next CLI request. Their login token
+  stays valid for any other org they belong to."* — **not** "invalidates their
+  tokens." OIDC/CLI tokens are account-scoped (V010); membership is re-checked per
+  request, so access dies at the next authz check while the credential lives.
+- **Last-owner soft block** — the UI refuses to remove or demote an org's final
+  `owner`, with an inline explanation. Recoverable by a site admin either way
+  (all-orgs switcher + `admin.cedar`), but the guard stops an org from silently
+  losing its only self-service administrator.
+
+**Data.** **Built full-stack in Slice 29.5** — the backend ships with the screen
+(this action resolves S11's old "membership has no owner" flag). New Cedar action
+`org:ManageMembers` (schema.cedar + `owner.cedar`; `admin.cedar` already covers it
+via its unconstrained permit), then `GET /api/orgs/{id}/members` (owner-or-admin)
+and `POST/PATCH/DELETE /api/orgs/{id}/members` (add / change role / remove), all
+`@Authorize(action = "org:ManageMembers", loader = OrgEntityLoader)`. The
+last-owner block is a **server-side invariant**, not just the UI soft-block.
+Guest-grant listing reads `policy_grants` for the org's members; minting stays on
+S7's shares API (stack-sharing.md §7). User search for the combobox:
+`GET /api/admin/users?q=` (extend S12's endpoint) or an owner-scoped equivalent —
+API decision in the slice.
+
+**States.** Empty (org just minted, zero members): "No members yet — add the first
+owner." Loading → table skeleton. Attempting to remove/demote the last owner →
+blocked inline.
+
+**Acceptance.** An owner who is not a site admin manages members of their own org
+and cannot touch another org's; adding a user as `guest` then granting one stack
+on S7 makes exactly that stack visible to them; a role change reflects on the row;
+removing a member toasts the access-revocation consequence (not a token claim);
+the final owner cannot be removed or demoted; service accounts do not appear.
+
+---
+
 ## 6. API gap summary (input to backend sessions)
 
 Screens above depend on these endpoints beyond what slices 26–29 already plan:
@@ -783,7 +896,9 @@ Screens above depend on these endpoints beyond what slices 26–29 already plan:
 | `POST /api/admin/stacks/{ref}/compact` | S7/S14 | enqueue job |
 | `GET /api/admin/locks`, `GET /api/admin/compaction-jobs` | S14 | |
 | `PATCH/DELETE /api/admin/providers/{id}` | S10 | CRUD completion |
-| `GET/POST /api/admin/orgs`, org member CRUD | S11 | currently unowned — flag |
+| `GET/POST /api/admin/orgs`, `DELETE /api/admin/orgs/{id}` (empty-only) | S11 | **Slice 29.5 (full-stack)** — admin-only tenant lifecycle; delete guard mirrors S7 |
+| `org:ManageMembers` action + `GET/POST/PATCH/DELETE /api/orgs/{id}/members` | S17 | **Slice 29.5 (full-stack)** — owner-or-admin (owner.cedar + OrgEntityLoader); server-side last-owner guard; resolves the old "membership unowned" flag |
+| Guest-grant listing (read `policy_grants` per member) | S17 | **Slice 29.5** — read-only; minting stays on S7 shares API (stack-sharing.md §7) |
 | `GET/PUT /api/admin/license` | S15 | slice 34 shape |
 | cli-mint callback lands on `/console/account/tokens#token=` | S9 | SPA-rendered one-time display |
 | Reserved org-name validation (frozen list, §2.2) | permalink integrity | server-side create guard; closed set, never grows with screens |
@@ -797,8 +912,11 @@ Screens above depend on these endpoints beyond what slices 26–29 already plan:
 5. **S6** activity tab
 6. **S8** run detail (largest single screen; needs S6's types)
 7. **S9** personal tokens
-8. **S7** settings tab · **S3** org/project views
-9. **S10–S13** admin CRUD screens (similar shape; 1–2 sessions)
+8. **S7** settings tab · **S3** org/project views · **S17** org member detail
+   (S3 supplies its entry action; S7 supplies the Sharing card; needs
+   `org:ManageMembers`)
+9. **S10–S13** admin CRUD screens (similar shape; 1–2 sessions). S11 is now
+   tenant-lifecycle-only — member CRUD lives in S17
 10. **S14** operations · **S15** license (as APIs land)
 
 Each session should end with the screen wired to real endpoints where they exist

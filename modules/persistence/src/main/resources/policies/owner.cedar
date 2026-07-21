@@ -20,3 +20,10 @@ permit(
   action in Action::"serviceaccount:*",
   resource
 );
+
+@id("OrganizationMemberAdmin")
+permit(
+  principal in Role::"owner",
+  action == Action::"org:ManageMembers",
+  resource
+);

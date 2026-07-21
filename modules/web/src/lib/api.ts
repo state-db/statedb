@@ -107,6 +107,23 @@ export interface OidcProviderWrite {
   enabled?: boolean;
 }
 
+export interface AdminOrganization {
+  id: string;
+  name: string;
+  displayName: string;
+  members: number;
+  stacks: number;
+  createdAt: string;
+}
+
+export type HumanRole = "owner" | "member" | "viewer" | "guest";
+export interface MemberGrant { stackId: string; project: string; stack: string; template: string; createdAt: string; }
+export interface OrganizationMember {
+  userId: string; email: string | null; displayName: string | null; role: HumanRole;
+  joinedAt: string; grants: MemberGrant[];
+}
+export interface UserCandidate { id: string; email: string | null; displayName: string | null; }
+
 export interface ApiToken {
   id: string;
   description: string;
@@ -261,6 +278,11 @@ export const api = {
       request<void>(`/tokens/${encodeURIComponent(id)}`, { method: "DELETE" }),
   },
   admin: {
+    orgs: {
+      list: () => request<AdminOrganization[]>("/admin/orgs"),
+      create: (org: { name: string; displayName: string }) => request<AdminOrganization>("/admin/orgs", { method: "POST", body: JSON.stringify(org) }),
+      delete: (id: string) => request<void>(`/admin/orgs/${encodeURIComponent(id)}`, { method: "DELETE" }),
+    },
     providers: {
       list: () => request<OidcProvider[]>("/admin/providers"),
       create: (provider: OidcProviderWrite) =>
@@ -277,6 +299,15 @@ export const api = {
         request<void>(`/admin/providers/${encodeURIComponent(id)}`, {
           method: "DELETE",
         }),
+    },
+  },
+  orgs: {
+    members: {
+      list: (org: string) => request<OrganizationMember[]>(`/orgs/${encodeURIComponent(org)}/members`),
+      candidates: (org: string) => request<UserCandidate[]>(`/orgs/${encodeURIComponent(org)}/members/candidates`),
+      add: (org: string, userId: string, role: HumanRole) => request<OrganizationMember>(`/orgs/${encodeURIComponent(org)}/members`, { method: "POST", body: JSON.stringify({ userId, role }) }),
+      update: (org: string, userId: string, role: HumanRole) => request<OrganizationMember>(`/orgs/${encodeURIComponent(org)}/members`, { method: "PATCH", body: JSON.stringify({ userId, role }) }),
+      remove: (org: string, userId: string) => request<void>(`/orgs/${encodeURIComponent(org)}/members?userId=${encodeURIComponent(userId)}`, { method: "DELETE" }),
     },
   },
   workspaces: {

@@ -20,6 +20,7 @@ import {
   useEffect,
   useState,
 } from "react";
+import { useQuery } from "@tanstack/react-query";
 
 import { Badge } from "@/components/ui/badge";
 import {
@@ -64,7 +65,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { useTheme } from "@/components/theme/ThemeProvider";
 import { useCurrentUser } from "@/hooks/useCurrentUser";
 import { useUnauthorizedRedirect } from "@/hooks/useUnauthorizedRedirect";
-import type { CurrentUser, OrgMembership } from "@/lib/api";
+import { api, type CurrentUser, type OrgMembership } from "@/lib/api";
 
 type ShellContextValue = {
   user: CurrentUser;
@@ -194,7 +195,7 @@ function AppSidebar({ user }: { user: CurrentUser }) {
         )}
       </SidebarContent>
       <SidebarFooter>
-        <OrgSwitcher organizations={user.organizations} />
+        <OrgSwitcher user={user} />
       </SidebarFooter>
     </Sidebar>
   );
@@ -225,9 +226,13 @@ function NavItem({
   );
 }
 
-function OrgSwitcher({ organizations }: { organizations: OrgMembership[] }) {
+function OrgSwitcher({ user }: { user: CurrentUser }) {
   const { selectedOrg, setSelectedOrg } = useShell();
   const navigate = useNavigate();
+  const allOrgs = useQuery({ queryKey: ["admin", "orgs"], queryFn: api.admin.orgs.list, enabled: user.siteAdmin });
+  const organizations: OrgMembership[] = user.siteAdmin
+    ? (allOrgs.data ?? []).map(org => ({name:org.name, displayName:org.displayName, role:"admin"}))
+    : user.organizations;
   const selected = organizations.find((org) => org.name === selectedOrg);
 
   useEffect(() => {
@@ -244,7 +249,7 @@ function OrgSwitcher({ organizations }: { organizations: OrgMembership[] }) {
     );
   }
 
-  if (organizations.length === 1) {
+  if (!user.siteAdmin && organizations.length === 1) {
     return (
       <div className="flex items-center gap-2 rounded-md border border-sidebar-border p-2 text-sm">
         <Building2 />
@@ -283,7 +288,7 @@ function OrgSwitcher({ organizations }: { organizations: OrgMembership[] }) {
               key={org.name}
               onClick={() => {
                 setSelectedOrg(org.name);
-                void navigate({ to: "/console" });
+                void navigate({ to: "/console/$org", params: { org: org.name } });
               }}
             >
               <span className="truncate">{org.displayName}</span>

@@ -802,6 +802,34 @@ the source of truth.
 
 ---
 
+### Slice 29.5 · Org lifecycle + membership admin (S11 + S17, full-stack)
+
+**Scope**
+
+- **New Cedar action `org:ManageMembers`** — `schema.cedar` (`appliesTo { resource: [Org] }`, sibling of the `serviceaccount:*` org actions), permitted to `Role::"owner"` in `owner.cedar`; `admin.cedar`'s unconstrained permit already covers it. Extends the Slice 19 coverage gate (every action has a policy) and the Slice 20 action matrix.
+- **Tenant lifecycle (admin-only, `AdminFilter`)** — `GET/POST /api/admin/orgs` and `DELETE /api/admin/orgs/{id}`. Create validates name against the frozen reserved list (§2.2 of `console-ux.md`) and the V011 name grammar; adds **no** members. Delete is **empty-only** — rejects (409) if any stack exists in the org, mirroring the Slice 10 stack-delete guard; the `organizations` cascade is never the deletion path for populated tenants. List DTO carries `members` / `stacks` count aggregates.
+- **Membership CRUD (owner-or-admin)** — `GET /api/orgs/{id}/members` + `POST/PATCH/DELETE /api/orgs/{id}/members`, all `@Authorize(action = "org:ManageMembers", loader = OrgEntityLoader)`. Writes go through a command service in `persistence/identity` (`OrgMembershipWriter`-style), humans only (`role IN owner/member/viewer/guest`; `service` rows are S13's, excluded). **Last-owner guard is a server-side invariant** — reject demote/remove that would leave an org with zero owners (independent of the S17 UI soft-block). Guest-grant listing per member reads `policy_grants` (read-only; grant *minting* stays on the S7 shares API, `stack-sharing.md` §7).
+- **Console** — S11 (`/console/admin/orgs`: admin-only create + empty-only delete)
+  and S17 (`/console/admin/orgs/{org}`: add/role/remove + read-only guest grants).
+  The S17 detail route deliberately sits outside the site-admin-only route
+  wrapper and admits either an owner of that org or a site admin; other roles
+  return to `/console/{org}`. The org-scoped stacks home remains stacks-only and
+  shows eligible users a "Manage members" action. The org switcher enumerates
+  **all** orgs when `user.siteAdmin` (sourced from `GET /api/admin/orgs`) and
+  navigates to `/console/{org}`; an admin can continue through its management
+  action, while the S11 members count links directly to the S17 detail.
+
+**Tests.** New action passes the coverage gate. Empty-only org delete: 409 with a stack present, 200 when empty. Last-owner: server rejects removing/demoting the final owner. Owner of org A gets 403/404 managing org B; site admin manages any org without membership. Reserved-name and grammar rejection at create. Add-as-`guest` then a Slice-A share (`stack-sharing.md`) makes exactly that stack visible.
+
+**Manual verification.** As a non-admin owner, open "Manage members" from
+`/console/{org}`, add a `guest`, and change a member's role; confirm a non-owner
+cannot open the detail and the owner cannot touch another org. As a site admin,
+create an org (zero members), switch to its scoped stacks home, follow "Manage
+members", and assign its first owner; also confirm the S11 members-count link
+opens the same detail page.
+
+---
+
 ## Phase 9 — Validation and forward compat
 
 ### Slice 30 · Fixture-driven E2E flow ✅

@@ -102,3 +102,8 @@ action "serviceaccount:Revoke" in ["serviceaccount:*"] appliesTo {
   principal: [User],
   resource: [Org]
 };
+
+action "org:ManageMembers" appliesTo {
+  principal: [User],
+  resource: [Org]
+};

@@ -53,6 +53,9 @@ class AdminAuthorizationTest {
     assertFalse(
         authorizer.authorize(nonAdmin, null, "stack:Delete", stack).allowed(),
         "a non-listed subject with no role is denied");
+    CedarResource org = org("any-org");
+    assertTrue(authorizer.authorize(admin, null, "org:ManageMembers", org).allowed());
+    assertFalse(authorizer.authorize(nonAdmin, null, "org:ManageMembers", org).allowed());
   }
 
   @Test
@@ -76,6 +79,12 @@ class AdminAuthorizationTest {
             new Entity(p, idAttr(ResourceName.project(org, proj)), Set.of(o)),
             new Entity(s, idAttr(ResourceName.stack(org, proj, name)), Set.of(p)));
     return new CedarResource(s, entities);
+  }
+
+  private static CedarResource org(String name) {
+    EntityUID uid = uid("Org", ResourceName.org(name));
+    return new CedarResource(
+        uid, Set.of(new Entity(uid, idAttr(ResourceName.org(name)), Set.of())));
   }
 
   private static EntityUID uid(String type, String id) {

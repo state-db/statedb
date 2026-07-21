@@ -8,7 +8,6 @@ import {
   Outlet,
 } from "@tanstack/react-router";
 import {
-  Building2,
   KeyRound,
   ServerCog,
   Settings,
@@ -20,10 +19,15 @@ import { HomePage } from "@/routes/home";
 import { LoginPage } from "@/routes/login";
 import { NotFoundPage } from "@/routes/not-found";
 import { PlaceholderPage } from "@/routes/placeholder";
-import { ProjectStacksPage } from "@/routes/scoped-stacks";
+import { OrgStacksPage, ProjectStacksPage } from "@/routes/scoped-stacks";
 import { StackDetailPage, type StackTab } from "@/routes/stack-detail";
 import { RunDetailPage } from "@/routes/run-detail";
 import { AdminProvidersPage } from "@/routes/admin-providers";
+import { AdminOrganizationsPage } from "@/routes/admin-orgs";
+import {
+  canManageOrganizationMembers,
+  OrganizationMembersPage,
+} from "@/routes/org-members";
 import { AccountTokensPage } from "@/routes/account-tokens";
 
 // Bare root renders an <Outlet />; the
@@ -131,6 +135,17 @@ const projectRoute = createRoute({
   component: ProjectStacksRoute,
 });
 
+const orgRoute = createRoute({
+  getParentRoute: () => shellRoute,
+  path: "$org",
+  component: OrgStacksRoute,
+});
+
+function OrgStacksRoute() {
+  const { org } = orgRoute.useParams();
+  return <OrgStacksPage org={org} />;
+}
+
 function ProjectStacksRoute() {
   const { org, project } = projectRoute.useParams();
   return <ProjectStacksPage org={org} project={project} />;
@@ -230,14 +245,24 @@ const adminProvidersRoute = createRoute({
 const adminOrgsRoute = createRoute({
   getParentRoute: () => adminRoute,
   path: "admin/orgs",
-  component: () => (
-    <PlaceholderPage
-      icon={Building2}
-      title="Organizations and members"
-      description="Organization administration fills in here in S11."
-    />
-  ),
+  component: AdminOrganizationsPage,
 });
+
+const adminOrgMembersRoute = createRoute({
+  getParentRoute: () => shellRoute,
+  path: "admin/orgs/$org",
+  component: AdminOrgMembersRoute,
+});
+
+function AdminOrgMembersRoute() {
+  const { org } = adminOrgMembersRoute.useParams();
+  const { user } = useShell();
+  return canManageOrganizationMembers(user, org) ? (
+    <OrganizationMembersPage org={org} />
+  ) : (
+    <Navigate to="/console/$org" params={{ org }} replace />
+  );
+}
 
 const adminUsersRoute = createRoute({
   getParentRoute: () => adminRoute,
@@ -297,11 +322,13 @@ const routeTree = rootRoute.addChildren([
   loginRoute,
   shellRoute.addChildren([
     indexRoute,
+    orgRoute,
     projectRoute,
     stackRoute,
     updateRoute,
     previewRoute,
     accountTokensRoute,
+    adminOrgMembersRoute,
     adminRoute.addChildren([
       adminIndexRoute,
       adminProvidersRoute,

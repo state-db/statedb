@@ -62,6 +62,10 @@ public class OrgMember extends PanacheEntityBase {
   @JoinColumn(name = "org_id", insertable = false, updatable = false)
   public Organization organization;
 
+  @ManyToOne(fetch = FetchType.LAZY)
+  @JoinColumn(name = "user_id", insertable = false, updatable = false)
+  public User user;
+
   @Enumerated(EnumType.STRING)
   @Column(nullable = false, columnDefinition = "text")
   public Role role;
