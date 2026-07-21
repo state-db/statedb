@@ -31,13 +31,12 @@
   // runners) so the TESTCONTAINERS_HOST_OVERRIDE below works everywhere; Docker Desktop already
   // resolves it and is unaffected.
   "runArgs": ["--add-host=host.docker.internal:host-gateway"],
-  "forwardPorts": [8080, 5173, 55432],
-  "portsAttributes": {
-    "55432": {
-      "label": "Workbench Postgres",
-      "onAutoForward": "silent",
-    },
-  },
+  // Only forward in-container servers (Quarkus :8080, Bun :5173). Postgres :55432 is NOT
+  // forwarded: it runs as a host sibling container (docker-outside-of-docker) that already
+  // publishes 55432 to the host. Forwarding it too makes VS Code's port helper race Docker
+  // for the same host loopback port — after a crash VS Code wins the freed port and the next
+  // `make pulumi-workbench cmd=infra-up` fails with "bind: address already in use".
+  "forwardPorts": [8080, 5173],
   "containerEnv": {
     // Testcontainers (used by Quarkus Dev Services) defaults to reaching
     // sibling containers via the Docker bridge gateway (172.17.0.1). On

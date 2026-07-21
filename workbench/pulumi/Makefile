@@ -66,12 +66,6 @@ infra-up:
 		DB_IMAGE=$(DB_IMAGE) DB_VOLUME=$(DB_VOLUME) DB_PORT=$(DB_PORT) DB_NAME=$(DB_NAME) DB_USER=$(DB_USER) DB_PASSWORD=$(DB_PASSWORD) \
 		IDP_UPSTREAM_PORT=$(IDP_UPSTREAM_PORT); \
 		mkdir -p "$$DOCKER_CONFIG"; \
-		for container in state-db-workbench-postgres state-db-workbench-idp; do \
-			if docker inspect "$$container" >/dev/null 2>&1 && \
-				[ "$$(docker inspect "$$container" --format "{{index .Config.Labels \"com.docker.compose.project\"}}")" != state-db-workbench ]; then \
-				docker rm -f "$$container" >/dev/null; \
-			fi; \
-			done; \
 		docker volume create $(DB_VOLUME) >/dev/null; \
 		docker compose -f "$$(git rev-parse --show-toplevel)/workbench/pulumi/compose.yml" up -d --wait --build; \
 		for i in $$(seq 1 30); do curl -fsS http://host.docker.internal:$(IDP_UPSTREAM_PORT)/default/.well-known/openid-configuration >/dev/null && exit 0; sleep 1; done; \
