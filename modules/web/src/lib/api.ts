@@ -116,6 +116,30 @@ export interface AdminOrganization {
   createdAt: string;
 }
 
+export interface AdminUserOrg {
+  name: string;
+  displayName: string;
+  role: string;
+}
+export interface AdminUser {
+  id: string;
+  iss: string;
+  sub: string;
+  email: string | null;
+  displayName: string | null;
+  principalType: "human" | "service";
+  siteAdmin: boolean;
+  lastLoginAt: string | null;
+  createdAt: string;
+  organizations: AdminUserOrg[];
+}
+export interface AdminUsersPage {
+  users: AdminUser[];
+  page: number;
+  pageSize: number;
+  total: number;
+}
+
 export type HumanRole = "owner" | "member" | "viewer" | "guest";
 export interface MemberGrant { stackId: string; project: string; stack: string; template: string; createdAt: string; }
 export interface OrganizationMember {
@@ -282,6 +306,12 @@ export const api = {
       list: () => request<AdminOrganization[]>("/admin/orgs"),
       create: (org: { name: string; displayName: string }) => request<AdminOrganization>("/admin/orgs", { method: "POST", body: JSON.stringify(org) }),
       delete: (id: string) => request<void>(`/admin/orgs/${encodeURIComponent(id)}`, { method: "DELETE" }),
+    },
+    users: {
+      list: (page: number, includeService: boolean) =>
+        request<AdminUsersPage>(
+          `/admin/users?page=${page}&includeService=${includeService}`,
+        ),
     },
     providers: {
       list: () => request<OidcProvider[]>("/admin/providers"),

@@ -18,4 +18,14 @@ public class OrgMembershipFinder {
         .project(OrgMembershipView.class)
         .list();
   }
+
+  /** Memberships for a page of users, each tagged with its {@code userId}. */
+  public List<UserOrgMembershipView> forUsers(List<UUID> userIds) {
+    if (userIds.isEmpty()) {
+      return List.of();
+    }
+    return OrgMember.find("userId in ?1 ORDER BY organization.name", userIds)
+        .project(UserOrgMembershipView.class)
+        .list();
+  }
 }

@@ -700,20 +700,34 @@ type-to-confirm.
 
 ### S12 · Admin — Users — `/console/admin/users`
 
-**Purpose.** Support/audit view of everyone who has signed in.
+**Purpose.** Support/audit view of every identity in the `users` table — humans
+who have signed in, plus the machine identities minted as service accounts.
+Service accounts *are* `users` rows (reserved issuer `local:service`), so they
+are present by default, not absent; this is also the only cross-org inventory of
+them, since S13 is org-scoped.
 
-**Layout.** `DataTable`: user (Avatar + name + email) | identity (`iss` short +
-`sub` mono, copyable — what an admin pastes into `STATE_DB_ADMIN_SUBJECTS`) |
-orgs (badges with role) | last login | created. Read-only except a per-row
-"Manage memberships" link into the applicable S17 organization detail. `Alert` at top: "Admins are
-configured via `STATE_DB_ADMIN_SUBJECTS`, not here" — with the current admin
-list rendered read-only if the API exposes it (**nice-to-have API**:
-`GET /api/admin/settings` returning non-secret operational config).
+**Layout.** `DataTable`: user (Avatar + name + email, with an inline `admin`
+`Badge` when the row is a site admin) | identity (`iss` short + `sub` mono,
+copyable — what an admin pastes into `STATE_DB_ADMIN_SUBJECTS`) | orgs (badges
+with role) | last login (`Never` for machine identities) | created. A
+`ToggleGroup` (Humans / Service accounts / All, default **Humans**) segments on
+the DTO's `principalType` (`human` | `service`, `service` iff issuer is
+`local:service`) so service rows never pollute the human-audit columns. Read-only
+except a per-row "Manage memberships" affordance: humans link into the applicable
+S17 organization detail (a single link for one org, a dropdown of orgs for
+several); service rows show none (S17 excludes them). `Alert` at top: "Admins are
+configured via `STATE_DB_ADMIN_SUBJECTS`, not here" — the current admin set is
+rendered read-only inline via the per-row `siteAdmin` flag (no separate settings
+endpoint needed).
 
-**Data.** `GET /api/admin/users` (planned).
+**Data.** `GET /api/admin/users?page=&includeService=` (**built** —
+`AdminUsersResource`). Returns `users, page, pageSize, total`; each user contains
+`id, iss, sub, email, displayName, principalType, siteAdmin, lastLoginAt,
+createdAt, organizations[{name, displayName, role}]`, admin-only.
 
 **Acceptance.** A freshly-signed-in user appears; copyable `<iss>:<sub>` matches
-the env format.
+the env format; a service account appears under the Service accounts filter with
+`principalType=service` and no last login.
 
 ---
 
@@ -864,9 +878,9 @@ and `POST/PATCH/DELETE /api/orgs/{id}/members` (add / change role / remove), all
 `@Authorize(action = "org:ManageMembers", loader = OrgEntityLoader)`. The
 last-owner block is a **server-side invariant**, not just the UI soft-block.
 Guest-grant listing reads `policy_grants` for the org's members; minting stays on
-S7's shares API (stack-sharing.md §7). User search for the combobox:
-`GET /api/admin/users?q=` (extend S12's endpoint) or an owner-scoped equivalent —
-API decision in the slice.
+S7's shares API (stack-sharing.md §7). User search for the combobox is served by
+the existing owner-scoped `GET /api/orgs/{id}/members/candidates` (already
+shipped) — S12's list is not involved.
 
 **States.** Empty (org just minted, zero members): "No members yet — add the first
 owner." Loading → table skeleton. Attempting to remove/demote the last owner →

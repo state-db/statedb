@@ -11,7 +11,6 @@ import {
   KeyRound,
   ServerCog,
   Settings,
-  Users,
 } from "lucide-react";
 
 import { AppShell, useShell } from "@/components/shell/AppShell";
@@ -24,6 +23,7 @@ import { StackDetailPage, type StackTab } from "@/routes/stack-detail";
 import { RunDetailPage } from "@/routes/run-detail";
 import { AdminProvidersPage } from "@/routes/admin-providers";
 import { AdminOrganizationsPage } from "@/routes/admin-orgs";
+import { AdminUsersPage } from "@/routes/admin-users";
 import {
   canManageOrganizationMembers,
   OrganizationMembersPage,
@@ -267,13 +267,7 @@ function AdminOrgMembersRoute() {
 const adminUsersRoute = createRoute({
   getParentRoute: () => adminRoute,
   path: "admin/users",
-  component: () => (
-    <PlaceholderPage
-      icon={Users}
-      title="Users"
-      description="User administration fills in here in S12."
-    />
-  ),
+  component: AdminUsersPage,
 });
 
 const adminTokensRoute = createRoute({
