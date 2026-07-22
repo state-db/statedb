@@ -7,8 +7,9 @@ import io.statedb.persistence.auth.RawApiTokens;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 import jakarta.transaction.Transactional;
-import java.time.Duration;
 import java.time.Instant;
+import java.time.temporal.ChronoUnit;
+import java.util.Set;
 import java.util.UUID;
 
 /**
@@ -28,9 +29,7 @@ public class ServiceAccountCreator {
   /** Reserved issuer namespace for machine identities; no OIDC provider can collide with it. */
   public static final String SERVICE_ISS = "local:service";
 
-  static final Duration DEFAULT_TTL = Duration.ofDays(365);
-
-  private static final Duration MAX_TTL = Duration.ofDays(3650);
+  static final Set<Integer> ALLOWED_TTLS = Set.of(30, 90, 365);
 
   @Inject ApiTokenHasher hasher;
 
@@ -39,17 +38,18 @@ public class ServiceAccountCreator {
       UUID accountId, String name, String rawToken, Instant expiresAt) {}
 
   /**
-   * @param expiresInDays token lifetime; null → 365 days
-   * @throws RequestValidationException (400) on a blank name or out-of-range lifetime
+   * @param expiresInDays mandatory token lifetime, restricted to the console's supported choices
+   * @param createdByUserId human console actor who minted the credential
+   * @throws RequestValidationException (400) on a blank name or unsupported lifetime
    */
   @Transactional
-  public MintedServiceAccount create(UUID orgId, String name, Integer expiresInDays) {
+  public MintedServiceAccount create(
+      UUID orgId, String name, Integer expiresInDays, UUID createdByUserId) {
     if (name == null || name.isBlank() || name.strip().length() > 200) {
       throw new RequestValidationException("service account name must be 1-200 characters");
     }
-    Duration ttl = expiresInDays == null ? DEFAULT_TTL : Duration.ofDays(expiresInDays);
-    if (ttl.isNegative() || ttl.isZero() || ttl.compareTo(MAX_TTL) > 0) {
-      throw new RequestValidationException("expiresInDays must be between 1 and 3650");
+    if (expiresInDays == null || !ALLOWED_TTLS.contains(expiresInDays)) {
+      throw new RequestValidationException("expiresInDays must be one of 30, 90, or 365");
     }
 
     User account = new User();
@@ -65,7 +65,7 @@ public class ServiceAccountCreator {
     membership.persist();
 
     String rawToken = RawApiTokens.generate();
-    Instant expiresAt = Instant.now().plus(ttl);
+    Instant expiresAt = Instant.now().plus(expiresInDays, ChronoUnit.DAYS);
 
     ApiToken token = new ApiToken();
     token.tokenHash = hasher.hash(rawToken);
@@ -74,6 +74,7 @@ public class ServiceAccountCreator {
     token.orgId = orgId; // single_org credential scope: worth nothing outside this org
     token.kind = ApiToken.Kind.service_account;
     token.expiresAt = expiresAt;
+    token.createdByUserId = createdByUserId;
     token.persistAndFlush();
 
     return new MintedServiceAccount(account.id, account.displayName, rawToken, expiresAt);

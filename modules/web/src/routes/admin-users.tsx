@@ -66,6 +66,12 @@ export function AdminUsersPage() {
               <div className="min-w-0">
                 <div className="flex items-center gap-2 truncate font-medium">
                   {u.displayName ?? "—"}
+                  {u.principalType === "service" && u.credentialStatus && (
+                    <CredentialStatus value={u.credentialStatus} />
+                  )}
+                  {u.principalType === "human" && u.deactivatedAt && (
+                    <Badge variant="muted">inactive</Badge>
+                  )}
                   {u.siteAdmin && (
                     <Tooltip>
                       <TooltipTrigger asChild>
@@ -178,6 +184,12 @@ export function AdminUsersPage() {
       )}
     </div>
   );
+}
+
+function CredentialStatus({ value }: { value: NonNullable<AdminUser["credentialStatus"]> }) {
+  if (value === "active") return <Badge variant="success">active</Badge>;
+  if (value === "expired") return <Badge variant="destructive">expired</Badge>;
+  return <Badge variant="muted">{value === "no_credential" ? "no credential" : "revoked"}</Badge>;
 }
 
 function ManageMemberships({ user }: { user: AdminUser }) {

@@ -155,7 +155,7 @@ TokenAuthFilter   (everything that isn't lease-scoped)
   ├─ sha256 the raw token
   ├─ SELECT t.user_id, t.org_id, o.name AS org_name
   │    FROM api_tokens t JOIN organizations o ON o.id = t.org_id
-  │   WHERE t.token_hash = ? AND (t.expires_at IS NULL OR t.expires_at > now())
+  │   WHERE t.token_hash = ? AND t.expires_at > now()
   ├─ if miss → 401
   ├─ verify org_members row exists for (Subject.user_id, Subject.org_id) → else 401
   └─ attach Subject{user_id, org_id, org_name} to SecurityContext
@@ -312,9 +312,9 @@ state-db /api/auth/cli-mint/callback
 
 Non-interactive callers cannot run an OIDC flow. They are served by a separate path:
 
-- Minted by an admin via `POST /api/admin/tokens`.
-- `api_tokens.kind = 'service_account'`. Owner is the minting admin's user (or a synthetic admin-owned user, depending on operational policy). `expires_at` is mandatory and capped at 1y in app code.
-- Revocation is manual. Convention: one token per service, narrowly described (`description = "github-actions/state-db-deploy"`).
+- Minted by an org owner or site admin via `POST /api/orgs/{org}/service-accounts`.
+- Minting creates a dedicated `local:service` machine user, `service` membership, and org-pinned `api_tokens.kind = 'service_account'` credential. `expires_at` is mandatory and restricted to 30/90/365 days; creator attribution is stored separately.
+- Revocation is manual and soft: the token is revoked and machine identity deactivated while both remain for audit. Convention: one token per service, narrowly described (`description = "github-actions/state-db-deploy"`).
 
 Both kinds share the wire format (`Authorization: token <tok>`) and the same `TokenAuthFilter`. The discriminator only affects mint policy and operational expectations, not protocol.
 
@@ -360,7 +360,9 @@ Read-heavy. Notable resources:
 Admin:
 - `GET/POST /api/admin/providers` — manage `oidc_providers`.
 - `GET /api/admin/users` — list users for support/auditing.
-- `POST /api/admin/tokens` — mint a service-account token. Body `{description, org_id, expires_at}` (mandatory, ≤1y). `kind='service_account'`. Returns the raw token once. Used for CI/CD.
+- `GET /api/service-accounts?status=active|inactive|all` — authorization-filtered service-account inventory for org owners and site admins.
+- `POST /api/orgs/{org}/service-accounts` — mint a service-account token. Body `{name, expiresInDays}` with 30/90/365-day expiry. Returns the raw token once.
+- `DELETE /api/orgs/{org}/service-accounts/{id}` — idempotent soft revocation of the credential and machine identity.
 - `DELETE /api/admin/stacks/{ref}/lock` — manual unlock.
 
 ---

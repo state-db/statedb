@@ -53,6 +53,7 @@ public final class TestIdentity {
               token.userId = user.id;
               token.orgId = org.id;
               token.kind = ApiToken.Kind.service_account;
+              token.expiresAt = java.time.Instant.now().plusSeconds(60 * 60);
               token.description = "test fixture";
               token.persistAndFlush();
             });

@@ -72,6 +72,7 @@ class AuthorizationContractTest {
               token.userId = admin.id;
               token.orgId = org.id;
               token.kind = ApiToken.Kind.service_account;
+              token.expiresAt = java.time.Instant.now().plusSeconds(60 * 60);
               token.description = "admin";
               token.persistAndFlush();
             });
@@ -281,6 +282,7 @@ class AuthorizationContractTest {
     token.userId = user.id;
     token.orgId = org.id;
     token.kind = ApiToken.Kind.service_account;
+    token.expiresAt = java.time.Instant.now().plusSeconds(60 * 60);
     token.description = sub;
     token.persistAndFlush();
   }

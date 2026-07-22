@@ -45,15 +45,6 @@ class ApiTokenFinderTest {
 
   @Test
   @TestTransaction
-  void nullExpiryIsTreatedAsNeverExpires() {
-    Fixture f = seed("finder-null-exp");
-    f.persistToken(null);
-
-    assertTrue(finder.findValidByHash(f.tokenHash).isPresent(), "NULL expiry must resolve");
-  }
-
-  @Test
-  @TestTransaction
   void expiredTokenDoesNotResolve() {
     Fixture f = seed("finder-expired");
     f.persistToken(Instant.now().minus(1, ChronoUnit.MINUTES));

@@ -81,6 +81,7 @@ class SecretsResourceTest {
               t.userId = user.id;
               t.orgId = org.id;
               t.kind = ApiToken.Kind.service_account;
+              t.expiresAt = java.time.Instant.now().plusSeconds(60 * 60);
               t.description = "secrets-test";
               t.persistAndFlush();
 
@@ -89,6 +90,7 @@ class SecretsResourceTest {
               sso.userId = user.id;
               sso.orgId = null; // account-scoped: role resolved per request from org_members
               sso.kind = ApiToken.Kind.oidc;
+              sso.expiresAt = java.time.Instant.now().plusSeconds(60 * 60);
               sso.description = "secrets-sso-test";
               sso.persistAndFlush();
 
@@ -104,6 +106,7 @@ class SecretsResourceTest {
               outsiderToken.userId = outsider.id;
               outsiderToken.orgId = null;
               outsiderToken.kind = ApiToken.Kind.oidc;
+              outsiderToken.expiresAt = java.time.Instant.now().plusSeconds(60 * 60);
               outsiderToken.description = "secrets-outsider-test";
               outsiderToken.persistAndFlush();
 

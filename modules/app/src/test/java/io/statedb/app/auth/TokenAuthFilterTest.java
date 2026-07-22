@@ -56,7 +56,11 @@ class TokenAuthFilterTest {
               m.role = OrgMember.Role.owner;
               m.persistAndFlush();
 
-              insertToken(user.id, org.id, sha256Hex(VALID_RAW_TOKEN), null);
+              insertToken(
+                  user.id,
+                  org.id,
+                  sha256Hex(VALID_RAW_TOKEN),
+                  Instant.now().plus(1, ChronoUnit.HOURS));
               insertToken(
                   user.id,
                   org.id,

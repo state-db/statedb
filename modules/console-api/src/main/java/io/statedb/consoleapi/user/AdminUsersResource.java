@@ -4,6 +4,7 @@ import io.quarkus.hibernate.orm.panache.PanacheQuery;
 import io.quarkus.panache.common.Page;
 import io.quarkus.security.identity.SecurityIdentity;
 import io.statedb.consoleapi.auth.SessionPrincipal;
+import io.statedb.persistence.auth.ApiToken;
 import io.statedb.persistence.identity.AdminAllowList;
 import io.statedb.persistence.identity.OrgMember;
 import io.statedb.persistence.identity.OrgMembershipFinder;
@@ -55,6 +56,17 @@ public class AdminUsersResource {
     long total = query.count();
     List<User> users = query.page(Page.of(page - 1, PAGE_SIZE)).list();
     List<UUID> userIds = users.stream().map(user -> user.id).toList();
+    Map<UUID, ApiToken> serviceTokens =
+        userIds.isEmpty()
+            ? Map.of()
+            : ApiToken.<ApiToken>list(
+                    "userId in ?1 and kind = ?2", userIds, ApiToken.Kind.service_account)
+                .stream()
+                .collect(
+                    Collectors.toMap(
+                        token -> token.userId,
+                        token -> token,
+                        (left, right) -> left.createdAt.isAfter(right.createdAt) ? left : right));
     Map<UUID, List<OrganizationDto>> orgsByUser =
         orgMembershipFinder.forUsers(userIds).stream()
             .collect(
@@ -64,11 +76,18 @@ public class AdminUsersResource {
                         m -> new OrganizationDto(m.name(), m.displayName(), m.role()),
                         Collectors.toList())));
     List<AdminUserDto> rows =
-        users.stream().map(user -> dto(user, orgsByUser.getOrDefault(user.id, List.of()))).toList();
+        users.stream()
+            .map(
+                user ->
+                    dto(
+                        user,
+                        orgsByUser.getOrDefault(user.id, List.of()),
+                        serviceTokens.get(user.id)))
+            .toList();
     return new AdminUsersPage(rows, page, PAGE_SIZE, total);
   }
 
-  private AdminUserDto dto(User user, List<OrganizationDto> orgs) {
+  private AdminUserDto dto(User user, List<OrganizationDto> orgs, ApiToken serviceToken) {
     String principalType = ServiceAccountCreator.SERVICE_ISS.equals(user.iss) ? "service" : "human";
     return new AdminUserDto(
         user.id,
@@ -80,7 +99,15 @@ public class AdminUsersResource {
         adminAllowList.isAdmin(user.iss, user.sub),
         user.lastLoginAt,
         user.createdAt,
+        user.deactivatedAt,
+        "service".equals(principalType) ? credentialStatus(user, serviceToken) : null,
         orgs);
+  }
+
+  private static String credentialStatus(User user, ApiToken token) {
+    if (token == null) return "no_credential";
+    if (user.deactivatedAt != null || token.revokedAt != null) return "revoked";
+    return token.expiresAt.isAfter(Instant.now()) ? "active" : "expired";
   }
 
   private void requireAdmin() {
@@ -100,6 +127,8 @@ public class AdminUsersResource {
       boolean siteAdmin,
       Instant lastLoginAt,
       Instant createdAt,
+      Instant deactivatedAt,
+      String credentialStatus,
       List<OrganizationDto> organizations) {}
 
   public record OrganizationDto(String name, String displayName, OrgMember.Role role) {}

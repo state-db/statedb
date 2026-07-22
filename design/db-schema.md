@@ -23,7 +23,7 @@ Forward compatibility for OpenTofu: the `workspaces` parent table provides type-
 | 7 | **Lock expiry + heartbeat** | Stale lock recovery when client crashes; bearer hash must match to unlock |
 | 8 | **Immutable journal entries** | Append-only matches Pulumi journaling semantics; compaction creates new snapshot |
 | 9 | **Async compaction job queue** | Compaction is slow; shouldn't block API responses; can be retried |
-| 10 | **`api_tokens.kind` discriminator (`oidc` vs `service_account`)** | OIDC-derived tokens are short-lived (24h default); each mint requires a fresh OIDC handshake (`prompt=none` re-auth), so IdP disablement propagates within the TTL through OIDC primitives alone. Service-account tokens are long-lived for CI/CD with mandatory `expires_at` enforced in app code. Both share the wire format (`Authorization: token <tok>`) — the distinction is policy, not protocol. |
+| 10 | **`api_tokens.kind` discriminator (`oidc` vs `service_account`)** | OIDC-derived tokens are short-lived (24h default); each mint requires a fresh OIDC handshake (`prompt=none` re-auth), so IdP disablement propagates within the TTL through OIDC primitives alone. Service-account tokens are long-lived for CI/CD. Every token has a mandatory `expires_at`, enforced by the database. Both share the wire format (`Authorization: token <tok>`) — the distinction is policy, not protocol. |
 | 11 | **`workspaces` parent table** | Type-erased identity for cross-tool listing (Pulumi today, Tofu in Wave 3); 1:1 with type-specific row; deletion cascades down the type-specific tree |
 | 12 | **`update_events` first-class** | Event payloads from `events/batch` are decoded and queryable per update; BRIN index on `created_at` enables cheap time-bounded vacuum |
 | 13 | **OIDC users + `org_members`** | Console authn via configurable OIDC providers; org membership decoupled from token ownership; admin set is env-driven, not stored in DB |
@@ -104,6 +104,8 @@ CREATE TABLE users (
     created_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
     last_login_at TIMESTAMPTZ,
+    deactivated_at TIMESTAMPTZ,
+    deactivated_by_user_id UUID REFERENCES users(id) ON DELETE SET NULL,
     UNIQUE (iss, sub)
 );
 
@@ -116,19 +118,24 @@ CREATE TABLE users (
 --                       TTL (24h default). When the user is disabled at the
 --                       IdP, the next mint attempt fails (login_required) and
 --                       the existing token expires within its TTL.
---   'service_account' — minted by an admin for non-interactive callers (CI/CD).
---                       Long-lived, manually revoked. App code enforces a
---                       mandatory expires_at on this kind (capped at 1y).
+--   'service_account' — minted by an org owner/site admin for a dedicated
+--                       local:service identity. Mandatory 30/90/365-day expiry;
+--                       manually soft-revoked and retained for audit.
 CREATE TABLE api_tokens (
     id           UUID        PRIMARY KEY,
     token_hash   TEXT        NOT NULL UNIQUE,
     description  TEXT,
-    user_id      UUID        NOT NULL REFERENCES users(id) ON DELETE CASCADE,  -- owner who minted it
-    org_id       UUID        NOT NULL,                                          -- FK added after organizations; access scope
+    user_id      UUID        NOT NULL REFERENCES users(id) ON DELETE CASCADE,  -- authenticated identity
+    org_id       UUID,                                                          -- null OIDC; required service account
     kind         TEXT        NOT NULL CHECK (kind IN ('oidc', 'service_account')),
     created_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
     last_used_at TIMESTAMPTZ,
-    expires_at   TIMESTAMPTZ
+    expires_at   TIMESTAMPTZ NOT NULL,
+    created_by_user_id UUID REFERENCES users(id) ON DELETE SET NULL,
+    revoked_at   TIMESTAMPTZ,
+    revoked_by_user_id UUID REFERENCES users(id) ON DELETE SET NULL,
+    CHECK ((kind = 'service_account' AND org_id IS NOT NULL)
+        OR (kind = 'oidc' AND org_id IS NULL))
 );
 
 CREATE INDEX idx_api_tokens_user ON api_tokens (user_id);

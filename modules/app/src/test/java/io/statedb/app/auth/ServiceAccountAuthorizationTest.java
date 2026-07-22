@@ -5,9 +5,11 @@ import static org.hamcrest.Matchers.notNullValue;
 
 import io.quarkus.narayana.jta.QuarkusTransaction;
 import io.quarkus.test.junit.QuarkusTest;
+import io.statedb.persistence.auth.ApiToken;
 import io.statedb.persistence.identity.Organization;
 import io.statedb.persistence.identity.ServiceAccountCreator;
-import io.statedb.persistence.identity.ServiceAccountDeleter;
+import io.statedb.persistence.identity.ServiceAccountRevoker;
+import io.statedb.persistence.identity.User;
 import jakarta.inject.Inject;
 import jakarta.persistence.EntityManager;
 import java.util.Map;
@@ -34,7 +36,7 @@ class ServiceAccountAuthorizationTest {
 
   @Inject ServiceAccountCreator creator;
 
-  @Inject ServiceAccountDeleter deleter;
+  @Inject ServiceAccountRevoker revoker;
 
   @Inject io.statedb.persistence.stack.StackCreator stackCreator;
 
@@ -63,7 +65,7 @@ class ServiceAccountAuthorizationTest {
             });
 
     var minted =
-        QuarkusTransaction.requiringNew().call(() -> creator.create(orgId, "ci-deploy", null));
+        QuarkusTransaction.requiringNew().call(() -> creator.create(orgId, "ci-deploy", 90, null));
     accountId = minted.accountId();
     rawToken = minted.rawToken();
   }
@@ -142,9 +144,19 @@ class ServiceAccountAuthorizationTest {
   void revokedAccountStopsAuthenticating() {
     asService().get(BASE).then().statusCode(200);
 
-    boolean deleted =
-        QuarkusTransaction.requiringNew().call(() -> deleter.delete(orgId, accountId));
-    org.junit.jupiter.api.Assertions.assertTrue(deleted);
+    boolean revoked =
+        QuarkusTransaction.requiringNew().call(() -> revoker.revoke(orgId, accountId, null));
+    org.junit.jupiter.api.Assertions.assertTrue(revoked);
+
+    QuarkusTransaction.requiringNew()
+        .run(
+            () -> {
+              User account = User.findById(accountId);
+              ApiToken token = ApiToken.find("userId", accountId).firstResult();
+              org.junit.jupiter.api.Assertions.assertNotNull(account);
+              org.junit.jupiter.api.Assertions.assertNotNull(account.deactivatedAt);
+              org.junit.jupiter.api.Assertions.assertNotNull(token.revokedAt);
+            });
 
     asService().get(BASE).then().statusCode(401);
   }

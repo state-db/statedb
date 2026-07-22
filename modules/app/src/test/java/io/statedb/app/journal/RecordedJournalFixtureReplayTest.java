@@ -418,6 +418,7 @@ class RecordedJournalFixtureReplayTest {
               t.userId = user.id;
               t.orgId = o.id;
               t.kind = ApiToken.Kind.service_account;
+              t.expiresAt = java.time.Instant.now().plusSeconds(60 * 60);
               t.description = "replay";
               t.persistAndFlush();
 

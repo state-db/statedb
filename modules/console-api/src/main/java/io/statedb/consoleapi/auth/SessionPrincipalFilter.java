@@ -42,7 +42,7 @@ public class SessionPrincipalFilter implements ContainerRequestFilter {
     }
     User user =
         User.<User>find("iss = ?1 and sub = ?2", jwt.getIssuer(), jwt.getSubject()).firstResult();
-    if (user == null) {
+    if (user == null || user.deactivatedAt != null) {
       ctx.abortWith(Response.status(Response.Status.UNAUTHORIZED).build());
       return;
     }

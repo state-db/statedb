@@ -9,9 +9,8 @@ import java.time.Instant;
 import org.jboss.logging.Logger;
 
 /**
- * Deletes api_tokens rows long past their expiry, so short-lived CLI tokens don't accumulate
- * forever. An expired token already fails authentication ({@code ApiTokenFinder} filters on {@code
- * expires_at}); this is housekeeping, not enforcement.
+ * Deletes short-lived OIDC CLI tokens long past their expiry. Service-account tokens are retained
+ * indefinitely for operator audit, including creator/revoker and update attribution.
  *
  * <p>The 30-day retention keeps recent rows for operator forensics ("when was this token last
  * used") and preserves {@code stack_updates.started_by_api_token_id} attribution for a while — that
@@ -27,8 +26,10 @@ public class ExpiredApiTokenPurger {
 
   @Scheduled(every = "24h", concurrentExecution = ConcurrentExecution.SKIP)
   @Transactional
-  void purge() {
-    long deleted = ApiToken.delete("expiresAt < ?1", Instant.now().minus(RETENTION));
+  public void purge() {
+    long deleted =
+        ApiToken.delete(
+            "kind = ?1 and expiresAt < ?2", ApiToken.Kind.oidc, Instant.now().minus(RETENTION));
     if (deleted > 0) {
       LOG.infof("purged %d api tokens expired more than %s ago", deleted, RETENTION);
     }

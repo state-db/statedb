@@ -1,12 +1,13 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { ColumnDef } from "@tanstack/react-table";
 import { formatDistanceToNow } from "date-fns";
-import { Check, Copy, KeyRound, Trash2 } from "lucide-react";
+import { KeyRound, Trash2 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 
 import { DataTable, sortableHeader } from "@/components/console/DataTable";
 import { ErrorAlert } from "@/components/console/ErrorAlert";
+import { OneTimeTokenDialog } from "@/components/console/OneTimeTokenDialog";
 import { Timestamp } from "@/components/console/Timestamp";
 import {
   AlertDialog,
@@ -28,15 +29,6 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useUnauthorizedRedirect } from "@/hooks/useUnauthorizedRedirect";
 import { api, type ApiToken, UnauthorizedError } from "@/lib/api";
@@ -194,7 +186,7 @@ export function AccountTokensPage() {
         </AlertDialogContent>
       </AlertDialog>
 
-      <MintedTokenDialog
+      <OneTimeTokenDialog
         rawToken={minted.rawToken}
         onClose={() => {
           clearMintedToken();
@@ -205,8 +197,7 @@ export function AccountTokensPage() {
   );
 }
 
-function Expiry({ value }: { value: string | null }) {
-  if (!value) return <span className="text-muted-foreground">Never</span>;
+function Expiry({ value }: { value: string }) {
   const date = new Date(value);
   const remaining = date.getTime() - Date.now();
   const state = expirationState(value);
@@ -214,35 +205,6 @@ function Expiry({ value }: { value: string | null }) {
   if (state === "expired") return <Badge variant="destructive">{label}</Badge>;
   if (state === "expiring") return <Badge variant="warning">{label}</Badge>;
   return <Timestamp value={value} />;
-}
-
-function MintedTokenDialog({ rawToken, onClose }: { rawToken: string | null; onClose: () => void }) {
-  const [copied, setCopied] = useState(false);
-  if (!rawToken) return null;
-  const copy = async () => {
-    await navigator.clipboard.writeText(rawToken);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
-  };
-  return (
-    <Dialog open onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className="sm:max-w-2xl">
-        <DialogHeader>
-          <DialogTitle>Your CLI token</DialogTitle>
-          <DialogDescription>Copy it now. state-db cannot show this token again.</DialogDescription>
-        </DialogHeader>
-        <div className="flex items-center gap-2">
-          <Input readOnly value={rawToken} className="font-mono" aria-label="CLI token" />
-          <Button type="button" variant="outline" size="icon" aria-label="Copy token" onClick={() => void copy()}>
-            {copied ? <Check data-icon="inline-start" /> : <Copy data-icon="inline-start" />}
-          </Button>
-        </div>
-        <DialogFooter>
-          <Button type="button" onClick={onClose}>I&apos;ve copied it</Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
-  );
 }
 
 function Command({ value }: { value: string }) {

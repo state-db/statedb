@@ -157,6 +157,10 @@ function AppSidebar({ user }: { user: CurrentUser }) {
     { label: "Operations", to: "/console/admin/operations", icon: ServerCog },
     { label: "License", to: "/console/admin/license", icon: Workflow },
   ];
+  const ownsOrganization = user.organizations.some((org) => org.role === "owner");
+  const managementItems = user.siteAdmin
+    ? admin
+    : admin.filter((item) => item.to === "/console/admin/tokens");
 
   return (
     <Sidebar>
@@ -179,11 +183,11 @@ function AppSidebar({ user }: { user: CurrentUser }) {
             ))}
           </SidebarMenu>
         </SidebarGroup>
-        {user.siteAdmin && (
+        {(user.siteAdmin || ownsOrganization) && (
           <SidebarGroup>
-            <SidebarGroupLabel>Admin</SidebarGroupLabel>
+            <SidebarGroupLabel>Manage</SidebarGroupLabel>
             <SidebarMenu>
-              {admin.map((item) => (
+              {managementItems.map((item) => (
                 <NavItem
                   key={item.to}
                   {...item}

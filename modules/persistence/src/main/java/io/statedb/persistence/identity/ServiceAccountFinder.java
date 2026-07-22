@@ -23,17 +23,55 @@ public class ServiceAccountFinder {
     return em.createQuery(
             """
             SELECT new io.statedb.persistence.identity.ServiceAccountView(
-              u.id, u.displayName, u.createdAt, t.expiresAt, t.lastUsedAt)
+              u.id, t.id, u.displayName, o.name, o.displayName, t.createdAt,
+              t.expiresAt, t.lastUsedAt, t.revokedAt, u.deactivatedAt,
+              t.createdByUserId, creator.displayName, creator.email,
+              t.revokedByUserId, revoker.displayName, revoker.email)
               FROM User u
               JOIN OrgMember m ON m.userId = u.id
-              LEFT JOIN ApiToken t ON t.userId = u.id AND t.orgId = m.orgId
+              JOIN Organization o ON o.id = m.orgId
+              JOIN ApiToken t ON t.userId = u.id AND t.orgId = m.orgId
+              LEFT JOIN User creator ON creator.id = t.createdByUserId
+              LEFT JOIN User revoker ON revoker.id = t.revokedByUserId
              WHERE m.orgId = :org AND m.role = :role
-             ORDER BY u.createdAt
+             ORDER BY t.createdAt DESC
             """,
             ServiceAccountView.class)
         .setParameter("org", orgId)
         .setParameter("role", OrgMember.Role.service)
         .getResultList();
+  }
+
+  /** Lists every service account the actor may manage: owned orgs, or all orgs for site admins. */
+  public List<ServiceAccountView> manageableBy(UUID actorUserId, boolean siteAdmin) {
+    String managerJoin =
+        siteAdmin
+            ? ""
+            : "JOIN OrgMember manager ON manager.orgId = m.orgId"
+                + " AND manager.userId = :actor AND manager.role = :owner";
+    var query =
+        em.createQuery(
+                """
+            SELECT new io.statedb.persistence.identity.ServiceAccountView(
+              u.id, t.id, u.displayName, o.name, o.displayName, t.createdAt,
+              t.expiresAt, t.lastUsedAt, t.revokedAt, u.deactivatedAt,
+              t.createdByUserId, creator.displayName, creator.email,
+              t.revokedByUserId, revoker.displayName, revoker.email)
+              FROM User u
+              JOIN OrgMember m ON m.userId = u.id
+              JOIN Organization o ON o.id = m.orgId
+              JOIN ApiToken t ON t.userId = u.id AND t.orgId = m.orgId
+              LEFT JOIN User creator ON creator.id = t.createdByUserId
+              LEFT JOIN User revoker ON revoker.id = t.revokedByUserId
+            """
+                    + managerJoin
+                    + " WHERE m.role = :service ORDER BY t.createdAt DESC",
+                ServiceAccountView.class)
+            .setParameter("service", OrgMember.Role.service);
+    if (!siteAdmin) {
+      query.setParameter("actor", actorUserId).setParameter("owner", OrgMember.Role.owner);
+    }
+    return query.getResultList();
   }
 
   /** True iff the account exists as a service identity in the given org. */

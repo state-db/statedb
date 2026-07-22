@@ -28,7 +28,9 @@ public class ApiTokenFinder {
               LEFT JOIN Organization o ON o.id = t.orgId
               LEFT JOIN OrgMember m ON m.orgId = t.orgId AND m.userId = t.userId
              WHERE t.tokenHash = :hash
-               AND (t.expiresAt IS NULL OR t.expiresAt > :now)
+               AND t.expiresAt > :now
+               AND t.revokedAt IS NULL
+               AND u.deactivatedAt IS NULL
                AND (t.orgId IS NULL OR m.role IS NOT NULL)
             """,
             AuthenticatedPrincipal.class)

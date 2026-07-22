@@ -11,6 +11,7 @@ import io.statedb.persistence.auth.ApiToken;
 import io.statedb.persistence.identity.OrgMember;
 import io.statedb.persistence.identity.Organization;
 import io.statedb.persistence.identity.User;
+import java.time.Instant;
 import java.util.UUID;
 import org.junit.jupiter.api.Test;
 
@@ -43,6 +44,7 @@ class IdentityConstraintsTest {
     token.userId = user.id;
     token.orgId = UUID.randomUUID();
     token.kind = ApiToken.Kind.service_account;
+    token.expiresAt = futureExpiry();
 
     assertThrows(Exception.class, token::persistAndFlush);
   }
@@ -58,6 +60,7 @@ class IdentityConstraintsTest {
     token.userId = UUID.randomUUID();
     token.orgId = org.id;
     token.kind = ApiToken.Kind.service_account;
+    token.expiresAt = futureExpiry();
 
     assertThrows(Exception.class, token::persistAndFlush);
   }
@@ -105,6 +108,7 @@ class IdentityConstraintsTest {
     first.userId = user.id;
     first.orgId = org.id;
     first.kind = ApiToken.Kind.service_account;
+    first.expiresAt = futureExpiry();
     first.persistAndFlush();
 
     ApiToken collision = new ApiToken();
@@ -112,6 +116,7 @@ class IdentityConstraintsTest {
     collision.userId = user.id;
     collision.orgId = org.id;
     collision.kind = ApiToken.Kind.service_account;
+    collision.expiresAt = futureExpiry();
 
     assertThrows(Exception.class, collision::persistAndFlush);
   }
@@ -158,6 +163,7 @@ class IdentityConstraintsTest {
     token.userId = user.id;
     token.orgId = UUID.randomUUID();
     token.kind = ApiToken.Kind.oidc;
+    token.expiresAt = futureExpiry();
 
     assertThrows(Exception.class, token::persistAndFlush);
   }
@@ -174,6 +180,7 @@ class IdentityConstraintsTest {
     token.userId = user.id;
     token.orgId = null;
     token.kind = ApiToken.Kind.service_account;
+    token.expiresAt = futureExpiry();
 
     assertThrows(Exception.class, token::persistAndFlush);
   }
@@ -195,6 +202,23 @@ class IdentityConstraintsTest {
                 .setParameter(1, org.id)
                 .setParameter(2, user.id)
                 .executeUpdate());
+  }
+
+  @Test
+  @TestTransaction
+  void apiTokenRequiresExpiry() {
+    Organization org = newOrg("acme-token-expiry");
+    org.persistAndFlush();
+    User user = newUser();
+    user.persistAndFlush();
+
+    ApiToken token = new ApiToken();
+    token.tokenHash = "sha256:" + "j".repeat(64);
+    token.userId = user.id;
+    token.orgId = org.id;
+    token.kind = ApiToken.Kind.service_account;
+
+    assertThrows(Exception.class, token::persistAndFlush);
   }
 
   // -----------------------------------------------------------------------------------------
@@ -298,8 +322,13 @@ class IdentityConstraintsTest {
     t.userId = userId;
     t.orgId = orgId;
     t.kind = ApiToken.Kind.service_account;
+    t.expiresAt = futureExpiry();
     t.persistAndFlush();
     assertNotNull(t.id);
     return t.id;
+  }
+
+  private static Instant futureExpiry() {
+    return Instant.now().plusSeconds(60 * 60);
   }
 }

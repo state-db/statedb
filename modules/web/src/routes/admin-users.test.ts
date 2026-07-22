@@ -14,6 +14,8 @@ function user(overrides: Partial<AdminUser>): AdminUser {
     siteAdmin: false,
     lastLoginAt: null,
     createdAt: "2026-01-01T00:00:00Z",
+    deactivatedAt: null,
+    credentialStatus: null,
     organizations: [],
     ...overrides,
   };

@@ -35,6 +35,7 @@ public class CurrentUserResource {
     User user =
         User.<User>find("iss = ?1 and sub = ?2", jwt.getIssuer(), jwt.getSubject())
             .firstResultOptional()
+            .filter(candidate -> candidate.deactivatedAt == null)
             .orElseThrow(() -> new NotAuthorizedException("OIDC"));
     List<OrganizationResponse> organizations =
         orgMembershipFinder.forUser(user.id).stream()

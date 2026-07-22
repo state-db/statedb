@@ -174,6 +174,7 @@ class UserStacksContractTest {
     t.userId = userId;
     t.orgId = orgId;
     t.kind = ApiToken.Kind.service_account;
+    t.expiresAt = java.time.Instant.now().plusSeconds(60 * 60);
     t.description = "user-stacks-test";
     t.persistAndFlush();
   }

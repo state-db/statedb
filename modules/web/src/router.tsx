@@ -7,11 +7,7 @@ import {
   createRouter,
   Outlet,
 } from "@tanstack/react-router";
-import {
-  KeyRound,
-  ServerCog,
-  Settings,
-} from "lucide-react";
+import { ServerCog, Settings } from "lucide-react";
 
 import { AppShell, useShell } from "@/components/shell/AppShell";
 import { HomePage } from "@/routes/home";
@@ -24,6 +20,10 @@ import { RunDetailPage } from "@/routes/run-detail";
 import { AdminProvidersPage } from "@/routes/admin-providers";
 import { AdminOrganizationsPage } from "@/routes/admin-orgs";
 import { AdminUsersPage } from "@/routes/admin-users";
+import {
+  AdminServiceTokensPage,
+  canManageServiceTokens,
+} from "@/routes/admin-service-tokens";
 import {
   canManageOrganizationMembers,
   OrganizationMembersPage,
@@ -271,16 +271,15 @@ const adminUsersRoute = createRoute({
 });
 
 const adminTokensRoute = createRoute({
-  getParentRoute: () => adminRoute,
+  getParentRoute: () => shellRoute,
   path: "admin/tokens",
-  component: () => (
-    <PlaceholderPage
-      icon={KeyRound}
-      title="Service-account tokens"
-      description="Service token administration fills in here in S13."
-    />
-  ),
+  component: AdminTokensRoute,
 });
+
+function AdminTokensRoute() {
+  const { user } = useShell();
+  return canManageServiceTokens(user) ? <AdminServiceTokensPage /> : <Navigate to="/console" replace />;
+}
 
 const adminOperationsRoute = createRoute({
   getParentRoute: () => adminRoute,
@@ -323,12 +322,12 @@ const routeTree = rootRoute.addChildren([
     previewRoute,
     accountTokensRoute,
     adminOrgMembersRoute,
+    adminTokensRoute,
     adminRoute.addChildren([
       adminIndexRoute,
       adminProvidersRoute,
       adminOrgsRoute,
       adminUsersRoute,
-      adminTokensRoute,
       adminOperationsRoute,
       adminLicenseRoute,
     ]),

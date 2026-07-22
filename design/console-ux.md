@@ -173,8 +173,11 @@ Replace the current top-bar-only `AppShell` with a shadcn **Sidebar** layout
 └──────────┴──────────────────────────────────────────────────────┘
 ```
 
-- **Nav groups:** `Stacks` and `Tokens` (→ `/console/account/tokens`) for everyone; an
-  `Admin` group rendered only when `user.siteAdmin` (from `GET /api/user`).
+- **Nav groups:** `Stacks` and `Tokens` (→ `/console/account/tokens`) for everyone;
+  a `Manage` group appears for site admins and org owners. Site admins see
+  Providers, Orgs, Users, Service tokens, Operations, and License; owners see
+  only Service tokens. `/console/admin/orgs/{org}` remains the other
+  owner-accessible management route, reached contextually from the org.
 - **Org switcher** (sidebar footer, shadcn `DropdownMenu` on a `SidebarMenuButton`):
   lists `user.organizations`. Selecting an org filters the Stacks screen and
   breadcrumb root. When the user has exactly one org, render a static label.
@@ -712,8 +715,11 @@ copyable — what an admin pastes into `STATE_DB_ADMIN_SUBJECTS`) | orgs (badges
 with role) | last login (`Never` for machine identities) | created. A
 `ToggleGroup` (Humans / Service accounts / All, default **Humans**) segments on
 the DTO's `principalType` (`human` | `service`, `service` iff issuer is
-`local:service`) so service rows never pollute the human-audit columns. Read-only
-except a per-row "Manage memberships" affordance: humans link into the applicable
+`local:service`) so service rows never pollute the human-audit columns. Service
+rows carry a credential status badge (`active` / `expired` / `revoked` / `no
+expiry` / `no credential`), because revoked machine identities are retained for
+audit rather than deleted. Deactivated humans remain visible with an `inactive`
+badge. Read-only except a per-row "Manage memberships" affordance: humans link into the applicable
 S17 organization detail (a single link for one org, a dropdown of orgs for
 several); service rows show none (S17 excludes them). `Alert` at top: "Admins are
 configured via `STATE_DB_ADMIN_SUBJECTS`, not here" — the current admin set is
@@ -723,7 +729,8 @@ endpoint needed).
 **Data.** `GET /api/admin/users?page=&includeService=` (**built** —
 `AdminUsersResource`). Returns `users, page, pageSize, total`; each user contains
 `id, iss, sub, email, displayName, principalType, siteAdmin, lastLoginAt,
-createdAt, organizations[{name, displayName, role}]`, admin-only.
+createdAt, deactivatedAt, credentialStatus,
+organizations[{name, displayName, role}]`, admin-only.
 
 **Acceptance.** A freshly-signed-in user appears; copyable `<iss>:<sub>` matches
 the env format; a service account appears under the Service accounts filter with
@@ -735,19 +742,60 @@ the env format; a service account appears under the Service accounts filter with
 
 **Purpose.** CI/CD credentials (the non-OIDC token kind).
 
-**Layout.** `DataTable` of `kind=service_account` tokens: description | org |
-created by | created | expires (mandatory; red when past) | last used | revoke.
-"Mint service token" `Dialog` `Form`: description (required, convention hint
-"one per service — e.g. github-actions/deploy"), org `Select`, expiry
-(`Select`: 30/90/365 days — 1y cap enforced server-side). Success → same
-one-time-token `Dialog` as S9.
+**Access and navigation.** Org owners manage service tokens for orgs where their
+live role is `owner`; site admins manage every org. The `Manage` sidebar group
+shows only this entry to owners and the full management set to site admins.
+Ordinary members cannot navigate to or call the inventory endpoint.
 
-**Data.** `POST /api/admin/tokens` (planned), `GET /api/tokens?all=true`
-(slice 26) or a dedicated admin list — **API session picks**; revoke via
-`DELETE /api/tokens/{id}` (admin path).
+**Layout.** `DataTable`: description | org | status | created by | created |
+expires | last used | revoke. `Active / Inactive / All` `ToggleGroup`, default
+Active; Inactive includes expired and revoked rows. Active rows sort by soonest
+expiry. More than seven days is a normal timestamp, seven days or less is amber,
+and past expiry is red. Revoked rows remain available for audit and show who
+revoked them and when. Client pagination is 50 rows with description/org search;
+server pagination is deferred.
 
-**Acceptance.** Minted token authenticates `pulumi login` in CI; raw value
-shown exactly once; revoke kills it.
+"Mint service token" `Dialog` `Form`: description required (duplicates allowed
+for zero-downtime rotation; warn when an active duplicate exists), convention
+hint "one per service — e.g. github-actions/deploy", org `Select`, and mandatory
+expiry `Select` (30/90/365 days, default 90). Only those three expiry values are
+accepted server-side. Prefer the shell's selected manageable org, otherwise the
+sole manageable org; a site admin with several orgs must select explicitly.
+The form repeats the org scope and explains that the service role deploys
+existing stacks but cannot create/delete/rename/retag stacks. Success uses S9's
+shared one-time-token `Dialog`: raw value in memory only, copy feedback, and
+"I've copied it." The value never enters a URL, storage, analytics, or logs.
+
+**Lifecycle and audit.** Minting creates one `local:service` machine user, one
+`service` membership, and one org-pinned `kind=service_account` credential.
+`api_tokens.created_by_user_id` records the console actor. Revocation is
+idempotent soft revocation: set token `revoked_at` / `revoked_by_user_id` and
+user `deactivated_at` / `deactivated_by_user_id` in one transaction. Never
+reactivate an old secret; rotate by minting a replacement, updating CI, then
+revoking the old account. Human and machine identities are not hard-deleted by
+application APIs; a future human removal is deactivation. Service-token audit
+rows are exempt from the 30-day expired-personal-token purge and retained
+indefinitely for now.
+
+Revocation rejects subsequent `Authorization: token ...` authentication
+immediately. It does not implicitly cancel an update that already exchanged the
+credential for an update lease; the confirmation points operators to Operations
+→ Force unlock when deliberate interruption is required.
+
+**Data.** Authorization-filtered `GET
+/api/service-accounts?status=active|inactive|all` returns owned orgs for owners
+and all orgs for site admins. Mutations stay tenant-explicit: `POST
+/api/orgs/{org}/service-accounts` and idempotent soft revoke via `DELETE
+/api/orgs/{org}/service-accounts/{id}`. Do not mix this inventory into personal
+`GET /api/tokens` or add a site-admin-only tokens API.
+
+**Acceptance.** Minted raw value is shown exactly once, authenticates `pulumi
+login`, and can deploy an existing stack in its selected org but is worth
+nothing outside it. Unsupported/missing expiry is rejected. Revocation
+preserves creator/revoker/account history and causes new CLI token
+authentication to 401; an already-issued update lease may finish. Owners see
+only owned-org credentials, site admins see all, and ordinary members receive
+403.
 
 ---
 

@@ -13,6 +13,7 @@ import io.restassured.response.Response;
 import io.statedb.persistence.identity.OrgMember;
 import io.statedb.persistence.identity.Organization;
 import io.statedb.persistence.identity.User;
+import java.time.Instant;
 import java.util.Map;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -63,7 +64,7 @@ class ServiceAccountsResourceTest {
         given()
             .cookie(session.getName(), session.getValue())
             .contentType("application/json")
-            .body(Map.of("name", "GitHub Actions deploy"))
+            .body(Map.of("name", "GitHub Actions deploy", "expiresInDays", 90))
             .when()
             .post(SA_PATH);
     created.then().statusCode(200);
@@ -88,9 +89,10 @@ class ServiceAccountsResourceTest {
         .body("size()", org.hamcrest.Matchers.is(1))
         .body("[0].id", org.hamcrest.Matchers.equalTo(accountId))
         .body("[0].name", org.hamcrest.Matchers.equalTo("GitHub Actions deploy"))
-        .body("[0].token", org.hamcrest.Matchers.nullValue());
+        .body("[0].token", org.hamcrest.Matchers.nullValue())
+        .body("[0].createdByName", org.hamcrest.Matchers.equalTo("Alice Example"));
 
-    // Revoke: 204, the token dies, and a second revoke is 404.
+    // Revoke: 204, the token dies, and repeated revocation is idempotent.
     given()
         .cookie(session.getName(), session.getValue())
         .when()
@@ -108,7 +110,18 @@ class ServiceAccountsResourceTest {
         .when()
         .delete(SA_PATH + "/" + accountId)
         .then()
-        .statusCode(404);
+        .statusCode(204);
+
+    given()
+        .cookie(session.getName(), session.getValue())
+        .when()
+        .get("/api/service-accounts?status=inactive")
+        .then()
+        .statusCode(200)
+        .body("[0].id", org.hamcrest.Matchers.equalTo(accountId))
+        .body("[0].tokenRevokedAt", org.hamcrest.Matchers.notNullValue())
+        .body("[0].accountDeactivatedAt", org.hamcrest.Matchers.notNullValue())
+        .body("[0].revokedByName", org.hamcrest.Matchers.equalTo("Alice Example"));
   }
 
   @Test
@@ -118,7 +131,7 @@ class ServiceAccountsResourceTest {
     given()
         .cookie(session.getName(), session.getValue())
         .contentType("application/json")
-        .body(Map.of("name", "sneaky"))
+        .body(Map.of("name", "sneaky", "expiresInDays", 90))
         .when()
         .post(SA_PATH)
         .then()
@@ -130,15 +143,71 @@ class ServiceAccountsResourceTest {
         .get(SA_PATH)
         .then()
         .statusCode(403);
+
+    given()
+        .cookie(session.getName(), session.getValue())
+        .when()
+        .get("/api/service-accounts")
+        .then()
+        .statusCode(403);
+  }
+
+  @Test
+  void mintRequiresOneOfTheSupportedExpiries() {
+    Cookie session = establishSession(OrgMember.Role.owner);
+
+    given()
+        .cookie(session.getName(), session.getValue())
+        .contentType("application/json")
+        .body(Map.of("name", "unsupported", "expiresInDays", 7))
+        .when()
+        .post(SA_PATH)
+        .then()
+        .statusCode(400);
+
+    given()
+        .cookie(session.getName(), session.getValue())
+        .contentType("application/json")
+        .body(Map.of("name", "missing expiry"))
+        .when()
+        .post(SA_PATH)
+        .then()
+        .statusCode(400);
   }
 
   @Test
   void anonymousIsChallengedNotServed() {
     given()
         .contentType("application/json")
-        .body(Map.of("name", "nope"))
+        .body(Map.of("name", "nope", "expiresInDays", 90))
         .when()
         .post(SA_PATH)
+        .then()
+        .statusCode(401);
+  }
+
+  @Test
+  void deactivatedHumanSessionCannotManageAccounts() {
+    Cookie session = establishSession(OrgMember.Role.owner);
+    QuarkusTransaction.requiringNew()
+        .run(
+            () ->
+                User.update(
+                    "deactivatedAt = ?1 where iss = ?2 and sub = ?3",
+                    Instant.now(),
+                    OidcConsoleSessionFixture.FIXTURE_ISS,
+                    OidcConsoleSessionFixture.FIXTURE_SUB));
+
+    given()
+        .cookie(session.getName(), session.getValue())
+        .when()
+        .get("/api/service-accounts")
+        .then()
+        .statusCode(401);
+    given()
+        .cookie(session.getName(), session.getValue())
+        .when()
+        .get("/api/user")
         .then()
         .statusCode(401);
   }
@@ -158,6 +227,7 @@ class ServiceAccountsResourceTest {
                           OidcConsoleSessionFixture.FIXTURE_SUB)
                       .firstResult();
               assertNotNull(user, "callback provisions the user");
+              user.displayName = "Alice Example";
               Organization org = Organization.<Organization>find("name", ORG).firstResult();
               OrgMember m = new OrgMember();
               m.orgId = org.id;

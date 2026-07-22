@@ -39,6 +39,15 @@ public class ApiToken extends BaseEntity {
   @Column(name = "last_used_at")
   public Instant lastUsedAt;
 
-  @Column(name = "expires_at")
+  @Column(name = "expires_at", nullable = false)
   public Instant expiresAt;
+
+  @Column(name = "created_by_user_id")
+  public UUID createdByUserId;
+
+  @Column(name = "revoked_at")
+  public Instant revokedAt;
+
+  @Column(name = "revoked_by_user_id")
+  public UUID revokedByUserId;
 }

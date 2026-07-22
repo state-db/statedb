@@ -79,7 +79,23 @@ class AdminUsersResourceTest {
               membership.persist();
             });
     // ServiceAccountCreator manages its own transaction and mints a users row + service membership.
-    serviceId = serviceAccounts.create(orgId, "s12-ci-bot", 30).accountId();
+    serviceId = serviceAccounts.create(orgId, "s12-ci-bot", 30, humanId).accountId();
+    QuarkusTransaction.requiringNew()
+        .run(
+            () -> {
+              ApiToken current =
+                  ApiToken.<ApiToken>find(
+                          "userId = ?1 and kind = ?2", serviceId, ApiToken.Kind.service_account)
+                      .singleResult();
+              ApiToken rotated = new ApiToken();
+              rotated.tokenHash = "sha256:" + "b".repeat(64);
+              rotated.description = "s12-ci-bot rotated";
+              rotated.userId = current.userId;
+              rotated.orgId = current.orgId;
+              rotated.kind = ApiToken.Kind.service_account;
+              rotated.expiresAt = Instant.now().plusSeconds(60 * 60);
+              rotated.persistAndFlush();
+            });
 
     String cookie = login(PASSWORD).statusCode(200).extract().cookie(COOKIE);
     String human = humanId.toString();
@@ -104,6 +120,7 @@ class AdminUsersResourceTest {
         .body(
             "users.find { it.id == '" + service + "' }.iss", is(ServiceAccountCreator.SERVICE_ISS))
         .body("users.find { it.id == '" + service + "' }.principalType", is("service"))
+        .body("users.find { it.id == '" + service + "' }.credentialStatus", is("active"))
         .body("users.find { it.id == '" + service + "' }.lastLoginAt", nullValue())
         .body("users.find { it.id == '" + service + "' }.organizations[0].role", is("service"));
 

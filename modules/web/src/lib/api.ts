@@ -131,6 +131,8 @@ export interface AdminUser {
   siteAdmin: boolean;
   lastLoginAt: string | null;
   createdAt: string;
+  deactivatedAt: string | null;
+  credentialStatus: "active" | "expired" | "revoked" | "no_credential" | null;
   organizations: AdminUserOrg[];
 }
 export interface AdminUsersPage {
@@ -153,8 +155,34 @@ export interface ApiToken {
   description: string;
   kind: "oidc" | "service_account";
   createdAt: string;
-  expiresAt: string | null;
+  expiresAt: string;
   lastUsedAt: string | null;
+}
+
+export interface ServiceAccount {
+  id: string;
+  tokenId: string;
+  name: string;
+  org: string;
+  orgDisplayName: string;
+  createdAt: string;
+  tokenExpiresAt: string;
+  tokenLastUsedAt: string | null;
+  tokenRevokedAt: string | null;
+  accountDeactivatedAt: string | null;
+  createdById: string | null;
+  createdByName: string | null;
+  createdByEmail: string | null;
+  revokedById: string | null;
+  revokedByName: string | null;
+  revokedByEmail: string | null;
+}
+
+export interface MintedServiceAccount {
+  id: string;
+  name: string;
+  token: string;
+  expiresAt: string;
 }
 
 export interface WorkspaceLastUpdate {
@@ -300,6 +328,20 @@ export const api = {
     list: () => request<ApiToken[]>("/tokens"),
     revoke: (id: string) =>
       request<void>(`/tokens/${encodeURIComponent(id)}`, { method: "DELETE" }),
+  },
+  serviceAccounts: {
+    list: (status: "active" | "inactive" | "all") =>
+      request<ServiceAccount[]>(`/service-accounts?status=${status}`),
+    create: (org: string, input: { name: string; expiresInDays: 30 | 90 | 365 }) =>
+      request<MintedServiceAccount>(
+        `/orgs/${encodeURIComponent(org)}/service-accounts`,
+        { method: "POST", body: JSON.stringify(input) },
+      ),
+    revoke: (org: string, id: string) =>
+      request<void>(
+        `/orgs/${encodeURIComponent(org)}/service-accounts/${encodeURIComponent(id)}`,
+        { method: "DELETE" },
+      ),
   },
   admin: {
     orgs: {

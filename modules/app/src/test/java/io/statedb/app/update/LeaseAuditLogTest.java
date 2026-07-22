@@ -72,6 +72,7 @@ class LeaseAuditLogTest {
               t.userId = user.id;
               t.orgId = org.id;
               t.kind = ApiToken.Kind.service_account;
+              t.expiresAt = java.time.Instant.now().plusSeconds(60 * 60);
               t.description = "audit";
               t.persistAndFlush();
               stackCreator.create(org.id, ORG, PROJECT, STACK, Map.of());

@@ -5,12 +5,13 @@ import io.statedb.consoleapi.auth.SessionPrincipal;
 import io.statedb.persistence.RequestValidationException;
 import io.statedb.persistence.authz.Authorize;
 import io.statedb.persistence.authz.AuthorizedResource;
+import io.statedb.persistence.authz.CurrentPrincipal;
 import io.statedb.persistence.authz.OrgEntityLoader;
 import io.statedb.persistence.identity.Organization;
 import io.statedb.persistence.identity.ServiceAccountCreator;
 import io.statedb.persistence.identity.ServiceAccountCreator.MintedServiceAccount;
-import io.statedb.persistence.identity.ServiceAccountDeleter;
 import io.statedb.persistence.identity.ServiceAccountFinder;
+import io.statedb.persistence.identity.ServiceAccountRevoker;
 import io.statedb.persistence.identity.ServiceAccountView;
 import jakarta.inject.Inject;
 import jakarta.ws.rs.Consumes;
@@ -42,9 +43,11 @@ public class ServiceAccountsResource {
 
   @Inject ServiceAccountFinder finder;
 
-  @Inject ServiceAccountDeleter deleter;
+  @Inject ServiceAccountRevoker revoker;
 
   @Inject AuthorizedResource authorized;
+
+  @Inject CurrentPrincipal currentPrincipal;
 
   @POST
   @Authorize(action = "serviceaccount:Create", loader = OrgEntityLoader.class)
@@ -54,7 +57,8 @@ public class ServiceAccountsResource {
       throw new RequestValidationException("request body is required");
     }
     Organization target = authorized.subject(Organization.class);
-    MintedServiceAccount minted = creator.create(target.id, body.name, body.expiresInDays);
+    MintedServiceAccount minted =
+        creator.create(target.id, body.name, body.expiresInDays, currentPrincipal.get().userId());
     return new CreatedServiceAccountDto(
         minted.accountId(), minted.name(), minted.rawToken(), minted.expiresAt());
   }
@@ -72,7 +76,7 @@ public class ServiceAccountsResource {
   public Response revoke(@PathParam("org") String org, @PathParam("id") String id) {
     Organization target = authorized.subject(Organization.class);
     UUID accountId = parseIdOr404(id);
-    if (!deleter.delete(target.id, accountId)) {
+    if (!revoker.revoke(target.id, accountId, currentPrincipal.get().userId())) {
       throw new NotFoundException();
     }
     return Response.noContent().build();
@@ -104,14 +108,40 @@ public class ServiceAccountsResource {
 
   public record ServiceAccountDto(
       @JsonProperty("id") UUID id,
+      @JsonProperty("tokenId") UUID tokenId,
       @JsonProperty("name") String name,
+      @JsonProperty("org") String org,
+      @JsonProperty("orgDisplayName") String orgDisplayName,
       @JsonProperty("createdAt") Instant createdAt,
       @JsonProperty("tokenExpiresAt") Instant tokenExpiresAt,
-      @JsonProperty("tokenLastUsedAt") Instant tokenLastUsedAt) {
+      @JsonProperty("tokenLastUsedAt") Instant tokenLastUsedAt,
+      @JsonProperty("tokenRevokedAt") Instant tokenRevokedAt,
+      @JsonProperty("accountDeactivatedAt") Instant accountDeactivatedAt,
+      @JsonProperty("createdById") UUID createdById,
+      @JsonProperty("createdByName") String createdByName,
+      @JsonProperty("createdByEmail") String createdByEmail,
+      @JsonProperty("revokedById") UUID revokedById,
+      @JsonProperty("revokedByName") String revokedByName,
+      @JsonProperty("revokedByEmail") String revokedByEmail) {
 
     static ServiceAccountDto from(ServiceAccountView v) {
       return new ServiceAccountDto(
-          v.id(), v.name(), v.createdAt(), v.tokenExpiresAt(), v.tokenLastUsedAt());
+          v.id(),
+          v.tokenId(),
+          v.name(),
+          v.orgName(),
+          v.orgDisplayName(),
+          v.createdAt(),
+          v.tokenExpiresAt(),
+          v.tokenLastUsedAt(),
+          v.tokenRevokedAt(),
+          v.accountDeactivatedAt(),
+          v.createdById(),
+          v.createdByName(),
+          v.createdByEmail(),
+          v.revokedById(),
+          v.revokedByName(),
+          v.revokedByEmail());
     }
   }
 }

@@ -6,6 +6,7 @@ import jakarta.persistence.Entity;
 import jakarta.persistence.Table;
 import jakarta.persistence.UniqueConstraint;
 import java.time.Instant;
+import java.util.UUID;
 
 @Entity
 @Table(name = "users", uniqueConstraints = @UniqueConstraint(columnNames = {"iss", "sub"}))
@@ -24,4 +25,10 @@ public class User extends TimestampedEntity {
 
   @Column(name = "last_login_at")
   public Instant lastLoginAt;
+
+  @Column(name = "deactivated_at")
+  public Instant deactivatedAt;
+
+  @Column(name = "deactivated_by_user_id")
+  public UUID deactivatedByUserId;
 }

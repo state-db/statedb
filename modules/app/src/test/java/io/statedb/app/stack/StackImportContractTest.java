@@ -64,6 +64,7 @@ class StackImportContractTest {
               token.userId = user.id;
               token.orgId = org.id;
               token.kind = ApiToken.Kind.service_account;
+              token.expiresAt = java.time.Instant.now().plusSeconds(60 * 60);
               token.description = "import";
               token.persistAndFlush();
 
