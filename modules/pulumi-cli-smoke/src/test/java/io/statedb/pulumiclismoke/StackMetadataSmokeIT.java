@@ -2,6 +2,7 @@ package io.statedb.pulumiclismoke;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.fasterxml.jackson.databind.JsonNode;
@@ -15,6 +16,7 @@ import org.junit.jupiter.api.Test;
  *   stack tag set/ls/get/rm                       supportsTagGraphHistoryAndSelectCommands
  *   stack (bare) / graph / history / select       supportsTagGraphHistoryAndSelectCommands
  *   stack rename                                   renamesAStack
+ *   stack change-secrets-provider                  reEncryptsSecretsUnderANewProvider
  * </pre>
  *
  * <p>({@code stack get} is not a real subcommand in the pinned CLI — bare {@code pulumi stack}
@@ -87,6 +89,44 @@ class StackMetadataSmokeIT extends PulumiSmokeBase {
     assertFalse(
         stackNames(stacks).contains(STACK),
         () -> "stack ls should no longer show the old name:\n" + stacks);
+  }
+
+  @Test
+  void reEncryptsSecretsUnderANewProvider() throws Exception {
+    String backendUrl = exposeBackend();
+    pulumi = singleProjectContainer(inspectionProject());
+    pulumi.start();
+
+    execResult("pulumi login " + backendUrl);
+    execResult("pulumi stack init " + STACK);
+    execResult("pulumi up --yes --non-interactive");
+
+    JsonNode before = execJson("pulumi stack export");
+
+    // Moving from the service-managed key to a passphrase decrypts every secret against us and
+    // writes the re-encrypted checkpoint back through POST /import.
+    execResult("pulumi stack change-secrets-provider passphrase");
+
+    JsonNode after = execJson("pulumi stack export");
+    assertEquals(
+        "passphrase",
+        after.required("deployment").required("secrets_providers").required("type").asText(),
+        () -> "the checkpoint should record the new secrets provider:\n" + after);
+    assertNotEquals(
+        before.required("deployment").required("secrets_providers"),
+        after.required("deployment").required("secrets_providers"),
+        "the secrets provider block should have been rewritten");
+    assertFalse(
+        after.toString().contains(SECRET_VALUE),
+        () -> "the re-encrypted export must not leak the secret:\n" + after);
+
+    // The migrated checkpoint is still readable: the CLI parses what we handed back and still knows
+    // which output is secret. Two things are deliberately not asserted, because both reproduce
+    // identically against `file://` state on the pinned CLI and so are backend-independent: reading
+    // the value back yields null, and a following update fails with "incorrect passphrase".
+    JsonNode outputs = execJson("pulumi stack output --json");
+    assertEquals(PLAIN_VALUE, outputs.required("plain").asText());
+    assertEquals("[secret]", outputs.required("secret").asText());
   }
 
   // Provider-free project (so `up` needs no plugin download) that still produces a real update, a

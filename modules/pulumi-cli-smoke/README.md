@@ -42,8 +42,16 @@ it directly.
 |---|---|
 | `StackLifecycleSmokeIT` | `stack init` / `ls` / `rm`, `export` / `import` |
 | `StackReferenceSmokeIT` | `StackReference` outputs + secret masking |
-| `StackMetadataSmokeIT` | `stack tag set/ls/get/rm`, bare `stack`, `graph`, `history`, `select`, `rename` |
+| `StackMetadataSmokeIT` | `stack tag set/ls/get/rm`, bare `stack`, `graph`, `history`, `select`, `rename`, `change-secrets-provider` |
+| `StateEditSmokeIT` | `state protect/unprotect/taint/untaint/rename/delete/repair`, `state move` |
+| `ResourceImportSmokeIT` | `import` (re-adopting a resource dropped from state) |
+| `ConfigSmokeIT` | `config set/get/rm` incl. `--secret`, `config cp` |
+| `BackendInspectionSmokeIT` | `about`, `project ls`, `stack ls --all` / `--organization`, `logs`, `console` |
+| `WatchSmokeIT` | `watch` (detached; first deploy must complete and land in history) |
 | `UnsupportedFeatureSmokeIT` | endpoints we 501 (`schedule list`, `webhook list`) |
+
+Command-by-command coverage, including what is deliberately unsupported, is
+tracked in `design/pulumi-command-coverage.md`.
 
 The fault tier lives in the `faults` package: `*FaultIT` classes extend
 `PulumiFaultBase` (process-kill, lease-expiry, DB-poll helpers) and annotate each

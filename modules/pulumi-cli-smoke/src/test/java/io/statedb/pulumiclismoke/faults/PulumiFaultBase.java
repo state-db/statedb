@@ -1,23 +1,20 @@
 package io.statedb.pulumiclismoke.faults;
 
-import static org.junit.jupiter.api.Assertions.fail;
-
 import io.quarkus.narayana.jta.QuarkusTransaction;
 import io.statedb.persistence.identity.Organization;
 import io.statedb.persistence.stack.Project;
 import io.statedb.persistence.stack.Stack;
 import io.statedb.pulumiclismoke.PulumiSmokeBase;
-import java.time.Duration;
 import java.time.Instant;
 import java.util.UUID;
-import java.util.concurrent.Callable;
 import org.junit.jupiter.api.extension.ExtendWith;
 
 /**
  * Shared harness for the fault-injection {@code *FaultIT} classes: everything from {@link
- * PulumiSmokeBase} plus process-kill, lease-expiry, and DB-poll helpers. Each scenario is annotated
- * with {@link FaultScenario}; results land in the State Safety Report via {@link
- * StateSafetyReport}.
+ * PulumiSmokeBase} plus process-kill, lease-expiry, and DB-poll helpers (the detached-exec and
+ * await helpers live on {@link PulumiSmokeBase} — the watch smoke test needs them too). Each
+ * scenario is annotated with {@link FaultScenario}; results land in the State Safety Report via
+ * {@link StateSafetyReport}.
  */
 @ExtendWith(StateSafetyReport.class)
 public abstract class PulumiFaultBase extends PulumiSmokeBase {
@@ -27,24 +24,6 @@ public abstract class PulumiFaultBase extends PulumiSmokeBase {
   /** SIGKILLs every pulumi process in the container — the CLI gets no chance to flush or unlock. */
   protected void killCliHard() throws Exception {
     pulumi.execInContainer("sh", "-lc", "pkill -9 -f pulumi || true");
-  }
-
-  /** Runs a CLI command detached; the exec returns immediately while the command keeps running. */
-  protected void execDetached(String command) throws Exception {
-    pulumi.execInContainer(
-        "sh", "-lc", "cd /workspace && nohup " + command + " > /tmp/detached.log 2>&1 &");
-  }
-
-  protected void awaitTrue(String what, Duration timeout, Callable<Boolean> condition)
-      throws Exception {
-    Instant deadline = Instant.now().plus(timeout);
-    while (Instant.now().isBefore(deadline)) {
-      if (Boolean.TRUE.equals(condition.call())) {
-        return;
-      }
-      Thread.sleep(200);
-    }
-    fail("timed out after " + timeout + " waiting for: " + what);
   }
 
   protected UUID stackId(String project, String stack) {

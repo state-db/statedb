@@ -2,6 +2,7 @@ package io.statedb.pulumiclismoke;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.fail;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -18,7 +19,10 @@ import jakarta.inject.Inject;
 import jakarta.persistence.EntityManager;
 import java.net.URL;
 import java.time.Duration;
+import java.time.Instant;
 import java.util.List;
+import java.util.Optional;
+import java.util.concurrent.Callable;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.testcontainers.Testcontainers;
@@ -142,6 +146,24 @@ public abstract class PulumiSmokeBase {
     return pulumi.execInContainer("sh", "-lc", "cd /workspace && " + command);
   }
 
+  /** Runs a CLI command detached; the exec returns immediately while the command keeps running. */
+  protected void execDetached(String command) throws Exception {
+    pulumi.execInContainer(
+        "sh", "-lc", "cd /workspace && nohup " + command + " > /tmp/detached.log 2>&1 &");
+  }
+
+  protected void awaitTrue(String what, Duration timeout, Callable<Boolean> condition)
+      throws Exception {
+    Instant deadline = Instant.now().plus(timeout);
+    while (Instant.now().isBefore(deadline)) {
+      if (Boolean.TRUE.equals(condition.call())) {
+        return;
+      }
+      Thread.sleep(200);
+    }
+    fail("timed out after " + timeout + " waiting for: " + what);
+  }
+
   protected static void assertContains(String actual, String expected) {
     assertTrue(
         actual.contains(expected), () -> "expected output to contain " + expected + ":\n" + actual);
@@ -149,6 +171,24 @@ public abstract class PulumiSmokeBase {
 
   protected static List<String> stackNames(JsonNode stacksJson) {
     return stacksJson.findValuesAsText("name");
+  }
+
+  /** The exported resource with the given Pulumi type token and name, or empty if it is gone. */
+  protected static Optional<JsonNode> findResource(JsonNode exported, String type, String name) {
+    for (JsonNode resource : exported.required("deployment").required("resources")) {
+      if (type.equals(resource.path("type").asText())
+          && resource.path("urn").asText().endsWith("::" + name)) {
+        return Optional.of(resource);
+      }
+    }
+    return Optional.empty();
+  }
+
+  protected static JsonNode requireResource(JsonNode exported, String type, String name) {
+    return findResource(exported, type, name)
+        .orElseThrow(
+            () ->
+                new AssertionError("export has no " + type + " named " + name + ":\n" + exported));
   }
 
   private void seedAcmeIdentity() {
