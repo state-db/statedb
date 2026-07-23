@@ -81,7 +81,8 @@ public class WorkspaceListFinder {
     Map<UUID, WorkspaceSummary.Lock> locks = new HashMap<>();
     StackLock.<StackLock>find("stackId in ?1 and expiresAt > ?2", stackIds, now)
         .list()
-        .forEach(l -> locks.put(l.stackId, new WorkspaceSummary.Lock(l.lockedBy, l.lockedAt)));
+        .forEach(
+            l -> locks.put(l.stackId, new WorkspaceSummary.Lock(l.id, l.lockedBy, l.lockedAt)));
     return locks;
   }
 

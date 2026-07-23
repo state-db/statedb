@@ -316,7 +316,7 @@ function StackSettings({ detail, isAdmin }: { detail: StackDetail; isAdmin: bool
   const queryKey = ["workspace", detail.org, detail.project, detail.name];
 
   const unlock = useMutation({
-    mutationFn: () => api.workspaces.forceUnlock(detail.org, detail.project, detail.name),
+    mutationFn: () => api.workspaces.forceUnlock(detail.org, detail.project, detail.name, detail.lock!.lockId),
     onSuccess: async () => {
       toast.success("Stack unlocked");
       await queryClient.invalidateQueries({ queryKey });

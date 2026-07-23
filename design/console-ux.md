@@ -133,7 +133,7 @@ scheme, so these are inherent, not incidental.)
 /console/admin/orgs/{org}                       Members & guest grants (owner-or-admin)
 /console/admin/users                            Users
 /console/admin/tokens                           Service-account tokens
-/console/admin/operations                       Locks + compaction + retention health
+/console/admin/operations                       Active locks + compaction queue health
 /console/admin/license                          License & usage (Free Edition limit)
 ```
 
@@ -257,7 +257,7 @@ Monospace stack (`font-mono`) for all technical identifiers and the log viewer.
 | S11 | Admin — Organizations (tenant lifecycle) | `/console/admin/orgs` | 2 |
 | S12 | Admin — Users | `/console/admin/users` | 2 |
 | S13 | Admin — Service tokens | `/console/admin/tokens` | 2 |
-| S14 | Admin — Operations (locks, compaction, retention) | `/console/admin/operations` | 2 |
+| S14 | Admin — Operations (locks, compaction queue) | `/console/admin/operations` | 2 |
 | S15 | Admin — License & usage | `/console/admin/license` | 3 |
 | S16 | First-run onboarding / empty deployment | overlays `/console` | 2 |
 | S17 | Org — Members & sharing (owner-or-admin) | `/console/admin/orgs/{org}` | 2 |
@@ -801,25 +801,37 @@ only owned-org credentials, site admins see all, and ordinary members receive
 
 ### S14 · Admin — Operations — `/console/admin/operations`
 
-**Purpose.** One page for "why is something stuck": locks, compaction queue,
-retention. Replaces psql spelunking.
+**Purpose.** One page for "why is something stuck": live locks and the
+compaction work queue. Replaces psql spelunking.
 
-**Layout.** Three stacked `Card`s:
+**Layout.** Two stacked `Card`s, each polling every 5 seconds:
 
-1. **Active locks** — table: stack (link) | locked by | acquired | expires
-   (countdown) | update (link) | force-unlock (destructive, `AlertDialog`).
-   Empty: "No stacks are locked."
-2. **Compaction** — table of recent `compaction_jobs`: stack | status badge |
-   journal range | created/completed | error message (truncated, tooltip).
-   Per-stack "Compact now" lives on S7; here is queue visibility only.
-3. **Event retention** — read-only config display (retention days, last vacuum
-   run) — data permitting; drop the card if no endpoint materializes.
+1. **Active locks** — live rows only (`expires_at > now()`): stack (link) |
+   locked by (resolved human/service identity with opaque fallback) | acquired |
+   expires (countdown) | update/preview (link) | force-unlock (destructive,
+   `AlertDialog`). The dialog shows holder, acquired time, and last heartbeat.
+   It explains that force-unlock cancels the update and the running Pulumi
+   process will fail on its next request. Empty: "No stacks are locked."
+2. **Compaction** — all active jobs first (oldest first), then the 50 most
+   recent terminal jobs (newest first): stack | status badge | attempts | queued
+   | started/completed | error message (truncated, tooltip). A retrying pending
+   job labels its error as "Last attempt". Per-stack "Compact now" lives on S7;
+   here is queue visibility only.
 
-**Data.** **API gaps**: `GET /api/admin/locks`, `GET /api/admin/compaction-jobs`,
-`DELETE /api/admin/stacks/{ref}/lock` (planned already).
+**Data.** `GET /api/admin/locks`, `GET /api/admin/compaction-jobs`, and guarded
+`DELETE /api/admin/stacks/{org}/{project}/{stack}/lock?lockId={displayedLockId}`.
+The delete returns 409 if the displayed lease has already gone or been replaced;
+on success it atomically deletes that lock, cancels its in-progress update, and
+clears the stack's active-update pointer. There is no event-retention card until
+retention configuration and last-vacuum data have a real owner and endpoint.
+The site-wide inventory reads require the site-admin allowlist; the two
+stack-scoped mutations retain Cedar `stack:Unlock` and `compaction:Trigger`
+authorization so future resource-scoped grants do not require another API
+redesign.
 
-**Acceptance.** A lock created by a hung `pulumi up` is visible and
-force-unlockable; a failed compaction job surfaces its error message.
+**Acceptance.** A live lock created by a hung `pulumi up` is visible and safely
+force-unlockable without risking a replacement lease; a failed compaction job
+surfaces its error message.
 
 ---
 
@@ -955,8 +967,9 @@ Screens above depend on these endpoints beyond what slices 26–29 already plan:
 | Change-summary per update (from summary event or column) | S6/S8 | decide storage vs derive |
 | Console export download URL | S4 | proxy of `/export` behind session auth |
 | `DELETE /api/pulumi/stacks/{ref}` (empty-only) | S7 | mirrors CLI guard |
-| `POST /api/admin/stacks/{ref}/compact` | S7/S14 | enqueue job |
-| `GET /api/admin/locks`, `GET /api/admin/compaction-jobs` | S14 | |
+| `POST /api/admin/stacks/{ref}/compact` | S7 | ✅ done — enqueue job |
+| `GET /api/admin/locks`, `GET /api/admin/compaction-jobs` | S14 | ✅ done — 5s-polled operational inventory |
+| `DELETE /api/admin/stacks/{ref}/lock?lockId={id}` | S7/S14 | ✅ done — guarded lease cancellation; 409 on replacement |
 | `PATCH/DELETE /api/admin/providers/{id}` | S10 | CRUD completion |
 | `GET/POST /api/admin/orgs`, `DELETE /api/admin/orgs/{id}` (empty-only) | S11 | **Slice 29.5 (full-stack)** — admin-only tenant lifecycle; delete guard mirrors S7 |
 | `org:ManageMembers` action + `GET/POST/PATCH/DELETE /api/orgs/{id}/members` | S17 | **Slice 29.5 (full-stack)** — owner-or-admin (owner.cedar + OrgEntityLoader); server-side last-owner guard; resolves the old "membership unowned" flag |

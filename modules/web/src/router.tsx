@@ -7,7 +7,7 @@ import {
   createRouter,
   Outlet,
 } from "@tanstack/react-router";
-import { ServerCog, Settings } from "lucide-react";
+import { Settings } from "lucide-react";
 
 import { AppShell, useShell } from "@/components/shell/AppShell";
 import { HomePage } from "@/routes/home";
@@ -20,6 +20,7 @@ import { RunDetailPage } from "@/routes/run-detail";
 import { AdminProvidersPage } from "@/routes/admin-providers";
 import { AdminOrganizationsPage } from "@/routes/admin-orgs";
 import { AdminUsersPage } from "@/routes/admin-users";
+import { AdminOperationsPage } from "@/routes/admin-operations";
 import {
   AdminServiceTokensPage,
   canManageServiceTokens,
@@ -284,13 +285,7 @@ function AdminTokensRoute() {
 const adminOperationsRoute = createRoute({
   getParentRoute: () => adminRoute,
   path: "admin/operations",
-  component: () => (
-    <PlaceholderPage
-      icon={ServerCog}
-      title="Operations"
-      description="Locks, compaction, and retention health fill in here in S14."
-    />
-  ),
+  component: AdminOperationsPage,
 });
 
 const adminLicenseRoute = createRoute({

@@ -20,6 +20,7 @@ import io.statedb.persistence.stack.Project;
 import io.statedb.persistence.stack.Stack;
 import io.statedb.persistence.stack.StackState;
 import io.statedb.persistence.stack.Workspace;
+import io.statedb.persistence.update.StackUpdate;
 import jakarta.inject.Inject;
 import jakarta.persistence.EntityManager;
 import java.time.Instant;
@@ -77,9 +78,18 @@ class LocalGlassLoginTest {
   void adminCanForceUnlockAndQueueCompaction() {
     String cookie = login(PASSWORD).statusCode(200).extract().cookie(COOKIE);
     UUID stackId = seedOperationalStack();
+    UUID lockId =
+        QuarkusTransaction.requiringNew()
+            .call(() -> StackLock.<StackLock>find("stackId", stackId).singleResult().id);
     String base = "/api/admin/stacks/ops-org/ops-project/ops-stack";
 
-    given().cookie(COOKIE, cookie).when().delete(base + "/lock").then().statusCode(204);
+    given()
+        .cookie(COOKIE, cookie)
+        .queryParam("lockId", lockId)
+        .when()
+        .delete(base + "/lock")
+        .then()
+        .statusCode(204);
     given().cookie(COOKIE, cookie).when().post(base + "/compact").then().statusCode(202);
 
     QuarkusTransaction.requiringNew()
@@ -301,8 +311,19 @@ class LocalGlassLoginTest {
               state.persist();
 
               Instant now = Instant.now();
+              StackUpdate update = new StackUpdate();
+              update.stackId = stack.id;
+              update.version = 1;
+              update.dryRun = false;
+              update.kind = StackUpdate.Kind.UPDATE;
+              update.status = StackUpdate.Status.IN_PROGRESS;
+              update.startedAt = now;
+              update.persist();
+              stack.activeUpdateId = update.id;
+
               StackLock lock = new StackLock();
               lock.stackId = stack.id;
+              lock.updateId = update.id;
               lock.lockedBy = "stuck-update";
               lock.lockTokenHash = UUID.randomUUID().toString().getBytes();
               lock.lockedAt = now;

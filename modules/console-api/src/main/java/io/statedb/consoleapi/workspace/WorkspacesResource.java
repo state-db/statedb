@@ -84,7 +84,8 @@ public class WorkspacesResource {
                 summary.lastUpdate().version()),
         summary.lock() == null
             ? null
-            : new LockResponse(summary.lock().lockedBy(), summary.lock().lockedAt()),
+            : new LockResponse(
+                summary.lock().id(), summary.lock().lockedBy(), summary.lock().lockedAt()),
         resources.isArray() ? resources : JsonNodeFactory.instance.arrayNode(),
         assembled.deployment().path("manifest").path("version").textValue(),
         stackEntity.tags == null ? Map.of() : stackEntity.tags,
@@ -178,7 +179,8 @@ public class WorkspacesResource {
                 summary.lastUpdate().version()),
         summary.lock() == null
             ? null
-            : new LockResponse(summary.lock().lockedBy(), summary.lock().lockedAt()));
+            : new LockResponse(
+                summary.lock().id(), summary.lock().lockedBy(), summary.lock().lockedAt()));
   }
 
   public record WorkspaceResponse(
@@ -195,7 +197,7 @@ public class WorkspacesResource {
 
   public record LastUpdateResponse(String kind, String status, Instant startedAt, int version) {}
 
-  public record LockResponse(String lockedBy, Instant lockedAt) {}
+  public record LockResponse(UUID lockId, String lockedBy, Instant lockedAt) {}
 
   public record StackDetailResponse(
       UUID id,

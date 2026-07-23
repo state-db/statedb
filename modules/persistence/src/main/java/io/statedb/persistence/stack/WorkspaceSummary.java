@@ -18,5 +18,5 @@ public record WorkspaceSummary(
 
   public record LastUpdate(String kind, String status, Instant startedAt, int version) {}
 
-  public record Lock(String lockedBy, Instant lockedAt) {}
+  public record Lock(UUID id, String lockedBy, Instant lockedAt) {}
 }

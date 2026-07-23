@@ -193,8 +193,49 @@ export interface WorkspaceLastUpdate {
 }
 
 export interface WorkspaceLock {
+  lockId: string;
   lockedBy: string;
   lockedAt: string;
+}
+
+export interface AdminLockHolder {
+  kind: "human" | "service";
+  id: string | null;
+  displayName: string | null;
+  email: string | null;
+  fallback: string;
+}
+
+export interface AdminLock {
+  lockId: string;
+  stackId: string;
+  org: string;
+  project: string;
+  stack: string;
+  holder: AdminLockHolder;
+  acquiredAt: string;
+  heartbeatAt: string;
+  expiresAt: string;
+  update: {
+    id: string;
+    kind: string;
+    version: number | null;
+    preview: boolean;
+  };
+}
+
+export interface AdminCompactionJob {
+  id: string;
+  stackId: string;
+  org: string;
+  project: string;
+  stack: string;
+  status: "pending" | "running" | "completed" | "failed";
+  attempts: number;
+  errorMessage: string | null;
+  createdAt: string;
+  startedAt: string | null;
+  completedAt: string | null;
 }
 
 export interface Workspace {
@@ -372,6 +413,10 @@ export const api = {
           method: "DELETE",
         }),
     },
+    operations: {
+      locks: () => request<AdminLock[]>("/admin/locks"),
+      compactionJobs: () => request<AdminCompactionJob[]>("/admin/compaction-jobs"),
+    },
   },
   orgs: {
     members: {
@@ -436,9 +481,9 @@ export const api = {
       `/pulumi/stacks/${encodeURIComponent(org)}/${encodeURIComponent(project)}/${encodeURIComponent(stack)}/updates/${encodeURIComponent(updateId)}/events?after=${after}`,
       { signal },
     ),
-    forceUnlock: (org: string, project: string, stack: string) =>
+    forceUnlock: (org: string, project: string, stack: string, lockId: string) =>
       request<void>(
-        `/admin/stacks/${encodeURIComponent(org)}/${encodeURIComponent(project)}/${encodeURIComponent(stack)}/lock`,
+        `/admin/stacks/${encodeURIComponent(org)}/${encodeURIComponent(project)}/${encodeURIComponent(stack)}/lock?lockId=${encodeURIComponent(lockId)}`,
         { method: "DELETE" },
       ),
     compact: (org: string, project: string, stack: string) =>
