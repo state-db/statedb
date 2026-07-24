@@ -127,6 +127,65 @@ class LeaseAuditLogTest {
     assertTrue(log.contains("lease_audit"), () -> "expected audit line, got: " + log);
     assertTrue(log.contains("status=204"), () -> "expected 204 outcome, got: " + log);
     assertTrue(log.contains("update_id=" + updateId), () -> "expected update_id, got: " + log);
+    assertTrue(
+        log.contains("action=graceful-cancel"), () -> "expected graceful cancel, got: " + log);
+  }
+
+  @Test
+  void forcedCancelEmitsDistinctAuditLine() {
+    String updateId = startPreview();
+    acquireLock(updateId);
+
+    given()
+        .header("Authorization", "token " + RAW_TOKEN)
+        .when()
+        .post(
+            "/pulumi/api/stacks/"
+                + ORG
+                + "/"
+                + PROJECT
+                + "/"
+                + STACK
+                + "/update/"
+                + updateId
+                + "/cancel")
+        .then()
+        .statusCode(204);
+
+    handler.flush();
+    String log = captured.toString(StandardCharsets.UTF_8);
+    assertTrue(log.contains("lease_audit"), () -> "expected audit line, got: " + log);
+    assertTrue(log.contains("status=204"), () -> "expected 204 outcome, got: " + log);
+    assertTrue(log.contains("update_id=" + updateId), () -> "expected update_id, got: " + log);
+    assertTrue(log.contains("action=forced-cancel"), () -> "expected forced cancel, got: " + log);
+  }
+
+  @Test
+  void rejectedForcedCancelEmitsRejectedOutcome() {
+    String updateId = startPreview();
+    acquireLock(updateId);
+
+    given()
+        .when()
+        .post(
+            "/pulumi/api/stacks/"
+                + ORG
+                + "/"
+                + PROJECT
+                + "/"
+                + STACK
+                + "/update/"
+                + updateId
+                + "/cancel")
+        .then()
+        .statusCode(401);
+
+    handler.flush();
+    String log = captured.toString(StandardCharsets.UTF_8);
+    assertTrue(log.contains("action=forced-cancel"), () -> "expected forced cancel, got: " + log);
+    assertTrue(log.contains("outcome=rejected"), () -> "expected rejected outcome, got: " + log);
+    assertTrue(log.contains("status=401"), () -> "expected 401, got: " + log);
+    assertTrue(log.contains("update_id=" + updateId), () -> "expected update_id, got: " + log);
   }
 
   @Test

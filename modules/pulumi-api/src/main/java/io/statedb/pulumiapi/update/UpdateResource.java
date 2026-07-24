@@ -281,7 +281,7 @@ public class UpdateResource {
       throw new RequestValidationException("no events provided");
     }
 
-    eventBatchAppender.append(ctx.stackId(), ctx.updateId(), body.events);
+    eventBatchAppender.append(ctx.stackId(), ctx.updateId(), ctx.leaseId(), body.events);
     return Response.ok(Map.of()).build();
   }
 
@@ -358,8 +358,31 @@ public class UpdateResource {
     if (ctx == null || !pathUpdateId.equals(ctx.updateId())) {
       return Response.status(Response.Status.CONFLICT).build();
     }
-    lockCanceller.cancel(ctx.leaseId(), ctx.stackId(), ctx.updateId());
+    lockCanceller.gracefulCancel(ctx.leaseId(), ctx.stackId(), ctx.updateId());
     return Response.noContent().build();
+  }
+
+  @POST
+  @Path("/update/{updateID}/cancel")
+  @Authorize(action = "stack:Lock", loader = StackEntityLoader.class)
+  public Response forceCancelUpdate(
+      @PathParam("org") String org,
+      @PathParam("project") String project,
+      @PathParam("stack") String stack,
+      @PathParam("updateID") String updateID) {
+    StackRef ref = authorized.subject(StackRef.class);
+    UUID pathUpdateId = parseUpdateIdOr404(updateID, org, project, stack);
+    if (!lockCanceller.forceCancelUpdate(ref.stackId(), pathUpdateId)) {
+      return updateNotFound(updateID);
+    }
+    return Response.noContent().build();
+  }
+
+  private static Response updateNotFound(String updateID) {
+    return Response.status(Response.Status.NOT_FOUND)
+        .type(MediaType.APPLICATION_JSON)
+        .entity(Map.of("message", "update not found", "detail", updateID))
+        .build();
   }
 
   private static Response notImplementedJournaling() {

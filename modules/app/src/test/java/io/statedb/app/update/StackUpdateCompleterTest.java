@@ -188,6 +188,7 @@ class StackUpdateCompleterTest {
     eventBatchAppender.append(
         f.stackId(),
         f.updateId(),
+        f.leaseId(),
         List.of(event(1, "diagnosticEvent", "{\"severity\":\"info\",\"message\":\"planning\"}")));
 
     completer.complete(f.leaseId(), f.stackId(), f.updateId(), StackUpdate.Status.SUCCEEDED);

@@ -708,7 +708,7 @@ class JournalAppenderTest {
     // Simulate /complete (or a cancel) winning the race: lock row is gone before the appender's
     // tx starts. Without in-tx revalidation, append would advance journal_seq past
     // end_journal_seq; with it, requireLive throws and zero rows persist.
-    lockCanceller.cancel(leaseId, stackId, updateId);
+    lockCanceller.gracefulCancel(leaseId, stackId, updateId);
 
     assertThrows(
         LeaseExpiredException.class,
@@ -753,7 +753,7 @@ class JournalAppenderTest {
             entry(2, 1, 2L, "{\"state\":{\"urn\":\"u:2\"}}")));
 
     // Release the first lock so we can take a fresh one for u2 — stack_locks is UNIQUE per stack.
-    lockCanceller.cancel(leaseId, stackId, updateId);
+    lockCanceller.gracefulCancel(leaseId, stackId, updateId);
 
     StartedUpdate u2 =
         starter.start(

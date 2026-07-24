@@ -9,9 +9,7 @@ import java.util.UUID;
  * either caller might surface; each HTTP module maps to its own wire DTO so additions here don't
  * leak into the Pulumi wire shape.
  *
- * <p>Placeholder fields ({@code activeUpdate}, {@code lastUpdate}, {@code resourceCount}) are
- * populated by later slices: Slice 12 ({@code stack_updates}) and Slice 17 (journal-driven resource
- * count).
+ * <p>Placeholder fields ({@code lastUpdate}, {@code resourceCount}) are populated by later work.
  */
 public record StackHead(
     UUID stackId,

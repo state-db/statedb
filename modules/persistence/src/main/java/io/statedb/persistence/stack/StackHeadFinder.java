@@ -33,7 +33,7 @@ public class StackHeadFinder {
                     s.name,
                     s.tags == null ? Map.of() : s.tags,
                     s.version,
-                    "",
+                    s.activeUpdateId == null ? "" : s.activeUpdateId.toString(),
                     null,
                     0));
   }

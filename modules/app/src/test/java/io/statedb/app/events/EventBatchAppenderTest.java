@@ -13,6 +13,7 @@ import io.statedb.persistence.RequestValidationException;
 import io.statedb.persistence.events.EventBatchAppender;
 import io.statedb.persistence.events.EventSequenceConflictException;
 import io.statedb.persistence.identity.Organization;
+import io.statedb.persistence.lock.StackLockAcquirer;
 import io.statedb.persistence.stack.StackCreator;
 import io.statedb.persistence.stack.StackRef;
 import io.statedb.persistence.update.StackUpdate;
@@ -37,11 +38,13 @@ class EventBatchAppenderTest {
 
   @Inject StackCreator stackCreator;
   @Inject StackUpdateStarter starter;
+  @Inject StackLockAcquirer lockAcquirer;
   @Inject EventBatchAppender appender;
   @Inject EntityManager em;
 
   private UUID stackId;
   private UUID updateId;
+  private UUID leaseId;
 
   @BeforeEach
   void seed() {
@@ -66,6 +69,7 @@ class EventBatchAppenderTest {
             new StartUpdateRequest(
                 Map.of(), Map.of(), Map.of(), "desc", "yaml", "v3.242.0", "msg"));
     updateId = u.updateId();
+    leaseId = lockAcquirer.acquire(stackId, updateId, "test", 1, Map.of()).orElseThrow().leaseId();
   }
 
   @AfterEach
@@ -83,6 +87,7 @@ class EventBatchAppenderTest {
     appender.append(
         stackId,
         updateId,
+        leaseId,
         List.of(
             event(0, "preludeEvent", "{\"config\":{}}"),
             event(1, "diagnosticEvent", "{\"severity\":\"info\",\"message\":\"hi\"}"),
@@ -113,6 +118,7 @@ class EventBatchAppenderTest {
     appender.append(
         stackId,
         updateId,
+        leaseId,
         List.of(event(7, "stdoutEvent", "{\"message\":\"hello\",\"color\":\"auto\"}")));
 
     QuarkusTransaction.requiringNew()
@@ -139,12 +145,16 @@ class EventBatchAppenderTest {
 
   @Test
   void duplicateSequenceReturnsConflict() {
-    appender.append(stackId, updateId, List.of(event(1, "stdoutEvent", "{\"message\":\"a\"}")));
+    appender.append(
+        stackId, updateId, leaseId, List.of(event(1, "stdoutEvent", "{\"message\":\"a\"}")));
     assertThrows(
         EventSequenceConflictException.class,
         () ->
             appender.append(
-                stackId, updateId, List.of(event(1, "stdoutEvent", "{\"message\":\"dup\"}"))));
+                stackId,
+                updateId,
+                leaseId,
+                List.of(event(1, "stdoutEvent", "{\"message\":\"dup\"}"))));
 
     QuarkusTransaction.requiringNew()
         .run(
@@ -166,7 +176,7 @@ class EventBatchAppenderTest {
         RequestValidationException.class,
         () ->
             appender.append(
-                stackId, updateId, List.of(MAPPER.createObjectNode().put("sequence", 1))));
+                stackId, updateId, leaseId, List.of(MAPPER.createObjectNode().put("sequence", 1))));
   }
 
   @Test
@@ -177,6 +187,7 @@ class EventBatchAppenderTest {
             appender.append(
                 stackId,
                 updateId,
+                leaseId,
                 List.of(
                     event(1, "stdoutEvent", "{}", "diagnosticEvent", "{\"severity\":\"info\"}"))));
   }
@@ -185,7 +196,8 @@ class EventBatchAppenderTest {
   void missingSequenceRejected() {
     JsonNode bad = MAPPER.createObjectNode().set("stdoutEvent", MAPPER.createObjectNode());
     assertThrows(
-        RequestValidationException.class, () -> appender.append(stackId, updateId, List.of(bad)));
+        RequestValidationException.class,
+        () -> appender.append(stackId, updateId, leaseId, List.of(bad)));
   }
 
   @Test
@@ -194,21 +206,22 @@ class EventBatchAppenderTest {
     java.util.ArrayList<JsonNode> withNull = new java.util.ArrayList<>();
     withNull.add(null);
     assertThrows(
-        RequestValidationException.class, () -> appender.append(stackId, updateId, withNull));
+        RequestValidationException.class,
+        () -> appender.append(stackId, updateId, leaseId, withNull));
   }
 
   @Test
   void nonObjectEntryRejected() {
     assertThrows(
         RequestValidationException.class,
-        () -> appender.append(stackId, updateId, List.of(MAPPER.createArrayNode())));
+        () -> appender.append(stackId, updateId, leaseId, List.of(MAPPER.createArrayNode())));
   }
 
   @Test
   void negativeSequenceRejected() {
     assertThrows(
         RequestValidationException.class,
-        () -> appender.append(stackId, updateId, List.of(event(-1, "stdoutEvent", "{}"))));
+        () -> appender.append(stackId, updateId, leaseId, List.of(event(-1, "stdoutEvent", "{}"))));
   }
 
   @Test
@@ -231,7 +244,9 @@ class EventBatchAppenderTest {
     RuntimeException thrown =
         assertThrows(
             RuntimeException.class,
-            () -> appender.append(otherStackId, updateId, List.of(event(1, "stdoutEvent", "{}"))));
+            () ->
+                appender.append(
+                    otherStackId, updateId, leaseId, List.of(event(1, "stdoutEvent", "{}"))));
     // Pin the Postgres SQLSTATE — 23503 = foreign_key_violation. Asserting the SQLSTATE (rather
     // than just any ConstraintViolationException) verifies we're catching the composite FK
     // rejection specifically, not some other accidental constraint violation.

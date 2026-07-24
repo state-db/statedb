@@ -7,7 +7,6 @@ import io.statedb.persistence.authz.AuthorizedResource;
 import io.statedb.persistence.authz.StackEntityLoader;
 import io.statedb.persistence.identity.AdminAllowList;
 import io.statedb.persistence.identity.ServiceAccountCreator;
-import io.statedb.persistence.lock.StackLock;
 import io.statedb.persistence.lock.StackLockCanceller;
 import io.statedb.persistence.operations.ActiveLockView;
 import io.statedb.persistence.operations.CompactionJobView;
@@ -15,7 +14,6 @@ import io.statedb.persistence.operations.OperationalInventoryFinder;
 import io.statedb.persistence.stack.CompactionJobEnqueuer;
 import io.statedb.persistence.stack.StackRef;
 import jakarta.inject.Inject;
-import jakarta.persistence.LockModeType;
 import jakarta.transaction.Transactional;
 import jakarta.ws.rs.BadRequestException;
 import jakarta.ws.rs.DELETE;
@@ -67,7 +65,6 @@ public class AdminOperationsResource {
   @DELETE
   @Path("/stacks/{org}/{project}/{stack}/lock")
   @Authorize(action = "stack:Unlock", loader = StackEntityLoader.class)
-  @Transactional
   public Response forceUnlock(
       @PathParam("org") String org,
       @PathParam("project") String project,
@@ -84,16 +81,11 @@ public class AdminOperationsResource {
     }
 
     StackRef ref = authorized.subject(StackRef.class);
-    StackLock lock =
-        StackLock.<StackLock>find("id = ?1 and stackId = ?2", lockId, ref.stackId())
-            .withLock(LockModeType.PESSIMISTIC_WRITE)
-            .firstResult();
-    if (lock == null) {
+    if (!lockCanceller.forceCancelLock(ref.stackId(), lockId)) {
       return Response.status(Response.Status.CONFLICT)
           .entity(Map.of("error", "The lock changed or was already released."))
           .build();
     }
-    lockCanceller.cancel(lock.id, ref.stackId(), lock.updateId);
     return Response.noContent().build();
   }
 

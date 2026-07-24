@@ -1,14 +1,17 @@
 package io.statedb.app.lock;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import io.quarkus.narayana.jta.QuarkusTransaction;
 import io.quarkus.test.junit.QuarkusTest;
 import io.statedb.persistence.identity.Organization;
 import io.statedb.persistence.lock.Lease;
+import io.statedb.persistence.lock.StackLock;
 import io.statedb.persistence.lock.StackLockAcquirer;
 import io.statedb.persistence.lock.StackLockCanceller;
 import io.statedb.persistence.lock.StackLockedException;
@@ -39,6 +42,7 @@ class StackLockCancellerTest {
   private UUID stackId;
   private UUID updateId;
   private UUID leaseId;
+  private UUID lockId;
 
   @BeforeEach
   void seed() {
@@ -65,6 +69,7 @@ class StackLockCancellerTest {
             .updateId();
     Lease lease = acquirer.acquire(stackId, updateId, "user:a", null, null).orElseThrow();
     leaseId = lease.leaseId();
+    lockId = lease.leaseId();
   }
 
   @AfterEach
@@ -78,35 +83,17 @@ class StackLockCancellerTest {
   }
 
   @Test
-  void cancelRemovesLockAndTransitionsUpdate() {
-    canceller.cancel(leaseId, stackId, updateId);
+  void gracefulCancelRemovesLockAndTransitionsUpdate() {
+    canceller.gracefulCancel(leaseId, stackId, updateId);
 
-    Number locks =
-        (Number)
-            em.createNativeQuery("SELECT count(*) FROM stack_locks WHERE stack_id = ?1")
-                .setParameter(1, stackId)
-                .getSingleResult();
-    assertEquals(0L, locks.longValue());
-
-    String status =
-        (String)
-            em.createNativeQuery("SELECT status FROM stack_updates WHERE id = ?1")
-                .setParameter(1, updateId)
-                .getSingleResult();
-    assertEquals("cancelled", status);
-
-    UUID active =
-        (UUID)
-            em.createNativeQuery("SELECT active_update_id FROM stacks WHERE id = ?1")
-                .setParameter(1, stackId)
-                .getSingleResult();
-    assertNull(active);
+    assertCancelledAndUnlocked();
   }
 
   @Test
-  void cancelWithWrongLeaseIdIsRejectedAndLeavesLockIntact() {
+  void gracefulCancelWithWrongLeaseIdIsRejectedAndLeavesLockIntact() {
     UUID wrong = UUID.randomUUID();
-    assertThrows(StackLockedException.class, () -> canceller.cancel(wrong, stackId, updateId));
+    assertThrows(
+        StackLockedException.class, () -> canceller.gracefulCancel(wrong, stackId, updateId));
 
     Number locks =
         (Number)
@@ -131,7 +118,7 @@ class StackLockCancellerTest {
   }
 
   @Test
-  void cancelOnAlreadyTerminalUpdateRemovesLockButLeavesStatus() {
+  void gracefulCancelOnAlreadyTerminalUpdateRemovesLockButLeavesStatus() {
     // Simulate a status that some other code path has already moved to a terminal value. The
     // status flip is guarded on IN_PROGRESS, so cancel must still release the lock but leave
     // the terminal status alone.
@@ -144,7 +131,7 @@ class StackLockCancellerTest {
                     .setParameter(1, updateId)
                     .executeUpdate());
 
-    canceller.cancel(leaseId, stackId, updateId);
+    canceller.gracefulCancel(leaseId, stackId, updateId);
 
     Number locks =
         (Number)
@@ -159,5 +146,60 @@ class StackLockCancellerTest {
                 .setParameter(1, updateId)
                 .getSingleResult();
     assertEquals("failed", status);
+  }
+
+  @Test
+  void forceCancelUpdateDoesNotRequireLeaseId() {
+    assertTrue(canceller.forceCancelUpdate(stackId, updateId));
+
+    assertCancelledAndUnlocked();
+  }
+
+  @Test
+  void forceCancelUpdateReturnsFalseForWrongStack() {
+    assertFalse(canceller.forceCancelUpdate(UUID.randomUUID(), updateId));
+
+    assertEquals(1L, StackLock.count("id", lockId));
+    assertEquals("in-progress", updateStatus());
+  }
+
+  @Test
+  void forceCancelLockUsesDisplayedLockId() {
+    assertTrue(canceller.forceCancelLock(stackId, lockId));
+
+    assertCancelledAndUnlocked();
+  }
+
+  @Test
+  void forceCancelLockReturnsFalseForStaleLockId() {
+    assertFalse(canceller.forceCancelLock(stackId, UUID.randomUUID()));
+
+    assertEquals(1L, StackLock.count("id", lockId));
+    assertEquals("in-progress", updateStatus());
+  }
+
+  private void assertCancelledAndUnlocked() {
+    Number locks =
+        (Number)
+            em.createNativeQuery("SELECT count(*) FROM stack_locks WHERE stack_id = ?1")
+                .setParameter(1, stackId)
+                .getSingleResult();
+    assertEquals(0L, locks.longValue());
+
+    assertEquals("cancelled", updateStatus());
+
+    UUID active =
+        (UUID)
+            em.createNativeQuery("SELECT active_update_id FROM stacks WHERE id = ?1")
+                .setParameter(1, stackId)
+                .getSingleResult();
+    assertNull(active);
+  }
+
+  private String updateStatus() {
+    return (String)
+        em.createNativeQuery("SELECT status FROM stack_updates WHERE id = ?1")
+            .setParameter(1, updateId)
+            .getSingleResult();
   }
 }

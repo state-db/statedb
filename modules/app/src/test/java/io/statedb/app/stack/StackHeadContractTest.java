@@ -14,14 +14,18 @@ import io.statedb.persistence.identity.Organization;
 import io.statedb.persistence.identity.User;
 import io.statedb.persistence.stack.Project;
 import io.statedb.persistence.stack.Stack;
+import io.statedb.persistence.stack.StackCreator;
 import io.statedb.persistence.stack.StackState;
 import io.statedb.persistence.stack.Workspace;
+import io.statedb.persistence.update.StackUpdate;
 import jakarta.inject.Inject;
 import jakarta.persistence.EntityManager;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
+import java.time.Instant;
 import java.util.Map;
+import java.util.UUID;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -40,6 +44,7 @@ class StackHeadContractTest {
   private static final String STACK = "dev";
 
   @Inject EntityManager em;
+  @Inject StackCreator stackCreator;
 
   @BeforeEach
   void seed() {
@@ -191,6 +196,41 @@ class StackHeadContractTest {
         .get("/pulumi/api/stacks/" + ORG_NAME + "/" + PROJECT + "/" + STACK)
         .then()
         .statusCode(401);
+  }
+
+  @Test
+  void activeUpdateReturnsCurrentUpdateId() {
+    UUID updateId =
+        QuarkusTransaction.requiringNew()
+            .call(
+                () -> {
+                  Organization org =
+                      Organization.<Organization>find("name", ORG_NAME).singleResult();
+                  stackCreator.create(org.id, ORG_NAME, PROJECT, STACK, Map.of());
+                  Project p =
+                      Project.<Project>find("orgId = ?1 and name = ?2", org.id, PROJECT)
+                          .singleResult();
+                  Stack s =
+                      Stack.<Stack>find("projectId = ?1 and name = ?2", p.id, STACK).singleResult();
+                  StackUpdate u = new StackUpdate();
+                  u.stackId = s.id;
+                  u.kind = StackUpdate.Kind.UPDATE;
+                  u.status = StackUpdate.Status.IN_PROGRESS;
+                  u.version = 0;
+                  u.dryRun = false;
+                  u.startedAt = Instant.now();
+                  u.persistAndFlush();
+                  s.activeUpdateId = u.id;
+                  return u.id;
+                });
+
+    given()
+        .header("Authorization", "token " + RAW_TOKEN)
+        .when()
+        .get("/pulumi/api/stacks/" + ORG_NAME + "/" + PROJECT + "/" + STACK)
+        .then()
+        .statusCode(200)
+        .body("activeUpdate", equalTo(updateId.toString()));
   }
 
   private static String sha256Hex(String input) {

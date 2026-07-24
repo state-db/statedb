@@ -2,6 +2,7 @@ package io.statedb.persistence.events;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import io.statedb.persistence.RequestValidationException;
+import io.statedb.persistence.lock.LeaseRevalidator;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 import jakarta.persistence.EntityManager;
@@ -17,16 +18,19 @@ import org.hibernate.exception.ConstraintViolationException;
  * journal appends rely on. The composite FK {@code (update_id, stack_id) → stack_updates} rejects
  * any attempt to write events under an update that belongs to a different stack.
  *
- * <p>The lease filter has already validated the bearer token before this method runs; we trust that
- * {@code stackId} and {@code updateId} match the lease's view of the world.
+ * <p>The lease filter has already validated the bearer token before this method runs, but a forced
+ * cancel can delete the lock after admission. Revalidating the lease in the transaction keeps stale
+ * event writes from landing after revocation.
  */
 @ApplicationScoped
 public class EventBatchAppender {
 
   @Inject EntityManager em;
 
+  @Inject LeaseRevalidator leaseRevalidator;
+
   @Transactional
-  public void append(UUID stackId, UUID updateId, List<JsonNode> rawEvents) {
+  public void append(UUID stackId, UUID updateId, UUID leaseId, List<JsonNode> rawEvents) {
     if (rawEvents == null || rawEvents.isEmpty()) {
       return;
     }
@@ -44,6 +48,8 @@ public class EventBatchAppender {
         throw new RequestValidationException(e.getMessage(), e);
       }
     }
+
+    leaseRevalidator.requireLive(leaseId);
 
     // 2. Insert rows. Order doesn't matter — replay sorts by sequence.
     for (UpdateEventView v : views) {

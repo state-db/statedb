@@ -17,8 +17,8 @@ import java.util.Optional;
 import java.util.UUID;
 
 /**
- * Authenticates lease-scoped routes (cancel + everything under {@code .../update/{updateID}/*}).
- * Header shape is {@code Authorization: update-token <UUID>}. Splits failure modes:
+ * Authenticates lease-scoped update-data routes. Header shape is {@code Authorization: update-token
+ * <UUID>}. Splits failure modes:
  *
  * <ul>
  *   <li>Missing / malformed / wrong-scheme header → 401 (you didn't authenticate)

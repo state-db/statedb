@@ -224,7 +224,7 @@ Actions are named IAM-style as `resource:Operation` (lowercase service prefix = 
 | `stack:Read` | `GET /pulumi/api/stacks/{ref}`, `GET /api/pulumi/stacks/{ref}` | Includes export/checkpoint download |
 | `stack:Create` | `POST /pulumi/api/stacks/{org}/{project}` | |
 | `stack:Delete` | `DELETE /pulumi/api/stacks/{ref}` | |
-| `stack:Lock` | `POST /pulumi/api/.../update/{id}` (acquire) | Lease creation; the lease itself bypasses Cedar afterward |
+| `stack:Lock` | `POST /pulumi/api/.../update/{id}` (acquire), `POST /pulumi/api/.../update/{id}/cancel` | CLI update control: acquire a lease, or force-cancel the active update from a second CLI using a normal API token; the lease itself bypasses Cedar afterward |
 | `stack:EncryptSecrets` | `POST /pulumi/api/stacks/{ref}/encrypt` | Encrypt secret values during an update |
 | `stack:DecryptSecrets` | `POST /pulumi/api/stacks/{ref}/decrypt`, `.../batch-decrypt` | Decrypt for read / preview flows |
 | `stack:Unlock` | `DELETE /api/admin/stacks/{ref}/lock` | Admin-only manual unlock |

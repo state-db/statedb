@@ -27,6 +27,15 @@ public class LeaseAuditLogger implements ContainerResponseFilter {
   @Override
   public void filter(ContainerRequestContext request, ContainerResponseContext response) {
     String normalized = RequestPaths.normalizedPath(request);
+    var forcedCancel = LeaseRouteMatcher.parseForcedCancel(request.getMethod(), normalized);
+    if (forcedCancel.isPresent()) {
+      LeaseRouteMatcher.UpdatePath path = forcedCancel.get();
+      String outcome = response.getStatus() >= 400 ? " outcome=rejected" : "";
+      LOG.infof(
+          "lease_audit action=forced-cancel method=%s path=%s status=%d%s update_id=%s",
+          request.getMethod(), normalized, response.getStatus(), outcome, path.updateId());
+      return;
+    }
     if (!LeaseRouteMatcher.isLeaseScoped(request.getMethod(), normalized)) {
       return;
     }
@@ -38,9 +47,17 @@ public class LeaseAuditLogger implements ContainerResponseFilter {
           "lease_audit method=%s path=%s status=%d outcome=rejected",
           request.getMethod(), normalized, status);
     } else {
+      String action =
+          "DELETE".equalsIgnoreCase(request.getMethod()) ? "graceful-cancel" : "lease-write";
       LOG.infof(
-          "lease_audit method=%s path=%s status=%d lease_id=%s stack_id=%s update_id=%s",
-          request.getMethod(), normalized, status, ctx.leaseId(), ctx.stackId(), ctx.updateId());
+          "lease_audit action=%s method=%s path=%s status=%d lease_id=%s stack_id=%s update_id=%s",
+          action,
+          request.getMethod(),
+          normalized,
+          status,
+          ctx.leaseId(),
+          ctx.stackId(),
+          ctx.updateId());
     }
   }
 }
