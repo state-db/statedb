@@ -22,10 +22,13 @@ type opState struct {
 }
 
 type stackInfo struct {
-	orgName         string
-	projectName     string
-	stackName       string
-	tags            map[string]interface{}
+	orgName     string
+	projectName string
+	stackName   string
+	tags        map[string]interface{}
+	// Only ever set by seedActiveUpdate: the CLI reads activeUpdate for `cancel` alone, and
+	// updates the CLI drives itself are already finished by the time it reads the stack again.
+	activeUpdate    string
 	resourceOrder   []string
 	resources       map[string]map[string]interface{}
 	secretsProvider map[string]interface{}
@@ -219,6 +222,8 @@ func (rt *router) routeStacks(method string, parts []string, n int, body []byte)
 	// Sub-operations: /api/stacks/{org}/{proj}/{stack}/{kind}/{updateID}/{subOp}[/leaf]
 	case n >= 8:
 		switch subOp {
+		case "cancel":
+			return rt.cancelOp(updateID)
 		case "complete":
 			return rt.completeOp(updateID)
 		case "renew_lease":
@@ -346,7 +351,7 @@ func (rt *router) stackBody(s stackInfo) map[string]interface{} {
 		"projectName":      s.projectName,
 		"stackName":        s.stackName,
 		"currentOperation": nil,
-		"activeUpdate":     "",
+		"activeUpdate":     s.activeUpdate,
 		"tags":             s.tags,
 	}
 }
@@ -441,6 +446,44 @@ func (rt *router) completeOp(updateID string) (int, interface{}) {
 	delete(rt.ops, updateID)
 	rt.mu.Unlock()
 	return 200, map[string]interface{}{}
+}
+
+func (rt *router) cancelOp(updateID string) (int, interface{}) {
+	rt.mu.Lock()
+	state, ok := rt.ops[updateID]
+	if ok {
+		if info, exists := rt.stacks[state.stackKey]; exists && info.activeUpdate == updateID {
+			info.activeUpdate = ""
+			rt.stacks[state.stackKey] = info
+		}
+	}
+	delete(rt.ops, updateID)
+	rt.mu.Unlock()
+	return 204, nil
+}
+
+// Fabricates the in-flight update that `pulumi cancel` requires. Driven out of band from
+// entrypoint.sh (POST /meta/active-update) rather than by a pulumi command, because every
+// update the CLI starts runs to completion — it never leaves a lease behind to cancel.
+func (rt *router) seedActiveUpdate(key string) (string, bool) {
+	n := atomic.AddInt64(&opCounter, 1)
+	updateID := fmt.Sprintf("update-%04d", n)
+
+	rt.mu.Lock()
+	defer rt.mu.Unlock()
+
+	info, exists := rt.stacks[key]
+	if !exists {
+		return "", false
+	}
+	rt.ops[updateID] = opState{
+		token:    fmt.Sprintf("lease-%04d", n),
+		kind:     "update",
+		stackKey: key,
+	}
+	info.activeUpdate = updateID
+	rt.stacks[key] = info
+	return updateID, true
 }
 
 func (rt *router) recordJournalEntries(org, proj, stack, updateID string, body []byte) (int, interface{}) {

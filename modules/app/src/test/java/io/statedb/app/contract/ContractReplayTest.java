@@ -62,7 +62,15 @@ class ContractReplayTest {
         "27-change-secrets-provider",
         "28-stack-rename",
         "29-stack-ls",
-        "30-stack-rm");
+        "30-stack-rm"),
+    // `pulumi cancel` needs an update already in flight. The recorder seeds that out of band
+    // (POST /meta/active-update) because no pulumi command leaves one behind; FixtureReplay seeds
+    // the live equivalent when it sees a recorded forced cancel.
+    CANCEL_SESSION(
+        FixtureReplay::seedIdentity,
+        "31-stack-init-for-cancel",
+        "32-cancel",
+        "33-stack-rm-after-cancel");
 
     final String[] commands;
     final Consumer<EntityManager> seed;

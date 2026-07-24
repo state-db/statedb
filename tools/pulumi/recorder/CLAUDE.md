@@ -40,7 +40,7 @@ redirects output to a scratch dir and diffs against the committed baseline.
 
 ```
 recorder/
-├── main.go              HTTP server — catch-all handler, fixture writing, /meta/command endpoint
+├── main.go              HTTP server — catch-all handler, fixture writing, /meta/ admin endpoints
 ├── stubs.go             Response routing — returns stub JSON to keep the CLI alive
 ├── catalog/main.go      Post-processor — reads fixtures, deduplicates, writes catalog.md
 ├── Dockerfile           Two-stage build: Go compiler + Pulumi CLI + runtime
@@ -67,6 +67,20 @@ recorder/
 `fixtures/by-command/03-preview/` and resets the per-command sequence counter.
 Fixtures get a per-command sequence number (for ordering within the command) and
 a global sequence number (field `seq`, for cross-command ordering).
+
+### Seeding state no command can produce
+
+`POST /meta/active-update {"stack": "testorg/recorder-test/dev"}` puts a stack
+into the "update in flight" state that `pulumi cancel` requires. No pulumi
+command can leave that state behind — every update the CLI starts runs to
+completion — and backgrounding a blocking `up` would interleave its journal and
+event traffic into whichever command is currently signalled, since command
+attribution is a single mutable global.
+
+Seed through `/meta/` rather than by curling the stub's real API: `/meta/` paths
+bypass fixture writing, so the fabricated state never appears in `by-command/`
+or the catalog as traffic some CLI supposedly sent. Anything else the CLI cannot
+reach on its own belongs here too, for the same reason.
 
 ### Fixture format
 

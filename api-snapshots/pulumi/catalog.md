@@ -11,10 +11,10 @@
 | # | Method | Path | Calls | Commands |
 |---|--------|------|-------|----------|
 | 1 | `GET` | `/api/user` | 1 | login |
-| 2 | `GET` | `/api/capabilities` | 45 | stack-init, up, preview, refresh, stack-ls, stack-export, destroy, stack-export-after-destroy, stack-rm, stack-init, up, stack-output, stack-get, stack-history, stack-tag-set, stack-tag-ls, stack-tag-get, stack-tag-rm, stack-select, stack-unselect, stack-graph, stack-schedule, stack-webhook, destroy, change-secrets-provider, stack-rename, stack-ls, stack-rm |
-| 3 | `GET` | `/api/user/organizations/default` | 28 | stack-init, up, preview, refresh, stack-ls, stack-export, destroy, stack-export-after-destroy, stack-rm, stack-init, up, stack-output, stack-get, stack-history, stack-tag-set, stack-tag-ls, stack-tag-get, stack-tag-rm, stack-select, stack-unselect, stack-graph, stack-schedule, stack-webhook, destroy, change-secrets-provider, stack-rename, stack-ls, stack-rm |
-| 4 | `GET` | `/api/stacks/{org}/{project}/{stack}` | 38 | stack-init, up, preview, refresh, stack-ls, stack-export, destroy, stack-export-after-destroy, stack-rm, stack-init, up, stack-output, stack-get, stack-history, stack-tag-set, stack-tag-ls, stack-tag-get, stack-tag-rm, stack-select, stack-unselect, stack-graph, stack-schedule, stack-webhook, destroy, change-secrets-provider, stack-rename |
-| 5 | `POST` | `/api/stacks/{org}/{project}` | 2 | stack-init, stack-init |
+| 2 | `GET` | `/api/capabilities` | 48 | stack-init, up, preview, refresh, stack-ls, stack-export, destroy, stack-export-after-destroy, stack-rm, stack-init, up, stack-output, stack-get, stack-history, stack-tag-set, stack-tag-ls, stack-tag-get, stack-tag-rm, stack-select, stack-unselect, stack-graph, stack-schedule, stack-webhook, destroy, change-secrets-provider, stack-rename, stack-ls, stack-rm, stack-init-for-cancel, cancel, stack-rm-after-cancel |
+| 3 | `GET` | `/api/user/organizations/default` | 31 | stack-init, up, preview, refresh, stack-ls, stack-export, destroy, stack-export-after-destroy, stack-rm, stack-init, up, stack-output, stack-get, stack-history, stack-tag-set, stack-tag-ls, stack-tag-get, stack-tag-rm, stack-select, stack-unselect, stack-graph, stack-schedule, stack-webhook, destroy, change-secrets-provider, stack-rename, stack-ls, stack-rm, stack-init-for-cancel, cancel, stack-rm-after-cancel |
+| 4 | `GET` | `/api/stacks/{org}/{project}/{stack}` | 42 | stack-init, up, preview, refresh, stack-ls, stack-export, destroy, stack-export-after-destroy, stack-rm, stack-init, up, stack-output, stack-get, stack-history, stack-tag-set, stack-tag-ls, stack-tag-get, stack-tag-rm, stack-select, stack-unselect, stack-graph, stack-schedule, stack-webhook, destroy, change-secrets-provider, stack-rename, stack-init-for-cancel, cancel, stack-rm-after-cancel |
+| 5 | `POST` | `/api/stacks/{org}/{project}` | 3 | stack-init, stack-init, stack-init-for-cancel |
 | 6 | `POST` | `/api/stacks/{org}/{project}/{stack}/update` | 4 | up, up |
 | 7 | `POST` | `/api/stacks/{org}/{project}/{stack}/update/{updateID}` | 11 | up, preview, refresh, destroy, up, destroy |
 | 8 | `GET` | `/api/stacks/{org}/{project}/{stack}/export` | 20 | up, preview, refresh, stack-export, destroy, stack-export-after-destroy, up, stack-output, stack-get, stack-graph, destroy, change-secrets-provider |
@@ -27,7 +27,7 @@
 | 15 | `POST` | `/api/stacks/{org}/{project}/{stack}/refresh` | 2 | refresh |
 | 16 | `GET` | `/api/user/stacks` | 2 | stack-ls, stack-ls |
 | 17 | `POST` | `/api/stacks/{org}/{project}/{stack}/destroy` | 4 | destroy, destroy |
-| 18 | `DELETE` | `/api/stacks/{org}/{project}/{stack}` | 1 | stack-rm |
+| 18 | `DELETE` | `/api/stacks/{org}/{project}/{stack}` | 2 | stack-rm, stack-rm-after-cancel |
 | 19 | `POST` | `/api/stacks/{org}/{project}/{stack}/decrypt/log-batch-decryption` | 1 | stack-output |
 | 20 | `GET` | `/api/stacks/{org}/{project}/{stack}/updates` | 1 | stack-history |
 | 21 | `PATCH` | `/api/stacks/{org}/{project}/{stack}/tags` | 2 | stack-tag-set, stack-tag-rm |
@@ -38,6 +38,7 @@
 | 26 | `POST` | `/api/stacks/{org}/{project}/{stack}/rename` | 1 | stack-rename |
 | 27 | `GET` | `/api/stacks/{org}/{project}/staging` | 2 | stack-ls, stack-rm |
 | 28 | `DELETE` | `/api/stacks/{org}/{project}/staging` | 1 | stack-rm |
+| 29 | `POST` | `/api/stacks/{org}/{project}/{stack}/update/{updateID}/cancel` | 1 | cancel |
 
 ---
 
@@ -517,6 +518,34 @@ GET /api/stacks/{org}/{project}/staging
 DELETE /api/stacks/{org}/{project}/staging?force=false
 ```
 
+### `stack-init-for-cancel`
+
+```
+GET /api/capabilities
+GET /api/user/organizations/default
+GET /api/stacks/{org}/{project}/{stack}
+POST /api/stacks/{org}/{project}
+```
+
+### `cancel`
+
+```
+GET /api/capabilities
+GET /api/user/organizations/default
+GET /api/stacks/{org}/{project}/{stack}
+GET /api/stacks/{org}/{project}/{stack}
+POST /api/stacks/{org}/{project}/{stack}/update/{updateID}/cancel
+```
+
+### `stack-rm-after-cancel`
+
+```
+GET /api/capabilities
+GET /api/user/organizations/default
+GET /api/stacks/{org}/{project}/{stack}
+DELETE /api/stacks/{org}/{project}/{stack}?force=false
+```
+
 ---
 
 ## Endpoint Details
@@ -545,7 +574,7 @@ DELETE /api/stacks/{org}/{project}/staging?force=false
 
 ### 2. `GET /api/capabilities`
 
-**Calls:** 45 &nbsp;·&nbsp; **Commands:** `02-stack-init` `03-up` `04-preview` `05-refresh` `06-stack-ls` `07-stack-export` `08-destroy` `09-stack-export-after-destroy` `10-stack-rm` `11-stack-init` `12-up` `13-stack-output` `14-stack-get` `15-stack-history` `16-stack-tag-set` `17-stack-tag-ls` `18-stack-tag-get` `19-stack-tag-rm` `20-stack-select` `21-stack-unselect` `22-stack-graph` `24-stack-schedule` `25-stack-webhook` `26-destroy` `27-change-secrets-provider` `28-stack-rename` `29-stack-ls` `30-stack-rm`
+**Calls:** 48 &nbsp;·&nbsp; **Commands:** `02-stack-init` `03-up` `04-preview` `05-refresh` `06-stack-ls` `07-stack-export` `08-destroy` `09-stack-export-after-destroy` `10-stack-rm` `11-stack-init` `12-up` `13-stack-output` `14-stack-get` `15-stack-history` `16-stack-tag-set` `17-stack-tag-ls` `18-stack-tag-get` `19-stack-tag-rm` `20-stack-select` `21-stack-unselect` `22-stack-graph` `24-stack-schedule` `25-stack-webhook` `26-destroy` `27-change-secrets-provider` `28-stack-rename` `29-stack-ls` `30-stack-rm` `31-stack-init-for-cancel` `32-cancel` `33-stack-rm-after-cancel`
 
 **Response** (`200`):
 
@@ -564,7 +593,7 @@ DELETE /api/stacks/{org}/{project}/staging?force=false
 
 ### 3. `GET /api/user/organizations/default`
 
-**Calls:** 28 &nbsp;·&nbsp; **Commands:** `02-stack-init` `03-up` `04-preview` `05-refresh` `06-stack-ls` `07-stack-export` `08-destroy` `09-stack-export-after-destroy` `10-stack-rm` `11-stack-init` `12-up` `13-stack-output` `14-stack-get` `15-stack-history` `16-stack-tag-set` `17-stack-tag-ls` `18-stack-tag-get` `19-stack-tag-rm` `20-stack-select` `21-stack-unselect` `22-stack-graph` `24-stack-schedule` `25-stack-webhook` `26-destroy` `27-change-secrets-provider` `28-stack-rename` `29-stack-ls` `30-stack-rm`
+**Calls:** 31 &nbsp;·&nbsp; **Commands:** `02-stack-init` `03-up` `04-preview` `05-refresh` `06-stack-ls` `07-stack-export` `08-destroy` `09-stack-export-after-destroy` `10-stack-rm` `11-stack-init` `12-up` `13-stack-output` `14-stack-get` `15-stack-history` `16-stack-tag-set` `17-stack-tag-ls` `18-stack-tag-get` `19-stack-tag-rm` `20-stack-select` `21-stack-unselect` `22-stack-graph` `24-stack-schedule` `25-stack-webhook` `26-destroy` `27-change-secrets-provider` `28-stack-rename` `29-stack-ls` `30-stack-rm` `31-stack-init-for-cancel` `32-cancel` `33-stack-rm-after-cancel`
 
 **Response** (`200`):
 
@@ -581,7 +610,7 @@ DELETE /api/stacks/{org}/{project}/staging?force=false
 
 ### 4. `GET /api/stacks/{org}/{project}/{stack}`
 
-**Calls:** 38 &nbsp;·&nbsp; **Commands:** `02-stack-init` `03-up` `04-preview` `05-refresh` `06-stack-ls` `07-stack-export` `08-destroy` `09-stack-export-after-destroy` `10-stack-rm` `11-stack-init` `12-up` `13-stack-output` `14-stack-get` `15-stack-history` `16-stack-tag-set` `17-stack-tag-ls` `18-stack-tag-get` `19-stack-tag-rm` `20-stack-select` `21-stack-unselect` `22-stack-graph` `24-stack-schedule` `25-stack-webhook` `26-destroy` `27-change-secrets-provider` `28-stack-rename`
+**Calls:** 42 &nbsp;·&nbsp; **Commands:** `02-stack-init` `03-up` `04-preview` `05-refresh` `06-stack-ls` `07-stack-export` `08-destroy` `09-stack-export-after-destroy` `10-stack-rm` `11-stack-init` `12-up` `13-stack-output` `14-stack-get` `15-stack-history` `16-stack-tag-set` `17-stack-tag-ls` `18-stack-tag-get` `19-stack-tag-rm` `20-stack-select` `21-stack-unselect` `22-stack-graph` `24-stack-schedule` `25-stack-webhook` `26-destroy` `27-change-secrets-provider` `28-stack-rename` `31-stack-init-for-cancel` `32-cancel` `33-stack-rm-after-cancel`
 
 **Response** (`200`):
 
@@ -604,7 +633,7 @@ DELETE /api/stacks/{org}/{project}/staging?force=false
 
 ### 5. `POST /api/stacks/{org}/{project}`
 
-**Calls:** 2 &nbsp;·&nbsp; **Commands:** `02-stack-init` `11-stack-init`
+**Calls:** 3 &nbsp;·&nbsp; **Commands:** `02-stack-init` `11-stack-init` `31-stack-init-for-cancel`
 
 **Request body:**
 
@@ -740,7 +769,14 @@ _Replay request body preserved in `body_b64` (273 bytes)._
 
 ```json
 {
-  "deployment": null,
+  "deployment": {
+    "manifest": {
+      "magic": "4ae265b5e36f43e09c7ff61ff9e23e82843496e0c1ad370c8f62bd2c5f0f4369",
+      "time": "1970-01-01T00:00:00Z",
+      "version": "v3.242.0"
+    },
+    "resources": []
+  },
   "version": 3
 }
 ```
@@ -1236,7 +1272,7 @@ _Replay request body preserved in `body_b64` (273 bytes)._
 }
 ```
 
-_Replay request body preserved in `body_b64` (1047 gzip bytes)._
+_Replay request body preserved in `body_b64` (1044 gzip bytes)._
 
 **Response** (`200`):
 
@@ -1619,7 +1655,7 @@ _Replay request body preserved in `body_b64` (892 bytes)._
 
 ### 18. `DELETE /api/stacks/{org}/{project}/{stack}?force=false`
 
-**Calls:** 1 &nbsp;·&nbsp; **Commands:** `10-stack-rm`
+**Calls:** 2 &nbsp;·&nbsp; **Commands:** `10-stack-rm` `33-stack-rm-after-cancel`
 
 **Response** (`200`):
 
@@ -1794,18 +1830,7 @@ _Replay request body preserved in `body_b64` (50 bytes)._
 **Response** (`200`):
 
 ```json
-{
-  "activeUpdate": "",
-  "currentOperation": null,
-  "orgName": "testorg",
-  "projectName": "recorder-test",
-  "stackName": "staging",
-  "tags": {
-    "pulumi:description": "Minimal Pulumi project for API recording. Uses the `random` provider so `pulumi up`/`destroy` exercise the journal/checkpoint write paths with real resource state.",
-    "pulumi:project": "recorder-test",
-    "pulumi:runtime": "yaml"
-  }
-}
+{}
 ```
 
 ---
@@ -1841,6 +1866,18 @@ _Replay request body preserved in `body_b64` (50 bytes)._
 
 ```json
 {}
+```
+
+---
+
+### 29. `POST /api/stacks/{org}/{project}/{stack}/update/{updateID}/cancel`
+
+**Calls:** 1 &nbsp;·&nbsp; **Commands:** `32-cancel`
+
+**Response** (`204`):
+
+```json
+null
 ```
 
 ---

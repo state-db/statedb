@@ -64,6 +64,12 @@ public final class FixtureReplay {
 
   private static final Pattern UPDATE_PATH =
       Pattern.compile("^/api/stacks/[^/]+/[^/]+/[^/]+/update/([^/]+)(/.*)?$");
+  private static final Pattern STACK_PATH =
+      Pattern.compile("^/api/stacks/([^/]+)/([^/]+)/([^/]+)$");
+  private static final Pattern UPDATE_STACK_PATH =
+      Pattern.compile("^/api/stacks/([^/]+)/([^/]+)/([^/]+)/update/([^/]+)(/.*)?$");
+  private static final Pattern FORCED_CANCEL_PATH =
+      Pattern.compile("^/api/stacks/([^/]+)/([^/]+)/([^/]+)/update/([^/]+)/cancel$");
   private static final Set<String> SECRETS_PATH_SUFFIXES =
       Set.of("/batch-decrypt", "/encrypt", "/decrypt/log-batch-decryption");
 
@@ -74,6 +80,7 @@ public final class FixtureReplay {
   // Session state: recorded id -> live id, and recorded updateID -> live lease token.
   private final Map<String, String> idSubstitutions = new HashMap<>();
   private final Map<String, String> leaseByRecordedUpdate = new HashMap<>();
+  private final Map<String, String> activeUpdateByStack = new HashMap<>();
 
   private FixtureReplay(List<String> commands, String rawToken) {
     this.commands = commands;
@@ -96,10 +103,76 @@ public final class FixtureReplay {
           fixtures.isEmpty(),
           () -> "No recorder fixtures found for command " + command + " under " + fixtureRoot());
 
+      seedActiveUpdate(fixtures);
+
       for (Path fixture : fixtures) {
         replayFixture(fixture);
       }
     }
+  }
+
+  /**
+   * Starts a live update and acquires its lease before a command that forcibly cancels one, so the
+   * stack is genuinely mid-update when the recorded cancel arrives.
+   *
+   * <p>This mirrors the recorder's own out-of-band {@code POST /meta/active-update}: no pulumi
+   * command leaves an update in flight — every update the CLI starts runs to completion — so
+   * neither the recorded fixtures nor a replay of them can reach that state by themselves. A
+   * recorded forced cancel therefore implies a seeded update; the recorded {@code updateID} is
+   * mapped onto the live one exactly as if a fixture response had returned it.
+   */
+  private void seedActiveUpdate(List<Path> fixtures) {
+    Matcher cancel = forcedCancelPath(fixtures);
+    if (cancel == null || idSubstitutions.containsKey(cancel.group(4))) {
+      return;
+    }
+
+    String org = cancel.group(1);
+    String project = cancel.group(2);
+    String stack = cancel.group(3);
+    String recordedUpdateId = cancel.group(4);
+    String stackPath = PULUMI_BASE_PATH + "/api/stacks/" + org + "/" + project + "/" + stack;
+
+    String liveUpdateId =
+        given()
+            .header("Authorization", "token " + rawToken)
+            .contentType("application/json")
+            .body(Map.of("name", project, "runtime", "yaml"))
+            .when()
+            .post(stackPath + "/update")
+            .then()
+            .statusCode(200)
+            .extract()
+            .path("updateID");
+
+    given()
+        .header("Authorization", "token " + rawToken)
+        .contentType("application/json")
+        .body(Map.of("journalVersion", 1))
+        .when()
+        .post(stackPath + "/update/" + liveUpdateId)
+        .then()
+        .statusCode(200);
+
+    idSubstitutions.put(recordedUpdateId, liveUpdateId);
+  }
+
+  private Matcher forcedCancelPath(List<Path> fixtures) {
+    for (Path fixture : fixtures) {
+      try {
+        JsonNode exchange = JSON.readTree(fixture.toFile());
+        if (!"POST".equalsIgnoreCase(exchange.required("method").asText())) {
+          continue;
+        }
+        Matcher matcher = FORCED_CANCEL_PATH.matcher(exchange.required("path").asText());
+        if (matcher.matches()) {
+          return matcher;
+        }
+      } catch (IOException e) {
+        fail("Could not read fixture " + fixture + ": " + e.getMessage());
+      }
+    }
+    return null;
   }
 
   private void replayFixture(Path fixture) {
@@ -128,7 +201,8 @@ public final class FixtureReplay {
 
       if (exchange.has("response") && !isStubFillerBody(method, recordedPath)) {
         learnSubstitutions(exchange.required("response"), response.asString(), recordedPath);
-        JsonNode expected = exchange.required("response");
+        learnActiveUpdate(method, recordedPath);
+        JsonNode expected = expectedResponse(exchange.required("response"), method, recordedPath);
         if (isOpLifecycle(method, recordedPath)) {
           expected = stripRootVersion(expected);
         }
@@ -138,6 +212,30 @@ public final class FixtureReplay {
     } catch (IOException e) {
       fail("Could not replay fixture " + fixture + ": " + e.getMessage());
     }
+  }
+
+  private JsonNode expectedResponse(JsonNode expected, String method, String recordedPath) {
+    JsonNode copy = expected.deepCopy();
+    if (!"GET".equalsIgnoreCase(method) || !(copy instanceof ObjectNode object)) {
+      return copy;
+    }
+
+    Matcher stack = STACK_PATH.matcher(recordedPath);
+    if (!stack.matches()) {
+      return copy;
+    }
+    String expectedActiveUpdate = object.path("activeUpdate").asText("");
+    if (!expectedActiveUpdate.isEmpty()) {
+      object.put(
+          "activeUpdate", idSubstitutions.getOrDefault(expectedActiveUpdate, expectedActiveUpdate));
+      return copy;
+    }
+    String activeUpdate =
+        activeUpdateByStack.get(stackKey(stack.group(1), stack.group(2), stack.group(3)));
+    if (activeUpdate != null) {
+      object.put("activeUpdate", activeUpdate);
+    }
+    return copy;
   }
 
   // The recorder stub did not track update history or the user-stacks index; those GET responses
@@ -193,15 +291,18 @@ public final class FixtureReplay {
             });
   }
 
-  // Mirrors LeaseRouteMatcher: sub-paths of .../update/{updateID} (and DELETE on the bare path)
-  // authenticate with the lease token; POST on the bare path is the acquire itself and still uses
-  // the regular token scheme.
+  // Mirrors LeaseRouteMatcher: lease-write sub-paths of .../update/{updateID} (and DELETE on the
+  // bare path) authenticate with the lease token. POST on the bare path is acquire, and
+  // POST .../cancel is forced cancellation by a non-holder; both use the regular token scheme.
   private String authorization(String method, String recordedPath, Path fixture) {
     Matcher matcher = UPDATE_PATH.matcher(recordedPath);
     if (matcher.matches()) {
       boolean deeper = matcher.group(2) != null && !matcher.group(2).isEmpty();
       if (deeper || "DELETE".equalsIgnoreCase(method)) {
         String recordedUpdateId = matcher.group(1);
+        if ("POST".equalsIgnoreCase(method) && "/cancel".equals(matcher.group(2))) {
+          return "token " + rawToken;
+        }
         String lease = leaseByRecordedUpdate.get(recordedUpdateId);
         assertFalse(
             lease == null,
@@ -248,12 +349,38 @@ public final class FixtureReplay {
     }
   }
 
+  private void learnActiveUpdate(String method, String recordedPath) {
+    Matcher matcher = UPDATE_STACK_PATH.matcher(recordedPath);
+    if (!matcher.matches()) {
+      return;
+    }
+
+    String stackKey = stackKey(matcher.group(1), matcher.group(2), matcher.group(3));
+    String recordedUpdateId = matcher.group(4);
+    String liveUpdateId = idSubstitutions.getOrDefault(recordedUpdateId, recordedUpdateId);
+    String subPath = matcher.group(5);
+    if ("POST".equalsIgnoreCase(method) && subPath == null) {
+      activeUpdateByStack.put(stackKey, liveUpdateId);
+    } else if (("DELETE".equalsIgnoreCase(method) && subPath == null)
+        || ("POST".equalsIgnoreCase(method)
+            && ("/complete".equals(subPath) || "/cancel".equals(subPath)))) {
+      activeUpdateByStack.remove(stackKey, liveUpdateId);
+    }
+  }
+
+  private static String stackKey(String org, String project, String stack) {
+    return org + "/" + project + "/" + stack;
+  }
+
   private static boolean isSecretsExchange(String recordedPath) {
     return SECRETS_PATH_SUFFIXES.stream().anyMatch(recordedPath::endsWith);
   }
 
   private void assertJsonMatches(
       JsonNode expected, String actualBody, Path fixture, boolean stripVersion) throws IOException {
+    if (expected.isNull() && (actualBody == null || actualBody.isBlank())) {
+      return;
+    }
     JsonNode actual =
         actualBody == null || actualBody.isBlank()
             ? JSON.createObjectNode()

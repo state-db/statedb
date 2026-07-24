@@ -66,7 +66,7 @@ func main() {
 }
 
 func (s *server) handle(w http.ResponseWriter, r *http.Request) {
-	// Admin endpoint — not recorded as a fixture.
+	// Admin endpoints — not recorded as fixtures.
 	if strings.HasPrefix(r.URL.Path, "/meta/") {
 		s.handleMeta(w, r)
 		return
@@ -164,10 +164,21 @@ func (s *server) handle(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *server) handleMeta(w http.ResponseWriter, r *http.Request) {
-	if r.URL.Path != "/meta/command" || r.Method != "POST" {
+	if r.Method != "POST" {
 		http.NotFound(w, r)
 		return
 	}
+	switch r.URL.Path {
+	case "/meta/command":
+		s.handleMetaCommand(w, r)
+	case "/meta/active-update":
+		s.handleMetaActiveUpdate(w, r)
+	default:
+		http.NotFound(w, r)
+	}
+}
+
+func (s *server) handleMetaCommand(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		Command string `json:"command"`
 	}
@@ -184,6 +195,28 @@ func (s *server) handleMeta(w http.ResponseWriter, r *http.Request) {
 		fmt.Printf("\n=== %s ===\n", req.Command)
 	}
 	w.WriteHeader(http.StatusOK)
+}
+
+// Seeds an in-flight update on a stack — the precondition `pulumi cancel` needs and that no
+// pulumi command can leave behind, since every update the CLI starts runs to completion. It
+// lives here rather than in entrypoint.sh's command sequence so the fabricated state never
+// lands in by-command/ as if a CLI had produced it.
+func (s *server) handleMetaActiveUpdate(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		Stack string `json:"stack"`
+	}
+	json.NewDecoder(r.Body).Decode(&req) //nolint:errcheck
+	r.Body.Close()
+
+	updateID, ok := s.rt.seedActiveUpdate(req.Stack)
+	if !ok {
+		http.Error(w, "unknown stack: "+req.Stack, http.StatusNotFound)
+		return
+	}
+
+	fmt.Printf("\n=== seeded active update %s on %s ===\n", updateID, req.Stack)
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]string{"updateID": updateID}) //nolint:errcheck
 }
 
 func (s *server) writeFixture(globalN int64, cmd string, cmdSeq int64, method, path string, fix fixture) {

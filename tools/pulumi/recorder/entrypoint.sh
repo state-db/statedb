@@ -32,6 +32,14 @@ signal() {
     -d "{\"command\": \"$1\"}" > /dev/null
 }
 
+# Put a stack into the "update in flight" state without issuing a pulumi command.
+# Nothing is recorded — /meta/ paths bypass fixture writing.
+seed_active_update() {
+  curl -sf -X POST "http://localhost:${PORT}/meta/active-update" \
+    -H "Content-Type: application/json" \
+    -d "{\"stack\": \"$1\"}" > /dev/null
+}
+
 run() {
   local cmd="$*"
   echo ""
@@ -153,6 +161,20 @@ run pulumi stack ls
 
 signal "30-stack-rm"
 run pulumi stack rm staging --yes
+
+signal "31-stack-init-for-cancel"
+run pulumi stack init dev
+
+# `pulumi cancel` needs an update already in flight, and no pulumi command leaves one
+# behind — every update the CLI starts runs to completion. Seed it through the recorder's
+# admin endpoint so the fabricated state is never recorded as CLI traffic.
+seed_active_update "testorg/recorder-test/dev"
+
+signal "32-cancel"
+run pulumi cancel --yes
+
+signal "33-stack-rm-after-cancel"
+run pulumi stack rm dev --yes
 
 echo ""
 echo "==> all commands completed"
