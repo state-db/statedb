@@ -48,7 +48,7 @@ it directly.
 | `ConfigSmokeIT` | `config set/get/rm` incl. `--secret`, `config cp` |
 | `BackendInspectionSmokeIT` | `about`, `project ls`, `stack ls --all` / `--organization`, `logs`, `console` |
 | `WatchSmokeIT` | `watch` (detached; first deploy must complete and land in history) |
-| `UnsupportedFeatureSmokeIT` | endpoints we 501 (`schedule list`, `webhook list`) |
+| `UnsupportedFeatureSmokeIT` | endpoints we 501 (`schedule list`, `webhook list`, `org search`, `policy ls`, `env ls`) |
 
 Command-by-command coverage, including what is deliberately unsupported, is
 tracked in `design/pulumi-command-coverage.md`.
