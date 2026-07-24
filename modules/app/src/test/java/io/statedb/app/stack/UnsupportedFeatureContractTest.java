@@ -57,6 +57,22 @@ class UnsupportedFeatureContractTest {
     return Stream.of(
         new UnsupportedEndpoint("stack schedule list", "GET", SCHEDULES, "stack schedules"),
         new UnsupportedEndpoint("stack schedule create", "POST", SCHEDULES, "stack schedules"),
+        new UnsupportedEndpoint(
+            "stack schedule rm", "DELETE", SCHEDULES + "/sched-1", "stack schedules"),
+        new UnsupportedEndpoint(
+            "stack schedule drift create",
+            "POST",
+            BASE + "/deployments/drift/schedules",
+            "stack schedules"),
+        new UnsupportedEndpoint(
+            "stack schedule ttl create",
+            "POST",
+            BASE + "/deployments/ttl/schedules",
+            "stack schedules"),
+        new UnsupportedEndpoint(
+            "stack drift status", "GET", BASE + "/drift/status", "stack drift detection runs"),
+        new UnsupportedEndpoint(
+            "stack drift list", "GET", BASE + "/drift/runs", "stack drift detection runs"),
         new UnsupportedEndpoint("stack webhook list", "GET", HOOKS, "stack webhooks"),
         new UnsupportedEndpoint("stack webhook new", "POST", HOOKS, "stack webhooks"),
         new UnsupportedEndpoint(
