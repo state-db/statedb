@@ -4,7 +4,13 @@ Runs the real state-db container image under continuous Pulumi load for days at 
 the failures short tests cannot: heap and GC drift, off-heap/RSS creep, JDBC pool exhaustion,
 unbounded history growth, stranded state locks, and crashes or OOM kills.
 
+Compose runs from the **host**, so a multi-day run survives a dev container rebuild. Only the
+image build needs that container, so the sequence is: build, stop the dev container, start the
+soak. Left running it is a ~4GB co-tenant on the same VM as the 2GB app under test.
+
 ```bash
+make soak cmd=build     # needs the dev container (Maven + bun)
+# stop the dev container here
 make soak cmd=up        # build images and start the run (48h by default)
 make soak cmd=status    # heap, pool and container state at a glance
 make soak cmd=logs      # follow the driver, sampler and app

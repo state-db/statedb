@@ -162,9 +162,14 @@ to Bun on `5173` (for example with `socat`) keeps discovery and browser redirect
 on one issuer. Open the console at `http://127.0.0.1:15173`; the backend is at
 `http://localhost:18080`.
 
-Deliberate exception: `tools/pulumi/api-extract` (pure-Go host tool) and
-`tools/pulumi/recorder` (builds and runs its own docker image) are not routed
-through the gateway — they manage their own execution environments.
+Deliberate exception: `tools/pulumi/api-extract` (pure-Go host tool),
+`tools/pulumi/recorder` (builds and runs its own docker image), and
+`workbench/soak` (drives its own Compose stack) are not routed through the
+gateway — they manage their own execution environments.
+
+`workbench/soak` runs Compose from the host so the dev container can be stopped
+for the duration of a run: it is a ~4GB co-tenant on the same Docker VM as the
+2GB app under test. Build the image first, then stop it, then `make soak cmd=up`.
 
 ## Project: state-db
 
