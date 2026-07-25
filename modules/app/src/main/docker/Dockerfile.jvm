@@ -1,0 +1,35 @@
+# Runtime image. Does not build the app: `mvn package` runs bun to bundle the console, so the jar
+# comes from the dev container first.
+#
+#   ./bin/in-container mvn -f modules/pom.xml -pl app -am package -DskipTests
+#   docker build -f modules/app/src/main/docker/Dockerfile.jvm modules/app/target/quarkus-app
+#
+# The context is quarkus-app itself, so Docker never walks workbench/.generated.
+
+# JDK, not JRE: the JRE image has no jcmd, jstack or jmap, which leaves native memory tracking
+# unreadable.
+FROM eclipse-temurin:21-jdk
+
+# Fast-jar layout, least- to most-frequently changed, for layer caching.
+COPY --chown=1000:1000 lib/ /app/lib/
+COPY --chown=1000:1000 quarkus/ /app/quarkus/
+COPY --chown=1000:1000 app/ /app/app/
+COPY --chown=1000:1000 quarkus-run.jar /app/
+
+USER 1000
+
+# 8080 Pulumi API and console; 9000 management.
+EXPOSE 8080 9000
+
+# Pinned rather than left to ergonomics, so behaviour does not shift with the memory limit: below
+# ~1792MB the JVM would pick SerialGC, and a fixed heap makes RSS growth mean off-heap growth.
+ENV JAVA_OPTS="-XX:+UseG1GC \
+-XX:InitialRAMPercentage=75 -XX:MaxRAMPercentage=75 \
+-XX:+AlwaysPreTouch \
+-XX:+ExitOnOutOfMemoryError \
+-XX:+HeapDumpOnOutOfMemoryError -XX:HeapDumpPath=/tmp"
+
+# Diagnostics go here so they cannot diverge from the baseline above.
+ENV JAVA_OPTS_APPEND=""
+
+ENTRYPOINT ["sh", "-c", "exec java $JAVA_OPTS $JAVA_OPTS_APPEND -jar /app/quarkus-run.jar"]

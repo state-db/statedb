@@ -1,5 +1,5 @@
 .PHONY: \
-	app-dev app-build app-test app-clean \
+	app-dev app-build app-image app-test app-clean \
 	web-dev \
 	format format-check \
 	pulumi-extract pulumi-compare pulumi-discover pulumi-api-test \
@@ -21,6 +21,11 @@ PULUMI_SNAPSHOTS_DIR ?= $(CURDIR)/api-snapshots/pulumi
 
 IN_CONTAINER := ./bin/in-container
 
+APP_IMAGE ?= state-db:dev
+
+## Empty docker config dir: dodges a credential helper that errors on anonymous pulls.
+DOCKER_CFG ?= /tmp/state-db-dockercfg
+
 ## Run the app in dev mode with live reload. Quarkus Dev Services
 ## auto-starts an ephemeral Postgres container on the host's Docker.
 ## Listens on http://localhost:8080.
@@ -30,6 +35,15 @@ app-dev:
 ## Build a runnable JAR (target/quarkus-app/quarkus-run.jar).
 app-build:
 	$(IN_CONTAINER) mvn -f modules/pom.xml -pl app -am package -DskipTests
+
+## Build the runtime image from the packaged fast-jar. The context is the quarkus-app output
+## directory so Docker does not walk workbench/.generated.
+app-image: app-build
+	$(IN_CONTAINER) sh -lc 'mkdir -p $(DOCKER_CFG) && DOCKER_CONFIG=$(DOCKER_CFG) docker build \
+		-f modules/app/src/main/docker/Dockerfile.jvm \
+		-t $(APP_IMAGE) \
+		modules/app/target/quarkus-app'
+	@echo "Built $(APP_IMAGE)"
 
 ## Run unit + integration tests across all modules.
 app-test:
