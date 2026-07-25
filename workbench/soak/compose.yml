@@ -1,0 +1,163 @@
+name: state-db-soak
+
+# Endurance stack: the real app image under a fixed budget, its own Postgres, a Pulumi CLI driver
+# and a sampler.
+#
+# No bind mounts: the daemon resolves them against the host, where /workspaces does not exist.
+# Config arrives via build contexts, results leave via `make soak cmd=artifacts`.
+
+services:
+  postgres:
+    image: ${DB_IMAGE:-postgres:16}
+    container_name: state-db-soak-postgres
+    environment:
+      POSTGRES_DB: ${DB_NAME:-statedb}
+      POSTGRES_USER: ${DB_USER:-statedb}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-statedb}
+    ports:
+      - "127.0.0.1:${DB_PORT:-55433}:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 3s
+      retries: 30
+
+  # Named volumes are root-owned but the app runs as UID 1000, so the JVM cannot open its GC log.
+  # Done here to keep soak-specific paths out of the runtime image.
+  artifacts-init:
+    image: ${APP_IMAGE:-state-db:dev}
+    container_name: state-db-soak-artifacts-init
+    user: root
+    entrypoint: ["sh", "-c", "mkdir -p /soak/artifacts && chown -R 1000:1000 /soak/artifacts"]
+    volumes:
+      - artifacts:/soak/artifacts
+
+  app:
+    image: ${APP_IMAGE:-state-db:dev}
+    container_name: state-db-soak-app
+    depends_on:
+      postgres:
+        condition: service_healthy
+      artifacts-init:
+        condition: service_completed_successfully
+    # memswap_limit matches mem_limit so swap cannot paper over a leak.
+    mem_limit: ${SOAK_MEMORY:-2g}
+    memswap_limit: ${SOAK_MEMORY:-2g}
+    cpus: ${SOAK_CPUS:-2.0}
+    # Restarts are graded, so the container must come back to be counted.
+    restart: unless-stopped
+    environment:
+      STATE_DB_JDBC_URL: jdbc:postgresql://postgres:5432/${DB_NAME:-statedb}
+      STATE_DB_DB_USER: ${DB_USER:-statedb}
+      STATE_DB_DB_PASSWORD: ${DB_PASSWORD:-statedb}
+      STATE_DB_BOOTSTRAP_ORG_NAME: ${ORG:-soak}
+      STATE_DB_BOOTSTRAP_ORG_DISPLAY_NAME: Soak
+      STATE_DB_SESSION_ENCRYPTION_SECRET: state-db-soak-session-secret-32-bytes
+      # No OIDC provider is bootstrapped, so break-glass is live; reached from the compose network.
+      STATE_DB_LOCAL_GLASS_PASSWORD_HASH: ${GLASS_PASSWORD_HASH:-$$2a$$10$$T56PF8UE80K1VeLu6iMJjOLW68rR.xHzHUppcyvcd2ZAudpNUgn9O}
+      STATE_DB_LOCAL_GLASS_ALLOW_REMOTE: "true"
+      # Appended to the image's JVM flags, not replacing them.
+      JAVA_OPTS_APPEND: >-
+        -XX:NativeMemoryTracking=summary
+        -XX:HeapDumpPath=/soak/artifacts
+        -Xlog:gc*:file=/soak/artifacts/gc.log:time,uptime:filecount=10,filesize=20M
+    volumes:
+      - artifacts:/soak/artifacts
+    ports:
+      - "127.0.0.1:${APP_PORT:-28080}:8080"
+      - "127.0.0.1:${MGMT_PORT:-29000}:9000"
+    # The sampler attaches to this PID namespace, so gate on readiness rather than "started".
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:9000/q/health/ready"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 30s
+
+  prometheus:
+    build:
+      context: .
+      dockerfile: prometheus.Dockerfile
+    image: state-db-soak-prometheus:local
+    container_name: state-db-soak-prometheus
+    depends_on:
+      - app
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.path=/prometheus
+      - --storage.tsdb.retention.time=7d
+    volumes:
+      - prometheus-data:/prometheus
+    ports:
+      - "127.0.0.1:${PROM_PORT:-29090}:9090"
+
+  sampler:
+    build:
+      context: .
+      dockerfile: load.Dockerfile
+    image: state-db-soak-load:local
+    container_name: state-db-soak-sampler
+    depends_on:
+      app:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+    # Shares the app's PID namespace to read true RSS from /proc/1/status, without a Docker socket.
+    pid: "service:app"
+    restart: unless-stopped
+    environment:
+      METRICS_URL: http://app:9000/q/metrics
+      PGHOST: postgres
+      PGUSER: ${DB_USER:-statedb}
+      PGDATABASE: ${DB_NAME:-statedb}
+      PGPASSWORD: ${DB_PASSWORD:-statedb}
+      SOAK_SAMPLE_INTERVAL: ${SOAK_SAMPLE_INTERVAL:-60}
+    volumes:
+      - artifacts:/soak/artifacts
+    command: ["/soak/sample.sh"]
+
+  load:
+    build:
+      context: .
+      dockerfile: load.Dockerfile
+    image: state-db-soak-load:local
+    container_name: state-db-soak-load
+    depends_on:
+      app:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+    environment:
+      APP_URL: http://app:8080
+      BACKEND_URL: http://app:8080/pulumi
+      PULUMI_ACCESS_TOKEN: ${TOKEN:-state-db-soak-token}
+      ORG: ${ORG:-soak}
+      PGHOST: postgres
+      PGUSER: ${DB_USER:-statedb}
+      PGDATABASE: ${DB_NAME:-statedb}
+      PGPASSWORD: ${DB_PASSWORD:-statedb}
+      TOKEN_HASH: ${TOKEN_HASH:-28aec1ea2dc56f9ba068e0c64de3cf36911327bcf7c7d0eaaed6cab3d412f243}
+      SOAK_STACKS: ${SOAK_STACKS:-4}
+      SOAK_RESOURCES: ${SOAK_RESOURCES:-300}
+      SOAK_PARALLEL: ${SOAK_PARALLEL:-8}
+      SOAK_PAYLOAD_BYTES: ${SOAK_PAYLOAD_BYTES:-2048}
+      SOAK_DURATION_HOURS: ${SOAK_DURATION_HOURS:-48}
+      SOAK_CONSOLE_READS: ${SOAK_CONSOLE_READS:-1}
+      SOAK_DESTROY_EVERY: ${SOAK_DESTROY_EVERY:-5}
+      SOAK_FAULT_EVERY: ${SOAK_FAULT_EVERY:-7}
+      SOAK_CONTENTION_EVERY: ${SOAK_CONTENTION_EVERY:-3}
+      SOAK_PREVIEW_EVERY: ${SOAK_PREVIEW_EVERY:-2}
+    volumes:
+      - artifacts:/soak/artifacts
+    command: ["bash", "-c", "/soak/seed.sh && exec /soak/drive.sh"]
+
+volumes:
+  postgres-data:
+    name: ${DB_VOLUME:-state-db-soak-postgres-data}
+  prometheus-data:
+    name: state-db-soak-prometheus-data
+  artifacts:
+    name: state-db-soak-artifacts

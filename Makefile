@@ -6,7 +6,8 @@
 	pulumi-recorder-run pulumi-recorder-run-no-build pulumi-recorder-catalog pulumi-recorder-verify pulumi-recorder-discover \
 	pulumi-verify-build pulumi-verify-test \
 	pulumi-compat-sweep \
-	pulumi-workbench
+	pulumi-workbench \
+	soak
 
 PULUMI_SCOPE         ?= $(CURDIR)/tools/pulumi/api-extract/scopes/state-backend.yaml
 PULUMI_SNAPSHOTS_DIR ?= $(CURDIR)/api-snapshots/pulumi
@@ -68,6 +69,17 @@ ifndef cmd
 	$(error cmd is required, e.g. make pulumi-workbench cmd=up)
 endif
 	$(MAKE) -C workbench/pulumi $(cmd) $(args)
+
+## -------------------------
+## Soak / endurance harness
+## -------------------------
+## Forward to workbench/soak/Makefile.
+## Usage: make soak cmd=up args="SOAK_DURATION_HOURS=12 SOAK_RESOURCES=500"
+soak:
+ifndef cmd
+	$(error cmd is required, e.g. make soak cmd=up)
+endif
+	$(MAKE) -C workbench/soak $(cmd) $(args)
 
 ## -------------------------
 ## Formatting
