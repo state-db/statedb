@@ -141,6 +141,58 @@ Clear an interrupted workbench update/lock:
 make pulumi-workbench cmd=force-unlock
 ```
 
+### High-cardinality scale runs
+
+For production-scale console and backend checks, the workbench includes a
+local-only Go provider named `statedbsim`. It is not published anywhere. The
+Make targets build it with host Docker in a Go builder container and install the
+binary into the workbench-local Pulumi plugin cache under `workbench/.pulumi-home`.
+
+Generate and deploy a synthetic stack:
+
+```bash
+make pulumi-workbench cmd=scale-up
+```
+
+Useful knobs:
+
+```bash
+make pulumi-workbench cmd=scale-up args="SCALE_RESOURCES=500 SCALE_DEPTH=12 SCALE_PAYLOAD_BYTES=2048"
+make pulumi-workbench cmd=scale-up args="SCALE_RESOURCES=300 SCALE_CREATE_DELAY_MS=100 SCALE_UPDATE_DELAY_MS=50"
+make pulumi-workbench cmd=scale-up args="SCALE_RESOURCES=300 SCALE_CREATE_JITTER_MS=400"
+make pulumi-workbench cmd=scale-up args="SCALE_RESOURCES=500 SCALE_REVISION=2"
+make pulumi-workbench cmd=scale-up args="SCALE_RESOURCES=500 SCALE_REPLACEMENT_KEY=rotation-2"
+```
+
+By default a `scale-up` throttles creates so it resembles a real cloud deploy rather than
+finishing instantly: `SCALE_CREATE_DELAY_MS` (default 600) is a fixed floor applied to every
+create and `SCALE_CREATE_JITTER_MS` (default 800) adds a random `[0, jitter)` millisecond delay
+on top, so resources finish creating at staggered, unpredictable times. `SCALE_PARALLEL`
+(default 8) pins how many creates run at once. First-up wall time is roughly
+`SCALE_RESOURCES * (SCALE_CREATE_DELAY_MS + SCALE_CREATE_JITTER_MS / 2) / SCALE_PARALLEL`, so the
+defaults put a 1000-resource run at ~2 minutes. Set both delays to 0 for instant runs:
+
+```bash
+make pulumi-workbench cmd=scale-up args="SCALE_RESOURCES=1000 SCALE_CREATE_DELAY_MS=0 SCALE_CREATE_JITTER_MS=0"
+```
+
+Inject a deterministic provider failure:
+
+```bash
+make pulumi-workbench cmd=scale-fault-up args="SCALE_RESOURCES=250 SCALE_FAULT_INDEX=42 SCALE_FAULT_MODE=once"
+```
+
+Use `SCALE_FAULT_MODE=always` for a repeatable hard failure, or
+`SCALE_FAIL_EVERY=97` with `scale-up` for hash-selected failures across the
+graph. Destroy the generated stack with:
+
+```bash
+make pulumi-workbench cmd=scale-destroy
+```
+
+The generated Pulumi YAML lives under `workbench/.generated/pulumi/scale-simulator`
+and is intentionally ignored by Git.
+
 Reset all local workbench state:
 
 ```bash

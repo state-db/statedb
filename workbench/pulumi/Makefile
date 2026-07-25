@@ -1,4 +1,4 @@
-.PHONY: infra-up infra-down db-up idp-up idp-down console-seed app app-stop check-app login init preview up destroy fixtures-up fixtures-destroy churn-preview churn-up sql psql force-unlock reset glass-on glass-off
+.PHONY: infra-up infra-down db-up idp-up idp-down console-seed app app-stop check-app login init preview up destroy fixtures-up fixtures-destroy churn-preview churn-up scale-provider-test scale-provider-build scale-provider-install scale-generate scale-preview scale-up scale-fault-up scale-destroy sql psql force-unlock reset glass-on glass-off
 
 REPO_ROOT := ../..
 IN_CONTAINER := $(REPO_ROOT)/bin/in-container
@@ -25,6 +25,33 @@ BACKEND_URL  ?= http://localhost:8080/pulumi
 CHURN_SECONDS   ?= 6
 CHURN_STACK     ?= dev
 CHURN_STACK_REF ?= $(ORG)/$(CHURN_STACK)
+
+## High-cardinality local provider scale runs.
+SIM_PROVIDER_VERSION       ?= 0.1.0
+SIM_PROVIDER_BUILDER_IMAGE ?= golang:1.26-bookworm
+SCALE_STACK                ?= scale
+SCALE_STACK_REF            ?= $(ORG)/$(SCALE_STACK)
+SCALE_RESOURCES            ?= 250
+SCALE_DEPTH                ?= 8
+SCALE_FANOUT               ?= 4
+SCALE_REVISION             ?= 1
+SCALE_PAYLOAD_BYTES        ?= 1024
+SCALE_DIFF_DELAY_MS        ?= 0
+## Creates are throttled so a run resembles a real cloud deploy instead of finishing instantly.
+## First-up wall time is roughly SCALE_RESOURCES * avg_create_delay / SCALE_PARALLEL, where
+## avg_create_delay = SCALE_CREATE_DELAY_MS + SCALE_CREATE_JITTER_MS / 2. The defaults land a
+## 1000-resource `scale-up` at ~2 minutes (1000 * 1.0s / 8). Set both delays to 0 for instant runs.
+SCALE_PARALLEL             ?= 8
+SCALE_CREATE_DELAY_MS      ?= 600
+SCALE_CREATE_JITTER_MS     ?= 800
+SCALE_UPDATE_DELAY_MS      ?= 0
+SCALE_DELETE_DELAY_MS      ?= 0
+SCALE_REPLACEMENT_KEY      ?= stable
+SCALE_FAIL_EVERY           ?= 0
+SCALE_FAIL_SEED            ?= scale
+SCALE_FAULT_INDEX          ?= 42
+SCALE_FAULT_MODE           ?= once
+SCALE_FAULT_OPERATION      ?= create
 
 ## Compose owns stable workbench infrastructure. The mock IdP is exposed only to the Bun dev server,
 ## which proxies /default/* on the existing browser-facing :5173 origin. Quarkus and the browser
@@ -234,6 +261,111 @@ churn-up: check-app
 		pulumi config set stepSeconds $(CHURN_SECONDS); \
 		pulumi config set deployNonce "churn-$$(date +%s)"; \
 		pulumi up --yes --skip-preview --message "Slow churn deployment"'
+
+## Run a command in a Go builder container mounted at the repo root. The dev container has Pulumi
+## but not Go, so statedbsim builds and tests happen here. When invoked from inside the dev container
+## the mount source is the labelled host path, not the container-local one. $(1) runs in the provider
+## directory via `sh -c`.
+define go-builder-run
+	@mkdir -p $(REPO_ROOT)/workbench/.generated/go/pkg/mod $(REPO_ROOT)/workbench/.generated/go/build-cache $(IDP_DOCKER_CFG)
+	host_repo="$(abspath $(REPO_ROOT))"; \
+	if [ -f /.dockerenv ]; then \
+		labelled_repo="$$(docker inspect "$$HOSTNAME" --format '{{ index .Config.Labels "devcontainer.local_folder" }}' 2>/dev/null || true)"; \
+		[ -n "$$labelled_repo" ] && host_repo="$$labelled_repo"; \
+	fi; \
+	DOCKER_CONFIG=$(IDP_DOCKER_CFG) docker run --rm \
+		-u "$$(id -u):$$(id -g)" \
+		-e GOMODCACHE=/src/workbench/.generated/go/pkg/mod \
+		-e GOCACHE=/src/workbench/.generated/go/build-cache \
+		-v "$$host_repo":/src \
+		-w /src/workbench/pulumi/providers/statedbsim \
+		$(SIM_PROVIDER_BUILDER_IMAGE) sh -c "$(1)"
+endef
+
+## Run statedbsim provider unit tests in an isolated Go builder container.
+scale-provider-test:
+	$(call go-builder-run,/usr/local/go/bin/go mod tidy && /usr/local/go/bin/go test ./...)
+
+## Build the local-only statedbsim provider binary and write the plugin binary back into the worktree.
+scale-provider-build:
+	$(call go-builder-run,mkdir -p bin && /usr/local/go/bin/go build -o bin/pulumi-resource-statedbsim .)
+
+## Install the locally built statedbsim provider into the workbench-local Pulumi plugin cache.
+scale-provider-install: scale-provider-build
+	$(IN_CONTAINER) sh -lc 'repo="$$(git rev-parse --show-toplevel)"; \
+		cd "$$repo/workbench/pulumi"; \
+		mkdir -p ../.pulumi-home; \
+		PULUMI_HOME="$$(pwd)/../.pulumi-home" \
+			pulumi plugin install resource statedbsim $(SIM_PROVIDER_VERSION) \
+				--file providers/statedbsim/bin/pulumi-resource-statedbsim \
+				--reinstall'
+
+## Generate the scale-simulator Pulumi.yaml under workbench/.generated.
+scale-generate:
+	$(IN_CONTAINER) sh -lc 'repo="$$(git rev-parse --show-toplevel)"; \
+		SCALE_OUT="$$repo/workbench/.generated/pulumi/scale-simulator" \
+		SCALE_RESOURCES=$(SCALE_RESOURCES) SCALE_DEPTH=$(SCALE_DEPTH) SCALE_FANOUT=$(SCALE_FANOUT) \
+		SCALE_REVISION=$(SCALE_REVISION) SCALE_PAYLOAD_BYTES=$(SCALE_PAYLOAD_BYTES) \
+		SCALE_DIFF_DELAY_MS=$(SCALE_DIFF_DELAY_MS) SCALE_CREATE_DELAY_MS=$(SCALE_CREATE_DELAY_MS) \
+		SCALE_CREATE_JITTER_MS=$(SCALE_CREATE_JITTER_MS) \
+		SCALE_UPDATE_DELAY_MS=$(SCALE_UPDATE_DELAY_MS) SCALE_DELETE_DELAY_MS=$(SCALE_DELETE_DELAY_MS) \
+		SCALE_REPLACEMENT_KEY=$(SCALE_REPLACEMENT_KEY) SCALE_FAIL_EVERY=$(SCALE_FAIL_EVERY) \
+		SCALE_FAIL_SEED=$(SCALE_FAIL_SEED) \
+		"$$repo/workbench/pulumi/projects/scale-simulator/generate.sh"'
+
+## Preview the generated high-cardinality stack against state-db.
+scale-preview: check-app scale-provider-install scale-generate
+	$(IN_CONTAINER) sh -lc 'repo="$$(git rev-parse --show-toplevel)"; \
+		cd "$$repo/workbench/.generated/pulumi/scale-simulator"; \
+		export PULUMI_ACCESS_TOKEN=$(TOKEN) PULUMI_CONFIG_PASSPHRASE=workbench \
+			PULUMI_HOME="$$repo/workbench/.pulumi-home" \
+			PULUMI_SKIP_UPDATE_CHECK=true PULUMI_SKIP_CONFIRMATIONS=true PULUMI_CONSOLE_DOMAIN=localhost:$(CONSOLE_PORT); \
+		pulumi login $(BACKEND_URL) >/dev/null; \
+		pulumi stack select $(SCALE_STACK_REF) >/dev/null 2>&1 || pulumi stack init $(SCALE_STACK_REF); \
+		pulumi preview --message "Scale simulator preview ($(SCALE_RESOURCES) resources)"'
+
+## Deploy the generated high-cardinality stack against state-db.
+scale-up: check-app scale-provider-install scale-generate
+	$(IN_CONTAINER) sh -lc 'repo="$$(git rev-parse --show-toplevel)"; \
+		cd "$$repo/workbench/.generated/pulumi/scale-simulator"; \
+		export PULUMI_ACCESS_TOKEN=$(TOKEN) PULUMI_CONFIG_PASSPHRASE=workbench \
+			PULUMI_HOME="$$repo/workbench/.pulumi-home" \
+			PULUMI_SKIP_UPDATE_CHECK=true PULUMI_SKIP_CONFIRMATIONS=true PULUMI_CONSOLE_DOMAIN=localhost:$(CONSOLE_PORT); \
+		pulumi login $(BACKEND_URL) >/dev/null; \
+		pulumi stack select $(SCALE_STACK_REF) >/dev/null 2>&1 || pulumi stack init $(SCALE_STACK_REF); \
+		pulumi up --yes --skip-preview --parallel $(SCALE_PARALLEL) --message "Scale simulator deployment ($(SCALE_RESOURCES) resources)"'
+
+## Deploy a generated stack with one deterministic provider failure.
+scale-fault-up: check-app scale-provider-install
+	$(IN_CONTAINER) sh -lc 'repo="$$(git rev-parse --show-toplevel)"; \
+		SCALE_OUT="$$repo/workbench/.generated/pulumi/scale-simulator" \
+		SCALE_RESOURCES=$(SCALE_RESOURCES) SCALE_DEPTH=$(SCALE_DEPTH) SCALE_FANOUT=$(SCALE_FANOUT) \
+		SCALE_REVISION=$(SCALE_REVISION) SCALE_PAYLOAD_BYTES=$(SCALE_PAYLOAD_BYTES) \
+		SCALE_DIFF_DELAY_MS=$(SCALE_DIFF_DELAY_MS) SCALE_CREATE_DELAY_MS=$(SCALE_CREATE_DELAY_MS) \
+		SCALE_CREATE_JITTER_MS=$(SCALE_CREATE_JITTER_MS) \
+		SCALE_UPDATE_DELAY_MS=$(SCALE_UPDATE_DELAY_MS) SCALE_DELETE_DELAY_MS=$(SCALE_DELETE_DELAY_MS) \
+		SCALE_REPLACEMENT_KEY=$(SCALE_REPLACEMENT_KEY) SCALE_FAIL_INDEX=$(SCALE_FAULT_INDEX) \
+		SCALE_FAIL_MODE=$(SCALE_FAULT_MODE) SCALE_FAIL_OPERATION=$(SCALE_FAULT_OPERATION) \
+		SCALE_FAIL_SEED=$(SCALE_FAIL_SEED) \
+		"$$repo/workbench/pulumi/projects/scale-simulator/generate.sh"; \
+		cd "$$repo/workbench/.generated/pulumi/scale-simulator"; \
+		export PULUMI_ACCESS_TOKEN=$(TOKEN) PULUMI_CONFIG_PASSPHRASE=workbench \
+			PULUMI_HOME="$$repo/workbench/.pulumi-home" \
+			PULUMI_SKIP_UPDATE_CHECK=true PULUMI_SKIP_CONFIRMATIONS=true PULUMI_CONSOLE_DOMAIN=localhost:$(CONSOLE_PORT); \
+		pulumi login $(BACKEND_URL) >/dev/null; \
+		pulumi stack select $(SCALE_STACK_REF) >/dev/null 2>&1 || pulumi stack init $(SCALE_STACK_REF); \
+		pulumi up --yes --skip-preview --parallel $(SCALE_PARALLEL) --message "Scale simulator fault injection ($(SCALE_RESOURCES) resources)"'
+
+## Destroy the generated scale-simulator stack.
+scale-destroy: check-app scale-provider-install scale-generate
+	$(IN_CONTAINER) sh -lc 'repo="$$(git rev-parse --show-toplevel)"; \
+		cd "$$repo/workbench/.generated/pulumi/scale-simulator"; \
+		export PULUMI_ACCESS_TOKEN=$(TOKEN) PULUMI_CONFIG_PASSPHRASE=workbench \
+			PULUMI_HOME="$$repo/workbench/.pulumi-home" \
+			PULUMI_SKIP_UPDATE_CHECK=true PULUMI_SKIP_CONFIRMATIONS=true PULUMI_CONSOLE_DOMAIN=localhost:$(CONSOLE_PORT); \
+		pulumi login $(BACKEND_URL) >/dev/null; \
+		pulumi stack select $(SCALE_STACK_REF); \
+		pulumi destroy --yes --skip-preview --message "Scale simulator destroy"'
 
 ## Disable the mock OIDC provider row so the break-glass login is live (password: "password").
 ## Break-glass only works while zero providers are enabled; note the app re-enables the row on
