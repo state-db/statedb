@@ -242,3 +242,14 @@ The app is designed to run with more than one replica behind a load balancer. Tw
 - **Run-once application init** (e.g. `BootstrapProvisioner`) — wrap the work in `AdvisoryLock#runExclusive(key, task)`. The helper opens a new JTA transaction and holds a Postgres transaction-scoped advisory lock for its duration, so concurrent pods serialize through `task` and a crashed leader releases the lock immediately when its DB session is reaped. The task body must still be idempotent (followers will take the lock and re-run after the leader commits — they should find the work already done and no-op).
 
 Lock keys live as `public static final long` constants on `AdvisoryLock`. Add a new constant rather than passing a literal — it keeps the registry in one place and makes collisions easy to spot.
+
+## Compaction and updates are mutually exclusive
+
+Compaction rewrites a stack's base snapshot from the journal. It must never observe a partially written update: the assembled checkpoint would place resources ahead of their provider, Pulumi would refuse to load it, and the persisted snapshot leaves the stack unusable.
+
+Both halves are required:
+
+- `CompactionWorker` takes the `stack_state` row lock and refuses to snapshot while `stacks.active_update_id` is set, returning the job to `pending`.
+- `StackLockAcquirer` takes the same row lock in the transaction that sets `active_update_id`, after waiting out any queued compaction (`state-db.lock.compaction-wait`; `0` disables).
+
+Anything else that assembles or persists a snapshot must do the same. The `stack_locks` lease does not help: it serializes updates against each other, and compaction never acquires it.
