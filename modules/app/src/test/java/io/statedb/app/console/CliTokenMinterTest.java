@@ -93,6 +93,9 @@ class CliTokenMinterTest {
     assertTrue(
         Duration.between(Instant.now(), minted.expiresAt()).toHours() >= 23,
         "token expires ~24h out");
+    assertTrue(
+        minted.rawToken().matches("[A-Za-z0-9_-]{43}"),
+        "raw token is 32 bytes of base64url entropy with no fixed prefix");
 
     ApiToken stored =
         QuarkusTransaction.requiringNew()
