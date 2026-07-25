@@ -32,6 +32,16 @@
             <artifactId>quarkus-config-yaml</artifactId>
         </dependency>
 
+        <!-- Probes and Prometheus scrape, served on the management interface. -->
+        <dependency>
+            <groupId>io.quarkus</groupId>
+            <artifactId>quarkus-smallrye-health</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>io.quarkus</groupId>
+            <artifactId>quarkus-micrometer-registry-prometheus</artifactId>
+        </dependency>
+
         <dependency>
             <groupId>io.statedb</groupId>
             <artifactId>state-db-test-support</artifactId>

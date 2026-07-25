@@ -38,6 +38,9 @@ quarkus:
         # env var keeps both stable across replicas; when unset Quarkus warns and uses a per-boot
         # random key (LocalGlassStartupValidator fails the boot if break-glass is configured).
         encryption-key: "${state-db.session.encryption-secret:}"
+  # Health and metrics on a separate listener (:9000); the public port is internet-facing.
+  management:
+    enabled: true
   oidc:
     # Console providers are data: ProviderTenantConfigResolver builds a web-app tenant per request
     # from the enabled oidc_providers rows. The static default tenant is intentionally disabled so
@@ -45,6 +48,10 @@ quarkus:
     tenant-enabled: false
   datasource:
     db-kind: postgresql
+    jdbc:
+      metrics:
+        # Agroal pool gauges; saturation is otherwise invisible until requests time out.
+        enabled: true
   flyway:
     migrate-at-start: true
     locations: classpath:db/migration
@@ -96,6 +103,9 @@ state-db:
   quarkus:
     http:
       # Random free port keeps @QuarkusTest isolated from other local Quarkus processes.
+      test-port: 0
+    management:
+      # Random port, as above; otherwise pinned to :9001.
       test-port: 0
     scheduler:
       enabled: false
