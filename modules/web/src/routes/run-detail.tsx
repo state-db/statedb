@@ -187,6 +187,7 @@ function RunView({
           <Badge variant="success">+{summary.created} created</Badge>
           <Badge variant="warning">~{summary.updated} updated</Badge>
           <Badge variant="destructive">−{summary.deleted} deleted</Badge>
+          {summary.replaced > 0 ? <Badge variant="info">±{summary.replaced} replaced</Badge> : null}
           <Badge variant="muted">{summary.unchanged} unchanged</Badge>
         </div>
       </header>
@@ -1009,5 +1010,5 @@ function formatSeconds(seconds: number) { const minutes = Math.floor(seconds / 6
 function OperationBadge({ op }: { op: string }) { const variant: BadgeProps["variant"] = op.includes("create") ? "success" : op.includes("delete") ? "destructive" : op.includes("update") ? "warning" : op.includes("replace") ? "info" : "muted"; return <Badge variant={variant}>{op}</Badge>; }
 function runTitle(run: RunDetail) { return run.version === null ? "Preview" : `${run.kind[0].toUpperCase()}${run.kind.slice(1)} v${run.version}`; }
 export function formatRunDuration(startedAt: string, endedAt: string | null, now = Date.now()) { const seconds = Math.max(0, Math.floor(((endedAt ? new Date(endedAt).getTime() : now) - new Date(startedAt).getTime()) / 1000)); const minutes = Math.floor(seconds / 60); const rest = seconds % 60; return minutes ? `${minutes}m ${rest}s` : `${rest}s`; }
-function changeSummary(run: RunDetail) { const counts = run.summary?.resourceChanges ?? {}; const count = (key: string) => counts[key] ?? 0; return { created: count("create") + count("create-replacement"), updated: count("update"), deleted: count("delete") + count("delete-replaced"), unchanged: count("same") }; }
+export function changeSummary(run: RunDetail) { const counts = conceptualSummaryCounts(run.summary?.resourceChanges ?? {}); return { created: counts.create, updated: counts.update, deleted: counts.delete, replaced: counts.replace, unchanged: counts.same }; }
 function RunDetailSkeleton() { return <div className="flex flex-col gap-4"><Skeleton className="h-8 w-2/3" /><Skeleton className="h-5 w-1/2" /><Skeleton className="h-[32rem] w-full" /></div>; }

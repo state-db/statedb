@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 
 import type { RunEvent } from "@/lib/api";
 import {
+  changeSummary,
   formatEventLine,
   formatRunDuration,
   jsonDiffLines,
@@ -199,5 +200,15 @@ describe("run detail presentation", () => {
   test("formats live and historical durations", () => {
     expect(formatRunDuration("2026-07-19T10:00:00Z", "2026-07-19T10:02:14Z")).toBe("2m 14s");
     expect(formatRunDuration("2026-07-19T10:00:00Z", null, Date.parse("2026-07-19T10:00:09Z"))).toBe("9s");
+  });
+
+  test("counts replacements without folding them into create or delete", () => {
+    const run = { summary: { resourceChanges: { replace: 2, same: 3 } } } as never;
+    expect(changeSummary(run)).toEqual({ created: 0, updated: 0, deleted: 0, replaced: 2, unchanged: 3 });
+  });
+
+  test("derives replacement count from create-replacement / delete-replaced substeps", () => {
+    const run = { summary: { resourceChanges: { "create-replacement": 1, "delete-replaced": 1, create: 1 } } } as never;
+    expect(changeSummary(run)).toMatchObject({ created: 1, replaced: 1 });
   });
 });
