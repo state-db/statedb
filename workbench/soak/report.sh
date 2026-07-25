@@ -15,6 +15,7 @@ POOL_AWAITING_MAX="${POOL_AWAITING_MAX:-0}"
 HTTP_5XX_MAX="${HTTP_5XX_MAX:-0}"
 RESTARTS_MAX="${RESTARTS_MAX:-0}"
 ORPHAN_LOCKS_MAX="${ORPHAN_LOCKS_MAX:-0}"
+SCRAPE_FAILURES_MAX="${SCRAPE_FAILURES_MAX:-0}"
 
 FAILURES=0
 pass() { printf '  \033[32mPASS\033[0m  %s\n' "$1"; }
@@ -46,12 +47,34 @@ if awk "BEGIN { exit !($duration_h < ${MIN_TREND_HOURS:-2}) }"; then
 fi
 echo ""
 
+# --- run validity ----------------------------------------------------------------------------
+#
+# Failed scrapes record zeros and an empty ops log has nothing to fail, so without this a run that
+# never happened grades as a clean pass.
+echo "Run validity"
+read -r scrape_fail uptime_max <<<"$(awk -F'\t' '
+  NR > 1 { if ($31 == "0") f++; if ($3 + 0 > u) u = $3 + 0 }
+  END { printf "%d %.0f", f + 0, u + 0 }' "$SERIES")"
+
+if [[ "$(awk -F'\t' 'NR==1{print NF}' "$SERIES")" -lt 31 ]]; then
+  info "series predates scrape_ok; cannot confirm the app was reachable"
+elif (( scrape_fail <= SCRAPE_FAILURES_MAX )); then
+  pass "every metrics scrape succeeded"
+else
+  fail "${scrape_fail} metrics scrape(s) failed — the app was unreachable during the run"
+fi
+
+if (( uptime_max > 0 )); then
+  pass "app was up (peak uptime ${uptime_max}s)"
+else
+  fail "app never reported uptime — it did not come up, so nothing below is meaningful"
+fi
+echo ""
+
 # --- memory trends -------------------------------------------------------------------------
 #
-# The leak signal is the live set after the last major GC, which the JVM reports directly as
-# jvm_gc_live_data_size_bytes. Regressing raw heap usage instead would mostly measure where in the
-# GC cycle each sample landed, and approximating the floor by per-sample minima overestimates it
-# whenever a sampling window contains no post-major-GC point. Slope is reported in MB/hour.
+# The leak signal is jvm_gc_live_data_size_bytes. Regressing raw heap usage would mostly measure
+# where in the GC cycle each sample landed. Slope in MB/hour.
 echo "Memory"
 read -r live_slope live_first live_last <<<"$(awk -F'\t' '
   NR > 1 && $29 != "" && $29 + 0 > 0 { n++; t[n] = $2; v[n] = $29 }
@@ -143,8 +166,7 @@ echo ""
 echo "Locks"
 read -r locks_final updates_final <<<"$(awk -F'\t' 'NR>1 { l = $19; u = $20 } END { printf "%.0f %.0f", l + 0, u + 0 }' "$SERIES")"
 if [[ ! -f "$ARTIFACTS_DIR/load-finished" ]]; then
-  # Mid-run, a held lock is just the update currently in flight. Grading it here would fail every
-  # report taken while the soak is still driving load.
+  # Mid-run a held lock is just the update in flight.
   info "load still running — ${locks_final} lock(s) held, quiesce check skipped"
 elif (( locks_final <= ORPHAN_LOCKS_MAX )) && (( updates_final == 0 )); then
   pass "no locks or in-progress updates remain (${locks_final} locks, ${updates_final} updates)"
@@ -180,23 +202,50 @@ echo ""
 # --- operations ----------------------------------------------------------------------------
 if [[ -s "$OPS" ]]; then
   echo "Operations"
-  awk -F'\t' '
+  read -r total unexpected fault_total fault_succeeded cont_groups cont_bad <<<"$(awk -F'\t' '
     NR > 1 {
       total++;
-      key = $5; count[key]++;
-      if ($6 != 0) { if ($8 == 1) expected++; else { unexpected++; bad[key]++ } }
+      if ($6 != 0 && $8 != 1) unexpected++;
+      if ($5 == "fault-up") { ft++; if ($6 == 0) fs++ }
+      if ($5 ~ /^contention-/) { ct[$3]++; if ($6 == 0) co[$3]++ }
     }
     END {
-      printf "  ----  %d operations", total;
-      for (k in count) printf ", %s=%d", k, count[k];
-      printf "\n  ----  %d expected failures (fault injection, lock contention)\n", expected + 0;
-      if (unexpected > 0) {
-        printf "  \033[31mFAIL\033[0m  %d unexpected operation failures:", unexpected;
-        for (k in bad) printf " %s=%d", k, bad[k];
-        printf "\n"; exit 1;
-      }
-      printf "  \033[32mPASS\033[0m  no unexpected operation failures\n";
-    }' "$OPS" || FAILURES=$((FAILURES + 1))
+      # Exactly one must win: two winners means the lease excludes nothing, two losers means the
+      # stack was already unusable. Partial groups are not judged.
+      for (i in ct) if (ct[i] == 2) { g++; if (co[i] != 1) cb++ }
+      printf "%d %d %d %d %d %d", total + 0, unexpected + 0, ft + 0, fs + 0, g + 0, cb + 0;
+    }' "$OPS")"
+
+  awk -F'\t' 'NR > 1 { c[$5]++ } END { printf "  ----  %d operations", NR - 1; for (k in c) printf ", %s=%d", k, c[k]; printf "\n" }' "$OPS"
+
+  if [[ -f "$ARTIFACTS_DIR/load-finished" ]] && (( total == 0 )); then
+    fail "the run completed without recording a single operation — the driver never drove"
+  elif (( total == 0 )); then
+    info "no operations recorded yet"
+  fi
+
+  if (( unexpected == 0 )); then
+    pass "no unexpected operation failures"
+  else
+    fail "${unexpected} unexpected operation failure(s)"
+  fi
+
+  # expected_failure only excuses a non-zero exit; it never checks the failure happened.
+  if (( fault_total == 0 )); then
+    info "no fault injections in this run"
+  elif (( fault_succeeded == 0 )); then
+    pass "all ${fault_total} injected fault(s) failed as designed"
+  else
+    fail "${fault_succeeded}/${fault_total} injected fault(s) succeeded — fault injection is not working"
+  fi
+
+  if (( cont_groups == 0 )); then
+    info "no complete contention pairs in this run"
+  elif (( cont_bad == 0 )); then
+    pass "all ${cont_groups} contention pair(s) had exactly one winner"
+  else
+    fail "${cont_bad}/${cont_groups} contention pair(s) did not have exactly one winner — lease exclusion is suspect"
+  fi
   echo ""
 fi
 

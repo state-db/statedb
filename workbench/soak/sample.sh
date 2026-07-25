@@ -23,7 +23,7 @@ COLUMNS=(
   locks_live updates_in_progress
   rows_snapshots rows_journal rows_events rows_updates rows_pending rows_compaction
   compaction_failed growth_bytes
-  gc_live_bytes gc_overhead
+  gc_live_bytes gc_overhead scrape_ok
 )
 
 if [[ ! -s "$SERIES" ]]; then
@@ -82,6 +82,7 @@ echo "[sample] writing $SERIES every ${INTERVAL}s"
 while true; do
   now="$(date +%s)"
 
+  scrape_ok=1
   if curl -fsS --max-time 10 "$METRICS_URL" -o "$SCRAPE" 2>/dev/null; then
     uptime_s="$(metric_bare process_uptime_seconds)"
     heap_used="$(metric_sum jvm_memory_used_bytes 'area="heap"')"
@@ -98,15 +99,14 @@ while true; do
     pool_acquire="$(metric_bare agroal_acquire_count_total)"
     http_total="$(metric_sum http_server_requests_seconds_count)"
     http_5xx="$(metric_sum http_server_requests_seconds_count 'outcome="SERVER_ERROR"')"
-    # The live set after the last major GC is the leak signal. Sampling jvm_memory_used_bytes and
-    # taking per-bucket minima only approximates it, and overestimates badly whenever a bucket
-    # happens to contain no post-major-GC sample. gc_overhead corroborates: a heap under real
-    # pressure spends a rising share of CPU collecting.
+    # The live set after the last major GC is the leak signal; approximating it from sampled
+    # minima overestimates badly. gc_overhead corroborates.
     gc_live="$(metric_bare jvm_gc_live_data_size_bytes)"
     gc_overhead="$(metric_bare jvm_gc_overhead)"
   else
-    # A failed scrape is itself a datum — record zeros rather than skipping the row, so a gap in
-    # the series means the app was unreachable rather than the sampler being asleep.
+    # Record zeros rather than skipping the row, so a gap means the app was unreachable rather
+    # than the sampler asleep. scrape_ok keeps those zeros distinguishable from real readings.
+    scrape_ok=0
     uptime_s=0 heap_used=0 heap_committed=0 heap_max=0 nonheap_used=0
     gc_count=0 gc_sum=0 threads=0
     pool_active=0 pool_available=0 pool_awaiting=0 pool_block_max=0 pool_acquire=0
@@ -116,12 +116,12 @@ while true; do
   db="$(db_row)"
   [[ -z "$db" ]] && db=$'0\t0\t0\t0\t0\t0\t0\t0\t0\t0'
 
-  printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \
+  printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \
     "$now" "$((now - START_EPOCH))" "$uptime_s" \
     "$heap_used" "$heap_committed" "$heap_max" "$nonheap_used" "$(rss_bytes)" \
     "$gc_count" "$gc_sum" "$threads" \
     "$pool_active" "$pool_available" "$pool_awaiting" "$pool_block_max" "$pool_acquire" \
-    "$http_total" "$http_5xx" "$db" "$gc_live" "$gc_overhead" >>"$SERIES"
+    "$http_total" "$http_5xx" "$db" "$gc_live" "$gc_overhead" "$scrape_ok" >>"$SERIES"
 
   sleep "$INTERVAL"
 done

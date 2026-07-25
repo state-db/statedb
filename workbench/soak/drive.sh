@@ -87,7 +87,7 @@ run_op() {
 
 # Writes the generated program for one stack.
 generate() {
-  local dir="$1" revision="$2" fail_index="${3:--1}" fail_mode="${4:-none}"
+  local dir="$1" revision="$2" fail_index="${3:--1}" fail_mode="${4:-none}" fail_operation="${5:-update}"
   mkdir -p "$dir"
   SCALE_OUT="$dir" \
   SCALE_RESOURCES="$RESOURCES" \
@@ -97,6 +97,7 @@ generate() {
   SCALE_CREATE_JITTER_MS="$CREATE_JITTER_MS" \
   SCALE_FAIL_INDEX="$fail_index" \
   SCALE_FAIL_MODE="$fail_mode" \
+  SCALE_FAIL_OPERATION="$fail_operation" \
     /soak/generate.sh >/dev/null
 }
 
@@ -179,11 +180,12 @@ while true; do
     fi
   done
 
-  # A deterministic mid-graph failure forces the server through failed-update completion.
+  # A deterministic mid-graph failure forces the server through failed-update completion. It
+  # targets `update`: everything already exists by now, so a create-only fault would never fire.
   if (( ITERATION % FAULT_EVERY == 0 )); then
     stack="$(stack_name 1)"
     dir="$WORK/$stack"
-    generate "$dir" "$ITERATION" $(( RESOURCES / 2 )) always
+    generate "$dir" "$ITERATION" $(( RESOURCES / 2 )) always update
     select_stack "$dir" "$ORG/$stack"
     run_op "$stack" fault-up 1 "$dir" \
       pulumi up --yes --skip-preview --parallel "$PARALLEL" \
@@ -209,8 +211,7 @@ while true; do
 done
 
 log "load finished after $ITERATION iterations"
-# Marks the start of the quiesce window. The lock check is only meaningful once nothing is driving
-# the backend, so report.sh keys off this file rather than guessing from the series.
+# Marks the quiesce window; report.sh keys off this rather than guessing from the series.
 date +%s >"$ARTIFACTS/load-finished"
 # Stay alive so the sampler records the quiesce window; the lock checks need load stopped.
 sleep infinity
