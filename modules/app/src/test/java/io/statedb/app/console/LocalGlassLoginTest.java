@@ -58,6 +58,32 @@ class LocalGlassLoginTest {
   }
 
   @Test
+  void logoutExpiresBreakGlassCookieAndRedirectsToLogin() {
+    String cookie = login(PASSWORD).statusCode(200).extract().cookie(COOKIE);
+
+    io.restassured.response.Response logout =
+        given()
+            .redirects()
+            .follow(false)
+            .cookie(COOKIE, cookie)
+            .accept("text/html")
+            .when()
+            .get("/api/auth/logout");
+
+    logout.then().statusCode(303);
+    assertEquals("/console/login", java.net.URI.create(logout.getHeader("Location")).getPath());
+    io.restassured.http.Cookie cleared =
+        logout.getDetailedCookies().asList().stream()
+            .filter(c -> c.getName().equals(COOKIE))
+            .findFirst()
+            .orElse(null);
+    org.junit.jupiter.api.Assertions.assertNotNull(
+        cleared, "logout deletes the break-glass cookie");
+    assertEquals(0, cleared.getMaxAge(), "break-glass cookie expired (Max-Age=0)");
+    assertEquals("/", cleared.getPath(), "deletion targets the root cookie path");
+  }
+
+  @Test
   void wrongPasswordIs401WithoutCookie() {
     String cookie = login("not-the-password").statusCode(401).extract().cookie(COOKIE);
     org.junit.jupiter.api.Assertions.assertNull(cookie);

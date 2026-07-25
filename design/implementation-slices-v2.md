@@ -775,6 +775,21 @@ the source of truth.
 
 ---
 
+### Slice 27.5 · Console sign-out ✅
+
+**Scope**
+
+- `GET /api/auth/logout` (public, added to the `console-public` HTTP permission): a top-level browser navigation that expires the console session cookies and 303-redirects to `/console/login`. Idempotent — an anonymous hit redirects without an SSO challenge.
+- Expires both session cookies: the quarkus-oidc cookie (name prefix `q_session`, any tenant suffix/chunk, path `/api/`) and the break-glass form-auth cookie (`state-db-glass`, path `/`). Cookie names/paths are read from the incoming request; deletion cookies match name + path.
+- SPA "Sign out" menu item navigates to the endpoint and clears the `state-db-selected-org` localStorage key.
+- Local sign-out only; no RP-initiated (`end_session_endpoint`) IdP logout. Sessions are stateless encrypted cookies, so logout drops the browser cookie but cannot revoke a copied value — see `auth.md`.
+
+**Out of scope.** Server-side session/token-state storage (`quarkus-oidc-db-token-state-manager`); RP-initiated SSO logout; any CLI-side logout (`pulumi logout` is client-only and never calls the backend).
+
+**Tests.** OIDC session → 303 to `/console/login`, `Set-Cookie` expires `q_session*` at path `/api/` (Max-Age=0). Break-glass session → expires `state-db-glass` at path `/`. Anonymous caller → still 303, no cookies emitted.
+
+---
+
 ### Slice 28 · `/api/workspaces` console read ✅
 
 **Scope**

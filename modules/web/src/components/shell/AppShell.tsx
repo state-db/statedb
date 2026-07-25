@@ -351,6 +351,7 @@ function UserMenu({ user }: { user: CurrentUser }) {
         <DropdownMenuSeparator />
         <DropdownMenuItem
           onClick={() => {
+            localStorage.removeItem("state-db-selected-org");
             window.location.href = "/api/auth/logout";
           }}
         >

@@ -176,9 +176,13 @@ without claiming to defend against a compromised local machine.
 
 #### Logout
 
-`POST /api/auth/logout`:
-- Clears the session cookie.
-- If the IdP advertises `end_session_endpoint`, redirect there. Otherwise just drop the cookie locally.
+`GET /api/auth/logout` (public; a top-level browser navigation, so it clears cookies and 303-redirects to `/console/login` rather than returning JSON). It is idempotent — an already-anonymous hit still redirects and never triggers an SSO challenge.
+
+- Expires both console session cookies in the browser: the quarkus-oidc session cookie (any tenant suffix or chunk, scoped to `/api/`) and the break-glass form-auth cookie (`state-db-glass`, scoped to `/`). One endpoint covers both login flavours.
+- **Local logout only.** The IdP session is left intact, so re-signing in is a silent SSO round trip. RP-initiated (`end_session_endpoint`) logout is deliberately not done — for a self-hosted backend, signing the user out of their IdP entirely is surprising, and it would require resolving `end_session` per dynamic tenant.
+- **Stateless limitation.** Both cookies are stateless encrypted cookies with no server-side record, so logout can only instruct the browser to drop them. It cannot revoke a cookie value already copied elsewhere; such a copy stays valid until the cookie's own expiry. The only "kill every session now" lever is rotating `STATE_DB_SESSION_ENCRYPTION_SECRET`, which invalidates all outstanding cookies at once. Server-side session invalidation would require moving to server-side token state (`quarkus-oidc-db-token-state-manager`), a larger change not taken here.
+
+The CLI has no server-side logout to mirror: `pulumi logout` only deletes the token from `~/.pulumi/credentials.json` and never calls the backend. The server-side counterpart to invalidating a CLI credential is revoking its `api_tokens` row via the tokens UI/API, which is independent of this console flow.
 
 #### Local break-glass
 

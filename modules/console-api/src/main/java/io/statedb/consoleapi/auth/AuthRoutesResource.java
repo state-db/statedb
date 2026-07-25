@@ -19,12 +19,16 @@ import jakarta.ws.rs.Produces;
 import jakarta.ws.rs.QueryParam;
 import jakarta.ws.rs.ServiceUnavailableException;
 import jakarta.ws.rs.WebApplicationException;
+import jakarta.ws.rs.core.Context;
+import jakarta.ws.rs.core.HttpHeaders;
 import jakarta.ws.rs.core.MediaType;
+import jakarta.ws.rs.core.NewCookie;
 import jakarta.ws.rs.core.Response;
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
+import java.util.Date;
 import java.util.List;
 import java.util.Optional;
 import org.eclipse.microprofile.config.inject.ConfigProperty;
@@ -58,6 +62,9 @@ import org.eclipse.microprofile.jwt.JsonWebToken;
 public class AuthRoutesResource {
 
   static final String CLI_LOGIN_PATH = "/api/auth/cli-login";
+
+  // Break-glass form-auth cookie; mirrors quarkus.http.auth.form.cookie-name in application.yml.
+  private static final String GLASS_COOKIE = "state-db-glass";
 
   public record AuthProvider(String name, String displayName) {}
 
@@ -118,6 +125,44 @@ public class AuthRoutesResource {
     // breakGlass tells the sign-in screen whether the /api/auth/local form has any chance of
     // succeeding; the loopback/provider gate is still enforced server-side on the POST.
     return new AuthProviders(providers, providers.isEmpty() && glass.passwordConfigured());
+  }
+
+  /**
+   * Console sign-out: expires the console session cookies in the browser and bounces to the SPA
+   * sign-in screen. Public and idempotent — an already-anonymous hit still clears any stray cookie
+   * and redirects, and a session challenge must never fire here (hence the {@code console-public}
+   * permission entry in {@code application.yml}).
+   *
+   * <p>Both console credentials are stateless encrypted cookies with no server-side record, so this
+   * only instructs the browser to drop them: the quarkus-oidc session cookie (any tenant suffix or
+   * chunk, scoped to {@code /api/}) and the break-glass form-auth cookie ({@code state-db-glass},
+   * scoped to {@code /}). It cannot revoke a cookie value already copied elsewhere — that is a
+   * property of the stateless BFF session. Local sign-out only: the IdP session is left intact, so
+   * re-signing in is a silent SSO round trip.
+   */
+  @GET
+  @Path("/logout")
+  public Response logout(@Context HttpHeaders headers) {
+    Response.ResponseBuilder response =
+        Response.seeOther(URI.create("/console/login")).header("Cache-Control", "no-store");
+    for (String name : headers.getCookies().keySet()) {
+      if (name.startsWith("q_session")) {
+        response.cookie(expire(name, "/api/"));
+      } else if (name.equals(GLASS_COOKIE)) {
+        response.cookie(expire(name, "/"));
+      }
+    }
+    return response.build();
+  }
+
+  private static NewCookie expire(String name, String path) {
+    return new NewCookie.Builder(name)
+        .value("")
+        .path(path)
+        .maxAge(0)
+        .expiry(new Date(0))
+        .httpOnly(true)
+        .build();
   }
 
   /**
