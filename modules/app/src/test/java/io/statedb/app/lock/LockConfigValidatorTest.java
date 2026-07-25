@@ -40,6 +40,11 @@ class LockConfigValidatorTest {
           public Duration maxLeaseLifetime() {
             return maxLifetime;
           }
+
+          @Override
+          public Duration compactionWait() {
+            return Duration.ofSeconds(30);
+          }
         };
     v.onStart(null);
   }

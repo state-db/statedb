@@ -155,6 +155,19 @@ public class CompactionWorker {
         StackState.find("stackId", job.stackId())
             .withLock(LockModeType.PESSIMISTIC_WRITE)
             .<StackState>singleResult();
+
+    // Never snapshot a half-applied update: entries replayed on top of a partial snapshot land
+    // ahead of the provider they reference, and Pulumi refuses to load the result. Lease
+    // acquisition takes this same row lock, so no update can start between here and the write.
+    Stack stack = Stack.findById(job.stackId());
+    if (stack != null && stack.activeUpdateId != null) {
+      // Hand the claim back without spending a retry; the job is waiting, not failing.
+      compactionJob.status = CompactionJob.Status.PENDING;
+      compactionJob.startedAt = null;
+      compactionJob.attempts = Math.max(0, compactionJob.attempts - 1);
+      return;
+    }
+
     long journalSeq = state.journalSeq;
     int snapshotVersion = state.baseSnapshotVersion + 1;
 

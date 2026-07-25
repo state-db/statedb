@@ -19,4 +19,8 @@ public interface LockConfig {
   // runs; pathological multi-day operations can raise the override.
   @WithDefault("24h")
   Duration maxLeaseLifetime();
+
+  // How long acquisition waits for a queued compaction before proceeding anyway. Zero disables.
+  @WithDefault("30s")
+  Duration compactionWait();
 }

@@ -1,11 +1,15 @@
 package io.statedb.persistence.lock;
 
+import io.quarkus.narayana.jta.QuarkusTransaction;
+import io.statedb.persistence.stack.CompactionJob;
 import io.statedb.persistence.stack.Stack;
+import io.statedb.persistence.stack.StackState;
 import io.statedb.persistence.update.StackUpdate;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 import jakarta.persistence.EntityManager;
-import jakarta.transaction.Transactional;
+import jakarta.persistence.LockModeType;
+import java.time.Duration;
 import java.time.Instant;
 import java.time.OffsetDateTime;
 import java.util.List;
@@ -13,6 +17,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 import org.hibernate.id.uuid.UuidVersion7Strategy;
+import org.jboss.logging.Logger;
 
 /**
  * Acquires the per-stack {@link StackLock}. The single {@code INSERT ... ON CONFLICT (stack_id) DO
@@ -22,21 +27,83 @@ import org.hibernate.id.uuid.UuidVersion7Strategy;
  *
  * <p>The same transaction also advances {@code stacks.active_update_id} and persists the
  * acquire-body fields onto the corresponding {@code stack_updates} row.
+ *
+ * <p>Ordered against compaction: a queued compaction finishes first, and this transaction takes the
+ * {@code stack_state} row lock {@link io.statedb.persistence.stack.CompactionWorker} holds while
+ * snapshotting, so compaction only ever sees complete updates.
  */
 @ApplicationScoped
 public class StackLockAcquirer {
+
+  private static final Logger LOG = Logger.getLogger(StackLockAcquirer.class);
+  private static final Duration COMPACTION_POLL = Duration.ofMillis(200);
 
   @Inject EntityManager em;
 
   @Inject LockConfig lockConfig;
 
-  @Transactional
   public Optional<Lease> acquire(
       UUID stackId,
       UUID updateId,
       String lockedBy,
       Integer journalVersion,
       Map<String, Object> tags) {
+    awaitCompactionSettled(stackId);
+    return QuarkusTransaction.requiringNew()
+        .call(() -> acquireExclusive(stackId, updateId, lockedBy, journalVersion, tags));
+  }
+
+  /**
+   * Waits out a queued compaction, giving {@code update -> compact -> next update}. Correctness
+   * does not depend on it — the worker refuses to snapshot during an update — but without it
+   * back-to-back updates could defer compaction indefinitely.
+   */
+  private void awaitCompactionSettled(UUID stackId) {
+    Duration wait = lockConfig.compactionWait();
+    // Zero disables it, for deployments and tests where no worker is running to clear the job.
+    if (wait.isZero() || wait.isNegative()) {
+      return;
+    }
+    Instant deadline = Instant.now().plus(wait);
+    while (compactionQueued(stackId)) {
+      if (!Instant.now().isBefore(deadline)) {
+        LOG.warnf(
+            "stack=%s taking lease with compaction still queued after %s; compaction will run"
+                + " once this update completes",
+            stackId, wait);
+        return;
+      }
+      try {
+        Thread.sleep(COMPACTION_POLL.toMillis());
+      } catch (InterruptedException e) {
+        Thread.currentThread().interrupt();
+        return;
+      }
+    }
+  }
+
+  private boolean compactionQueued(UUID stackId) {
+    return QuarkusTransaction.requiringNew()
+        .call(
+            () ->
+                CompactionJob.count(
+                        "stackId = ?1 and status in ?2",
+                        stackId,
+                        List.of(CompactionJob.Status.PENDING, CompactionJob.Status.RUNNING))
+                    > 0);
+  }
+
+  private Optional<Lease> acquireExclusive(
+      UUID stackId,
+      UUID updateId,
+      String lockedBy,
+      Integer journalVersion,
+      Map<String, Object> tags) {
+
+    // Shared serialization point with compaction.
+    StackState.find("stackId", stackId)
+        .withLock(LockModeType.PESSIMISTIC_WRITE)
+        .<StackState>firstResult();
 
     UUID lockId = UuidVersion7Strategy.INSTANCE.generateUuid(null);
     // 122 random bits from SecureRandom. The bearer is a short-lived secret

@@ -14,6 +14,7 @@ import io.statedb.persistence.stack.CompactionJob;
 import io.statedb.persistence.stack.CompactionJobEnqueuer;
 import io.statedb.persistence.stack.CompactionWorker;
 import io.statedb.persistence.stack.Snapshot;
+import io.statedb.persistence.stack.Stack;
 import io.statedb.persistence.stack.StackAssembler;
 import io.statedb.persistence.stack.StackCreator;
 import io.statedb.persistence.stack.StackRef;
@@ -41,6 +42,8 @@ class CompactionWorkerTest {
 
   private static final ObjectMapper MAPPER = new ObjectMapper();
   private static final String ORG_NAME = "compaction-org";
+  private static final String PROVIDER_URN = "urn:pulumi:dev::proj::pulumi:providers:pkg::prov";
+  private static final String PROVIDER_ID = "8f1f0b1e-0000-4000-8000-000000000001";
 
   @Inject StackAssembler assembler;
   @Inject StackCreator stackCreator;
@@ -127,6 +130,43 @@ class CompactionWorkerTest {
       release.countDown();
       pool.shutdownNow();
     }
+  }
+
+  @Test
+  void compactionDuringInFlightUpdateKeepsProvidersAheadOfTheirResources() throws Exception {
+    // A completed update establishes the base snapshot: provider first, then its resources.
+    UUID first = update(stackId);
+    entry(stackId, first, 1, 1L, "{\"state\":" + providerResource() + "}");
+    entry(stackId, first, 1, 2L, "{\"state\":" + providedResource("alpha") + "}");
+    entry(stackId, first, 1, 3L, "{\"state\":" + providedResource("beta") + "}");
+
+    QuarkusTransaction.requiringNew().run(() -> enqueuer.enqueue(stackId));
+    assertEquals(1, worker.drainOnce());
+    assemble(stackId);
+
+    // A second update is in flight, and only a prefix of its entries has been written.
+    UUID second = update(stackId);
+    markUpdateInFlight(stackId, second);
+    entryReplacingBase(stackId, second, 4L, "{\"state\":" + providerResource() + "}", 0L);
+    entryReplacingBase(stackId, second, 5L, "{\"state\":" + providedResource("alpha") + "}", 1L);
+
+    // Compacting the prefix would put the suffix ahead of the provider on the next replay.
+    QuarkusTransaction.requiringNew().run(() -> enqueuer.enqueue(stackId));
+    worker.drainOnce();
+
+    assertEquals(1L, Snapshot.count("stackId", stackId), "no snapshot may be taken mid-update");
+    assertEquals(
+        1L,
+        CompactionJob.count("stackId = ?1 and status = ?2", stackId, CompactionJob.Status.PENDING),
+        "the job must be handed back as pending, not consumed");
+
+    // The rest lands and the update completes.
+    entryReplacingBase(stackId, second, 6L, "{\"state\":" + providedResource("beta") + "}", 2L);
+    completeUpdate(stackId);
+    assertEquals(1, worker.drainOnce());
+
+    assertEquals(2L, Snapshot.count("stackId", stackId));
+    assemble(stackId);
   }
 
   @Test
@@ -384,6 +424,64 @@ class CompactionWorkerTest {
     job.startedAt = startedAt;
     job.persistAndFlush();
     return job.id;
+  }
+
+  /** Journals an entry that supersedes a base-snapshot resource at {@code removeOldIndex}. */
+  private void entryReplacingBase(
+      UUID targetStackId, UUID updateId, Long operationId, String payload, long removeOldIndex)
+      throws Exception {
+    long seq = ++sequence;
+    JsonNode parsed = MAPPER.readTree(payload);
+    QuarkusTransaction.requiringNew()
+        .run(
+            () -> {
+              JournalEntry entry = new JournalEntry();
+              entry.stackId = targetStackId;
+              entry.updateId = updateId;
+              entry.sequenceId = seq;
+              entry.wireSequenceId = seq;
+              entry.kind = (short) 1;
+              entry.operationId = operationId;
+              entry.removeOld = removeOldIndex;
+              entry.payload = parsed;
+              entry.persistAndFlush();
+
+              StackState state = stackState(targetStackId);
+              state.journalSeq = Math.max(state.journalSeq, seq);
+              state.journalEntriesSinceCompaction++;
+            });
+  }
+
+  /** Clears the in-flight marker, as update completion does. */
+  private void completeUpdate(UUID targetStackId) {
+    QuarkusTransaction.requiringNew()
+        .run(() -> Stack.update("activeUpdateId = null where id = ?1", targetStackId));
+  }
+
+  /** Marks the stack as having an update in flight, as lock acquisition does. */
+  private void markUpdateInFlight(UUID targetStackId, UUID updateId) {
+    QuarkusTransaction.requiringNew()
+        .run(() -> Stack.update("activeUpdateId = ?1 where id = ?2", updateId, targetStackId));
+  }
+
+  private String providerResource() {
+    return "{\"urn\":\""
+        + PROVIDER_URN
+        + "\",\"type\":\"pulumi:providers:pkg\",\"custom\":true,\"id\":\""
+        + PROVIDER_ID
+        + "\"}";
+  }
+
+  private String providedResource(String name) {
+    return "{\"urn\":\""
+        + urn(name)
+        + "\",\"type\":\"pkg:index:"
+        + name
+        + "\",\"custom\":true,\"provider\":\""
+        + PROVIDER_URN
+        + "::"
+        + PROVIDER_ID
+        + "\"}";
   }
 
   private StackState stackState(UUID targetStackId) {

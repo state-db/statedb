@@ -96,6 +96,9 @@ state-db:
 # connection). Five minutes is generous; trim later if it masks real hangs.
 "%test":
   state-db:
+    # The scheduler is off below, so tests drive compaction directly; nothing would clear a job.
+    lock:
+      compaction-wait: 0
     oidc:
       default-provider: wiremock
     session:
