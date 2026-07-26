@@ -49,13 +49,15 @@ class WorkspaceListFinderTest {
         StackUpdate.Kind.UPDATE,
         StackUpdate.Status.SUCCEEDED,
         14,
-        Instant.parse("2026-07-17T10:00:00Z"));
+        Instant.parse("2026-07-17T10:00:00Z"),
+        user);
     update(
         prod,
         StackUpdate.Kind.REFRESH,
         StackUpdate.Status.FAILED,
         13,
-        Instant.parse("2026-07-16T10:00:00Z"));
+        Instant.parse("2026-07-16T10:00:00Z"),
+        user);
     lock(staging, "alice@example.test", Instant.parse("2026-07-17T11:00:00Z"));
     snapshotResources(prod, 2);
     em.flush();
@@ -73,6 +75,8 @@ class WorkspaceListFinderTest {
     assertEquals("update", prodRow.lastUpdate().kind());
     assertEquals("succeeded", prodRow.lastUpdate().status());
     assertEquals(14, prodRow.lastUpdate().version());
+    assertEquals("User workspace-user", prodRow.lastUpdate().actor().displayName());
+    assertEquals("workspace-user@example.test", prodRow.lastUpdate().actor().email());
     assertEquals(2L, prodRow.resourceCount());
     assertNull(prodRow.lock());
 
@@ -103,6 +107,8 @@ class WorkspaceListFinderTest {
     User user = new User();
     user.iss = "https://idp.test";
     user.sub = sub;
+    user.email = sub + "@example.test";
+    user.displayName = "User " + sub;
     user.persist();
     return user;
   }
@@ -152,13 +158,15 @@ class WorkspaceListFinderTest {
       StackUpdate.Kind kind,
       StackUpdate.Status status,
       int version,
-      Instant startedAt) {
+      Instant startedAt,
+      User user) {
     StackUpdate update = new StackUpdate();
     update.stackId = stack.id;
     update.kind = kind;
     update.status = status;
     update.version = version;
     update.startedAt = startedAt;
+    update.startedByUserId = user.id;
     update.dryRun = false;
     update.persist();
   }

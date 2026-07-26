@@ -10,6 +10,7 @@ import {
   filterResourceRows,
   filterAndSortResources,
   maskSecrets,
+  lastUpdateActorLabel,
   pageResources,
   resourceTreeIndentRem,
   resourceName,
@@ -167,6 +168,18 @@ describe("stack resource presentation", () => {
     expect(resourceTreeIndentRem(-1)).toBe(0);
     expect(resourceTreeIndentRem(3)).toBe(3);
     expect(resourceTreeIndentRem(50)).toBe(7);
+  });
+
+  test("labels the last update actor from the richest available identity field", () => {
+    expect(
+      lastUpdateActorLabel({ displayName: "Deploy Bot", email: null, fallback: "opaque" }),
+    ).toBe("Deploy Bot");
+    expect(
+      lastUpdateActorLabel({ displayName: null, email: "ops@example.test", fallback: "opaque" }),
+    ).toBe("ops@example.test");
+    expect(
+      lastUpdateActorLabel({ displayName: null, email: null, fallback: "opaque" }),
+    ).toBe("opaque");
   });
 
   test("unfiltered trees do not force-expand descendants", () => {

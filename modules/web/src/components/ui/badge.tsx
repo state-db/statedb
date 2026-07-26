@@ -19,10 +19,10 @@ const badgeVariants = cva(
         // they share one outline treatment and differ only by hue. Badges here
         // report state; they are never actions, which is why `destructive` is
         // outlined rather than filled like the destructive button.
-        success: "border-success/30 bg-background text-success",
-        warning: "border-warning/30 bg-background text-warning",
-        info: "border-info/30 bg-background text-info",
-        destructive: "border-destructive/30 bg-background text-destructive",
+        success: "border-success/35 bg-success/10 text-success",
+        warning: "border-warning/35 bg-warning/10 text-warning",
+        info: "border-info/35 bg-info/10 text-info",
+        destructive: "border-destructive/35 bg-destructive/10 text-destructive",
       },
     },
     defaultVariants: {

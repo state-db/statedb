@@ -83,6 +83,7 @@ import {
   type PulumiValue,
   type StackDetail,
   type UpdateHistoryRow,
+  type WorkspaceLastUpdate,
 } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { useCurrentUser } from "@/hooks/useCurrentUser";
@@ -186,19 +187,17 @@ export function StackDetailPage({
               )}
             </div>
           </div>
-          {tab === "resources" && (
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button variant="outline" asChild>
-                  <a href={api.workspaces.exportUrl(org, project, stack)} download>
-                    <Download data-icon="inline-start" />
-                    Download state
-                  </a>
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent>Download the raw Pulumi checkpoint JSON.</TooltipContent>
-            </Tooltip>
-          )}
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button variant="outline" asChild>
+                <a href={api.workspaces.exportUrl(org, project, stack)} download>
+                  <Download data-icon="inline-start" />
+                  Download state
+                </a>
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>Download the raw Pulumi checkpoint JSON.</TooltipContent>
+          </Tooltip>
         </div>
         {detail.lock && (
           <Alert>
@@ -226,6 +225,7 @@ export function StackDetailPage({
             </AlertDescription>
           </Alert>
         )}
+        <StackInsightStrip detail={detail} resources={resources} outputs={outputs} />
       </header>
 
       <Tabs
@@ -260,24 +260,30 @@ export function StackDetailPage({
                 aria-label="Filter resources by type or name"
               />
             </div>
-            <ToggleGroup
-              type="single"
-              variant="outline"
-              value={viewMode}
-              onValueChange={(value) => {
-                if (value !== "flat" && value !== "tree") return;
-                setViewMode(value);
-                window.localStorage.setItem("statedb.resources.view", value);
-              }}
-              aria-label="Resource view"
-            >
-              <ToggleGroupItem value="flat" aria-label="Flat view">
-                <List /> Flat
-              </ToggleGroupItem>
-              <ToggleGroupItem value="tree" aria-label="Tree view">
-                <Network /> Tree
-              </ToggleGroupItem>
-            </ToggleGroup>
+            <div className="flex flex-wrap items-center gap-3">
+              <span className="text-sm text-muted-foreground">
+                Showing {visible.length.toLocaleString()} of {resources.length.toLocaleString()}{" "}
+                {pluralize("resource", resources.length)}
+              </span>
+              <ToggleGroup
+                type="single"
+                variant="outline"
+                value={viewMode}
+                onValueChange={(value) => {
+                  if (value !== "flat" && value !== "tree") return;
+                  setViewMode(value);
+                  window.localStorage.setItem("statedb.resources.view", value);
+                }}
+                aria-label="Resource view"
+              >
+                <ToggleGroupItem value="flat" aria-label="Flat view">
+                  <List /> Flat
+                </ToggleGroupItem>
+                <ToggleGroupItem value="tree" aria-label="Tree view">
+                  <Network /> Tree
+                </ToggleGroupItem>
+              </ToggleGroup>
+            </div>
           </div>
 
           {resources.length === 0 ? (
@@ -324,6 +330,46 @@ export function StackDetailPage({
         onOpenChange={(open) => !open && setSelectedUrn(null)}
         onNavigate={setSelectedUrn}
       />
+    </div>
+  );
+}
+
+function StackInsightStrip({
+  detail,
+  resources,
+  outputs,
+}: {
+  detail: StackDetail;
+  resources: PulumiResource[];
+  outputs: Record<string, PulumiValue>;
+}) {
+  const outputCount = Object.keys(outputs).length;
+  const lastUpdate = detail.lastUpdate;
+  const providerCount = resourceProviders(resources);
+  const secretCount = secretOutputCount(outputs);
+  return (
+    <div className="flex flex-wrap items-center gap-2 rounded-md border bg-muted/20 px-3 py-2 text-sm">
+      <Badge variant="outline">
+        {providerCount.toLocaleString()} {pluralize("provider", providerCount)}
+      </Badge>
+      <Badge variant="outline">
+        {outputCount.toLocaleString()} {pluralize("output", outputCount)}
+      </Badge>
+      {secretCount > 0 && (
+        <Badge variant="warning">
+          {secretCount.toLocaleString()} secret {pluralize("output", secretCount)}
+        </Badge>
+      )}
+      {lastUpdate ? (
+        <div className="flex flex-wrap items-center gap-2 text-muted-foreground">
+          <span>Last run v{lastUpdate.version}</span>
+          {lastUpdate.actor && <span>by {lastUpdateActorLabel(lastUpdate.actor)}</span>}
+          <KindBadge kind={lastUpdate.kind} />
+          <StatusBadge status={lastUpdate.status} />
+        </div>
+      ) : (
+        <span className="text-muted-foreground">No runs yet</span>
+      )}
     </div>
   );
 }
@@ -679,6 +725,10 @@ export function defaultTreeBranchOpen(
   return options.expandAll === true || depth < 1 || depth >= TREE_AUTO_EXPAND_FROM_DEPTH;
 }
 
+export function lastUpdateActorLabel(actor: NonNullable<WorkspaceLastUpdate["actor"]>): string {
+  return actor.displayName ?? actor.email ?? actor.fallback;
+}
+
 export function resourceTreeIndentRem(depth: number): number {
   return Math.min(Math.max(0, depth), TREE_MAX_INDENT_REM) * TREE_INDENT_REM;
 }
@@ -836,16 +886,19 @@ function ResourceTable({
   onSelect: (urn: string) => void;
 }) {
   return (
-    <div className="rounded-md border bg-card">
-      <Table className="min-w-[900px] table-fixed">
-        <ResourceTableHeader />
-        <TableBody>
-          {resources.map((resource) => (
-            <ResourceRow key={resource.urn} resource={resource} onSelect={onSelect} />
-          ))}
-        </TableBody>
-      </Table>
-    </div>
+    <>
+      <ResourceCards resources={resources} onSelect={onSelect} />
+      <div className="hidden rounded-md border bg-card md:block">
+        <Table className="min-w-[900px] table-fixed">
+          <ResourceTableHeader />
+          <TableBody>
+            {resources.map((resource) => (
+              <ResourceRow key={resource.urn} resource={resource} onSelect={onSelect} />
+            ))}
+          </TableBody>
+        </Table>
+      </div>
+    </>
   );
 }
 
@@ -868,26 +921,112 @@ function ResourceTree({
   );
 
   return (
-    <div className="rounded-md border bg-card">
-      <Table className="min-w-[900px] table-fixed">
-        <ResourceTableHeader />
-        <TableBody>
-          {model.roots.map((resource) => (
-            <TreeBranch
-              key={resource.urn}
-              resource={resource}
-              children={model.children}
-              childCounts={model.childCounts}
-              autoExpanded={model.autoExpanded}
-              expandAll={expandAll}
-              depth={0}
-              onSelect={onSelect}
+    <>
+      <ResourceCards resources={treeResourcesForCards(model.roots, model.children)} onSelect={onSelect} />
+      <div className="hidden rounded-md border bg-card md:block">
+        <Table className="min-w-[900px] table-fixed">
+          <ResourceTableHeader />
+          <TableBody>
+            {model.roots.map((resource) => (
+              <TreeBranch
+                key={resource.urn}
+                resource={resource}
+                children={model.children}
+                childCounts={model.childCounts}
+                autoExpanded={model.autoExpanded}
+                expandAll={expandAll}
+                depth={0}
+                onSelect={onSelect}
+              />
+            ))}
+          </TableBody>
+        </Table>
+      </div>
+    </>
+  );
+}
+
+function ResourceCards({
+  resources,
+  onSelect,
+}: {
+  resources: PulumiResource[];
+  onSelect: (urn: string) => void;
+}) {
+  return (
+    <div className="flex flex-col gap-2 md:hidden">
+      {resources.map((resource) => (
+        <Card
+          key={resource.urn}
+          className="rounded-lg shadow-none"
+          role="button"
+          tabIndex={0}
+          onClick={() => onSelect(resource.urn)}
+          onKeyDown={(event) => {
+            if (event.key === "Enter" || event.key === " ") {
+              event.preventDefault();
+              onSelect(resource.urn);
+            }
+          }}
+        >
+          <CardHeader className="gap-1 pb-2">
+            <div className="flex min-w-0 items-start justify-between gap-3">
+              <div className="min-w-0">
+                <CardTitle className="truncate text-base" title={resourceName(resource)}>
+                  {resourceName(resource)}
+                </CardTitle>
+                <CardDescription className="truncate font-mono" title={resourceType(resource)}>
+                  {resourceType(resource)}
+                </CardDescription>
+              </div>
+              <Badge variant="secondary" className="shrink-0">
+                {resource.custom === false ? "component" : "custom"}
+              </Badge>
+            </div>
+          </CardHeader>
+          <CardContent className="grid gap-2 text-sm sm:grid-cols-3">
+            <MobileResourceFact label="Provider" value={resourceProvider(resource)} />
+            <MobileResourceFact
+              label="Created"
+              value={resource.created ? <Timestamp value={resource.created} /> : "-"}
             />
-          ))}
-        </TableBody>
-      </Table>
+            <MobileResourceFact
+              label="Modified"
+              value={resource.modified ? <Timestamp value={resource.modified} /> : "-"}
+            />
+          </CardContent>
+        </Card>
+      ))}
     </div>
   );
+}
+
+function MobileResourceFact({
+  label,
+  value,
+}: {
+  label: string;
+  value: React.ReactNode;
+}) {
+  return (
+    <div className="flex min-w-0 flex-col gap-1">
+      <span className="text-xs font-medium text-muted-foreground">{label}</span>
+      <span className="min-w-0 truncate">{value}</span>
+    </div>
+  );
+}
+
+function treeResourcesForCards(
+  roots: PulumiResource[],
+  children: Map<string, PulumiResource[]>,
+) {
+  const ordered: PulumiResource[] = [];
+  const visit = (resource: PulumiResource) => {
+    ordered.push(resource);
+    for (const child of children.get(resource.urn) ?? []) visit(child);
+  };
+  for (const root of roots) visit(root);
+  return ordered;
 }
 
 function TreeBranch({
@@ -1269,4 +1408,16 @@ export function maskSecrets(value: unknown): unknown {
     return Object.fromEntries(Object.entries(value).map(([key, child]) => [key, maskSecrets(child)]));
   }
   return value;
+}
+
+function resourceProviders(resources: PulumiResource[]) {
+  return new Set(resources.map(resourceProvider)).size;
+}
+
+function secretOutputCount(outputs: Record<string, PulumiValue>) {
+  return Object.values(outputs).filter(containsSecret).length;
+}
+
+function pluralize(noun: string, count: number) {
+  return count === 1 ? noun : `${noun}s`;
 }

@@ -17,14 +17,14 @@
    in step when these values change.                                         */
 :root {
   /* depth */
-  --abyss: #081625;
-  --deep: #0c1d31;
-  --hull: #12293f;
-  --trough: #17304a;
-  --silt: #142e48;
-  --shelf: #1b3652;
-  --shoal: #1f3c5c;
-  --sill: #274764;
+  --abyss: #07111d;
+  --deep: #0b1422;
+  --hull: #111c2c;
+  --trough: #172235;
+  --silt: #17283d;
+  --shelf: #223247;
+  --shoal: #2c4058;
+  --sill: #344d68;
   --ink: #0f2039;
   --navy: #182b4d;
 
@@ -103,30 +103,30 @@
 .dark {
   --background: var(--deep);
   --foreground: #e6eff8;
-  --card: var(--hull);
+  --card: #101b2a;
   --card-foreground: #e6eff8;
-  --popover: var(--hull);
+  --popover: #101b2a;
   --popover-foreground: #e6eff8;
   --primary: var(--tide-lit);
   --primary-foreground: #071626;
   --secondary: var(--shelf);
   --secondary-foreground: #dce8f6;
-  --muted: var(--trough);
+  --muted: #172234;
   --muted-foreground: var(--haze-lit);
-  --accent: var(--shelf);
+  --accent: #1d2d43;
   --accent-foreground: #eaf2fb;
   --destructive: var(--coral-lit);
   --destructive-foreground: #2b0a04;
   --success: var(--kelp-lit);
   --warning: var(--gold-lit);
   --info: var(--tide-lit);
-  --border: var(--shoal);
-  --input: var(--sill);
-  --field: var(--trough);
+  --border: #263a52;
+  --input: #34506d;
+  --field: #142238;
   --tooltip: var(--shelf);
   --tooltip-foreground: #eaf2fb;
   --ring: var(--biolume);
-  --sidebar: var(--abyss);
+  --sidebar: #070f1a;
   --sidebar-foreground: #c6d8ec;
   --sidebar-primary: var(--tide-lit);
   --sidebar-primary-foreground: #071626;

@@ -190,6 +190,11 @@ export interface WorkspaceLastUpdate {
   status: "succeeded" | "failed" | "in-progress" | "cancelled" | string;
   startedAt: string;
   version: number;
+  actor: {
+    displayName: string | null;
+    email: string | null;
+    fallback: string;
+  } | null;
 }
 
 export interface WorkspaceLock {

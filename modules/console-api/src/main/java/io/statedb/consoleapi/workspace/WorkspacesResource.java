@@ -81,7 +81,8 @@ public class WorkspacesResource {
                 summary.lastUpdate().kind(),
                 summary.lastUpdate().status(),
                 summary.lastUpdate().startedAt(),
-                summary.lastUpdate().version()),
+                summary.lastUpdate().version(),
+                toActorResponse(summary.lastUpdate().actor())),
         summary.lock() == null
             ? null
             : new LockResponse(
@@ -176,11 +177,18 @@ public class WorkspacesResource {
                 summary.lastUpdate().kind(),
                 summary.lastUpdate().status(),
                 summary.lastUpdate().startedAt(),
-                summary.lastUpdate().version()),
+                summary.lastUpdate().version(),
+                toActorResponse(summary.lastUpdate().actor())),
         summary.lock() == null
             ? null
             : new LockResponse(
                 summary.lock().id(), summary.lock().lockedBy(), summary.lock().lockedAt()));
+  }
+
+  private static ActorResponse toActorResponse(WorkspaceSummary.Actor actor) {
+    return actor == null
+        ? null
+        : new ActorResponse(actor.displayName(), actor.email(), actor.fallback());
   }
 
   public record WorkspaceResponse(
@@ -195,7 +203,10 @@ public class WorkspacesResource {
       LastUpdateResponse lastUpdate,
       LockResponse lock) {}
 
-  public record LastUpdateResponse(String kind, String status, Instant startedAt, int version) {}
+  public record LastUpdateResponse(
+      String kind, String status, Instant startedAt, int version, ActorResponse actor) {}
+
+  public record ActorResponse(String displayName, String email, String fallback) {}
 
   public record LockResponse(UUID lockId, String lockedBy, Instant lockedAt) {}
 
