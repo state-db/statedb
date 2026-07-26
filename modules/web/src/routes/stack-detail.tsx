@@ -15,7 +15,7 @@ import {
   Trash2,
   Unlock,
 } from "lucide-react";
-import { useMemo, useState } from "react";
+import { memo, useCallback, useMemo, useState } from "react";
 import { toast } from "sonner";
 
 import { CopyableId } from "@/components/console/CopyableId";
@@ -89,6 +89,12 @@ import { useCurrentUser } from "@/hooks/useCurrentUser";
 
 type ViewMode = "flat" | "tree";
 export type StackTab = "resources" | "outputs" | "activity" | "settings";
+const RESOURCE_PAGE_SIZE = 50;
+const RESOURCE_COLLATOR = new Intl.Collator();
+const TREE_INDENT_REM = 1;
+const TREE_MAX_INDENT_REM = 7;
+const TREE_EXPAND_ALL_LIMIT = 200;
+const TREE_AUTO_EXPAND_FROM_DEPTH = 5;
 
 export function StackDetailPage({
   org,
@@ -112,27 +118,23 @@ export function StackDetailPage({
   const user = useCurrentUser();
   const [filter, setFilter] = useState("");
   const [selectedUrn, setSelectedUrn] = useState<string | null>(null);
+  const [resourcePage, setResourcePage] = useState(1);
   const [viewMode, setViewMode] = useState<ViewMode>(() => {
     const saved = window.localStorage.getItem("statedb.resources.view");
     return saved === "tree" ? "tree" : "flat";
   });
 
   const resources = query.data?.resources ?? [];
-  const visible = useMemo(() => {
-    const needle = filter.trim().toLocaleLowerCase();
-    return resources
-      .filter((resource) =>
-        `${resourceType(resource)} ${resourceName(resource)}`
-          .toLocaleLowerCase()
-          .includes(needle),
-      )
-      .sort((a, b) =>
-        `${resourceType(a)}\0${resourceName(a)}`.localeCompare(
-          `${resourceType(b)}\0${resourceName(b)}`,
-        ),
-      );
-  }, [filter, resources]);
-  const selected = resources.find((resource) => resource.urn === selectedUrn) ?? null;
+  const resourceRows = useMemo(() => buildResourceRows(resources), [resources]);
+  const visible = useMemo(() => filterResourceRows(resourceRows, filter), [filter, resourceRows]);
+  const resourceByUrn = useMemo(
+    () => new Map(resources.map((resource) => [resource.urn, resource])),
+    [resources],
+  );
+  const filterActive = filter.trim().length > 0;
+  const resourcePageInfo = pageResources(visible, resourcePage, RESOURCE_PAGE_SIZE);
+  const treeResources = filterActive ? resourcePageInfo.rows : visible;
+  const selected = selectedUrn ? resourceByUrn.get(selectedUrn) ?? null : null;
   const outputs = stackOutputs(resources);
 
   if (query.isLoading) return <StackDetailSkeleton />;
@@ -251,7 +253,10 @@ export function StackDetailPage({
                 className="pl-9"
                 placeholder="Filter by type or name…"
                 value={filter}
-                onChange={(event) => setFilter(event.target.value)}
+                onChange={(event) => {
+                  setFilter(event.target.value);
+                  setResourcePage(1);
+                }}
                 aria-label="Filter resources by type or name"
               />
             </div>
@@ -286,9 +291,23 @@ export function StackDetailPage({
               description="Try a different type or resource name."
             />
           ) : viewMode === "flat" ? (
-            <ResourceTable resources={visible} onSelect={setSelectedUrn} />
+            <>
+              <ResourceTable resources={resourcePageInfo.rows} onSelect={setSelectedUrn} />
+              <ResourcePager pageInfo={resourcePageInfo} onPageChange={setResourcePage} />
+            </>
           ) : (
-            <ResourceTree resources={visible} allResources={resources} onSelect={setSelectedUrn} />
+            <>
+              <ResourceTree
+                resources={treeResources}
+                allResources={resources}
+                includeAncestors={filterActive}
+                expandAll={visible.length <= TREE_EXPAND_ALL_LIMIT}
+                onSelect={setSelectedUrn}
+              />
+              {filterActive && (
+                <ResourcePager pageInfo={resourcePageInfo} onPageChange={setResourcePage} />
+              )}
+            </>
           )}
         </section>
       ) : tab === "outputs" ? (
@@ -301,7 +320,7 @@ export function StackDetailPage({
 
       <ResourceSheet
         resource={selected}
-        resources={resources}
+        resourceByUrn={resourceByUrn}
         onOpenChange={(open) => !open && setSelectedUrn(null)}
         onNavigate={setSelectedUrn}
       />
@@ -580,6 +599,142 @@ export function formatDuration(startedAt: string, endedAt: string | null): strin
   return `${minutes}m ${seconds % 60}s`;
 }
 
+export interface ResourcePage {
+  page: number;
+  pageCount: number;
+  pageSize: number;
+  total: number;
+  start: number;
+  end: number;
+  rows: PulumiResource[];
+}
+
+export interface ResourceListRow {
+  resource: PulumiResource;
+  type: string;
+  name: string;
+  searchText: string;
+}
+
+export function buildResourceRows(resources: PulumiResource[]): ResourceListRow[] {
+  return resources
+    .map((resource) => {
+      const type = resourceType(resource);
+      const name = resourceName(resource);
+      return {
+        resource,
+        type,
+        name,
+        searchText: `${type} ${name}`.toLowerCase(),
+      };
+    })
+    .sort(
+      (a, b) =>
+        RESOURCE_COLLATOR.compare(a.type, b.type) || RESOURCE_COLLATOR.compare(a.name, b.name),
+    );
+}
+
+export function filterResourceRows(rows: ResourceListRow[], filter: string): PulumiResource[] {
+  const needle = filter.trim().toLowerCase();
+  if (!needle) return rows.map((row) => row.resource);
+  return rows.filter((row) => row.searchText.includes(needle)).map((row) => row.resource);
+}
+
+export function filterAndSortResources(resources: PulumiResource[], filter: string): PulumiResource[] {
+  return filterResourceRows(buildResourceRows(resources), filter);
+}
+
+export function pageResources(
+  resources: PulumiResource[],
+  page: number,
+  pageSize: number,
+): ResourcePage {
+  const total = resources.length;
+  const pageCount = Math.max(1, Math.ceil(total / pageSize));
+  const safePage = Math.min(Math.max(1, page), pageCount);
+  const start = (safePage - 1) * pageSize;
+  const end = Math.min(start + pageSize, total);
+  return {
+    page: safePage,
+    pageCount,
+    pageSize,
+    total,
+    start,
+    end,
+    rows: resources.slice(start, end),
+  };
+}
+
+export interface ResourceTreeModel {
+  roots: PulumiResource[];
+  children: Map<string, PulumiResource[]>;
+  childCounts: Map<string, number>;
+  autoExpanded: Set<string>;
+}
+
+export function defaultTreeBranchOpen(
+  depth: number,
+  options: { expandAll?: boolean } = {},
+): boolean {
+  return options.expandAll === true || depth < 1 || depth >= TREE_AUTO_EXPAND_FROM_DEPTH;
+}
+
+export function resourceTreeIndentRem(depth: number): number {
+  return Math.min(Math.max(0, depth), TREE_MAX_INDENT_REM) * TREE_INDENT_REM;
+}
+
+export function buildResourceTree(
+  resources: PulumiResource[],
+  allResources: PulumiResource[],
+  options: { includeAncestors?: boolean } = {},
+): ResourceTreeModel {
+  const byUrn = new Map(allResources.map((resource) => [resource.urn, resource]));
+  const included = new Set(resources.map((resource) => resource.urn));
+  const autoExpanded = new Set<string>();
+
+  if (options.includeAncestors) {
+    for (const resource of resources) {
+      const seen = new Set<string>([resource.urn]);
+      let parent = resource.parent ? byUrn.get(resource.parent) : undefined;
+      while (parent && !seen.has(parent.urn)) {
+        included.add(parent.urn);
+        autoExpanded.add(parent.urn);
+        seen.add(parent.urn);
+        parent = parent.parent ? byUrn.get(parent.parent) : undefined;
+      }
+    }
+  }
+
+  const ordered = [
+    ...allResources.filter((resource) => included.has(resource.urn)),
+    ...resources.filter((resource) => !byUrn.has(resource.urn)),
+  ];
+  const visibleUrns = new Set(ordered.map((resource) => resource.urn));
+  const children = new Map<string, PulumiResource[]>();
+
+  for (const resource of ordered) {
+    if (!resource.parent || !visibleUrns.has(resource.parent)) continue;
+    const bucket = children.get(resource.parent);
+    if (bucket) {
+      bucket.push(resource);
+    } else {
+      children.set(resource.parent, [resource]);
+    }
+  }
+
+  const childCounts = new Map<string, number>();
+  for (const [parent, descendants] of children) {
+    childCounts.set(parent, descendants.length);
+  }
+
+  return {
+    roots: ordered.filter((resource) => !resource.parent || !visibleUrns.has(resource.parent)),
+    children,
+    childCounts,
+    autoExpanded,
+  };
+}
+
 function ActivitySkeleton() {
   return <div className="flex flex-col gap-2">{Array.from({ length: 5 }, (_, index) => <Skeleton key={index} className="h-12 w-full" />)}</div>;
 }
@@ -697,38 +852,34 @@ function ResourceTable({
 function ResourceTree({
   resources,
   allResources,
+  includeAncestors,
+  expandAll,
   onSelect,
 }: {
   resources: PulumiResource[];
   allResources: PulumiResource[];
+  includeAncestors: boolean;
+  expandAll: boolean;
   onSelect: (urn: string) => void;
 }) {
-  const visibleUrns = new Set(resources.map((resource) => resource.urn));
-  const children = new Map<string, PulumiResource[]>();
-  for (const resource of resources) {
-    if (resource.parent && visibleUrns.has(resource.parent)) {
-      children.set(resource.parent, [...(children.get(resource.parent) ?? []), resource]);
-    }
-  }
-  const roots = resources.filter(
-    (resource) => !resource.parent || !visibleUrns.has(resource.parent),
+  const model = useMemo(
+    () => buildResourceTree(resources, allResources, { includeAncestors }),
+    [resources, allResources, includeAncestors],
   );
-  const allChildren = new Map<string, number>();
-  for (const resource of allResources) {
-    if (resource.parent) allChildren.set(resource.parent, (allChildren.get(resource.parent) ?? 0) + 1);
-  }
 
   return (
     <div className="rounded-md border">
       <Table className="min-w-[900px] table-fixed">
         <ResourceTableHeader />
         <TableBody>
-          {roots.map((resource) => (
+          {model.roots.map((resource) => (
             <TreeBranch
               key={resource.urn}
               resource={resource}
-              children={children}
-              childCounts={allChildren}
+              children={model.children}
+              childCounts={model.childCounts}
+              autoExpanded={model.autoExpanded}
+              expandAll={expandAll}
               depth={0}
               onSelect={onSelect}
             />
@@ -743,38 +894,84 @@ function TreeBranch({
   resource,
   children,
   childCounts,
+  autoExpanded,
+  expandAll,
   depth,
   onSelect,
 }: {
   resource: PulumiResource;
   children: Map<string, PulumiResource[]>;
   childCounts: Map<string, number>;
+  autoExpanded: Set<string>;
+  expandAll: boolean;
   depth: number;
   onSelect: (urn: string) => void;
 }) {
   const descendants = children.get(resource.urn) ?? [];
-  const [open, setOpen] = useState(true);
+  const [open, setOpen] = useState(defaultTreeBranchOpen(depth, { expandAll }));
+  const toggle = useCallback(() => setOpen((value) => !value), []);
+  const forcedOpen = autoExpanded.has(resource.urn);
+  const expanded = expandAll || forcedOpen || open;
   return (
     <>
       <ResourceRow
         resource={resource}
         depth={depth}
         childCount={childCounts.get(resource.urn) ?? 0}
-        open={open}
-        onToggle={descendants.length ? () => setOpen((value) => !value) : undefined}
+        open={expanded}
+        onToggle={descendants.length ? toggle : undefined}
         onSelect={onSelect}
       />
-      {open && descendants.map((child) => (
+      {expanded && descendants.map((child) => (
         <TreeBranch
           key={child.urn}
           resource={child}
           children={children}
           childCounts={childCounts}
+          autoExpanded={autoExpanded}
+          expandAll={expandAll}
           depth={depth + 1}
           onSelect={onSelect}
         />
       ))}
     </>
+  );
+}
+
+function ResourcePager({
+  pageInfo,
+  onPageChange,
+}: {
+  pageInfo: ResourcePage;
+  onPageChange: (page: number) => void;
+}) {
+  if (pageInfo.pageCount <= 1) return null;
+  return (
+    <div className="flex items-center justify-between gap-3 text-sm text-muted-foreground">
+      <span>
+        Showing {pageInfo.start + 1}-{pageInfo.end} of {pageInfo.total}
+      </span>
+      <div className="flex items-center gap-2">
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          disabled={pageInfo.page <= 1}
+          onClick={() => onPageChange(pageInfo.page - 1)}
+        >
+          Previous
+        </Button>
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          disabled={pageInfo.page >= pageInfo.pageCount}
+          onClick={() => onPageChange(pageInfo.page + 1)}
+        >
+          Next
+        </Button>
+      </div>
+    </div>
   );
 }
 
@@ -793,7 +990,7 @@ function ResourceTableHeader() {
   );
 }
 
-function ResourceRow({
+const ResourceRow = memo(function ResourceRow({
   resource,
   onSelect,
   depth = 0,
@@ -817,13 +1014,17 @@ function ResourceRow({
       }}
       tabIndex={0}
     >
-      <TableCell className="max-w-0">
-        <div className="flex min-w-0 items-center gap-1" style={{ paddingLeft: `${depth * 1.25}rem` }}>
+      <TableCell className="max-w-0 overflow-hidden">
+        <div
+          className="flex min-w-0 items-center gap-1 overflow-hidden"
+          style={{ paddingLeft: `${resourceTreeIndentRem(depth)}rem` }}
+        >
           {onToggle ? (
             <Button
               type="button"
               variant="ghost"
               size="icon"
+              className="size-6 shrink-0"
               onClick={(event) => {
                 event.stopPropagation();
                 onToggle();
@@ -833,12 +1034,14 @@ function ResourceRow({
               {open ? <ChevronDown /> : <ChevronRight />}
             </Button>
           ) : depth > 0 ? (
-            <span className="w-8" />
+            <span className="w-6 shrink-0" />
           ) : null}
-          <span className="truncate font-mono text-xs" title={resourceType(resource)}>
+          <span className="min-w-0 truncate font-mono text-xs" title={resourceType(resource)}>
             {resourceType(resource)}
           </span>
-          {childCount > 0 && <span className="text-xs text-muted-foreground">({childCount})</span>}
+          {childCount > 0 && (
+            <span className="shrink-0 text-xs text-muted-foreground">({childCount})</span>
+          )}
         </div>
       </TableCell>
       <TableCell className="max-w-0 font-medium">
@@ -860,21 +1063,21 @@ function ResourceRow({
       <TableCell>{resource.modified ? <Timestamp value={resource.modified} /> : "-"}</TableCell>
     </TableRow>
   );
-}
+});
+ResourceRow.displayName = "ResourceRow";
 
 function ResourceSheet({
   resource,
-  resources,
+  resourceByUrn,
   onOpenChange,
   onNavigate,
 }: {
   resource: PulumiResource | null;
-  resources: PulumiResource[];
+  resourceByUrn: Map<string, PulumiResource>;
   onOpenChange: (open: boolean) => void;
   onNavigate: (urn: string) => void;
 }) {
   if (!resource) return null;
-  const knownUrns = new Set(resources.map((candidate) => candidate.urn));
   const references = [
     ...(resource.parent ? [{ label: "Parent", urn: resource.parent }] : []),
     ...(resource.provider ? [{ label: "Provider", urn: providerUrn(resource.provider) }] : []),
@@ -928,7 +1131,7 @@ function ResourceSheet({
                     className="grid min-w-0 gap-2 rounded-md border p-3 text-sm sm:grid-cols-[auto_minmax(0,1fr)]"
                   >
                     <Badge variant="outline" className="w-fit">{label}</Badge>
-                    {knownUrns.has(urn) ? (
+                    {resourceByUrn.has(urn) ? (
                       <Button
                         variant="link"
                         className="h-auto min-w-0 justify-start overflow-hidden p-0 text-left"

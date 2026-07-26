@@ -2,9 +2,16 @@ import { describe, expect, test } from "bun:test";
 
 import { PULUMI_SECRET_SIG } from "@/components/console/SecretBadge";
 import {
+  buildResourceRows,
+  buildResourceTree,
   containsSecret,
   calculateChangeSummary,
+  defaultTreeBranchOpen,
+  filterResourceRows,
+  filterAndSortResources,
   maskSecrets,
+  pageResources,
+  resourceTreeIndentRem,
   resourceName,
   resourceType,
   serializeOutput,
@@ -68,4 +75,116 @@ describe("stack resource presentation", () => {
       }),
     ).toEqual({ added: 1, changed: 0, deleted: 1 });
   });
+
+  test("sorts resources by type before name", () => {
+    const sorted = buildResourceRows([
+      resource("urn:pulumi:dev::app::z:type:Thing::alpha"),
+      resource("urn:pulumi:dev::app::a:type:Thing::zulu"),
+      resource("urn:pulumi:dev::app::a:type:Thing::alpha"),
+    ]);
+
+    expect(sorted.map((row) => `${row.type} ${row.name}`)).toEqual([
+      "a:type:Thing alpha",
+      "a:type:Thing zulu",
+      "z:type:Thing alpha",
+    ]);
+  });
+
+  test("filters pre-sorted resource rows without resorting them", () => {
+    const rows = buildResourceRows([
+      resource("urn:pulumi:dev::app::z:type:Thing::alpha"),
+      resource("urn:pulumi:dev::app::a:type:Thing::zulu"),
+      resource("urn:pulumi:dev::app::a:type:Thing::alpha"),
+    ]);
+
+    expect(filterResourceRows(rows, "thing").map((row) => resourceName(row))).toEqual([
+      "alpha",
+      "zulu",
+      "alpha",
+    ]);
+    expect(filterAndSortResources(rows.map((row) => row.resource), "zulu").map(resourceName)).toEqual([
+      "zulu",
+    ]);
+  });
+
+  test("paginates resource rows with clamped page bounds", () => {
+    const rows = Array.from({ length: 7 }, (_, index) =>
+      resource(`urn:pulumi:dev::app::pkg:index:Thing::thing-${index}`),
+    );
+
+    expect(pageResources(rows, 1, 3)).toMatchObject({
+      page: 1,
+      pageCount: 3,
+      start: 0,
+      end: 3,
+    });
+    expect(pageResources(rows, 99, 3)).toMatchObject({
+      page: 3,
+      start: 6,
+      end: 7,
+    });
+  });
+
+  test("tree pages include ancestors and auto-expand them", () => {
+    const stack = resource("urn:pulumi:dev::app::pulumi:pulumi:Stack::app-dev");
+    const parent = resource("urn:pulumi:dev::app::pkg:index:Component::parent", {
+      parent: stack.urn,
+      custom: false,
+    });
+    const child = resource("urn:pulumi:dev::app::pkg:index:Child::child", {
+      parent: parent.urn,
+    });
+
+    const tree = buildResourceTree([child], [stack, parent, child], { includeAncestors: true });
+
+    expect(tree.roots.map((row) => row.urn)).toEqual([stack.urn]);
+    expect(tree.children.get(stack.urn)?.map((row) => row.urn)).toEqual([parent.urn]);
+    expect(tree.children.get(parent.urn)?.map((row) => row.urn)).toEqual([child.urn]);
+    expect(tree.autoExpanded.has(stack.urn)).toBe(true);
+    expect(tree.autoExpanded.has(parent.urn)).toBe(true);
+  });
+
+  test("tree child counts describe rendered children only", () => {
+    const stack = resource("urn:pulumi:dev::app::pulumi:pulumi:Stack::app-dev");
+    const first = resource("urn:pulumi:dev::app::pkg:index:Child::first", { parent: stack.urn });
+    const second = resource("urn:pulumi:dev::app::pkg:index:Child::second", { parent: stack.urn });
+
+    const tree = buildResourceTree([first], [stack, first, second], { includeAncestors: true });
+
+    expect(tree.childCounts.get(stack.urn)).toBe(1);
+    expect(tree.children.get(stack.urn)?.map((row) => row.urn)).toEqual([first.urn]);
+  });
+
+  test("tree branches expand roots by default and collapse below them", () => {
+    expect(defaultTreeBranchOpen(0)).toBe(true);
+    expect(defaultTreeBranchOpen(1)).toBe(false);
+    expect(defaultTreeBranchOpen(4)).toBe(false);
+    expect(defaultTreeBranchOpen(5)).toBe(true);
+    expect(defaultTreeBranchOpen(1, { expandAll: true })).toBe(true);
+  });
+
+  test("caps rendered tree indentation at deep nesting levels", () => {
+    expect(resourceTreeIndentRem(-1)).toBe(0);
+    expect(resourceTreeIndentRem(3)).toBe(3);
+    expect(resourceTreeIndentRem(50)).toBe(7);
+  });
+
+  test("unfiltered trees do not force-expand descendants", () => {
+    const stack = resource("urn:pulumi:dev::app::pulumi:pulumi:Stack::app-dev");
+    const parent = resource("urn:pulumi:dev::app::pkg:index:Component::parent", {
+      parent: stack.urn,
+      custom: false,
+    });
+    const child = resource("urn:pulumi:dev::app::pkg:index:Child::child", {
+      parent: parent.urn,
+    });
+
+    const tree = buildResourceTree([stack, parent, child], [stack, parent, child]);
+
+    expect(tree.autoExpanded.size).toBe(0);
+  });
 });
+
+function resource(urn: string, overrides: Record<string, unknown> = {}) {
+  return { urn, ...overrides };
+}
