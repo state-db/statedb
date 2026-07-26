@@ -16,6 +16,9 @@ HTTP_5XX_MAX="${HTTP_5XX_MAX:-0}"
 RESTARTS_MAX="${RESTARTS_MAX:-0}"
 ORPHAN_LOCKS_MAX="${ORPHAN_LOCKS_MAX:-0}"
 SCRAPE_FAILURES_MAX="${SCRAPE_FAILURES_MAX:-0}"
+# Scrape latency puts a second or two between the two clocks; a real suspend loses minutes.
+SUSPEND_GAP_MIN_S="${SUSPEND_GAP_MIN_S:-30}"
+SUSPEND_LOST_MAX_S="${SUSPEND_LOST_MAX_S:-120}"
 
 FAILURES=0
 pass() { printf '  \033[32mPASS\033[0m  %s\n' "$1"; }
@@ -41,8 +44,10 @@ info "$samples samples over ${duration_h}h"
 
 # Short windows measure JVM warmup, not drift, so trends below the threshold print ungraded.
 GRADE_TRENDS=1
+TREND_SKIP_REASON=""
 if awk "BEGIN { exit !($duration_h < ${MIN_TREND_HOURS:-2}) }"; then
   GRADE_TRENDS=0
+  TREND_SKIP_REASON="run too short"
   info "run shorter than ${MIN_TREND_HOURS:-2}h — memory trends reported but not graded"
 fi
 echo ""
@@ -68,6 +73,29 @@ if (( uptime_max > 0 )); then
   pass "app was up (peak uptime ${uptime_max}s)"
 else
   fail "app never reported uptime — it did not come up, so nothing below is meaningful"
+fi
+
+# A suspended host freezes the container while wall clock keeps running, leaving holes in the
+# series that make every trend meaningless. The JVM's uptime is monotonic-clock based and does not
+# advance across a suspend, so wall time the uptime cannot account for is the signal.
+read -r gaps lost worst <<<"$(awk -F'\t' -v min="$SUSPEND_GAP_MIN_S" '
+  NR > 1 && $31 == "1" && $3 + 0 > 0 {
+    ts = $1 + 0; up = $3 + 0;
+    # A restart rewinds uptime; that is graded separately and is not a suspend.
+    if (prev != "" && up - prev >= 0) {
+      d = (ts - prev_ts) - (up - prev);
+      if (d > min) { g++; lost += d; if (d > worst) worst = d }
+    }
+    prev_ts = ts; prev = up;
+  }
+  END { printf "%d %.0f %.0f", g + 0, lost + 0, worst + 0 }' "$SERIES")"
+
+if (( lost <= SUSPEND_LOST_MAX_S )); then
+  pass "no host suspend detected (wall clock and JVM uptime agree)"
+else
+  GRADE_TRENDS=0
+  TREND_SKIP_REASON="host suspended"
+  fail "${gaps} gap(s) totalling ${lost}s (worst ${worst}s) where wall clock advanced but the JVM did not — the host suspended; trends below are not graded"
 fi
 echo ""
 
@@ -98,7 +126,7 @@ if [[ "$live_slope" == "NA" ]]; then
 else
   info "post-GC live set: ${live_first}MB -> ${live_last}MB"
   if (( GRADE_TRENDS == 0 )); then
-    info "live-set trend ${live_slope}MB/h (run too short to grade)"
+    info "live-set trend ${live_slope}MB/h (not graded: ${TREND_SKIP_REASON})"
   elif awk "BEGIN { exit !($live_slope <= $HEAP_SLOPE_MAX_MB_H) }"; then
     pass "live-set trend ${live_slope}MB/h (limit ${HEAP_SLOPE_MAX_MB_H})"
   else
@@ -118,7 +146,7 @@ read -r rss_slope rss_first rss_last <<<"$(awk -F'\t' '
   }' "$SERIES")"
 info "resident set: ${rss_first}MB -> ${rss_last}MB"
 if (( GRADE_TRENDS == 0 )); then
-  info "RSS trend ${rss_slope}MB/h (run too short to grade)"
+  info "RSS trend ${rss_slope}MB/h (not graded: ${TREND_SKIP_REASON})"
 elif awk "BEGIN { exit !($rss_slope <= $RSS_SLOPE_MAX_MB_H) }"; then
   pass "RSS trend ${rss_slope}MB/h (limit ${RSS_SLOPE_MAX_MB_H})"
 else
