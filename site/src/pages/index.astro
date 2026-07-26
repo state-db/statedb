@@ -446,7 +446,59 @@ const tiers = [
     color: var(--blue);
   }
 
-  /* ---------- nav + hero (navy) ---------- */
+  /* ---------- the water column ---------- */
+
+  /* The navy bands descend as you scroll: the nav and hero are the surface,
+     the lock-in band is mid water, the footer is the abyss. The texture over
+     them is bathymetric — contour lines from public/contours.svg, generated
+     by tools/contours.gen.ts — under a fine grain that also keeps the large
+     flat navy areas from banding on 8-bit displays.
+
+     Contours are left off the nav: it is only ~80px tall and sits directly on
+     the hero, so its tile would restart mid-pattern and leave a seam. Grain is
+     noise, so it tiles across that boundary invisibly. */
+  .nav,
+  .hero,
+  .lockin,
+  .footer {
+    position: relative;
+    isolation: isolate;
+  }
+
+  .nav > *,
+  .hero > *,
+  .lockin > *,
+  .footer > * {
+    position: relative;
+  }
+
+  .hero::before,
+  .lockin::before,
+  .footer::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    z-index: -1;
+    background: url("/contours.svg") center / 1200px 1200px repeat;
+    opacity: 0.04;
+    pointer-events: none;
+  }
+
+  .nav::after,
+  .hero::after,
+  .lockin::after,
+  .footer::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    z-index: -1;
+    background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='160' height='160' filter='url(%23n)'/%3E%3C/svg%3E") repeat;
+    opacity: 0.03;
+    mix-blend-mode: overlay;
+    pointer-events: none;
+  }
+
+  /* ---------- nav + hero (surface) ---------- */
 
   .nav {
     background: var(--ink);
@@ -512,7 +564,7 @@ const tiers = [
     font-family: var(--mono);
     font-size: 0.85rem;
     line-height: 1.7;
-    background: var(--ink-deep);
+    background: var(--abyss);
     border: 1px solid var(--mist-dark);
     border-radius: 8px;
     padding: 1rem 1.25rem;
@@ -545,7 +597,7 @@ const tiers = [
 
   .term-tabs [role="tab"][aria-selected="true"] {
     color: #ffffff;
-    background: var(--ink-deep);
+    background: var(--abyss);
     box-shadow: inset 0 2px 0 var(--biolume);
   }
 
@@ -819,10 +871,10 @@ const tiers = [
     color: var(--muted);
   }
 
-  /* ---------- lock-in band (navy) ---------- */
+  /* ---------- lock-in band (mid water) ---------- */
 
   .lockin {
-    background: var(--ink);
+    background: var(--ink-deep);
     color: var(--text-on-ink);
     padding-block: 4.5rem;
   }
@@ -901,7 +953,7 @@ const tiers = [
   /* ---------- footer ---------- */
 
   .footer {
-    background: var(--ink);
+    background: var(--abyss);
     color: var(--muted-on-ink);
     padding-block: 3.5rem 2.5rem;
   }
@@ -1016,6 +1068,30 @@ const tiers = [
       to {
         opacity: 1;
         transform: translateY(0);
+      }
+    }
+
+    /* The report is a scan, so let it finish like one: the passes land in
+       order once the card has settled, rather than arriving pre-answered.
+       Without this block every check is simply present. */
+    .r-check {
+      animation: sounded 380ms ease-out both;
+    }
+
+    .report-row:nth-child(1) .r-check { animation-delay: 750ms; }
+    .report-row:nth-child(2) .r-check { animation-delay: 860ms; }
+    .report-row:nth-child(3) .r-check { animation-delay: 970ms; }
+    .report-row:nth-child(4) .r-check { animation-delay: 1080ms; }
+    .report-row:nth-child(5) .r-check { animation-delay: 1190ms; }
+
+    @keyframes sounded {
+      from {
+        opacity: 0;
+        transform: translateX(-3px);
+      }
+      to {
+        opacity: 1;
+        transform: translateX(0);
       }
     }
   }
