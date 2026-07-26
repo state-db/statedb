@@ -12,15 +12,17 @@ const badgeVariants = cva(
           "border-transparent bg-primary text-primary-foreground shadow hover:bg-primary/80",
         secondary:
           "border-transparent bg-secondary text-secondary-foreground hover:bg-secondary/80",
-        destructive:
-          "border-transparent bg-destructive text-destructive-foreground shadow hover:bg-destructive/80",
         outline: "text-foreground",
         muted: "border-transparent bg-muted text-muted-foreground",
-        success:
-          "border-emerald-500/30 bg-background text-emerald-700 dark:text-emerald-400",
-        warning:
-          "border-amber-500/30 bg-background text-amber-700 dark:text-amber-400",
-        info: "border-blue-500/30 bg-background text-blue-700 dark:text-blue-400",
+        // Status family. These always appear beside one another (a run's
+        // created / updated / deleted / replaced counts, a token's state), so
+        // they share one outline treatment and differ only by hue. Badges here
+        // report state; they are never actions, which is why `destructive` is
+        // outlined rather than filled like the destructive button.
+        success: "border-success/30 bg-background text-success",
+        warning: "border-warning/30 bg-background text-warning",
+        info: "border-info/30 bg-background text-info",
+        destructive: "border-destructive/30 bg-background text-destructive",
       },
     },
     defaultVariants: {

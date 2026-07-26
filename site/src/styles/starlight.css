@@ -1,20 +1,65 @@
-/* statedb brand theme for Starlight */
+/* statedb brand theme for Starlight — the ocean ramp in styles/ocean.css
+   mapped onto Starlight's own tokens, so the docs, the landing page, and the
+   console all sit in the same water. */
 
 :root {
   --sl-font: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
-  /* brand blues (light theme) */
-  --sl-color-accent-low: #dbe4f2;
-  --sl-color-accent: #2563eb;
-  --sl-color-accent-high: #182b4d;
+  /* the shallows */
+  --sl-color-accent-low: var(--spray);
+  --sl-color-accent: var(--tide);
+  --sl-color-accent-high: var(--navy);
+  --sl-color-bg: var(--foam);
+  --sl-color-bg-nav: #ffffff;
+  --sl-color-bg-sidebar: #ffffff;
 }
 
 :root[data-theme="dark"] {
-  --sl-color-accent-low: #16233d;
-  --sl-color-accent: #3b82f6;
-  --sl-color-accent-high: #b7c3d8;
-  --sl-color-bg: #101f39;
-  --sl-color-bg-nav: #182b4d;
-  --sl-color-bg-sidebar: #101f39;
+  /* the deep — bands sink below the page, matching the console's sidebar */
+  --sl-color-accent-low: var(--trough);
+  --sl-color-accent: var(--tide-lit);
+  --sl-color-accent-high: var(--mist);
+  --sl-color-bg: var(--deep);
+  --sl-color-bg-nav: var(--abyss);
+  --sl-color-bg-sidebar: var(--abyss);
+  --sl-color-hairline-shade: var(--shoal);
+}
+
+/* Focus glows bioluminescent, the same signal the console uses. */
+:focus-visible {
+  outline: 2px solid var(--lagoon);
+  outline-offset: 3px;
+}
+
+:root[data-theme="dark"] :focus-visible {
+  outline-color: var(--biolume);
+}
+
+/* Waterline: mark the current page the way the console marks the current
+   section — a tinted pill with a brand-blue rule at its left edge. Starlight's
+   default inverts to a pale slab, which glares against the deep. */
+:root nav a[aria-current="page"] {
+  position: relative;
+  background: var(--spray);
+  color: var(--navy);
+}
+
+:root nav a[aria-current="page"]::before {
+  content: "";
+  position: absolute;
+  inset-block: 0.25rem;
+  left: 0;
+  width: 2px;
+  border-radius: 2px;
+  background: var(--tide);
+}
+
+:root[data-theme="dark"] nav a[aria-current="page"] {
+  background: var(--trough);
+  color: #eaf2fb;
+}
+
+:root[data-theme="dark"] nav a[aria-current="page"]::before {
+  background: var(--tide-lit);
 }
 
 /* Display face for headings only; body stays quiet. */

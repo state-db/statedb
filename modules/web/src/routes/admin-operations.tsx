@@ -118,7 +118,7 @@ function LocksCard({ query }: { query: UseQueryResult<AdminLock[], Error> }) {
             onRetry={() => void query.refetch()}
           />
         ) : (
-          <div className="overflow-x-auto rounded-md border">
+          <div className="overflow-x-auto rounded-md border bg-card">
             <Table>
               <TableHeader>
                 <TableRow>
@@ -221,7 +221,7 @@ function CompactionCard({ query }: { query: UseQueryResult<AdminCompactionJob[],
             onRetry={() => void query.refetch()}
           />
         ) : (
-          <div className="overflow-x-auto rounded-md border">
+          <div className="overflow-x-auto rounded-md border bg-card">
             <Table>
               <TableHeader>
                 <TableRow>

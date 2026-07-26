@@ -147,7 +147,7 @@ export function StacksTable({
 }) {
   const projectGroups = groupByProject(rows);
   return (
-    <div className="rounded-md border">
+    <div className="rounded-md border bg-card">
       <Table>
         <TableHeader>
           <TableRow>
@@ -273,7 +273,7 @@ function LockIndicator({ lock }: { lock: NonNullable<Workspace["lock"]> }) {
 
 export function StacksTableSkeleton() {
   return (
-    <div className="rounded-md border">
+    <div className="rounded-md border bg-card">
       <Table>
         <TableHeader>
           <TableRow>

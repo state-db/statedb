@@ -1,0 +1,44 @@
+/* ─── Brand palette — the water column ────────────────────────────────────
+   statedb reads the ocean as depth rather than as "blue". Light is the sunlit
+   shallows; dark is the deep. Surfaces recede by getting deeper and more
+   saturated rather than merely darker.
+
+   The brand blue (--tide) is fixed: the logo and the otter are drawn in it.
+   Everything that carries state is marine — kelp for pass, coral for fail,
+   sunlit sand for caution — and focus glows bioluminescent cyan.
+
+   This ramp is shared with the console; keep modules/web/src/index.css in
+   step when these values change.                                            */
+:root {
+  /* depth */
+  --abyss: #081625;
+  --deep: #0c1d31;
+  --hull: #12293f;
+  --trough: #17304a;
+  --shelf: #1b3652;
+  --shoal: #1f3c5c;
+  --ink-deep: #0c1d31;
+  --navy: #182b4d;
+
+  /* surface */
+  --foam: #eef4fa;
+  --spray: #dde8f5;
+  --wash: #e1eaf6;
+  --mist: #dbe4f2;
+  --edge: #cedcec;
+  --sand: #f7f3e8;
+  --haze: #526685;
+  --haze-lit: #93aac6;
+
+  /* marine accents — the second of each pair is the on-dark form */
+  --tide: #2563eb;
+  --tide-lit: #6ba6ff;
+  --lagoon: #0f8fb0;
+  --biolume: #3fd3e8;
+  --kelp: #0b7a57;
+  --kelp-lit: #34d9a2;
+  --coral: #c4402f;
+  --coral-lit: #ff7b62;
+  --gold: #8f5a0e;
+  --gold-lit: #f2b457;
+}

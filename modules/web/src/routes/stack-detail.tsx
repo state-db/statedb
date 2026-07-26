@@ -756,7 +756,7 @@ function StackOutputs({ outputs }: { outputs: Record<string, PulumiValue> }) {
           description="Export values with pulumi.export(...)."
         />
       ) : (
-        <div className="rounded-md border">
+        <div className="rounded-md border bg-card">
           <Table>
             <TableHeader>
               <TableRow>
@@ -836,7 +836,7 @@ function ResourceTable({
   onSelect: (urn: string) => void;
 }) {
   return (
-    <div className="rounded-md border">
+    <div className="rounded-md border bg-card">
       <Table className="min-w-[900px] table-fixed">
         <ResourceTableHeader />
         <TableBody>
@@ -868,7 +868,7 @@ function ResourceTree({
   );
 
   return (
-    <div className="rounded-md border">
+    <div className="rounded-md border bg-card">
       <Table className="min-w-[900px] table-fixed">
         <ResourceTableHeader />
         <TableBody>
@@ -1191,7 +1191,7 @@ function PropertySection({ title, values }: { title: string; values?: Record<str
     <section className="flex min-w-0 flex-col gap-3">
       <SectionHeading title={title} count={entries.length} />
       {entries.length ? (
-        <div className="overflow-hidden rounded-lg border">
+        <div className="overflow-hidden rounded-lg border bg-card">
           {entries.map(([key, value], index) => (
             <div key={key} className="grid min-w-0 gap-2 p-3 text-sm sm:grid-cols-[minmax(0,9rem)_minmax(0,1fr)] sm:gap-4">
               <span className="truncate font-medium" title={key}>{key}</span>

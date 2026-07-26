@@ -44,7 +44,7 @@ export function LoginPage() {
         <CardHeader className="items-center text-center">
           <BrandMark className="mb-2 h-12 w-12" />
           <div className="text-sm font-semibold text-muted-foreground">
-            state<span className="text-[#2563EB] dark:text-[#3B82F6]">db</span>
+            state<span className="text-[var(--tide-deep)] dark:text-[var(--tide-lit)]">db</span>
           </div>
           <CardTitle className="text-xl">Sign in to state-db</CardTitle>
           <CardDescription>

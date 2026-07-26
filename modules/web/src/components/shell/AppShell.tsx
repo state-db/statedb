@@ -56,7 +56,6 @@ import {
   SidebarMenuItem,
   SidebarProvider,
   SidebarRail,
-  SidebarSeparator,
   SidebarTrigger,
 } from "@/components/ui/sidebar";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -164,13 +163,16 @@ function AppSidebar({ user }: { user: CurrentUser }) {
 
   return (
     <Sidebar>
-      <SidebarHeader>
+      {/* The rule lives on the header's own box, not on a separator after it,
+          so it lands on the same pixel row as the content header's border-b.
+          It also takes --border rather than --sidebar-border: this is one
+          continuous line across the top of the app, not a sidebar divider. */}
+      <SidebarHeader className="border-b">
         <BrandMark className="size-8 shrink-0" />
         <span className="font-semibold tracking-tight group-data-[sidebar-open=false]/sidebar-wrapper:sr-only">
-          state<span className="text-[#2563EB] dark:text-[#3B82F6]">db</span>
+          state<span className="text-[var(--tide-deep)] dark:text-[var(--tide-lit)]">db</span>
         </span>
       </SidebarHeader>
-      <SidebarSeparator />
       <SidebarContent>
         <SidebarGroup>
           <SidebarMenu>

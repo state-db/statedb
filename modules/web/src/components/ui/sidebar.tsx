@@ -155,7 +155,11 @@ const SidebarMenuButton = React.forwardRef<
       ref={ref}
       data-active={isActive}
       className={cn(
-        "flex h-9 w-full items-center gap-2 rounded-md px-2 text-sm outline-none transition-colors hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus-visible:ring-2 focus-visible:ring-sidebar-ring data-[active=true]:bg-sidebar-accent data-[active=true]:text-sidebar-accent-foreground [&_svg]:shrink-0",
+        "relative flex h-9 w-full items-center gap-2 rounded-md px-2 text-sm outline-none transition-colors hover:bg-sidebar-accent/60 hover:text-sidebar-accent-foreground focus-visible:ring-2 focus-visible:ring-sidebar-ring data-[active=true]:bg-sidebar-accent data-[active=true]:font-medium data-[active=true]:text-sidebar-accent-foreground [&_svg]:shrink-0",
+        // Waterline: the active item is marked by a brand-blue rule at the
+        // left edge, echoing the wave strokes under the otter in the logo. It
+        // is what separates "active" from "hovered" — both share a pill.
+        "data-[active=true]:before:absolute data-[active=true]:before:inset-y-1.5 data-[active=true]:before:left-0 data-[active=true]:before:w-0.5 data-[active=true]:before:rounded-full data-[active=true]:before:bg-sidebar-primary",
         "group-data-[sidebar-open=false]/sidebar-wrapper:justify-center group-data-[sidebar-open=false]/sidebar-wrapper:px-0",
         className,
       )}

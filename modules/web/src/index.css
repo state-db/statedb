@@ -2,67 +2,138 @@
 
 @custom-variant dark (&:is(.dark *));
 
-/* ─── shadcn/ui CSS variables — light (zinc base) ─────────────────────────── */
+/* ─── Brand palette — the water column ────────────────────────────────────
+   statedb reads the ocean as depth rather than as "blue". Light mode is the
+   sunlit shallows; dark mode is the deep. Surfaces recede by getting deeper
+   and more saturated, which is why the sidebar sits *below* the content in
+   both modes instead of floating above it.
+
+   The brand blue (--tide) is fixed: the logo and the otter are drawn in it.
+   Everything else that carries state is marine — kelp for success, coral for
+   failure, sunlit sand for warnings — and focus glows bioluminescent cyan so
+   it never disappears into a blue-heavy UI.
+
+   The marketing site carries the same ramp; keep site/src/styles/ocean.css
+   in step when these values change.                                         */
 :root {
-  --background: oklch(1 0 0);
-  --foreground: oklch(0.141 0.005 285.823);
-  --card: oklch(1 0 0);
-  --card-foreground: oklch(0.141 0.005 285.823);
-  --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.141 0.005 285.823);
-  --primary: oklch(0.21 0.006 285.885);
-  --primary-foreground: oklch(0.985 0 0);
-  --secondary: oklch(0.967 0.001 286.375);
-  --secondary-foreground: oklch(0.21 0.006 285.885);
-  --muted: oklch(0.967 0.001 286.375);
-  --muted-foreground: oklch(0.552 0.016 285.938);
-  --accent: oklch(0.967 0.001 286.375);
-  --accent-foreground: oklch(0.21 0.006 285.885);
-  --destructive: oklch(0.577 0.245 27.325);
-  --destructive-foreground: oklch(0.985 0 0);
-  --border: oklch(0.92 0.004 286.32);
-  --input: oklch(0.92 0.004 286.32);
-  --ring: oklch(0.21 0.006 285.885);
-  --radius: 0.625rem;
-  --sidebar: oklch(0.985 0 0);
-  --sidebar-foreground: oklch(0.141 0.005 285.823);
-  --sidebar-primary: oklch(0.21 0.006 285.885);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.967 0.001 286.375);
-  --sidebar-accent-foreground: oklch(0.21 0.006 285.885);
-  --sidebar-border: oklch(0.92 0.004 286.32);
-  --sidebar-ring: oklch(0.21 0.006 285.885);
+  /* depth */
+  --abyss: #081625;
+  --deep: #0c1d31;
+  --hull: #12293f;
+  --trough: #17304a;
+  --silt: #142e48;
+  --shelf: #1b3652;
+  --shoal: #1f3c5c;
+  --sill: #274764;
+  --ink: #0f2039;
+  --navy: #182b4d;
+
+  /* surface */
+  --foam: #eef4fa;
+  --spray: #dde8f5;
+  --tint: #d8e6f7;
+  --wash: #e1eaf6;
+  --mist: #dbe4f2;
+  --edge: #cedcec;
+  --edge-deep: #c2d5ea;
+  --sand: #f7f3e8;
+  --haze: #526685;
+  --haze-lit: #93aac6;
+
+  /* marine accents — the second value in each pair is the dark-mode form */
+  --tide: #2563eb;
+  /* Deep tide: the brand blue is only 4.2:1 on the light sidebar, so text
+     set in it there steps down a shade. */
+  --tide-deep: #1b57cf;
+  --tide-lit: #6ba6ff;
+  --lagoon: #0f8fb0;
+  --biolume: #3fd3e8;
+  --kelp: #0b7a57;
+  --kelp-lit: #34d9a2;
+  --coral: #c4402f;
+  --coral-lit: #ff7b62;
+  --gold: #8f5a0e;
+  --gold-lit: #f2b457;
 }
 
-/* ─── shadcn/ui CSS variables — dark ──────────────────────────────────────── */
+/* ─── shadcn/ui CSS variables — light (the shallows) ──────────────────────── */
+:root {
+  --background: var(--foam);
+  --foreground: var(--ink);
+  --card: #ffffff;
+  --card-foreground: var(--ink);
+  --popover: #ffffff;
+  --popover-foreground: var(--ink);
+  --primary: var(--tide);
+  --primary-foreground: #ffffff;
+  --secondary: var(--wash);
+  --secondary-foreground: var(--navy);
+  --muted: var(--wash);
+  --muted-foreground: var(--haze);
+  --accent: var(--tint);
+  --accent-foreground: #14345e;
+  --destructive: var(--coral);
+  --destructive-foreground: #ffffff;
+  --success: var(--kelp);
+  --warning: var(--gold);
+  --info: var(--tide);
+  --border: var(--edge);
+  --input: var(--edge);
+  /* Fields are the surface you type into. They read as white paper in the
+     shallows and as a lit pocket in the deep — never as the page itself,
+     which is what a transparent field would collapse to here. */
+  --field: #ffffff;
+  /* A tooltip is chrome, not a brand moment: it borrows the deep rather than
+     the brand blue, which would compete with the control it describes. */
+  --tooltip: var(--navy);
+  --tooltip-foreground: #eaf2fb;
+  --ring: var(--lagoon);
+  --radius: 0.625rem;
+  --sidebar: var(--spray);
+  --sidebar-foreground: #16304f;
+  --sidebar-primary: var(--tide);
+  --sidebar-primary-foreground: #ffffff;
+  --sidebar-accent: #d6e4f5;
+  --sidebar-accent-foreground: var(--ink);
+  --sidebar-border: var(--edge-deep);
+  --sidebar-ring: var(--lagoon);
+}
+
+/* ─── shadcn/ui CSS variables — dark (the deep) ───────────────────────────── */
 .dark {
-  --background: oklch(0.141 0.005 285.823);
-  --foreground: oklch(0.985 0 0);
-  --card: oklch(0.21 0.006 285.885);
-  --card-foreground: oklch(0.985 0 0);
-  --popover: oklch(0.21 0.006 285.885);
-  --popover-foreground: oklch(0.985 0 0);
-  --primary: oklch(0.92 0.004 286.32);
-  --primary-foreground: oklch(0.21 0.006 285.885);
-  --secondary: oklch(0.274 0.006 286.033);
-  --secondary-foreground: oklch(0.985 0 0);
-  --muted: oklch(0.274 0.006 286.033);
-  --muted-foreground: oklch(0.705 0.015 286.067);
-  --accent: oklch(0.274 0.006 286.033);
-  --accent-foreground: oklch(0.985 0 0);
-  --destructive: oklch(0.704 0.191 22.216);
-  --destructive-foreground: oklch(0.985 0 0);
-  --border: oklch(1 0 0 / 10%);
-  --input: oklch(1 0 0 / 15%);
-  --ring: oklch(0.552 0.016 285.938);
-  --sidebar: oklch(0.21 0.006 285.885);
-  --sidebar-foreground: oklch(0.985 0 0);
-  --sidebar-primary: oklch(0.488 0.243 264.376);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.274 0.006 286.033);
-  --sidebar-accent-foreground: oklch(0.985 0 0);
-  --sidebar-border: oklch(1 0 0 / 10%);
-  --sidebar-ring: oklch(0.552 0.016 285.938);
+  --background: var(--deep);
+  --foreground: #e6eff8;
+  --card: var(--hull);
+  --card-foreground: #e6eff8;
+  --popover: var(--hull);
+  --popover-foreground: #e6eff8;
+  --primary: var(--tide-lit);
+  --primary-foreground: #071626;
+  --secondary: var(--shelf);
+  --secondary-foreground: #dce8f6;
+  --muted: var(--trough);
+  --muted-foreground: var(--haze-lit);
+  --accent: var(--shelf);
+  --accent-foreground: #eaf2fb;
+  --destructive: var(--coral-lit);
+  --destructive-foreground: #2b0a04;
+  --success: var(--kelp-lit);
+  --warning: var(--gold-lit);
+  --info: var(--tide-lit);
+  --border: var(--shoal);
+  --input: var(--sill);
+  --field: var(--trough);
+  --tooltip: var(--shelf);
+  --tooltip-foreground: #eaf2fb;
+  --ring: var(--biolume);
+  --sidebar: var(--abyss);
+  --sidebar-foreground: #c6d8ec;
+  --sidebar-primary: var(--tide-lit);
+  --sidebar-primary-foreground: #071626;
+  --sidebar-accent: var(--silt);
+  --sidebar-accent-foreground: #eaf2fb;
+  --sidebar-border: var(--trough);
+  --sidebar-ring: var(--biolume);
 }
 
 /* ─── Tailwind v4 theme mapping ───────────────────────────────────────────── */
@@ -83,8 +154,14 @@
   --color-accent-foreground: var(--accent-foreground);
   --color-destructive: var(--destructive);
   --color-destructive-foreground: var(--destructive-foreground);
+  --color-success: var(--success);
+  --color-warning: var(--warning);
+  --color-info: var(--info);
   --color-border: var(--border);
   --color-input: var(--input);
+  --color-field: var(--field);
+  --color-tooltip: var(--tooltip);
+  --color-tooltip-foreground: var(--tooltip-foreground);
   --color-ring: var(--ring);
   --color-sidebar: var(--sidebar);
   --color-sidebar-foreground: var(--sidebar-foreground);
@@ -94,6 +171,16 @@
   --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-ring: var(--sidebar-ring);
+  /* Fixed depth shades for surfaces that stay dark in both themes (the run
+     log reads as a porthole into deep water, not as a light-mode panel). */
+  --color-abyss: var(--abyss);
+  --color-shelf: var(--shelf);
+  --color-mist: var(--mist);
+  --color-haze-lit: var(--haze-lit);
+  --color-biolume: var(--biolume);
+  --color-kelp-lit: var(--kelp-lit);
+  --color-coral-lit: var(--coral-lit);
+  --color-gold-lit: var(--gold-lit);
   --radius-sm: calc(var(--radius) - 4px);
   --radius-md: calc(var(--radius) - 2px);
   --radius-lg: var(--radius);

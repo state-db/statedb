@@ -217,7 +217,7 @@ function Command({ value }: { value: string }) {
 
 function TokenTableSkeleton() {
   return (
-    <div className="flex flex-col gap-2 rounded-md border p-4">
+    <div className="flex flex-col gap-2 rounded-md border bg-card p-4">
       <Skeleton className="h-8 w-full" />
       <Skeleton className="h-12 w-full" />
       <Skeleton className="h-12 w-full" />

@@ -271,13 +271,13 @@ function RunLog({ events, expired, error, live, preview }: { events: RunEvent[];
         <Button variant="outline" size="sm" onClick={() => { follow.current = true; jumpToBottom(); }}><ArrowDown data-icon="inline-start" />Jump to bottom</Button>
       </div>
       {error !== null && <ErrorAlert title="Live log disconnected" error={error} />}
-      <ScrollArea className="h-[32rem] rounded-lg border bg-zinc-950 text-zinc-100">
+      <ScrollArea className="h-[32rem] rounded-lg border bg-abyss text-mist">
         <div className="flex min-w-[42rem] flex-col p-4 font-mono text-xs leading-5">
           {/* One shared grid so column tracks align across all rows — per-row
               grids would resolve the auto-sized status column independently. */}
           {filter === "all" && rows.length > 0 && (
             <div className="grid grid-cols-[2rem_minmax(12rem,1fr)_minmax(10rem,1fr)_minmax(9rem,auto)] gap-x-2">
-              <div className="col-span-4 mb-3 grid grid-cols-subgrid border-b border-zinc-800 pb-2 text-zinc-500">
+              <div className="col-span-4 mb-3 grid grid-cols-subgrid border-b border-shelf pb-2 text-haze-lit">
                 <span />
                 <span>Type</span>
                 <span>Name</span>
@@ -297,7 +297,7 @@ function RunLog({ events, expired, error, live, preview }: { events: RunEvent[];
                       onToggle={() => setExpandedRows((current) => ({ ...current, [row.urn]: !expanded }))}
                     />
                     {expanded && rowMessages.length > 0 && (
-                      <div className="col-span-4 mb-1 ml-8 border-l border-zinc-800 pl-3">
+                      <div className="col-span-4 mb-1 ml-8 border-l border-shelf pl-3">
                         {rowMessages.map((event) => <LogLine key={event.sequence} event={event} preview={preview} />)}
                       </div>
                     )}
@@ -307,18 +307,18 @@ function RunLog({ events, expired, error, live, preview }: { events: RunEvent[];
             </div>
           )}
           {sectionMessages.length > 0 && (
-            <section className={cn("flex flex-col", filter === "all" && rows.length > 0 && "mt-5 border-t border-zinc-800 pt-4")}>
-              {filter === "all" && <h3 className="mb-2 font-sans text-xs font-medium uppercase tracking-wide text-zinc-500">Diagnostics and output</h3>}
+            <section className={cn("flex flex-col", filter === "all" && rows.length > 0 && "mt-5 border-t border-shelf pt-4")}>
+              {filter === "all" && <h3 className="mb-2 font-sans text-xs font-medium uppercase tracking-wide text-haze-lit">Diagnostics and output</h3>}
               <DiagnosticOutput events={sectionMessages} rows={rows} preview={preview} />
             </section>
           )}
           {filter === "all" && <OutputsSection events={events} />}
           {filter === "all" && summary && <SummaryLogLine event={summary} preview={preview} />}
-          {rows.length === 0 && visibleMessages.length === 0 && !summary && !live && <p className="text-zinc-500">Waiting for events…</p>}
+          {rows.length === 0 && visibleMessages.length === 0 && !summary && !live && <p className="text-haze-lit">Waiting for events…</p>}
           {live && (
             <div className={cn(
-              "flex items-center gap-2 text-sky-300",
-              (rows.length > 0 || visibleMessages.length > 0 || summary) && "mt-4 border-t border-zinc-800 pt-3",
+              "flex items-center gap-2 text-biolume",
+              (rows.length > 0 || visibleMessages.length > 0 || summary) && "mt-4 border-t border-shelf pt-3",
             )}
             >
               <LiveDot />
@@ -347,7 +347,7 @@ function DiagnosticOutput({ events, rows, preview }: { events: RunEvent[]; rows:
       {stdout.map((event) => <LogLine key={event.sequence} event={event} preview={preview} />)}
       {[...groups.entries()].map(([urn, grouped]) => (
         <section className="flex flex-col" key={urn || "stack"}>
-          <h4 className="mb-1 text-zinc-500">{names.get(urn) ?? "Stack"}:</h4>
+          <h4 className="mb-1 text-haze-lit">{names.get(urn) ?? "Stack"}:</h4>
           <div className="pl-4">{grouped.map((event) => <LogLine key={event.sequence} event={event} preview={preview} />)}</div>
         </section>
       ))}
@@ -359,8 +359,8 @@ function OutputsSection({ events }: { events: RunEvent[] }) {
   const diff = useMemo(() => stackOutputsDiff(events), [events]);
   if (diff.length === 0) return null;
   return (
-    <section className="mt-5 flex flex-col border-t border-zinc-800 pt-4">
-      <h3 className="mb-2 font-sans text-xs font-medium uppercase tracking-wide text-zinc-500">Outputs</h3>
+    <section className="mt-5 flex flex-col border-t border-shelf pt-4">
+      <h3 className="mb-2 font-sans text-xs font-medium uppercase tracking-wide text-haze-lit">Outputs</h3>
       {diff.map((entry) => {
         const marker = entry.kind === "add" ? "+ " : entry.kind === "remove" ? "- " : entry.kind === "update" ? "~ " : "  ";
         return (
@@ -369,7 +369,7 @@ function OutputsSection({ events }: { events: RunEvent[] }) {
             <span className="whitespace-pre-wrap break-words">
               {entry.key}:{" "}
               {entry.kind === "update"
-                ? <>{displayValue(entry.oldValue)} <span className="text-zinc-500">{"=>"}</span> {displayValue(entry.newValue)}</>
+                ? <>{displayValue(entry.oldValue)} <span className="text-haze-lit">{"=>"}</span> {displayValue(entry.newValue)}</>
                 : displayValue(entry.kind === "remove" ? entry.oldValue : entry.newValue)}
             </span>
           </div>
@@ -390,19 +390,19 @@ function ResourceLogRow({ row, rows, preview, expandable, expanded, onToggle }: 
   const depth = resourceDepth(row, rows);
   return (
     <div
-      className={cn("col-span-4 grid grid-cols-subgrid py-1", expandable && "cursor-pointer rounded-sm hover:bg-zinc-900")}
+      className={cn("col-span-4 grid grid-cols-subgrid py-1", expandable && "cursor-pointer rounded-sm hover:bg-shelf/40")}
       onClick={expandable ? onToggle : undefined}
       title={expandable ? "Show this resource's output" : undefined}
     >
       <span className={cn("font-semibold", markerClass(row.marker))}>{row.failed ? "! " : row.marker}</span>
       <span className="truncate" title={row.type}>{row.type}</span>
       <span className="truncate" style={{ paddingLeft: `${depth * 1.25}rem` }} title={row.name}>{row.name}</span>
-      <span className={cn(!row.done && "animate-pulse text-zinc-400", row.failed && "text-red-400")}>
+      <span className={cn(!row.done && "animate-pulse text-biolume", row.failed && "text-coral-lit")}>
         {row.status}{!row.done && "…"}
-        {!preview && row.done && row.seconds !== undefined && <span className="text-zinc-500"> · {row.seconds < 1 ? "<1s" : formatSeconds(row.seconds)}</span>}
-        {row.diffs.length > 0 && <span className="text-zinc-500"> · diff: {formatDiffKeys(row.diffs)}</span>}
-        {row.info && <span className="text-zinc-500"> · {row.info}</span>}
-        {expandable && <ChevronDown className={cn("ml-1 inline size-3 text-zinc-500 transition-transform", expanded && "rotate-180")} aria-hidden="true" />}
+        {!preview && row.done && row.seconds !== undefined && <span className="text-haze-lit"> · {row.seconds < 1 ? "<1s" : formatSeconds(row.seconds)}</span>}
+        {row.diffs.length > 0 && <span className="text-haze-lit"> · diff: {formatDiffKeys(row.diffs)}</span>}
+        {row.info && <span className="text-haze-lit"> · {row.info}</span>}
+        {expandable && <ChevronDown className={cn("ml-1 inline size-3 text-haze-lit transition-transform", expanded && "rotate-180")} aria-hidden="true" />}
       </span>
     </div>
   );
@@ -424,7 +424,7 @@ function LogLine({ event, preview }: { event: RunEvent; preview: boolean }) {
 function SummaryLogLine({ event, preview }: { event: RunEvent; preview: boolean }) {
   const line = formatEventLine(event, preview);
   if (!line) return null;
-  return <div className="mt-5 border-t border-zinc-800 pt-4"><LogLine event={event} preview={preview} /></div>;
+  return <div className="mt-5 border-t border-shelf pt-4"><LogLine event={event} preview={preview} /></div>;
 }
 
 function RunChanges({ events, collapseReplacements, live, preview }: { events: RunEvent[]; collapseReplacements: boolean; live: boolean; preview: boolean }) {
@@ -435,7 +435,7 @@ function RunChanges({ events, collapseReplacements, live, preview }: { events: R
   return (
     <div className="flex flex-col gap-3">
       <div className="flex items-center gap-2"><Checkbox id="show-unchanged" checked={showUnchanged} onCheckedChange={(value) => setShowUnchanged(value === true)} /><Label htmlFor="show-unchanged">Show unchanged</Label></div>
-      <div className="rounded-lg border">
+      <div className="rounded-lg border bg-card">
         <Table>
           <TableHeader><TableRow><TableHead>Operation</TableHead><TableHead>Type</TableHead><TableHead>Name</TableHead><TableHead><span className="sr-only">Toggle diff</span></TableHead></TableRow></TableHeader>
           <TableBody>
@@ -739,7 +739,7 @@ export function formatEventLine(event: RunEvent, preview: boolean): { marker: st
   return { marker: "·", text: friendlyKey(event.kind) };
 }
 
-function diagnosticClass(event: RunEvent) { return cn(event.severity === "error" && "text-red-400", event.severity === "warning" && "text-amber-300"); }
+function diagnosticClass(event: RunEvent) { return cn(event.severity === "error" && "text-coral-lit", event.severity === "warning" && "text-gold-lit"); }
 function mergeEvents(current: RunEvent[], incoming: RunEvent[]) { return [...new Map([...current, ...incoming].map((event) => [event.sequence, event])).values()].sort((a, b) => a.sequence - b.sequence); }
 
 export function resourceChanges(events: RunEvent[], collapseReplacements = false): ResourceChange[] {
@@ -902,7 +902,7 @@ function operationMarker(op: string) {
   };
   return markers[op] ?? "› ";
 }
-function markerClass(marker: string) { return cn(marker.startsWith("+") && "text-emerald-400", marker.startsWith("~") && "text-amber-300", marker.startsWith("-") && "text-red-400", marker.startsWith("!") && "text-red-400", marker.startsWith("✓") && "text-emerald-400", marker.trim() === "" && "text-zinc-500"); }
+function markerClass(marker: string) { return cn(marker.startsWith("+") && "text-kelp-lit", marker.startsWith("~") && "text-gold-lit", marker.startsWith("-") && "text-coral-lit", marker.startsWith("!") && "text-coral-lit", marker.startsWith("✓") && "text-kelp-lit", marker.trim() === "" && "text-haze-lit"); }
 function operationVerb(op: string, complete: boolean) {
   const verbs: Record<string, [string, string]> = {
     create: ["creating", "created"],

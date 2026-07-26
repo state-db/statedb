@@ -25,6 +25,7 @@ export default defineConfig({
       customCss: [
         "@fontsource-variable/bricolage-grotesque",
         "@fontsource-variable/jetbrains-mono",
+        "./src/styles/ocean.css",
         "./src/styles/starlight.css",
       ],
       sidebar: [
