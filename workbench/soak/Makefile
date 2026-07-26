@@ -38,8 +38,6 @@ SOAK_PREVIEW_EVERY   ?= 2
 
 ## Compose reads the run shape from the environment, so tunables are exported, not passed as Make
 ## variables.
-COMPOSE = cd "$$(git rev-parse --show-toplevel)/$(COMPOSE_DIR)" && \
-	export DOCKER_CONFIG=$(DOCKER_CFG) APP_IMAGE=$(APP_IMAGE) ORG=$(ORG) \
 COMPOSE = export APP_IMAGE=$(APP_IMAGE) ORG=$(ORG) \
 		DB_USER=$(DB_USER) DB_NAME=$(DB_NAME) DB_PORT=$(DB_PORT) \
 		APP_PORT=$(APP_PORT) MGMT_PORT=$(MGMT_PORT) PROM_PORT=$(PROM_PORT) \
