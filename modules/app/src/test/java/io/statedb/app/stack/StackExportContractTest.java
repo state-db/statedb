@@ -5,19 +5,24 @@ import static org.hamcrest.Matchers.equalTo;
 import static org.hamcrest.Matchers.hasSize;
 import static org.hamcrest.Matchers.nullValue;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import io.quarkus.narayana.jta.QuarkusTransaction;
 import io.quarkus.test.junit.QuarkusTest;
 import io.statedb.persistence.auth.ApiToken;
 import io.statedb.persistence.identity.OrgMember;
 import io.statedb.persistence.identity.Organization;
 import io.statedb.persistence.identity.User;
+import io.statedb.persistence.journal.JournalEntry;
 import io.statedb.persistence.stack.StackCreator;
+import io.statedb.persistence.update.StackUpdate;
 import jakarta.inject.Inject;
 import jakarta.persistence.EntityManager;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
+import java.time.Instant;
 import java.util.Map;
+import java.util.UUID;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -31,8 +36,12 @@ class StackExportContractTest {
   private static final String STACK = "dev";
   private static final String RAW_TOKEN = "export-token";
 
+  private static final ObjectMapper MAPPER = new ObjectMapper();
+
   @Inject StackCreator stackCreator;
   @Inject EntityManager em;
+
+  private UUID stackId;
 
   @BeforeEach
   void seed() {
@@ -64,7 +73,7 @@ class StackExportContractTest {
               token.description = "export";
               token.persistAndFlush();
 
-              stackCreator.create(org.id, ORG, PROJECT, STACK, Map.of());
+              stackId = stackCreator.create(org.id, ORG, PROJECT, STACK, Map.of()).stackId();
               stackCreator.create(other.id, OTHER_ORG, PROJECT, STACK, Map.of());
             });
   }
@@ -124,6 +133,65 @@ class StackExportContractTest {
     given().when().get(path(ORG, PROJECT, STACK)).then().statusCode(401);
   }
 
+  // pulumi stack export --version N — the CLI appends /N to the export path.
+
+  @Test
+  void versionedExportReturnsStateAsOfThatVersion() {
+    seedTwoAppliedVersions();
+
+    given()
+        .header("Authorization", "token " + RAW_TOKEN)
+        .when()
+        .get(path(ORG, PROJECT, STACK) + "/1")
+        .then()
+        .statusCode(200)
+        .body("deployment.resources", hasSize(1))
+        .body("deployment.resources[0].urn", equalTo(urn("a")));
+
+    given()
+        .header("Authorization", "token " + RAW_TOKEN)
+        .when()
+        .get(path(ORG, PROJECT, STACK) + "/2")
+        .then()
+        .statusCode(200)
+        .body("deployment.resources", hasSize(2));
+  }
+
+  @Test
+  void versionedExportUnknownVersionReturns404() {
+    given()
+        .header("Authorization", "token " + RAW_TOKEN)
+        .when()
+        .get(path(ORG, PROJECT, STACK) + "/7")
+        .then()
+        .statusCode(404);
+  }
+
+  @Test
+  void versionedExportInProgressUpdateReturns404() {
+    QuarkusTransaction.requiringNew()
+        .run(() -> appliedUpdate(1, StackUpdate.Status.IN_PROGRESS, 0L, null));
+
+    given()
+        .header("Authorization", "token " + RAW_TOKEN)
+        .when()
+        .get(path(ORG, PROJECT, STACK) + "/1")
+        .then()
+        .statusCode(404);
+  }
+
+  @Test
+  void versionedExportDryRunVersionZeroReturns404() {
+    seedTwoAppliedVersions();
+
+    given()
+        .header("Authorization", "token " + RAW_TOKEN)
+        .when()
+        .get(path(ORG, PROJECT, STACK) + "/0")
+        .then()
+        .statusCode(404);
+  }
+
   @Test
   void updateTokenDoesNotAuthorizeExport() {
     given()
@@ -132,6 +200,58 @@ class StackExportContractTest {
         .get(path(ORG, PROJECT, STACK))
         .then()
         .statusCode(401);
+  }
+
+  // Two applied versions with production boundary semantics: end_journal_seq is one past the
+  // update's last journal entry (the gap JournalAppender's counter advance leaves).
+  private void seedTwoAppliedVersions() {
+    QuarkusTransaction.requiringNew()
+        .run(
+            () -> {
+              UUID first = appliedUpdate(1, StackUpdate.Status.SUCCEEDED, 0L, 2L);
+              successEntry(first, 1L, "a");
+              UUID second = appliedUpdate(2, StackUpdate.Status.SUCCEEDED, 2L, 4L);
+              successEntry(second, 3L, "b");
+            });
+  }
+
+  private UUID appliedUpdate(int version, StackUpdate.Status status, Long startSeq, Long endSeq) {
+    StackUpdate update = new StackUpdate();
+    update.stackId = stackId;
+    update.version = version;
+    update.kind = StackUpdate.Kind.UPDATE;
+    update.status = status;
+    update.startJournalSeq = startSeq;
+    update.endJournalSeq = endSeq;
+    update.startedAt = Instant.now();
+    update.persistAndFlush();
+    return update.id;
+  }
+
+  private void successEntry(UUID updateId, long sequenceId, String name) {
+    JournalEntry entry = new JournalEntry();
+    entry.stackId = stackId;
+    entry.updateId = updateId;
+    entry.sequenceId = sequenceId;
+    entry.wireSequenceId = sequenceId;
+    entry.kind = 1;
+    entry.operationId = 1L;
+    try {
+      entry.payload =
+          MAPPER.readTree(
+              "{\"state\":{\"urn\":\""
+                  + urn(name)
+                  + "\",\"type\":\"pkg:index:"
+                  + name
+                  + "\",\"custom\":true}}");
+    } catch (com.fasterxml.jackson.core.JsonProcessingException e) {
+      throw new IllegalStateException(e);
+    }
+    entry.persistAndFlush();
+  }
+
+  private static String urn(String name) {
+    return "urn:pulumi:dev::proj::pkg:index:" + name + "::" + name;
   }
 
   private Organization org(String name) {

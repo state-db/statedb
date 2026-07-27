@@ -4,6 +4,7 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
+import io.quarkus.panache.common.Sort;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 import jakarta.persistence.EntityManager;
@@ -31,13 +32,29 @@ public class StackAssembler {
 
   @Transactional
   public AssembledDeployment assemble(UUID stackId) {
-    BaseSnapshot baseSnapshot = loadBaseSnapshotOrEmpty(stackId);
+    return replay(stackId, loadBaseSnapshotOrEmpty(stackId), null);
+  }
+
+  /**
+   * Reconstructs the deployment as of a historical journal boundary — a completed update's {@code
+   * end_journal_seq}. The base is the newest snapshot at or below the boundary, found by position
+   * rather than through {@code stack_state.base_snapshot_id} (which may already be past the
+   * boundary); any retained snapshot is a valid base because each one is a full materialization of
+   * the journal prefix up to its own boundary. With no snapshot at or below the boundary, replay
+   * starts from the empty base, the same path a stack takes before its first compaction.
+   */
+  @Transactional
+  public AssembledDeployment assembleAt(UUID stackId, long endJournalSeq) {
+    return replay(stackId, loadNearestSnapshotOrEmpty(stackId, endJournalSeq), endJournalSeq);
+  }
+
+  private AssembledDeployment replay(UUID stackId, BaseSnapshot baseSnapshot, Long endSeq) {
     ObjectNode currentBase = baseSnapshot.checkpoint();
     long baseSeq = baseSnapshot.compactedFromJournalSeq();
     UUID priorUpdateId = null;
     JournalReplayer replayer = new JournalReplayer(mapper, currentBase);
 
-    try (Stream<EntryRow> entries = streamEntries(stackId, baseSeq)) {
+    try (Stream<EntryRow> entries = streamEntries(stackId, baseSeq, endSeq)) {
       Iterator<EntryRow> iterator = entries.iterator();
       EntryRow pending = iterator.hasNext() ? iterator.next() : null;
       while (pending != null) {
@@ -82,29 +99,56 @@ public class StackAssembler {
       return new BaseSnapshot(
           (ObjectNode) snapshot.checkpoint.deepCopy(), snapshot.compactedFromJournalSeq);
     }
+    return emptyBase();
+  }
+
+  private BaseSnapshot loadNearestSnapshotOrEmpty(UUID stackId, long endJournalSeq) {
+    Snapshot snapshot =
+        Snapshot.<Snapshot>find(
+                "stackId = ?1 and compactedFromJournalSeq <= ?2",
+                Sort.descending("compactedFromJournalSeq"),
+                stackId,
+                endJournalSeq)
+            .firstResult();
+    if (snapshot == null) {
+      return emptyBase();
+    }
+    if (!snapshot.checkpoint.isObject()) {
+      throw new IllegalStateException("snapshot checkpoint must be a JSON object");
+    }
+    return new BaseSnapshot(
+        (ObjectNode) snapshot.checkpoint.deepCopy(), snapshot.compactedFromJournalSeq);
+  }
+
+  private BaseSnapshot emptyBase() {
     ObjectNode deployment = mapper.createObjectNode();
     deployment.set("resources", mapper.createArrayNode());
     return new BaseSnapshot(deployment, 0L);
   }
 
-  private Stream<EntryRow> streamEntries(UUID stackId, long baseSeq) {
-    @SuppressWarnings("unchecked")
-    Stream<Object[]> rows =
-        em.createNativeQuery(
-                """
-                SELECT stack_id, update_id, sequence_id, kind, operation_id, is_refresh,
-                       remove_old, remove_new, delete_old, delete_new,
-                       pending_replacement_old, pending_replacement_new,
-                       CAST(payload AS text)
-                  FROM journal_entries
-                 WHERE stack_id = ?1 AND sequence_id > ?2
-                 ORDER BY sequence_id ASC
-                """)
+  private Stream<EntryRow> streamEntries(UUID stackId, long baseSeq, Long endSeqInclusive) {
+    String sql =
+        """
+        SELECT stack_id, update_id, sequence_id, kind, operation_id, is_refresh,
+               remove_old, remove_new, delete_old, delete_new,
+               pending_replacement_old, pending_replacement_new,
+               CAST(payload AS text)
+          FROM journal_entries
+         WHERE stack_id = ?1 AND sequence_id > ?2
+        """
+            + (endSeqInclusive != null ? "   AND sequence_id <= ?3\n" : "")
+            + " ORDER BY sequence_id ASC";
+    var query =
+        em.createNativeQuery(sql)
             .setParameter(1, stackId)
             .setParameter(2, baseSeq)
             .setHint("org.hibernate.fetchSize", 512)
-            .setHint("org.hibernate.readOnly", true)
-            .getResultStream();
+            .setHint("org.hibernate.readOnly", true);
+    if (endSeqInclusive != null) {
+      query.setParameter(3, endSeqInclusive);
+    }
+    @SuppressWarnings("unchecked")
+    Stream<Object[]> rows = query.getResultStream();
     return rows.map(this::entryRow);
   }
 

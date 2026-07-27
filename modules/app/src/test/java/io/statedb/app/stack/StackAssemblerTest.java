@@ -12,6 +12,7 @@ import io.quarkus.test.junit.QuarkusTest;
 import io.statedb.persistence.identity.Organization;
 import io.statedb.persistence.journal.JournalEntry;
 import io.statedb.persistence.stack.AssembledDeployment;
+import io.statedb.persistence.stack.Snapshot;
 import io.statedb.persistence.stack.StackAssembler;
 import io.statedb.persistence.stack.StackCreator;
 import io.statedb.persistence.stack.StackRef;
@@ -56,6 +57,7 @@ class StackAssemblerTest {
 
   private UUID stackId;
   private int updateVersion;
+  private int snapshotVersion;
   private long sequence;
 
   @BeforeEach
@@ -790,6 +792,56 @@ class StackAssemblerTest {
         "project:///new.ts#1,1", find(afterFlush, "a").required("sourcePosition").asText());
   }
 
+  // Historical (per-version) bounded replay
+
+  @Test
+  void assembleAtReturnsStateAsOfBoundary() throws Exception {
+    UUID first = update();
+    success(first, 1L, res("a"));
+    long v1Boundary = boundaryAfterLastEntry();
+    UUID second = update();
+    success(second, 1L, res("b"));
+
+    JsonNode historical = assembleAt(v1Boundary).deployment().required("resources");
+    assertEquals(1, historical.size());
+    assertEquals(urn("a"), historical.get(0).required("urn").asText());
+
+    JsonNode current = assemble().deployment().required("resources");
+    assertEquals(2, current.size());
+  }
+
+  // assembleAt must find its base snapshot by boundary position, not via
+  // stack_state.base_snapshot_id (which is never set here).
+  @Test
+  void assembleAtUsesNearestSnapshotAtOrBelowBoundary() throws Exception {
+    long snapshotBoundary = boundaryAfterLastEntry();
+    persistSnapshot(snapshotBoundary, "[" + res("from-snapshot") + "]");
+    UUID update = update();
+    success(update, 1L, res("after"));
+    long boundary = boundaryAfterLastEntry();
+
+    JsonNode resources = assembleAt(boundary).deployment().required("resources");
+
+    assertEquals(2, resources.size());
+    assertEquals(urn("after"), resources.get(0).required("urn").asText());
+    assertEquals(urn("from-snapshot"), resources.get(1).required("urn").asText());
+  }
+
+  @Test
+  void assembleAtIgnoresSnapshotsBeyondBoundary() throws Exception {
+    UUID first = update();
+    success(first, 1L, res("a"));
+    long v1Boundary = boundaryAfterLastEntry();
+    UUID second = update();
+    success(second, 1L, res("b"));
+    persistSnapshot(boundaryAfterLastEntry(), "[" + res("newer-state") + "]");
+
+    JsonNode resources = assembleAt(v1Boundary).deployment().required("resources");
+
+    assertEquals(1, resources.size());
+    assertEquals(urn("a"), resources.get(0).required("urn").asText());
+  }
+
   // Error handling
 
   @Test
@@ -802,6 +854,34 @@ class StackAssemblerTest {
     assertTrue(e.getMessage().contains("stack=" + stackId));
     assertTrue(e.getMessage().contains("update=" + update));
     assertTrue(e.getMessage().contains("kind=" + JournalKind.UNKNOWN.wireValue));
+  }
+
+  private AssembledDeployment assembleAt(long endJournalSeq) {
+    AssembledDeployment assembled = assembler.assembleAt(stackId, endJournalSeq);
+    PulumiDeploymentAssert.assertIntegrityPasses(assembled.deployment());
+    return assembled;
+  }
+
+  // Mirrors production sequencing: JournalAppender advances journal_seq to last-entry+1, so a
+  // completed update's end_journal_seq (and a snapshot boundary) sits in a gap no entry occupies.
+  private long boundaryAfterLastEntry() {
+    return ++sequence;
+  }
+
+  private void persistSnapshot(long boundary, String resources) throws Exception {
+    JsonNode checkpoint = MAPPER.readTree("{\"resources\":" + resources + "}");
+    int version = ++snapshotVersion;
+    QuarkusTransaction.requiringNew()
+        .run(
+            () -> {
+              Snapshot snapshot = new Snapshot();
+              snapshot.stackId = stackId;
+              snapshot.version = version;
+              snapshot.checkpoint = checkpoint;
+              snapshot.compactedFromJournalSeq = boundary;
+              snapshot.resourceCount = checkpoint.path("resources").size();
+              snapshot.persistAndFlush();
+            });
   }
 
   private UUID update() {
