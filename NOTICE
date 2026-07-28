@@ -17,7 +17,13 @@ Third-party notices:
 state-db includes compatibility tooling, recorded protocol fixtures, and API
 snapshots derived from public Pulumi source code and API descriptions. Pulumi
 is Copyright Pulumi Corporation and contributors, licensed under the Apache
-License 2.0. See https://github.com/pulumi/pulumi/blob/master/LICENSE.
+License 2.0. A copy of that license is included at third_party/pulumi/LICENSE
+(also at https://github.com/pulumi/pulumi/blob/master/LICENSE).
+
+Attributions for the open-source components distributed with the state-db
+server and web console are listed in THIRD-PARTY-NOTICES.txt (regenerate with
+`make notices`). A running server serves the same file at
+/THIRD-PARTY-NOTICES.txt.
 
 Pulumi is a trademark of Pulumi Corporation. state-db is an independent project
 and is not affiliated with, endorsed by, or sponsored by Pulumi Corporation.

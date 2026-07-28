@@ -2,6 +2,7 @@
 	app-dev app-build app-image app-test app-clean \
 	web-dev \
 	format format-check \
+	notices notices-check \
 	pulumi-extract pulumi-compare pulumi-discover pulumi-api-test \
 	pulumi-recorder-run pulumi-recorder-run-no-build pulumi-recorder-catalog pulumi-recorder-verify pulumi-recorder-discover \
 	pulumi-verify-build pulumi-verify-test \
@@ -102,6 +103,19 @@ format-check:
 		echo "$$unformatted"; \
 		exit 1; \
 	fi
+
+## -------------------------
+## Third-party notices
+## -------------------------
+## THIRD-PARTY-NOTICES.txt attributes the open-source components bundled in
+## the server and web console. Regenerate after dependency changes; CI runs
+## the check and fails when the committed file is stale.
+
+notices:
+	./bin/generate-third-party-notices
+
+notices-check:
+	./bin/generate-third-party-notices --check
 
 ## -------------------------
 ## Pulumi API Extractor

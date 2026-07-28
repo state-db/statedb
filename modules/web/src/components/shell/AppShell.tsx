@@ -202,6 +202,15 @@ function AppSidebar({ user }: { user: CurrentUser }) {
       </SidebarContent>
       <SidebarFooter>
         <OrgSwitcher user={user} />
+        {/* Static file bundled into the server jar; not served by the bun dev server. */}
+        <a
+          href="/THIRD-PARTY-NOTICES.txt"
+          target="_blank"
+          rel="noreferrer"
+          className="px-2 text-xs text-muted-foreground hover:text-foreground group-data-[sidebar-open=false]/sidebar-wrapper:hidden"
+        >
+          Open-source licenses
+        </a>
       </SidebarFooter>
     </Sidebar>
   );

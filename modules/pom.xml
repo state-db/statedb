@@ -24,6 +24,7 @@
         <quarkus.platform.artifact-id>quarkus-bom</quarkus.platform.artifact-id>
         <quarkus.platform.version>3.33.1</quarkus.platform.version>
         <jandex-maven-plugin.version>3.5.3</jandex-maven-plugin.version>
+        <license-maven-plugin.version>2.6.0</license-maven-plugin.version>
         <spotless-maven-plugin.version>3.4.0</spotless-maven-plugin.version>
         <maven-failsafe-plugin.version>3.5.4</maven-failsafe-plugin.version>
         <google-java-format.version>1.35.0</google-java-format.version>
@@ -61,6 +62,39 @@
                     <groupId>io.smallrye</groupId>
                     <artifactId>jandex-maven-plugin</artifactId>
                     <version>${jandex-maven-plugin.version}</version>
+                </plugin>
+                <!--
+                  Third-party attribution for the shipped server. Not bound to a
+                  lifecycle phase; `make notices` runs license:add-third-party on
+                  the app module and folds the result into THIRD-PARTY-NOTICES.txt.
+                  licenseMerges collapses the many spellings of the same license
+                  so the generated listing groups correctly.
+                -->
+                <plugin>
+                    <groupId>org.codehaus.mojo</groupId>
+                    <artifactId>license-maven-plugin</artifactId>
+                    <version>${license-maven-plugin.version}</version>
+                    <configuration>
+                        <excludedScopes>test,provided</excludedScopes>
+                        <excludedGroups>io\.statedb</excludedGroups>
+                        <failOnMissing>false</failOnMissing>
+                        <sortArtifactByName>true</sortArtifactByName>
+                        <!-- Resolves relative to the module the goal runs on;
+                             `make notices` runs it on app only. -->
+                        <overrideUrl>file:${project.basedir}/../third-party-license-overrides.properties</overrideUrl>
+                        <licenseMerges>
+                            <licenseMerge>Apache License 2.0|Apache-2.0|Apache 2.0|Apache 2|Apache License, Version 2.0|The Apache License, Version 2.0|The Apache Software License, Version 2.0|Apache Software License 2.0|Apache Software License, version 2.0|ASL 2.0|Apache License v2.0|Apache License version 2.0|Apache License Version 2.0</licenseMerge>
+                            <licenseMerge>MIT License|MIT|The MIT License|The MIT License (MIT)|MIT license|MIT-0</licenseMerge>
+                            <licenseMerge>BSD 3-Clause License|BSD-3-Clause|The BSD 3-Clause License|BSD License 3|New BSD License|BSD 3-clause New License|3-Clause BSD License|EDL 1.0|Eclipse Distribution License - v 1.0|Eclipse Distribution License v. 1.0</licenseMerge>
+                            <licenseMerge>BSD 2-Clause License|BSD-2-Clause|The BSD 2-Clause License|BSD 2-Clause "Simplified" License</licenseMerge>
+                            <licenseMerge>Eclipse Public License 2.0|EPL-2.0|EPL 2.0|Eclipse Public License v2.0|Eclipse Public License v. 2.0|Eclipse Public License - v 2.0|Eclipse Public License, Version 2.0</licenseMerge>
+                            <licenseMerge>Eclipse Public License 1.0|EPL-1.0|EPL 1.0|Eclipse Public License v1.0|Eclipse Public License - v 1.0|Eclipse Public License, Version 1.0|Eclipse Public License 1.0 (EPL-1.0)</licenseMerge>
+                            <licenseMerge>GNU Lesser General Public License 2.1|LGPL-2.1|LGPL, version 2.1|GNU Lesser General Public License, version 2.1|GNU Library General Public License v2.1 or later|LGPL 2.1</licenseMerge>
+                            <licenseMerge>GNU General Public License v2.0 with Classpath Exception|GPL-2.0-with-classpath-exception|GPL2 w/ CPE|GNU General Public License, version 2 with the GNU Classpath Exception</licenseMerge>
+                            <licenseMerge>Public Domain|Public domain|CC0|CC0-1.0|Creative Commons Zero|Public Domain, per Creative Commons CC0</licenseMerge>
+                            <licenseMerge>Universal Permissive License 1.0|UPL-1.0|Universal Permissive License, Version 1.0</licenseMerge>
+                        </licenseMerges>
+                    </configuration>
                 </plugin>
             </plugins>
         </pluginManagement>

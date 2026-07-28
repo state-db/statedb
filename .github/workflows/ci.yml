@@ -32,7 +32,9 @@ jobs:
         uses: devcontainers/ci@v0.3
         with:
           push: never
-          runCmd: mvn -f modules/pom.xml verify
+          runCmd: |
+            mvn -f modules/pom.xml verify
+            ./bin/generate-third-party-notices --check
 
   verifier-tool:
     name: Integrity verifier (Go)
