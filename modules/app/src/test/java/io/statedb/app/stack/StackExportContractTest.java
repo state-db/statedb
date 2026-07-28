@@ -1,6 +1,7 @@
 package io.statedb.app.stack;
 
 import static io.restassured.RestAssured.given;
+import static org.hamcrest.Matchers.containsInAnyOrder;
 import static org.hamcrest.Matchers.equalTo;
 import static org.hamcrest.Matchers.hasSize;
 import static org.hamcrest.Matchers.nullValue;
@@ -14,6 +15,8 @@ import io.statedb.persistence.identity.Organization;
 import io.statedb.persistence.identity.User;
 import io.statedb.persistence.journal.JournalEntry;
 import io.statedb.persistence.stack.StackCreator;
+import io.statedb.persistence.stack.StackImporter;
+import io.statedb.persistence.stack.StackState;
 import io.statedb.persistence.update.StackUpdate;
 import jakarta.inject.Inject;
 import jakarta.persistence.EntityManager;
@@ -39,6 +42,7 @@ class StackExportContractTest {
   private static final ObjectMapper MAPPER = new ObjectMapper();
 
   @Inject StackCreator stackCreator;
+  @Inject StackImporter stackImporter;
   @Inject EntityManager em;
 
   private UUID stackId;
@@ -190,6 +194,45 @@ class StackExportContractTest {
         .get(path(ORG, PROJECT, STACK) + "/0")
         .then()
         .statusCode(404);
+  }
+
+  // Import records an applied version at the current journal head without advancing it, so its
+  // snapshot shares version 2's boundary. Each version must still export its own state.
+  @Test
+  void versionedExportDistinguishesImportSharingJournalBoundary() throws Exception {
+    seedTwoAppliedVersions();
+    QuarkusTransaction.requiringNew()
+        .run(
+            () -> {
+              StackState state = StackState.<StackState>find("stackId", stackId).firstResult();
+              state.journalSeq = 4L;
+            });
+    stackImporter.importDeployment(
+        stackId,
+        null,
+        null,
+        MAPPER.readTree(
+            "{\"resources\":[{\"urn\":\""
+                + urn("imported")
+                + "\",\"type\":\"pkg:index:imported\",\"custom\":true}]}"));
+
+    given()
+        .header("Authorization", "token " + RAW_TOKEN)
+        .when()
+        .get(path(ORG, PROJECT, STACK) + "/3")
+        .then()
+        .statusCode(200)
+        .body("deployment.resources", hasSize(1))
+        .body("deployment.resources[0].urn", equalTo(urn("imported")));
+
+    given()
+        .header("Authorization", "token " + RAW_TOKEN)
+        .when()
+        .get(path(ORG, PROJECT, STACK) + "/2")
+        .then()
+        .statusCode(200)
+        .body("deployment.resources", hasSize(2))
+        .body("deployment.resources.urn", containsInAnyOrder(urn("a"), urn("b")));
   }
 
   @Test

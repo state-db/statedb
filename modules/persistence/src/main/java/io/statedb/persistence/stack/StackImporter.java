@@ -54,6 +54,7 @@ public class StackImporter {
                     .getSingleResult())
             .intValue();
     Instant now = Instant.now();
+    int snapshotVersion = state.baseSnapshotVersion + 1;
 
     StackUpdate update = new StackUpdate();
     update.stackId = stackId;
@@ -62,13 +63,16 @@ public class StackImporter {
     update.version = nextUpdateVersion;
     update.startJournalSeq = state.journalSeq;
     update.endJournalSeq = state.journalSeq;
+    // Lineage fence for historical export: the imported snapshot is not a fold of the prior
+    // journal, so versioned assembly must not use it (or anything after it) as a base for
+    // earlier versions sharing this journal boundary.
+    update.baseSnapshotVersion = snapshotVersion;
     update.startedByUserId = startedByUserId;
     update.startedByApiTokenId = startedByApiTokenId;
     update.startedAt = now;
     update.endedAt = now;
     update.persistAndFlush();
 
-    int snapshotVersion = state.baseSnapshotVersion + 1;
     Snapshot snapshot = new Snapshot();
     snapshot.stackId = stackId;
     snapshot.version = snapshotVersion;

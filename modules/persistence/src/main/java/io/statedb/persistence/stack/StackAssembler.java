@@ -5,6 +5,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import io.quarkus.panache.common.Sort;
+import io.statedb.persistence.update.StackUpdate;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 import jakarta.persistence.EntityManager;
@@ -36,16 +37,21 @@ public class StackAssembler {
   }
 
   /**
-   * Reconstructs the deployment as of a historical journal boundary — a completed update's {@code
+   * Reconstructs the deployment as of a historical applied version — a completed update's {@code
    * end_journal_seq}. The base is the newest snapshot at or below the boundary, found by position
    * rather than through {@code stack_state.base_snapshot_id} (which may already be past the
-   * boundary); any retained snapshot is a valid base because each one is a full materialization of
-   * the journal prefix up to its own boundary. With no snapshot at or below the boundary, replay
-   * starts from the empty base, the same path a stack takes before its first compaction.
+   * boundary). Position alone is not enough: import and rename install snapshots without advancing
+   * the journal, so a later version's snapshot can share the target's boundary, and its content is
+   * not the fold of the journal prefix. Those operations stamp {@code
+   * stack_updates.base_snapshot_version}; the earliest stamp after {@code version} fences the
+   * lookup — only snapshots below it are candidates, and ties at one boundary resolve to the
+   * highest surviving snapshot version. With no candidate at or below the boundary, replay starts
+   * from the empty base, the same path a stack takes before its first compaction.
    */
   @Transactional
-  public AssembledDeployment assembleAt(UUID stackId, long endJournalSeq) {
-    return replay(stackId, loadNearestSnapshotOrEmpty(stackId, endJournalSeq), endJournalSeq);
+  public AssembledDeployment assembleAt(UUID stackId, long endJournalSeq, int version) {
+    return replay(
+        stackId, loadNearestSnapshotOrEmpty(stackId, endJournalSeq, version), endJournalSeq);
   }
 
   private AssembledDeployment replay(UUID stackId, BaseSnapshot baseSnapshot, Long endSeq) {
@@ -102,14 +108,29 @@ public class StackAssembler {
     return emptyBase();
   }
 
-  private BaseSnapshot loadNearestSnapshotOrEmpty(UUID stackId, long endJournalSeq) {
-    Snapshot snapshot =
-        Snapshot.<Snapshot>find(
-                "stackId = ?1 and compactedFromJournalSeq <= ?2",
-                Sort.descending("compactedFromJournalSeq"),
+  private BaseSnapshot loadNearestSnapshotOrEmpty(UUID stackId, long endJournalSeq, int version) {
+    StackUpdate nextLineageBreak =
+        StackUpdate.<StackUpdate>find(
+                "stackId = ?1 and version > ?2 and baseSnapshotVersion is not null",
+                Sort.ascending("version"),
                 stackId,
-                endJournalSeq)
+                version)
             .firstResult();
+    Snapshot snapshot =
+        nextLineageBreak == null
+            ? Snapshot.<Snapshot>find(
+                    "stackId = ?1 and compactedFromJournalSeq <= ?2",
+                    Sort.descending("compactedFromJournalSeq", "version"),
+                    stackId,
+                    endJournalSeq)
+                .firstResult()
+            : Snapshot.<Snapshot>find(
+                    "stackId = ?1 and compactedFromJournalSeq <= ?2 and version < ?3",
+                    Sort.descending("compactedFromJournalSeq", "version"),
+                    stackId,
+                    endJournalSeq,
+                    nextLineageBreak.baseSnapshotVersion)
+                .firstResult();
     if (snapshot == null) {
       return emptyBase();
     }

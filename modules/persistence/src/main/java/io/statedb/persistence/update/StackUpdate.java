@@ -89,6 +89,13 @@ public class StackUpdate extends TimestampedEntity {
   @Column(name = "journal_version")
   public Integer journalVersion;
 
+  /**
+   * Snapshot version installed by this update, set only by snapshot-installing operations (import,
+   * rename). Those snapshots start a new lineage — their content is not the fold of the journal
+   * prefix at their boundary — so historical assembly treats the earliest stamp after a target
+   * version as a fence and never uses that snapshot version or higher as a base. Null for
+   * journal-driven updates.
+   */
   @Column(name = "base_snapshot_version")
   public Integer baseSnapshotVersion;
 

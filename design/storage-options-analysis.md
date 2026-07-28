@@ -152,9 +152,22 @@ construction: every snapshot's `compacted_from_journal_seq` equals a completed
 update's `end_journal_seq` (`measured`: all 1,894 of 1,894 aligned; guaranteed
 by the compaction/update mutual exclusion).
 
+**Lineage exception (import/rename):** `StackImporter` and `StackRenamer`
+install snapshots whose content is *not* the fold of the journal prefix —
+imported checkpoints are foreign, renamed checkpoints supersede the stale-URN
+journal rows behind them — and they do so **without advancing the journal**, so
+their snapshot can share a boundary with an earlier version. Two consequences:
+those snapshots are **mandatory rungs** (replay from an older rung across an
+import/rename silently misses the state replacement), and boundary position
+alone cannot order same-boundary snapshots. Both operations therefore stamp
+`stack_updates.base_snapshot_version` with the installed snapshot version, and
+the lookup uses it as a lineage fence (below).
+
 **Ladder policy (three tiers per stack):**
 
-1. **Live base** — always kept; FK-enforced (`NO ACTION`).
+1. **Live base** — always kept; FK-enforced (`NO ACTION`). Snapshots installed
+   by import/rename (`stack_updates.base_snapshot_version` stamps) are equally
+   non-prunable: they are lineage bases, not derived caches.
 2. **Recency tier** — the newest **K** snapshots (default ~10). Rollback and
    inspection overwhelmingly target recent versions; these stay O(1).
 3. **History ladder** — walking backward, keep a snapshot only if it is at
@@ -182,9 +195,14 @@ versions would hoard snapshots on quiet stacks. The 42 ms rate is soak-shaped
 version 0 and never match; `end_journal_seq IS NULL` → 404), pick the newest
 snapshot with `compacted_from_journal_seq <= end_seq` by position — *not* via
 `stack_state.base_snapshot_id`, which may already be past the boundary — and
-replay `sequence_id > rung_boundary AND sequence_id <= end_seq`. Whichever
-rungs survived pruning, the nearest-below rung wins; adding a rung back is just
-an insert that readers pick up on the next lookup.
+replay `sequence_id > rung_boundary AND sequence_id <= end_seq`. Position is
+qualified by the lineage fence: the earliest
+`stack_updates.base_snapshot_version` stamp on a version *after* the target
+caps candidate snapshot versions (`snapshots.version < fence`), and ties at
+one boundary resolve to the highest surviving snapshot version. Whichever
+rungs survived pruning, the nearest-below rung within the target's lineage
+wins; adding a rung back is just an insert that readers pick up on the next
+lookup.
 
 **Saving:** 386 of 390 MB stored checkpoint bytes on this dataset — **~11% of
 the database; `measured`** (only 4 snapshots are referenced). The soak's

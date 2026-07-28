@@ -802,7 +802,7 @@ class StackAssemblerTest {
     UUID second = update();
     success(second, 1L, res("b"));
 
-    JsonNode historical = assembleAt(v1Boundary).deployment().required("resources");
+    JsonNode historical = assembleAt(v1Boundary, 1).deployment().required("resources");
     assertEquals(1, historical.size());
     assertEquals(urn("a"), historical.get(0).required("urn").asText());
 
@@ -820,7 +820,7 @@ class StackAssemblerTest {
     success(update, 1L, res("after"));
     long boundary = boundaryAfterLastEntry();
 
-    JsonNode resources = assembleAt(boundary).deployment().required("resources");
+    JsonNode resources = assembleAt(boundary, 1).deployment().required("resources");
 
     assertEquals(2, resources.size());
     assertEquals(urn("after"), resources.get(0).required("urn").asText());
@@ -836,10 +836,41 @@ class StackAssemblerTest {
     success(second, 1L, res("b"));
     persistSnapshot(boundaryAfterLastEntry(), "[" + res("newer-state") + "]");
 
-    JsonNode resources = assembleAt(v1Boundary).deployment().required("resources");
+    JsonNode resources = assembleAt(v1Boundary, 1).deployment().required("resources");
 
     assertEquals(1, resources.size());
     assertEquals(urn("a"), resources.get(0).required("urn").asText());
+  }
+
+  // Import and rename install snapshots without advancing the journal, so a later version's
+  // snapshot can sit exactly on an earlier version's boundary. The baseSnapshotVersion fence
+  // must keep it from serving as that earlier version's base.
+  @Test
+  void assembleAtFencesSnapshotsInstalledByLaterVersions() throws Exception {
+    UUID first = update();
+    success(first, 1L, res("a"));
+    long v1Boundary = boundaryAfterLastEntry();
+    snapshotInstallingUpdate(v1Boundary, "[" + res("imported") + "]");
+
+    JsonNode v1 = assembleAt(v1Boundary, 1).deployment().required("resources");
+    assertEquals(1, v1.size());
+    assertEquals(urn("a"), v1.get(0).required("urn").asText());
+
+    JsonNode v2 = assembleAt(v1Boundary, 2).deployment().required("resources");
+    assertEquals(1, v2.size());
+    assertEquals(urn("imported"), v2.get(0).required("urn").asText());
+  }
+
+  @Test
+  void assembleAtResolvesSameBoundaryImportsByVersionOrder() throws Exception {
+    snapshotInstallingUpdate(0L, "[" + res("first-import") + "]");
+    snapshotInstallingUpdate(0L, "[" + res("second-import") + "]");
+
+    JsonNode v1 = assembleAt(0L, 1).deployment().required("resources");
+    assertEquals(urn("first-import"), v1.get(0).required("urn").asText());
+
+    JsonNode v2 = assembleAt(0L, 2).deployment().required("resources");
+    assertEquals(urn("second-import"), v2.get(0).required("urn").asText());
   }
 
   // Error handling
@@ -856,8 +887,8 @@ class StackAssemblerTest {
     assertTrue(e.getMessage().contains("kind=" + JournalKind.UNKNOWN.wireValue));
   }
 
-  private AssembledDeployment assembleAt(long endJournalSeq) {
-    AssembledDeployment assembled = assembler.assembleAt(stackId, endJournalSeq);
+  private AssembledDeployment assembleAt(long endJournalSeq, int version) {
+    AssembledDeployment assembled = assembler.assembleAt(stackId, endJournalSeq, version);
     PulumiDeploymentAssert.assertIntegrityPasses(assembled.deployment());
     return assembled;
   }
@@ -881,6 +912,28 @@ class StackAssemblerTest {
               snapshot.compactedFromJournalSeq = boundary;
               snapshot.resourceCount = checkpoint.path("resources").size();
               snapshot.persistAndFlush();
+            });
+  }
+
+  // Mirrors StackImporter/StackRenamer: an applied version that installs a snapshot at the
+  // current boundary without writing journal entries, stamping the baseSnapshotVersion fence.
+  private void snapshotInstallingUpdate(long boundary, String resources) throws Exception {
+    persistSnapshot(boundary, resources);
+    int version = ++updateVersion;
+    int installedSnapshotVersion = snapshotVersion;
+    QuarkusTransaction.requiringNew()
+        .run(
+            () -> {
+              StackUpdate update = new StackUpdate();
+              update.stackId = stackId;
+              update.version = version;
+              update.kind = StackUpdate.Kind.IMPORT;
+              update.status = StackUpdate.Status.SUCCEEDED;
+              update.startJournalSeq = boundary;
+              update.endJournalSeq = boundary;
+              update.baseSnapshotVersion = installedSnapshotVersion;
+              update.startedAt = Instant.now();
+              update.persistAndFlush();
             });
   }
 

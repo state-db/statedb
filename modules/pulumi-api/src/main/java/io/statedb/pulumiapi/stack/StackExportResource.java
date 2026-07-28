@@ -61,7 +61,8 @@ public class StackExportResource {
     if (update.endJournalSeq == null) {
       throw new NotFoundException();
     }
-    AssembledDeployment assembled = assembler.assembleAt(ref.stackId(), update.endJournalSeq);
+    AssembledDeployment assembled =
+        assembler.assembleAt(ref.stackId(), update.endJournalSeq, update.version);
     return new ExportDto(assembled.deployment(), assembled.version(), assembled.features());
   }
 

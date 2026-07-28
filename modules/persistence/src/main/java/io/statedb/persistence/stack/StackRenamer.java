@@ -110,18 +110,20 @@ public class StackRenamer {
         StackState.<StackState>find("stackId", ref.stackId())
             .withLock(LockModeType.PESSIMISTIC_WRITE)
             .firstResult();
+    Integer installedSnapshotVersion = null;
     if (state != null && (state.baseSnapshotId != null || state.journalSeq != 0)) {
-      rewriteCheckpoint(state, ref.stackId(), targetName, targetProject);
+      installedSnapshotVersion = rewriteCheckpoint(state, ref.stackId(), targetName, targetProject);
     }
 
-    return recordRename(stack, state, startedByUserId, startedByApiTokenId);
+    return recordRename(
+        stack, state, installedSnapshotVersion, startedByUserId, startedByApiTokenId);
   }
 
   // Rewrite and reinstall the checkpoint as a fresh compacted base snapshot. Assembling the current
   // deployment and rewriting it once is simpler — and avoids rewriting URNs across N journal deltas
   // — than mutating the base snapshot and every journal row in place; replay starts after the new
   // compaction boundary, so the old (stale-URN) journal rows are superseded.
-  private void rewriteCheckpoint(
+  private int rewriteCheckpoint(
       StackState state, UUID stackId, String newStack, String newProject) {
     ObjectNode deployment = (ObjectNode) assembler.assemble(stackId).deployment();
     checkpointRenamer.rewrite(deployment, newStack, newProject);
@@ -138,13 +140,18 @@ public class StackRenamer {
     state.baseSnapshotId = snapshot.id;
     state.baseSnapshotVersion = snapshotVersion;
     state.journalEntriesSinceCompaction = 0;
+    return snapshotVersion;
   }
 
   // Insert the rename as a terminal update. The per-stack version is MAX+1, race-safe under the
   // stacks row lock held above (the same lock StackUpdateStarter takes). A rename spans no journal,
   // so start/end seq both point at the current journal head.
   private UUID recordRename(
-      Stack stack, StackState state, UUID startedByUserId, UUID startedByApiTokenId) {
+      Stack stack,
+      StackState state,
+      Integer installedSnapshotVersion,
+      UUID startedByUserId,
+      UUID startedByApiTokenId) {
     StackUpdate latest =
         StackUpdate.<StackUpdate>find("stackId = ?1 order by version desc", stack.id).firstResult();
     long journalSeq = state == null ? 0L : state.journalSeq;
@@ -157,6 +164,9 @@ public class StackRenamer {
     update.version = (latest == null ? 0 : latest.version) + 1;
     update.startJournalSeq = journalSeq;
     update.endJournalSeq = journalSeq;
+    // Lineage fence for historical export: the rewritten snapshot supersedes the stale-URN
+    // journal rows behind it, so versioned assembly of earlier versions must not use it.
+    update.baseSnapshotVersion = installedSnapshotVersion;
     update.startedByUserId = startedByUserId;
     update.startedByApiTokenId = startedByApiTokenId;
     update.startedAt = now;

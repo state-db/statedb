@@ -89,8 +89,13 @@ entries; everything else is deleted.
 snapshots (386 MB) unreferenced and unread by any current code path. Per-version
 export (`StackAssembler.assembleAt`, `StackExportResource.exportVersion`) finds
 its base **by position** (newest snapshot with `compacted_from_journal_seq <=
-end_journal_seq`), so deleting any subset of snapshots is safe — replay just
-starts from an older rung, or the empty base. The FK
+end_journal_seq`, capped by the `stack_updates.base_snapshot_version` lineage
+fence — see §O3's lineage exception), so deleting compaction-produced snapshots
+is safe — replay just starts from an older rung, or the empty base. **Exception:
+snapshots installed by import/rename are lineage bases, not derived caches**
+(their content is not the fold of the journal prefix; replay from an older rung
+across one misses the state replacement). They are identified by their
+`stack_updates.base_snapshot_version` stamp and must never be pruned. The FK
 `stack_state.base_snapshot_id → snapshots` (NO ACTION) makes deleting the live
 base physically impossible — keep that FK as the safety net. Deletion happens
 inside the compaction transaction, where the `stack_state` row lock is already
@@ -102,10 +107,12 @@ assembles anything). Policy rationale and latency math: options analysis §O3.
 - Two config keys: recency count **K** (default ~10) and ladder spacing **G**
   in journal entries (default per §O3, ~1,000–10,000). A documented sentinel
   (e.g. `0`) disables pruning entirely.
-- Retention rule: live base always survives; newest K survive; walking older
-  snapshots by `compacted_from_journal_seq`, a snapshot survives only if it is
-  ≥ G entries above the nearest older survivor (greedy from oldest; the first
-  snapshot always survives). Everything else is deleted.
+- Retention rule: live base always survives; snapshots stamped in
+  `stack_updates.base_snapshot_version` (import/rename lineage bases) always
+  survive; newest K survive; walking older snapshots by
+  `compacted_from_journal_seq`, a snapshot survives only if it is ≥ G entries
+  above the nearest older survivor (greedy from oldest; the first snapshot
+  always survives). Everything else is deleted.
 - After compactions push a snapshot out of the recency window in a test, it is
   deleted unless it lands on a rung; the base remains; current export output
   is unchanged.
