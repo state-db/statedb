@@ -112,6 +112,63 @@ public final class FixtureReplay {
   }
 
   /**
+   * Re-issues a recorded {@code stack export} against the versioned export path ({@code pulumi
+   * stack export --version N}), asserting the recorded response comes back unchanged, and returns
+   * the deployment for further assertions.
+   *
+   * <p>A recorded export is the head state at the moment it was taken, so it is also the deployment
+   * the update before it produced. Replaying it as a historical read once later updates have moved
+   * the stack on checks the bounded replay against real recorded Pulumi state, without recording a
+   * second session to hold the answer.
+   */
+  public JsonNode assertExportMatchesAtVersion(String command, int version) {
+    Path fixture = exportFixture(command);
+    try {
+      JsonNode exchange = JSON.readTree(fixture.toFile());
+      String target = targetUrl(exchange) + "/" + version;
+      Response response = given().header("Authorization", "token " + rawToken).when().get(target);
+      assertEquals(200, response.statusCode(), target + " status");
+      assertJsonMatches(exchange.required("response"), response.asString(), fixture, false);
+      return JSON.readTree(response.asString());
+    } catch (IOException e) {
+      fail("Could not replay fixture " + fixture + ": " + e.getMessage());
+      throw new IllegalStateException("unreachable");
+    }
+  }
+
+  /** The head deployment, for contrast with the historical reads above. */
+  public JsonNode exportHead(String org, String project, String stack) {
+    String target =
+        PULUMI_BASE_PATH + "/api/stacks/" + org + "/" + project + "/" + stack + "/export";
+    Response response = given().header("Authorization", "token " + rawToken).when().get(target);
+    assertEquals(200, response.statusCode(), target + " status");
+    try {
+      return JSON.readTree(response.asString());
+    } catch (IOException e) {
+      fail("Could not parse " + target + ": " + e.getMessage());
+      throw new IllegalStateException("unreachable");
+    }
+  }
+
+  // The first export a command makes is the head state before that command changes anything — for
+  // a destroy, the deployment the update before it left behind.
+  private static Path exportFixture(String command) {
+    for (Path fixture : fixturesFor(command)) {
+      try {
+        JsonNode exchange = JSON.readTree(fixture.toFile());
+        if ("GET".equalsIgnoreCase(exchange.required("method").asText())
+            && exchange.required("path").asText().endsWith("/export")) {
+          return fixture;
+        }
+      } catch (IOException e) {
+        fail("Could not read fixture " + fixture + ": " + e.getMessage());
+      }
+    }
+    fail(command + " recorded no export");
+    throw new IllegalStateException("unreachable");
+  }
+
+  /**
    * Starts a live update and acquires its lease before a command that forcibly cancels one, so the
    * stack is genuinely mid-update when the recorded cancel arrives.
    *
