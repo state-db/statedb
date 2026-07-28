@@ -1,5 +1,5 @@
 {
-  "seq": 333,
+  "seq": 420,
   "command": "32-cancel",
   "cmd_seq": 4,
   "method": "GET",
@@ -13,7 +13,7 @@
   },
   "status_code": 200,
   "response": {
-    "activeUpdate": "update-0012",
+    "activeUpdate": "update-0016",
     "currentOperation": null,
     "orgName": "testorg",
     "projectName": "recorder-test",

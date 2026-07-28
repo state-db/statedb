@@ -24,6 +24,10 @@ var (
 
 var updateIDRe = regexp.MustCompile(`^(preview|update|destroy|refresh)-\d+$`)
 
+// Command directories are ordered by a numeric prefix, with a letter suffix for commands
+// inserted between two existing ones (09a-, 09b-).
+var cmdPrefixRe = regexp.MustCompile(`^\d+[a-z]*-`)
+
 type rawFixture struct {
 	Seq        int64             `json:"seq"`
 	Command    string            `json:"command"`
@@ -312,7 +316,7 @@ func isPrintableBytes(b []byte) bool {
 }
 
 func stripCmdPrefix(cmd string) string {
-	return strings.TrimLeft(cmd, "0123456789-")
+	return cmdPrefixRe.ReplaceAllString(cmd, "")
 }
 
 func abbreviateCommands(cmds []string) string {

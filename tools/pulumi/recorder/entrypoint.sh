@@ -91,13 +91,24 @@ run pulumi destroy --yes --parallel 1
 signal "09-stack-export-after-destroy"
 run pulumi stack export
 
+# Rebuild and tear down again, so the earlier versions end up behind two more update
+# boundaries. `pulumi stack export --version N` has to reach back past both, and a stack
+# that has been destroyed once is not the same starting point as a freshly created one —
+# it already carries a secrets provider — so these have to be recorded here rather than
+# borrowed from the session below.
+
+signal "09a-up-after-destroy"
+run pulumi up --yes --parallel 1
+
+signal "09b-destroy-after-rebuild"
+run pulumi destroy --yes --parallel 1
+
 signal "10-stack-rm"
 run pulumi stack rm dev --yes
 
-# --- Additional `pulumi stack` subcommands (appended; commands 01-10 above are
-# the original baseline and must stay byte-stable). The baseline removed the
-# stack, so re-establish a populated stack before the read-oriented inspections,
-# then tear it down again through rename/destroy/rm. ---
+# --- Additional `pulumi stack` subcommands (appended). The baseline removed the stack, so
+# re-establish a populated stack before the read-oriented inspections, then tear it down
+# again through rename/destroy/rm. ---
 
 signal "11-stack-init"
 run pulumi stack init dev

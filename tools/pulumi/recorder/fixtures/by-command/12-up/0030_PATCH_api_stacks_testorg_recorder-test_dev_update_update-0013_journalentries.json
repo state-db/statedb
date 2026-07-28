@@ -1,0 +1,133 @@
+{
+  "seq": 286,
+  "command": "12-up",
+  "cmd_seq": 30,
+  "method": "PATCH",
+  "path": "/api/stacks/testorg/recorder-test/dev/update/update-0013/journalentries",
+  "headers": {
+    "Accept": "application/vnd.pulumi+9",
+    "Accept-Encoding": "gzip",
+    "Authorization": "REDACTED",
+    "Content-Encoding": "gzip",
+    "Content-Length": "461",
+    "Content-Type": "application/json",
+    "User-Agent": "pulumi-cli/1 (v3.242.0; linux; cmd=up)"
+  },
+  "body": {
+    "entries": [
+      {
+        "kind": 0,
+        "operation": {
+          "resource": {
+            "additionalSecretOutputs": [
+              "bcryptHash",
+              "result"
+            ],
+            "custom": true,
+            "dependencies": [
+              "urn:pulumi:dev::recorder-test::random:index/randomInteger:RandomInteger::pin"
+            ],
+            "inputs": {
+              "length": 14,
+              "lower": true,
+              "minLower": 3,
+              "minNumeric": 2,
+              "minSpecial": 1,
+              "minUpper": 2,
+              "numeric": true,
+              "overrideSpecial": "_-",
+              "special": true,
+              "upper": true
+            },
+            "parent": "urn:pulumi:dev::recorder-test::pulumi:pulumi:Stack::recorder-test-dev",
+            "propertyDependencies": {
+              "length": [],
+              "lower": [],
+              "minLower": [],
+              "minNumeric": [],
+              "minSpecial": [],
+              "minUpper": [],
+              "numeric": [],
+              "overrideSpecial": [],
+              "special": [],
+              "upper": []
+            },
+            "provider": "urn:pulumi:dev::recorder-test::pulumi:providers:random::default::[resource-id]",
+            "sourcePosition": "[source-position]",
+            "stackTrace": [
+              {
+                "sourcePosition": "[source-position]"
+              },
+              {
+                "sourcePosition": "[source-position]"
+              },
+              {
+                "sourcePosition": "[source-position]"
+              },
+              {
+                "sourcePosition": "[source-position]"
+              },
+              {
+                "sourcePosition": "[source-position]"
+              },
+              {
+                "sourcePosition": "[source-position]"
+              },
+              {
+                "sourcePosition": "[source-position]"
+              },
+              {
+                "sourcePosition": "[source-position]"
+              },
+              {
+                "sourcePosition": "[source-position]"
+              },
+              {
+                "sourcePosition": "[source-position]"
+              },
+              {
+                "sourcePosition": "[source-position]"
+              },
+              {
+                "sourcePosition": "[source-position]"
+              },
+              {
+                "sourcePosition": "[source-position]"
+              },
+              {
+                "sourcePosition": "[source-position]"
+              },
+              {
+                "sourcePosition": "[source-position]"
+              },
+              {
+                "sourcePosition": "[source-position]"
+              },
+              {
+                "sourcePosition": "[source-position]"
+              },
+              {
+                "sourcePosition": "[source-position]"
+              },
+              {
+                "sourcePosition": "[source-position]"
+              }
+            ],
+            "type": "random:index/randomPassword:RandomPassword",
+            "urn": "urn:pulumi:dev::recorder-test::random:index/randomPassword:RandomPassword::password"
+          },
+          "type": "creating"
+        },
+        "operationID": 6,
+        "removeNew": null,
+        "removeOld": null,
+        "sequenceID": 12,
+        "version": 1
+      }
+    ]
+  },
+  "body_b64": "H4sIAAAAAAAA/+yVwW4TMRCG32XOjiABcZhzD1RCbUXgFK2QsYfUqtc2Y3tDtNp3R961ty0gNVeknrLf7D/e+SdjewRyiQ1FwMMID8ZpwLcCfCCWyXgHOAJT9JkVlWeptSlxafekmNJtTiGnkg3fFZ9D+ijjPYiSk22CToDKMfkeMHEmAZoCOU1OLZ+EzA5Dtrk3qGlAZFKeNfEmUUyILJ32PRqn6debBa5doiMxfn5GGIwrXzNuKWcES+6Y7gG37wVYfyJuJfTGfVr43Qw3uSc2CnA34z6QMtICbmf8GkKR7gS4pluW8QMxG02rHr5tQEBsuKjykl5gEhAkk0uAL9mur+rPPkn18Idmo2kAAYHLP5XOV8/a+mj+0K3my+Oj9Uqr98qrmcrVfSH3VPqX+RKMTyG3zGmucjC64KXGa0JsA4CafshsE+KhTePG6K70e4Y7H80yrnCor0MNzaLSwS8sywwfxktyJvEqe5X9t7JOQDoHAoR/nKB3MsaTZ12P0IYgyu58eY9eviJiaGtPa0GKSSbjjiW0XjPXV4Afyq3R+4Fu6ATosrUtcGt1C0T6mckpKgnbnYCBOM5d2E7d9DsAAP//cGfOZc0GAAA=",
+  "body_gzip": true,
+  "status_code": 200,
+  "response": {}
+}

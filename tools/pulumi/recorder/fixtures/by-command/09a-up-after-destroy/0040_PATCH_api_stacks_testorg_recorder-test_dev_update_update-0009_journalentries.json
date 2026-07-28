@@ -1,0 +1,91 @@
+{
+  "seq": 201,
+  "command": "09a-up-after-destroy",
+  "cmd_seq": 40,
+  "method": "PATCH",
+  "path": "/api/stacks/testorg/recorder-test/dev/update/update-0009/journalentries",
+  "headers": {
+    "Accept": "application/vnd.pulumi+9",
+    "Accept-Encoding": "gzip",
+    "Authorization": "REDACTED",
+    "Content-Encoding": "gzip",
+    "Content-Length": "368",
+    "Content-Type": "application/json",
+    "User-Agent": "pulumi-cli/1 (v3.242.0; linux; cmd=up)"
+  },
+  "body": {
+    "entries": [
+      {
+        "kind": 4,
+        "operationID": 8,
+        "removeNew": 1,
+        "removeOld": null,
+        "sequenceID": 16,
+        "state": {
+          "created": "1970-01-01T00:00:00Z",
+          "custom": false,
+          "modified": "1970-01-01T00:00:00Z",
+          "outputs": {
+            "password": {
+              "4dabf18193072939515e22adb298388d": "1b47061264138c4ac30d75fd1eb44270",
+              "ciphertext": "[secret]"
+            },
+            "petName": "[pet-name]",
+            "pin": 42,
+            "tokenHex": "[hex]",
+            "word": "[word]"
+          },
+          "sourcePosition": "[source-position]",
+          "stackTrace": [
+            {
+              "sourcePosition": "[source-position]"
+            },
+            {
+              "sourcePosition": "[source-position]"
+            },
+            {
+              "sourcePosition": "[source-position]"
+            },
+            {
+              "sourcePosition": "[source-position]"
+            },
+            {
+              "sourcePosition": "[source-position]"
+            },
+            {
+              "sourcePosition": "[source-position]"
+            },
+            {
+              "sourcePosition": "[source-position]"
+            },
+            {
+              "sourcePosition": "[source-position]"
+            },
+            {
+              "sourcePosition": "[source-position]"
+            },
+            {
+              "sourcePosition": "[source-position]"
+            },
+            {
+              "sourcePosition": "[source-position]"
+            },
+            {
+              "sourcePosition": "[source-position]"
+            },
+            {
+              "sourcePosition": "[source-position]"
+            }
+          ],
+          "type": "pulumi:pulumi:Stack",
+          "urn": "urn:pulumi:dev::recorder-test::pulumi:pulumi:Stack::recorder-test-dev"
+        },
+        "version": 1
+      }
+    ]
+  },
+  "body_b64": "H4sIAAAAAAAA/+xSQY/bLBT8L++MJWM7sc35O3y9bCt1T41yIDDRothA4ZFNFeW/V7i7l6qqeq4qIT14b2YYwdwJnpNDJnW408V5S2oQFCKSZhf8h/9ITYIS1nDFE15JyffTx8WS8mVZBGV8LfAGFS33gjJrBqk7mQTNsKRIzmPbtLJp5XPbqm19IUGmZA4rqbNeMgStwbqz+x0hFI6FcxWPOufXkGzdD1afznKSc9+O3dzPO7lD12l76uapn6ZN8DSM7V52+0H2kxm06Vs77s5W4jQM3dhWNy6+IDFuTIoOGSaBj/QQFMFPekXtRnDj9YojCYrOkxo6QRwu8P/jVgEvuNXZD2d0qHXTyKEkg08hu/qw2wVbp4lvrcrKrM3lOWmD7UP+gPMQ/2B/HewoiL/FmrdYlrI69VY+13iQoJIqsST/PrC4KpVgQrJIDSOzUr+g/oRpLK41mlekvHmRj+PjewAAAP//FeaqIhMEAAA=",
+  "body_gzip": true,
+  "status_code": 200,
+  "response": {}
+}

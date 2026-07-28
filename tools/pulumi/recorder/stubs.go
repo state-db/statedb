@@ -363,7 +363,9 @@ func (rt *router) exportStack(org, proj, stack string) (int, interface{}) {
 	// Empty stacks still export as a DeploymentV3-shaped object (matching state-db and Pulumi
 	// cloud), never as a null deployment.
 	resources := make([]interface{}, 0)
-	var secretsProvider interface{}
+	// Typed as the map, not interface{}: a nil map in an interface{} is not nil, which would
+	// export an empty secrets_providers on stacks that have never had one.
+	var secretsProvider map[string]interface{}
 	if ok {
 		for _, urn := range info.resourceOrder {
 			if res := info.resources[urn]; res != nil {

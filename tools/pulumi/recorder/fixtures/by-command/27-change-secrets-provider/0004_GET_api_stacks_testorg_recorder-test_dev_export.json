@@ -1,5 +1,5 @@
 {
-  "seq": 310,
+  "seq": 397,
   "command": "27-change-secrets-provider",
   "cmd_seq": 4,
   "method": "GET",
@@ -14,21 +14,21 @@
   "status_code": 200,
   "response": {
     "deployment": {
-      "secrets_providers": {
-        "type": "service",
-        "state": {
-          "url": "http://localhost:8080",
-          "owner": "testorg",
-          "stack": "dev",
-          "project": "recorder-test"
-        }
-      },
       "manifest": {
-        "time": "1970-01-01T00:00:00Z",
         "magic": "4ae265b5e36f43e09c7ff61ff9e23e82843496e0c1ad370c8f62bd2c5f0f4369",
+        "time": "1970-01-01T00:00:00Z",
         "version": "v3.242.0"
       },
-      "resources": []
+      "resources": [],
+      "secrets_providers": {
+        "state": {
+          "owner": "testorg",
+          "project": "recorder-test",
+          "stack": "dev",
+          "url": "http://localhost:8080"
+        },
+        "type": "service"
+      }
     },
     "version": 3
   }

@@ -1,0 +1,43 @@
+{
+  "seq": 242,
+  "command": "09b-destroy-after-rebuild",
+  "cmd_seq": 39,
+  "method": "PATCH",
+  "path": "/api/stacks/testorg/recorder-test/dev/update/destroy-0011/journalentries",
+  "headers": {
+    "Accept": "application/vnd.pulumi+9",
+    "Accept-Encoding": "gzip",
+    "Authorization": "REDACTED",
+    "Content-Encoding": "gzip",
+    "Content-Length": "232",
+    "Content-Type": "application/json",
+    "User-Agent": "pulumi-cli/1 (v3.242.0; linux; cmd=destroy)"
+  },
+  "body": {
+    "entries": [
+      {
+        "kind": 0,
+        "operation": {
+          "resource": {
+            "created": "1970-01-01T00:00:00Z",
+            "custom": true,
+            "id": "[resource-id]",
+            "modified": "1970-01-01T00:00:00Z",
+            "type": "pulumi:providers:random",
+            "urn": "urn:pulumi:dev::recorder-test::pulumi:providers:random::default"
+          },
+          "type": "deleting"
+        },
+        "operationID": 6,
+        "removeNew": null,
+        "removeOld": null,
+        "sequenceID": 12,
+        "version": 1
+      }
+    ]
+  },
+  "body_b64": "H4sIAAAAAAAA/3yQsWr0MBCE32VqGeS/+EO2TpMmaVLluMJ454KILDkrySEYv3vwEV+XwLIsHzOz7K5gqhZYIKcV7yEpxDvkmTbUkBNkhbHkZiP3eTQOlQpBf3/nO993vn/xXq71CoexlZonSLVGh7ArT0dAF/QMhylruIS/QurXTAjmFtsUZLa8BKUVsSFpnuDQLEH2Lj8a5SJiHLMprassVeQXu4jyMrRYsd02KSNrSG87ut3++AD572Cc8sInfkJSi/EAz1EPUPjRmEbuhv6fw0Ir19/123n7DgAA//9YbRXGYgEAAA==",
+  "body_gzip": true,
+  "status_code": 200,
+  "response": {}
+}

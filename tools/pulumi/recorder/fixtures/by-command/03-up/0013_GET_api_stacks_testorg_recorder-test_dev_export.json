@@ -15,8 +15,8 @@
   "response": {
     "deployment": {
       "manifest": {
-        "time": "1970-01-01T00:00:00Z",
         "magic": "4ae265b5e36f43e09c7ff61ff9e23e82843496e0c1ad370c8f62bd2c5f0f4369",
+        "time": "1970-01-01T00:00:00Z",
         "version": "v3.242.0"
       },
       "resources": []

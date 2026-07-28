@@ -1,0 +1,132 @@
+{
+  "seq": 240,
+  "command": "09b-destroy-after-rebuild",
+  "cmd_seq": 37,
+  "method": "PATCH",
+  "path": "/api/stacks/testorg/recorder-test/dev/update/destroy-0011/journalentries",
+  "headers": {
+    "Accept": "application/vnd.pulumi+9",
+    "Accept-Encoding": "gzip",
+    "Authorization": "REDACTED",
+    "Content-Encoding": "gzip",
+    "Content-Length": "483",
+    "Content-Type": "application/json",
+    "User-Agent": "pulumi-cli/1 (v3.242.0; linux; cmd=destroy)"
+  },
+  "body": {
+    "entries": [
+      {
+        "kind": 0,
+        "operation": {
+          "resource": {
+            "created": "1970-01-01T00:00:00Z",
+            "custom": true,
+            "id": "[resource-id]",
+            "inputs": {
+              "length": 2,
+              "separator": "-"
+            },
+            "modified": "1970-01-01T00:00:00Z",
+            "outputs": {
+              "__pulumi_raw_state_delta": {
+                "obj": {
+                  "ps": {
+                    "keepers": {
+                      "4dabf18193072939515e22adb298388d": "1b47061264138c4ac30d75fd1eb44270",
+                      "ciphertext": "[secret]"
+                    },
+                    "prefix": {
+                      "4dabf18193072939515e22adb298388d": "1b47061264138c4ac30d75fd1eb44270",
+                      "ciphertext": "[secret]"
+                    }
+                  }
+                }
+              },
+              "id": "[resource-id]",
+              "length": 2,
+              "separator": "-"
+            },
+            "parent": "urn:pulumi:dev::recorder-test::pulumi:pulumi:Stack::recorder-test-dev",
+            "propertyDependencies": {
+              "length": [],
+              "separator": []
+            },
+            "provider": "urn:pulumi:dev::recorder-test::pulumi:providers:random::default::[resource-id]",
+            "sourcePosition": "[source-position]",
+            "stackTrace": [
+              {
+                "sourcePosition": "[source-position]"
+              },
+              {
+                "sourcePosition": "[source-position]"
+              },
+              {
+                "sourcePosition": "[source-position]"
+              },
+              {
+                "sourcePosition": "[source-position]"
+              },
+              {
+                "sourcePosition": "[source-position]"
+              },
+              {
+                "sourcePosition": "[source-position]"
+              },
+              {
+                "sourcePosition": "[source-position]"
+              },
+              {
+                "sourcePosition": "[source-position]"
+              },
+              {
+                "sourcePosition": "[source-position]"
+              },
+              {
+                "sourcePosition": "[source-position]"
+              },
+              {
+                "sourcePosition": "[source-position]"
+              },
+              {
+                "sourcePosition": "[source-position]"
+              },
+              {
+                "sourcePosition": "[source-position]"
+              },
+              {
+                "sourcePosition": "[source-position]"
+              },
+              {
+                "sourcePosition": "[source-position]"
+              },
+              {
+                "sourcePosition": "[source-position]"
+              },
+              {
+                "sourcePosition": "[source-position]"
+              },
+              {
+                "sourcePosition": "[source-position]"
+              },
+              {
+                "sourcePosition": "[source-position]"
+              }
+            ],
+            "type": "random:index/randomPet:RandomPet",
+            "urn": "urn:pulumi:dev::recorder-test::random:index/randomPet:RandomPet::pet"
+          },
+          "type": "deleting"
+        },
+        "operationID": 5,
+        "removeNew": null,
+        "removeOld": null,
+        "sequenceID": 10,
+        "version": 1
+      }
+    ]
+  },
+  "body_b64": "H4sIAAAAAAAA/+xVTW/bMAz9Lzw7mO0kTcJzL7tsxdbTDCNQrJdWqyNpEp2mCPzfBzn2hhVY28sOAwoYEEU+fjyatM8EK8EgEldnejBWE+cZOY+gxDhLfKaA6LrQIMlNgBJoYio2q3yWF7O8uM1zHp5vlFHTRXEHYgkdMjIJWU0BZkbXlJGxvpOYorWwd3JPXGYU4VVQ4gIxzajP6OC02ZuXUrlOpkDbre/a7mC2QT1uoyjBVqMVlWxu9z0dfgA+AB5hEBda7fbFutjM81W5mW+WxRJlqfSu3Kzn6/WQeLdY5VdFebUo5utmoZp5rlfLvS6wWyzKVZ74Gn+PIDhJYhrRBEid6vcBe3P654n6vv9Lm19qrlcBNgXqguVL61jjyBzQuKARZoIoPJnG46uo5uEZZqZxpMQ2jYw8XcPDathmGKnfb7iq/6iiqocOuaPRCG8vY3SIHJTV7sCssVddK8zPyV8uNy6ayxRTNZr9qBpAic9tUGm0q/NbfPrsHfYO+29hdUby5EFM4wIZq3H6cLncQPjLJFGWdvL1zXwtDrOHpC/OmFejhRh7l1S/fjIfr4mXGQUc3BGf8Ehsu7adFJ9bPSkifnSwDZJDkWd0RIgD2aKv+58BAAD//9gKsYHLBgAA",
+  "body_gzip": true,
+  "status_code": 200,
+  "response": {}
+}

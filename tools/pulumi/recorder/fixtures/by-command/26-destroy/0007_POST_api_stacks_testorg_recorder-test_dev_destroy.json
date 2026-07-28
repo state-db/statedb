@@ -1,5 +1,5 @@
 {
-  "seq": 268,
+  "seq": 355,
   "command": "26-destroy",
   "cmd_seq": 7,
   "method": "POST",
@@ -52,7 +52,7 @@
   "body_b64": "eyJjb25maWciOnt9LCJkZXNjcmlwdGlvbiI6Ik1pbmltYWwgUHVsdW1pIHByb2plY3QgZm9yIEFQSSByZWNvcmRpbmcuIFVzZXMgdGhlIGByYW5kb21gIHByb3ZpZGVyIHNvIGBwdWx1bWkgdXBgL2BkZXN0cm95YCBleGVyY2lzZSB0aGUgam91cm5hbC9jaGVja3BvaW50IHdyaXRlIHBhdGhzIHdpdGggcmVhbCByZXNvdXJjZSBzdGF0ZS4iLCJtYWluIjoiIiwibWV0YWRhdGEiOnsiZW52aXJvbm1lbnQiOnsiZXhlYy5raW5kIjoiY2xpIiwicHVsdW1pLmFyY2giOiJhcm02NCIsInB1bHVtaS5lbnYuUFVMVU1JX0FDQ0VTU19UT0tFTiI6InNldCIsInB1bHVtaS5lbnYuUFVMVU1JX0JBQ0tFTkRfVVJMIjoic2V0IiwicHVsdW1pLmVudi5QVUxVTUlfQ09ORklHX1BBU1NQSFJBU0UiOiJzZXQiLCJwdWx1bWkuZW52LlBVTFVNSV9IT01FIjoic2V0IiwicHVsdW1pLmVudi5QVUxVTUlfU0tJUF9DT05GSVJNQVRJT05TIjoidHJ1ZSIsInB1bHVtaS5lbnYuUFVMVU1JX1NLSVBfVVBEQVRFX0NIRUNLIjoidHJ1ZSIsInB1bHVtaS5mbGFnLnBhcmFsbGVsIjoic2V0IiwicHVsdW1pLmZsYWcueWVzIjoidHJ1ZSIsInB1bHVtaS5vcyI6ImxpbnV4IiwicHVsdW1pLnZlcnNpb24iOiJ2My4yNDIuMCIsInN0YWNrLmVudmlyb25tZW50cyI6IltdIiwidXBkYXRlUGxhbiI6ImZhbHNlIn0sIm1lc3NhZ2UiOiIifSwibmFtZSI6InJlY29yZGVyLXRlc3QiLCJvcHRpb25zIjp7ImNvbG9yIjoicmF3IiwiZGVidWciOmZhbHNlLCJkcnlSdW4iOnRydWUsImxvY2FsUG9saWN5UGFja1BhdGhzIjpbXSwicGFyYWxsZWwiOjEsInNob3dDb25maWciOmZhbHNlLCJzaG93TmFtZXMiOmZhbHNlLCJzaG93UmVwbGFjZW1lbnRTdGVwcyI6ZmFsc2UsInN1bW1hcnkiOmZhbHNlfSwicnVudGltZSI6InlhbWwifQ==",
   "status_code": 200,
   "response": {
-    "updateID": "destroy-0010",
+    "updateID": "destroy-0014",
     "version": 1
   }
 }
