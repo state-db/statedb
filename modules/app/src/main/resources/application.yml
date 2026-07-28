@@ -74,6 +74,18 @@ state-db:
     per-tick-cap: 25
     claim-timeout: 5m
     max-attempts: 3
+    prune:
+      # Snapshots are a derived cache of the journal: a pruned one is rebuilt by
+      # replaying from an older retained rung, or from the empty base. Set
+      # newest-snapshots to 0 to disable pruning and keep every snapshot.
+      newest-snapshots: 10
+      # The two ladder bounds cap the two terms of historical-export cost, which
+      # dominate on opposite workloads. journal-spacing caps rows replayed;
+      # update-spacing caps whole-deployment rebuilds, which replay performs once
+      # per update boundary it crosses. A rung survives once either budget is
+      # spent since the previous one. Set either to 0 to deactivate that bound.
+      ladder-journal-spacing: 5000
+      ladder-update-spacing: 50
   lock:
     lease-ttl: 1h
     # Advisory; no server-side behavior keys off this today. Exposed so operators can tune the

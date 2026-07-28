@@ -68,7 +68,10 @@ public class StackAssembler {
         pending = iterator.hasNext() ? iterator.next() : null;
 
         if (priorUpdateId != null && !entry.updateId().equals(priorUpdateId)) {
-          currentBase = (ObjectNode) replayer.generateDeployment().deployment().deepCopy();
+          // generateDeployment already returns an independent tree, and the replayer copies
+          // whatever base it is handed; copying here as well would rebuild it a third time on
+          // every update boundary, which is the dominant cost of a long replay.
+          currentBase = (ObjectNode) replayer.generateDeployment().deployment();
           replayer = new JournalReplayer(mapper, currentBase);
         }
 
@@ -88,24 +91,26 @@ public class StackAssembler {
     return replayer.generateDeployment();
   }
 
+  /**
+   * Resolves the live base in one statement so the pointer and the row it names come from the same
+   * read snapshot: reading them separately lets a concurrent {@link SnapshotPruner} commit in
+   * between and leave the pointer resolving to nothing. The FK on {@code
+   * stack_state.base_snapshot_id} means an empty result is "no base yet", never a dangling id.
+   */
   private BaseSnapshot loadBaseSnapshotOrEmpty(UUID stackId) {
-    UUID baseSnapshotId =
-        (UUID)
-            em.createNativeQuery("SELECT base_snapshot_id FROM stack_state WHERE stack_id = ?1")
-                .setParameter(1, stackId)
-                .getSingleResult();
-    if (baseSnapshotId != null) {
-      Snapshot snapshot = em.find(Snapshot.class, baseSnapshotId);
-      if (snapshot == null) {
-        throw new IllegalStateException("base snapshot not found: " + baseSnapshotId);
-      }
-      if (!snapshot.checkpoint.isObject()) {
-        throw new IllegalStateException("base snapshot checkpoint must be a JSON object");
-      }
-      return new BaseSnapshot(
-          (ObjectNode) snapshot.checkpoint.deepCopy(), snapshot.compactedFromJournalSeq);
+    Snapshot snapshot =
+        Snapshot.<Snapshot>find(
+                "from Snapshot s where s.id ="
+                    + " (select st.baseSnapshotId from StackState st where st.stackId = ?1)",
+                stackId)
+            .firstResult();
+    if (snapshot == null) {
+      return emptyBase();
     }
-    return emptyBase();
+    if (!snapshot.checkpoint.isObject()) {
+      throw new IllegalStateException("base snapshot checkpoint must be a JSON object");
+    }
+    return new BaseSnapshot((ObjectNode) snapshot.checkpoint, snapshot.compactedFromJournalSeq);
   }
 
   private BaseSnapshot loadNearestSnapshotOrEmpty(UUID stackId, long endJournalSeq, int version) {
@@ -137,8 +142,7 @@ public class StackAssembler {
     if (!snapshot.checkpoint.isObject()) {
       throw new IllegalStateException("snapshot checkpoint must be a JSON object");
     }
-    return new BaseSnapshot(
-        (ObjectNode) snapshot.checkpoint.deepCopy(), snapshot.compactedFromJournalSeq);
+    return new BaseSnapshot((ObjectNode) snapshot.checkpoint, snapshot.compactedFromJournalSeq);
   }
 
   private BaseSnapshot emptyBase() {
@@ -213,5 +217,9 @@ public class StackAssembler {
       Long pendingReplacementNew,
       JsonNode payload) {}
 
+  /**
+   * {@code checkpoint} may alias a managed {@link Snapshot}'s field. {@link JournalReplayer} copies
+   * whatever base it is constructed with, so replay never writes through this reference.
+   */
   private record BaseSnapshot(ObjectNode checkpoint, long compactedFromJournalSeq) {}
 }

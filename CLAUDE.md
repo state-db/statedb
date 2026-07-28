@@ -257,4 +257,4 @@ Both halves are required:
 - `CompactionWorker` takes the `stack_state` row lock and refuses to snapshot while `stacks.active_update_id` is set, returning the job to `pending`.
 - `StackLockAcquirer` takes the same row lock in the transaction that sets `active_update_id`, after waiting out any queued compaction (`state-db.lock.compaction-wait`; `0` disables).
 
-Anything else that assembles or persists a snapshot must do the same. The `stack_locks` lease does not help: it serializes updates against each other, and compaction never acquires it.
+Anything else that assembles, persists, or deletes a snapshot must do the same — `SnapshotPruner` runs inside the compaction transaction for exactly this reason. The `stack_locks` lease does not help: it serializes updates against each other, and compaction never acquires it.

@@ -26,6 +26,8 @@ public class CompactionWorker {
 
   @Inject StackAssembler assembler;
 
+  @Inject SnapshotPruner snapshotPruner;
+
   @ConfigProperty(name = "state-db.compaction.per-tick-cap", defaultValue = "25")
   int perTickCap;
 
@@ -184,6 +186,11 @@ public class CompactionWorker {
     state.baseSnapshotId = snapshot.id;
     state.baseSnapshotVersion = snapshotVersion;
     state.journalEntriesSinceCompaction = 0;
+    // Publish the new base pointer before pruning. The pruner's bulk delete touches only
+    // `snapshots`, so Hibernate's space-based auto-flush would leave this update pending and the
+    // delete would trip fk_stack_state_base_snapshot against the previous base.
+    em.flush();
+    snapshotPruner.prune(job.stackId(), snapshot.id);
 
     compactionJob.status = CompactionJob.Status.COMPLETED;
     compactionJob.completedAt = Instant.now();
