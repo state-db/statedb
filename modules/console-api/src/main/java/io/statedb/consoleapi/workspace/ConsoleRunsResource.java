@@ -6,6 +6,7 @@ import io.statedb.persistence.authz.Authorize;
 import io.statedb.persistence.authz.AuthorizedResource;
 import io.statedb.persistence.authz.StackEntityLoader;
 import io.statedb.persistence.events.UpdateEvent;
+import io.statedb.persistence.events.UpdateEventReader;
 import io.statedb.persistence.stack.StackRef;
 import io.statedb.persistence.update.ConsoleUpdateHistoryFinder;
 import io.statedb.persistence.update.StackUpdate;
@@ -35,6 +36,7 @@ public class ConsoleRunsResource {
 
   @Inject AuthorizedResource authorized;
   @Inject ConsoleUpdateHistoryFinder finder;
+  @Inject UpdateEventReader eventReader;
 
   @GET
   @Path("/updates/{version}")
@@ -78,16 +80,19 @@ public class ConsoleRunsResource {
             .orElseThrow(NotFoundException::new);
     int after = requestedAfter == null ? -1 : requestedAfter;
     if (after < -1) throw new BadRequestException("after must be at least -1");
-    List<UpdateEvent> events = finder.events(ref.stackId(), id, after, EVENT_PAGE_SIZE);
+    UpdateEventReader.EventPage page = eventReader.page(ref.stackId(), id, after, EVENT_PAGE_SIZE);
     List<EventResponse> rows =
-        events.stream()
+        page.events().stream()
             .map(
                 event ->
-                    new EventResponse(event.sequence, event.kind, event.severity, event.payload))
+                    new EventResponse(
+                        event.sequence(), event.kind(), event.severity(), event.payload()))
             .toList();
     Integer nextAfter = rows.size() == EVENT_PAGE_SIZE ? rows.getLast().sequence() : null;
+    // An archived stream is present, just compressed: only a genuinely absent one is expired.
     boolean expired =
-        rows.isEmpty()
+        !page.archived()
+            && rows.isEmpty()
             && after == -1
             && update.startedAt.isBefore(Instant.now().minus(EVENT_RETENTION));
     return new EventsResponse(rows, nextAfter, expired);

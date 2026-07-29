@@ -30,6 +30,7 @@
         <google-java-format.version>1.35.0</google-java-format.version>
         <cedar-java.version>4.10.0</cedar-java.version>
         <tink.version>1.18.0</tink.version>
+        <zstd-jni.version>1.5.7-6</zstd-jni.version>
     </properties>
 
     <dependencyManagement>

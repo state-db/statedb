@@ -50,6 +50,13 @@
             <artifactId>tink</artifactId>
             <version>${tink.version}</version>
         </dependency>
+        <!-- Block compression for update_event_archives; see EventArchiveCodec for the ratio
+             measurement that chose it over the JDK's gzip. BSD-2-Clause. -->
+        <dependency>
+            <groupId>com.github.luben</groupId>
+            <artifactId>zstd-jni</artifactId>
+            <version>${zstd-jni.version}</version>
+        </dependency>
     </dependencies>
 
     <build>

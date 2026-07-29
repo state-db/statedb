@@ -6,6 +6,7 @@ import com.fasterxml.jackson.databind.node.JsonNodeFactory;
 import io.quarkus.test.TestTransaction;
 import io.quarkus.test.junit.QuarkusTest;
 import io.statedb.persistence.events.UpdateEvent;
+import io.statedb.persistence.events.UpdateEventReader;
 import io.statedb.persistence.identity.Organization;
 import io.statedb.persistence.stack.Project;
 import io.statedb.persistence.stack.Stack;
@@ -20,6 +21,7 @@ import org.junit.jupiter.api.Test;
 class ConsoleUpdateHistoryFinderTest {
 
   @Inject ConsoleUpdateHistoryFinder finder;
+  @Inject UpdateEventReader reader;
 
   @Test
   @TestTransaction
@@ -56,8 +58,8 @@ class ConsoleUpdateHistoryFinderTest {
 
     assertEquals(oldUpdate.id, finder.findUpdate(stack.id, 1).orElseThrow().id);
     assertEquals(preview.id, finder.findPreview(stack.id, preview.id).orElseThrow().id);
-    assertEquals(1, finder.events(stack.id, preview.id, 0, 50).size());
-    assertEquals(0, finder.events(stack.id, preview.id, 1, 50).size());
+    assertEquals(1, reader.page(stack.id, preview.id, 0, 50).events().size());
+    assertEquals(0, reader.page(stack.id, preview.id, 1, 50).events().size());
 
     var secondPage = finder.find(stack.id, null, null, 2, 2);
     assertEquals(oldUpdate.id, secondPage.updates().get(0).id);

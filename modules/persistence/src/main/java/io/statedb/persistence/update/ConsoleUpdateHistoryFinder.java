@@ -27,16 +27,6 @@ public class ConsoleUpdateHistoryFinder {
         .firstResultOptional();
   }
 
-  public List<UpdateEvent> events(UUID stackId, UUID updateId, int after, int limit) {
-    return UpdateEvent.<UpdateEvent>find(
-            "stackId = ?1 and updateId = ?2 and sequence > ?3 order by sequence",
-            stackId,
-            updateId,
-            after)
-        .page(Page.ofSize(limit))
-        .list();
-  }
-
   public HistoryPage find(
       UUID stackId, StackUpdate.Kind kind, StackUpdate.Status status, int page, int pageSize) {
     StringBuilder predicate = new StringBuilder("stackId = :stackId");

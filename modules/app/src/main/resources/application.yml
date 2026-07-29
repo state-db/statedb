@@ -86,6 +86,19 @@ state-db:
       # spent since the previous one. Set either to 0 to deactivate that bound.
       ladder-journal-spacing: 5000
       ladder-update-spacing: 50
+  events:
+    archive:
+      # Folding a terminal update's events into one compressed blob is a
+      # representation change, not retention — every event is preserved and the
+      # console serves it transparently. Set enabled to false to stop folding;
+      # existing archives keep being read, and EventArchiveFolder#unfold turns
+      # any of them back into rows.
+      enabled: true
+      # Time after an update ends before its events may be folded. Keeps the
+      # console's live tail paging over rows until clients are done with it.
+      grace-period: 1h
+      poll-interval: 5m
+      per-tick-cap: 50
   lock:
     lease-ttl: 1h
     # Advisory; no server-side behavior keys off this today. Exposed so operators can tune the

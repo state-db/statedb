@@ -136,6 +136,15 @@ public class StackUpdate extends TimestampedEntity {
   @Column(name = "ended_at")
   public Instant endedAt;
 
+  /**
+   * When {@link io.statedb.persistence.events.EventArchiveFolder} settled this update's events —
+   * either by folding them into an archive or by finding nothing foldable. Null means the folder
+   * has not considered it yet, and is what its candidate sweep indexes on, so the sweep costs what
+   * is outstanding rather than what has ever run.
+   */
+  @Column(name = "events_folded_at")
+  public Instant eventsFoldedAt;
+
   @Column(name = "started_by_user_id")
   public UUID startedByUserId;
 

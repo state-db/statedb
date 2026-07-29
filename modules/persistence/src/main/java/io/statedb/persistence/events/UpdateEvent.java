@@ -23,6 +23,12 @@ import org.hibernate.type.SqlTypes;
 @Table(name = "update_events")
 public class UpdateEvent extends BaseEntity {
 
+  /**
+   * Kind of the run-summary event. Run detail and the console history list read it on every view,
+   * so {@link EventArchiveFolder} leaves these rows behind when it folds the rest of the stream.
+   */
+  public static final String SUMMARY_KIND = "summary";
+
   @Column(name = "stack_id", nullable = false)
   public UUID stackId;
 

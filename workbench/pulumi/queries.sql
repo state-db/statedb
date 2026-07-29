@@ -91,16 +91,29 @@ ORDER BY je.resource_urn;
 
 \echo ''
 \echo '== events summary =='
-SELECT
-  su.kind AS update_kind,
-  su.status AS update_status,
-  ue.kind AS event_kind,
-  ue.severity,
-  count(*) AS events
-FROM update_events ue
-JOIN stack_updates su ON su.id = ue.update_id
-GROUP BY su.id, su.kind, su.status, su.started_at, ue.kind, ue.severity
-ORDER BY su.started_at DESC, events DESC;
+-- Per-kind detail only exists for updates whose events are still rows. Once an
+-- update is folded (see update_event_archives) its stream lives in one blob and
+-- only the total is visible without decompressing, so archived updates appear as
+-- a single 'ARCHIVED' line rather than silently dropping out of the report.
+SELECT update_kind, update_status, event_kind, severity, events
+FROM (
+  SELECT
+    su.kind AS update_kind,
+    su.status AS update_status,
+    ue.kind AS event_kind,
+    ue.severity AS severity,
+    count(*) AS events,
+    su.started_at AS started_at
+  FROM update_events ue
+  JOIN stack_updates su ON su.id = ue.update_id
+  WHERE NOT EXISTS (SELECT 1 FROM update_event_archives a WHERE a.update_id = ue.update_id)
+  GROUP BY su.id, su.kind, su.status, su.started_at, ue.kind, ue.severity
+  UNION ALL
+  SELECT su.kind, su.status, 'ARCHIVED', NULL, a.event_count, su.started_at
+  FROM update_event_archives a
+  JOIN stack_updates su ON su.id = a.update_id
+) events_by_update
+ORDER BY started_at DESC, events DESC;
 
 \echo ''
 \echo '== pending operations =='
