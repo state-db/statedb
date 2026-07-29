@@ -224,7 +224,7 @@ A periodic vacuum job (`@Scheduled(every="1h")`) deletes events older than `stat
 Async per db-schema.md `compaction_jobs`. A `@Scheduled` poller in `pulumi-api` (or its own `worker` module — TBD) reads `compaction_jobs WHERE status='pending'`, processes one stack at a time. Holds `SELECT … FOR UPDATE` on `stack_state` for the duration to serialize against journal appends.
 
 Two trigger paths:
-- **Threshold** — `stack_state.journal_entries_since_compaction >= auto_compact_threshold` enqueues a job at the end of an update.
+- **Per update** — every completed update enqueues a job, so the head snapshot is always materialized.
 - **Manual** — admin endpoint enqueues for a specific stack.
 
 ---

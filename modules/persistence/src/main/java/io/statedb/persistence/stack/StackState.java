@@ -24,7 +24,4 @@ public class StackState extends TimestampedEntity {
 
   @Column(name = "journal_entries_since_compaction", nullable = false)
   public int journalEntriesSinceCompaction = 0;
-
-  @Column(name = "auto_compact_threshold", nullable = false)
-  public int autoCompactThreshold = 100;
 }

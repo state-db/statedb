@@ -91,8 +91,7 @@ public class WorkspacesResource {
         assembled.deployment().path("manifest").path("version").textValue(),
         stackEntity.tags == null ? Map.of() : stackEntity.tags,
         state.baseSnapshotVersion,
-        state.journalEntriesSinceCompaction,
-        state.autoCompactThreshold);
+        state.journalEntriesSinceCompaction);
   }
 
   @GET
@@ -225,8 +224,7 @@ public class WorkspacesResource {
       String pulumiVersion,
       Map<String, String> tags,
       int baseSnapshotVersion,
-      int journalEntriesSinceCompaction,
-      int autoCompactThreshold) {}
+      int journalEntriesSinceCompaction) {}
 
   public record ExportResponse(int version, JsonNode deployment) {}
 

@@ -290,7 +290,6 @@ export interface StackDetail {
   tags: Record<string, string>;
   baseSnapshotVersion: number;
   journalEntriesSinceCompaction: number;
-  autoCompactThreshold: number;
 }
 
 export interface UpdateHistoryRow {

@@ -282,7 +282,6 @@ CREATE TABLE stack_state (
 
     journal_seq                     BIGINT      NOT NULL DEFAULT 0,
     journal_entries_since_compaction INTEGER    NOT NULL DEFAULT 0,
-    auto_compact_threshold          INTEGER     NOT NULL DEFAULT 100,
 
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT now()

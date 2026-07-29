@@ -464,10 +464,9 @@ function StackSettings({ detail, isAdmin }: { detail: StackDetail; isAdmin: bool
           <CardTitle>Compaction</CardTitle>
           <CardDescription>Snapshot and journal replay health.</CardDescription>
         </CardHeader>
-        <CardContent className="grid gap-4 sm:grid-cols-3">
+        <CardContent className="grid gap-4 sm:grid-cols-2">
           <Detail label="Base snapshot version">v{detail.baseSnapshotVersion}</Detail>
           <Detail label="Journal entries">{detail.journalEntriesSinceCompaction}</Detail>
-          <Detail label="Auto-compact threshold">{detail.autoCompactThreshold}</Detail>
         </CardContent>
         {isAdmin && (
           <CardFooter><Button variant="outline" disabled={compact.isPending} onClick={() => compact.mutate()}>Compact now</Button></CardFooter>
