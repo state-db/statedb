@@ -147,47 +147,99 @@ payloads of its kind-0 journal entries that have a matching terminal entry
 payloads of *unmatched* Begins — are preserved.
 
 **Context:** `JournalReplayer.add()` case 0 puts the Begin payload into
-`incompleteOps`; every terminal kind removes it. For matched Begins in terminal
+`incompleteOps`; every terminal kind removes it. `StackAssembler` is the only
+reader of `journal_entries.payload` in main code. For matched Begins in terminal
 updates the payload is dead weight (measured: 284 MB, 20% of journal heap;
 400,420/400,420 matched in the soak). Unmatched Begins become
 `pending_operations` in the exported checkpoint (Pulumi's crash-recovery UX) —
-their payloads are load-bearing and must be kept. Trigger point: after the
-terminal transition commits (see `StackUpdateCompleter`); run async/post-commit
-so `/complete` latency is flat. Note `JournalAppender.payloadEquals` retry
-idempotency: legal retries require a live lease, which is gone once the update
-is terminal, so stripped rows are unreachable by retries — state this in the
-Javadoc. Decide empty representation explicitly: `'{}'::jsonb` keeps the NOT
-NULL constraint; a nullable column is cleaner semantics but needs a migration.
-Either is acceptable; document the choice.
+their payloads are load-bearing and must be kept.
+
+Note `JournalAppender.payloadEquals` retry idempotency: legal retries require a
+live lease, and every path to terminal status deletes the `stack_locks` row in
+the same transaction, so stripped rows are unreachable by retries — state this
+in the Javadoc.
+
+**Empty representation: `'{}'::jsonb`.** It keeps the NOT NULL constraint and
+needs no migration, and the existing readers already tolerate it —
+`payload.get("operation")` returns null, `nullable()` maps it to null, and
+`generateDeployment` skips null ops. A nullable column would additionally break
+`StackAssembler.entryRow`, which calls `mapper.readTree((String) row[12])`
+unguarded.
+
+**Trigger: a paced background sweeper over terminal updates, not a post-commit
+hook.** `StackUpdateCompleter` is only one of three paths to terminal status —
+`StackLockCanceller.markCancelled` (graceful and both force paths) and
+`StackLockAcquirer`'s expired-lease takeover are the others, and cancelled
+updates are precisely where unmatched Begins occur. `markCancelled` also never
+stamps `end_journal_seq`, so the sweeper's eligibility predicate must key off
+`stack_updates.status IN ('succeeded','failed','cancelled')`, never
+`end_journal_seq IS NOT NULL`. The same sweeper backfills the existing
+population; a post-commit hook on `/complete` is at most an optional latency
+optimisation on top and must never run inside the completer's transaction.
+
+**Pacing.** `SET payload = '{}'` rewrites each row and drops its toast chunks:
+the backfill converts the whole 284 MB into dead tuples in both the heap and the
+toast table, at full WAL, on the table `StackAssembler` streams in `sequence_id`
+order. Give the sweeper a per-tick row cap and its own short transactions, as
+`CompactionWorker` does — a single 400k-row `UPDATE` is not acceptable.
+
+**Do not use the `pending_operations` table as the "unmatched?" index.** It has
+no production reader today, and `JournalAppender` silently skips Begins whose
+`operation_type`/`resource_urn`/`resource_type` are missing or outside
+`VALID_OPERATION_TYPES` — so it under-reports unmatched Begins whose payloads
+are still load-bearing. (Its stale-row comment is also out of date:
+`CompactionWorker` never sweeps that table.) The self-join on `journal_entries`
+is the only correct predicate.
 
 **Depends on:** nothing, but coordinate with T6 (stripping shrinks archive
-inputs).
+inputs). Sequence after T2 if both land: lz4 changes the `pg_column_size`
+baseline, so measure before/after against one codec.
 
 **Acceptance criteria:**
 - A regression test that: runs an update to terminal, captures the assembled
-  export, strips, re-assembles — byte-identical deployment JSON.
+  export, strips, re-assembles — identical deployment JSON modulo
+  `manifest.time`.
 - A test with an unmatched Begin (cancelled/failed mid-operation) proving its
   payload survives and still surfaces in `pending_operations` of the export.
+- A test that a Begin is stripped after each of the three terminal transitions
+  (`StackUpdateCompleter`, `StackLockCanceller`, expired-lease takeover).
+- The match predicate requires the terminal entry to sort **after** the Begin
+  (`t.sequence_id > j.sequence_id`), matching replay order — replay processes
+  entries by `sequence_id`, so a terminal entry ahead of its Begin would leave
+  the Begin live in `incompleteOps`.
 - Stripping is idempotent and multi-pod safe (re-running on an already-stripped
   update is a no-op).
-- No stripping of any entry belonging to an in-progress update, ever.
+- No stripping of any entry belonging to an in-progress update, ever. Updates
+  abandoned without cancellation stay `in-progress` and are never stripped —
+  accepted, no savings there.
 
 **How to verify:**
 - `./bin/in-container mvn -f modules/pom.xml -pl persistence -am -Dtest='*Journal*,*Assembler*' -Dsurefire.failIfNoSpecifiedTests=false test`
-- Candidate-bytes query for a before/after measurement on any dev dataset:
-  `SELECT pg_size_pretty(sum(pg_column_size(payload))::bigint) FROM journal_entries j WHERE kind=0 AND EXISTS (SELECT 1 FROM journal_entries t WHERE t.update_id=j.update_id AND t.operation_id=j.operation_id AND t.kind IN (1,2,3));`
+- Candidate-bytes query for a before/after measurement on any dev dataset
+  (terminal updates only — without the status filter this overcounts by
+  including in-flight work that is never eligible):
+  `SELECT pg_size_pretty(sum(pg_column_size(j.payload))::bigint) FROM journal_entries j JOIN stack_updates u ON u.id = j.update_id WHERE j.kind=0 AND u.status <> 'in-progress' AND EXISTS (SELECT 1 FROM journal_entries t WHERE t.update_id=j.update_id AND t.operation_id=j.operation_id AND t.sequence_id > j.sequence_id AND t.kind IN (1,2,3));`
 - Run the pulumi-compat sweep (`make pulumi-compat-sweep`) — export shape must
   be untouched.
 
-**Rollback:** disable the sweep (config flag). Stripped payloads are not
+**Rollback:** disable the sweeper (config flag). Stripped payloads are not
 recoverable — acceptable and documented: they duplicate data in the matching
 terminal entries.
 
 **Risk:** the matched-only predicate being subtly wrong (e.g. matching across
-updates instead of within one). Pin it with the unmatched-Begin test. Also
-verify the replay of a *historical* bounded range (once T7 exists) never needs
-matched Begin payloads — it doesn't today because Begins are matched within
-their own update, but the T7 implementer must re-check.
+updates instead of within one). Pin it with the unmatched-Begin test.
+
+Historical bounded replay is already proven safe and needs no re-check in T7:
+`assembleAt` bounds the range at an update's `end_journal_seq`, and every entry
+of an update lies at or below that update's own `end_journal_seq`, so any Begin
+inside the range has its terminal entry inside the range too.
+
+Note the saving is **not additive with T7**: nothing deletes journal rows today
+(compaction only advances `stack_state.base_snapshot_id`), and the live
+`assemble()` path already ignores everything below the compaction boundary, so
+most of the 284 MB is cold tail that T7 would archive or drop wholesale. T4
+remains worth doing — it is cheap, it thins T5/T7's inputs, and T7 is a spike
+with a go/no-go — but do not count both savings twice.
 
 ---
 
@@ -298,8 +350,9 @@ boundary monotonicity; crash recovery for in-flight updates; tenant-isolation
 composite FKs; T3's ladder spacing G bounds how much cold journal any one
 export decompresses.
 
-**Depends on:** T3 (ladder), T5 (pattern evidence), T4 (matched-Begin
-semantics under bounded replay must be re-verified in the design).
+**Depends on:** T3 (ladder), T5 (pattern evidence), T4 (stripping shrinks the
+segments; matched-Begin safety under bounded replay is already proven in T4 and
+needs no re-derivation here).
 
 **Acceptance criteria:** a design doc answering: ladder spacing G vs
 replay-latency budget re-measured on a large real stack (the 42 ms/425-entry
