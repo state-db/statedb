@@ -102,9 +102,9 @@ public class UpdateEventReader {
   }
 
   /**
-   * One page of events plus where they came from. {@code archived} is what tells a caller the
-   * stream still exists: an empty page from an archived update means the cursor ran past the end,
-   * never that the events are gone.
+   * One page of events plus which source answered. Callers serve both identically — that is the
+   * point of folding — so {@code archived} exists to assert on: it is how a test tells a fold that
+   * worked from one that silently served the summary rows the fold left behind.
    */
   public record EventPage(List<StoredEvent> events, boolean archived) {}
 }

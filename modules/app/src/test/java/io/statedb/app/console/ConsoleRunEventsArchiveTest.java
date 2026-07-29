@@ -36,8 +36,8 @@ import org.junit.jupiter.api.Test;
 
 /**
  * Paging parity for the console events endpoint across a fold. The archived stream must produce the
- * same response bodies — same events, same {@code nextAfter} cursors, same {@code expired} flag —
- * as the rows it replaced, because {@code run-detail.tsx} pages exactly this way.
+ * same response bodies — same events, same {@code nextAfter} cursors — as the rows it replaced,
+ * because {@code run-detail.tsx} pages exactly this way.
  */
 @QuarkusTest
 @TestProfile(LocalGlassTestSupport.Profile.class)
@@ -113,7 +113,7 @@ class ConsoleRunEventsArchiveTest {
               .get(
                   "/api/pulumi/stacks/%s/%s/%s/updates/%s/events"
                       .formatted(ORG, PROJECT, STACK, updateId));
-      response.then().statusCode(200).body("expired", org.hamcrest.Matchers.is(false));
+      response.then().statusCode(200);
       bodies.add(response.asString());
       after = response.jsonPath().get("nextAfter");
     } while (after != null);

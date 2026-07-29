@@ -19,7 +19,6 @@ import jakarta.ws.rs.PathParam;
 import jakarta.ws.rs.Produces;
 import jakarta.ws.rs.QueryParam;
 import jakarta.ws.rs.core.MediaType;
-import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
@@ -32,7 +31,6 @@ import java.util.UUID;
 public class ConsoleRunsResource {
 
   private static final int EVENT_PAGE_SIZE = 500;
-  private static final Duration EVENT_RETENTION = Duration.ofDays(30);
 
   @Inject AuthorizedResource authorized;
   @Inject ConsoleUpdateHistoryFinder finder;
@@ -74,10 +72,10 @@ public class ConsoleRunsResource {
       @QueryParam("after") Integer requestedAfter) {
     StackRef ref = authorized.subject(StackRef.class);
     UUID id = parseUuid(updateId);
-    StackUpdate update =
-        StackUpdate.<StackUpdate>find("id = ?1 and stackId = ?2", id, ref.stackId())
-            .firstResultOptional()
-            .orElseThrow(NotFoundException::new);
+    // Scopes the run to this stack: another stack's run must 404 rather than page back empty.
+    if (StackUpdate.count("id = ?1 and stackId = ?2", id, ref.stackId()) == 0) {
+      throw new NotFoundException();
+    }
     int after = requestedAfter == null ? -1 : requestedAfter;
     if (after < -1) throw new BadRequestException("after must be at least -1");
     UpdateEventReader.EventPage page = eventReader.page(ref.stackId(), id, after, EVENT_PAGE_SIZE);
@@ -89,13 +87,7 @@ public class ConsoleRunsResource {
                         event.sequence(), event.kind(), event.severity(), event.payload()))
             .toList();
     Integer nextAfter = rows.size() == EVENT_PAGE_SIZE ? rows.getLast().sequence() : null;
-    // An archived stream is present, just compressed: only a genuinely absent one is expired.
-    boolean expired =
-        !page.archived()
-            && rows.isEmpty()
-            && after == -1
-            && update.startedAt.isBefore(Instant.now().minus(EVENT_RETENTION));
-    return new EventsResponse(rows, nextAfter, expired);
+    return new EventsResponse(rows, nextAfter);
   }
 
   private RunResponse response(StackUpdate update) {
@@ -145,5 +137,10 @@ public class ConsoleRunsResource {
 
   public record EventResponse(int sequence, String kind, String severity, JsonNode payload) {}
 
-  public record EventsResponse(List<EventResponse> events, Integer nextAfter, boolean expired) {}
+  /**
+   * An empty page always means this run has no more events, never that events were lost. Folding is
+   * a representation change and nothing else removes them, so there is no "unavailable" state for
+   * the console to distinguish.
+   */
+  public record EventsResponse(List<EventResponse> events, Integer nextAfter) {}
 }

@@ -336,7 +336,6 @@ export interface RunEvent {
 export interface RunEventsPage {
   events: RunEvent[];
   nextAfter: number | null;
-  expired: boolean;
 }
 
 /**

@@ -74,7 +74,6 @@ export function RunDetailPage({
     refetchInterval: (current) => current.state.data?.status === "in-progress" ? 3_000 : false,
   });
   const [events, setEvents] = useState<RunEvent[]>([]);
-  const [expired, setExpired] = useState(false);
   const [eventsError, setEventsError] = useState<unknown>(null);
   const previousStatus = useRef<string | null>(null);
   const eventCursor = useRef(-1);
@@ -89,7 +88,6 @@ export function RunDetailPage({
 
   useEffect(() => {
     setEvents([]);
-    setExpired(false);
     eventCursor.current = -1;
   }, [query.data?.id]);
 
@@ -111,7 +109,6 @@ export function RunDetailPage({
             setEvents((current) => mergeEvents(current, page.events));
             eventCursor.current = page.events[page.events.length - 1]?.sequence ?? eventCursor.current;
           }
-          setExpired(page.expired);
           nextAfter = page.nextAfter;
         } while (nextAfter !== null);
         setEventsError(null);
@@ -147,17 +144,16 @@ export function RunDetailPage({
       stack={stack}
       run={query.data}
       events={events}
-      expired={expired}
       eventsError={eventsError}
     />
   );
 }
 
 function RunView({
-  org, project, stack, run, events, expired, eventsError,
+  org, project, stack, run, events, eventsError,
 }: {
   org: string; project: string; stack: string; run: RunDetail; events: RunEvent[];
-  expired: boolean; eventsError: unknown;
+  eventsError: unknown;
 }) {
   const summary = changeSummary(run);
   const live = run.status === "in-progress";
@@ -199,7 +195,7 @@ function RunView({
           <TabsTrigger value="configuration">Configuration</TabsTrigger>
         </TabsList>
         <TabsContent value="log" className="mt-4">
-          <RunLog events={events} expired={expired} error={eventsError} live={run.status === "in-progress"} preview={run.version === null} />
+          <RunLog events={events} error={eventsError} live={run.status === "in-progress"} preview={run.version === null} />
         </TabsContent>
         <TabsContent value="changes" className="mt-4">
           <RunChanges events={events} collapseReplacements={run.version === null || run.status !== "in-progress"} live={live} preview={run.version === null} />
@@ -212,7 +208,7 @@ function RunView({
   );
 }
 
-function RunLog({ events, expired, error, live, preview }: { events: RunEvent[]; expired: boolean; error: unknown; live: boolean; preview: boolean }) {
+function RunLog({ events, error, live, preview }: { events: RunEvent[]; error: unknown; live: boolean; preview: boolean }) {
   const [filter, setFilter] = useState("all");
   const [expandedRows, setExpandedRows] = useState<Record<string, boolean>>({});
   const viewport = useRef<HTMLDivElement>(null);
@@ -258,9 +254,6 @@ function RunLog({ events, expired, error, live, preview }: { events: RunEvent[];
     if (live && follow.current) jumpToBottom();
   }, [events.length, live]);
 
-  if (expired) {
-    return <Alert><CircleAlert /><AlertTitle>Event log unavailable</AlertTitle><AlertDescription>Event log expired per retention policy.</AlertDescription></Alert>;
-  }
   return (
     <div className="flex flex-col gap-3">
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -314,7 +307,7 @@ function RunLog({ events, expired, error, live, preview }: { events: RunEvent[];
           )}
           {filter === "all" && <OutputsSection events={events} />}
           {filter === "all" && summary && <SummaryLogLine event={summary} preview={preview} />}
-          {rows.length === 0 && visibleMessages.length === 0 && !summary && !live && <p className="text-haze-lit">Waiting for events…</p>}
+          {rows.length === 0 && visibleMessages.length === 0 && !summary && !live && <p className="text-haze-lit">No events recorded for this run.</p>}
           {live && (
             <div className={cn(
               "flex items-center gap-2 text-biolume",
