@@ -65,27 +65,39 @@ public class WorkspaceListFinder {
   }
 
   private Map<UUID, WorkspaceSummary.LastUpdate> latestUpdates(List<UUID> stackIds) {
-    Map<UUID, WorkspaceSummary.LastUpdate> latest = new HashMap<>();
-    // Correlated subquery keeps this to one row per stack; without it every stack's full update
-    // history (jsonb columns included) is hydrated on a list the console polls.
+    // Compute the latest timestamp once per visible stack, then load only those update rows.
     List<StackUpdate> updates =
         StackUpdate.<StackUpdate>find(
-                "from StackUpdate u where u.stackId in ?1 and u.startedAt = "
-                    + "(select max(u2.startedAt) from StackUpdate u2 where u2.stackId = u.stackId)",
+                "from StackUpdate u where u.stackId in ?1 and (u.stackId, u.startedAt) in "
+                    + "(select u2.stackId, max(u2.startedAt) from StackUpdate u2 "
+                    + "where u2.stackId in ?1 group by u2.stackId)",
                 stackIds)
             .list();
-    Map<UUID, User> users = usersById(updates);
-    Map<UUID, ApiToken> tokens = tokensById(updates);
+    Map<UUID, StackUpdate> latestRows = new HashMap<>();
     updates.forEach(
         u ->
-            latest.putIfAbsent(
+            latestRows.merge(
                 u.stackId,
-                new WorkspaceSummary.LastUpdate(
-                    u.kind.wireValue(),
-                    statusWireValue(u.status),
-                    u.startedAt,
-                    u.version,
-                    actorFor(users.get(u.startedByUserId), tokens.get(u.startedByApiTokenId)))));
+                u,
+                (existing, candidate) ->
+                    candidate.createdAt.isAfter(existing.createdAt) ? candidate : existing));
+
+    Map<UUID, WorkspaceSummary.LastUpdate> latest = new HashMap<>();
+    Map<UUID, User> users = usersById(updates);
+    Map<UUID, ApiToken> tokens = tokensById(updates);
+    latestRows
+        .values()
+        .forEach(
+            u ->
+                latest.put(
+                    u.stackId,
+                    new WorkspaceSummary.LastUpdate(
+                        u.kind.wireValue(),
+                        statusWireValue(u.status),
+                        u.startedAt,
+                        u.version,
+                        actorFor(
+                            users.get(u.startedByUserId), tokens.get(u.startedByApiTokenId)))));
     return latest;
   }
 

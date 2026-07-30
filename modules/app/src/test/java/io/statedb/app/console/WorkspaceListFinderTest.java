@@ -43,14 +43,16 @@ class WorkspaceListFinderTest {
 
     Stack prod = stack(visible, "networking", "prod");
     Stack staging = stack(visible, "networking", "staging");
+    Stack qa = stack(visible, "networking", "qa");
     stack(hidden, "payments", "prod");
-    update(
-        prod,
-        StackUpdate.Kind.UPDATE,
-        StackUpdate.Status.SUCCEEDED,
-        14,
-        Instant.parse("2026-07-17T10:00:00Z"),
-        user);
+    StackUpdate prodStartedAtMax =
+        update(
+            prod,
+            StackUpdate.Kind.UPDATE,
+            StackUpdate.Status.SUCCEEDED,
+            14,
+            Instant.parse("2026-07-17T10:00:00Z"),
+            user);
     update(
         prod,
         StackUpdate.Kind.REFRESH,
@@ -58,6 +60,31 @@ class WorkspaceListFinderTest {
         13,
         Instant.parse("2026-07-16T10:00:00Z"),
         user);
+    StackUpdate prodStartedTie =
+        update(
+            prod,
+            StackUpdate.Kind.DESTROY,
+            StackUpdate.Status.CANCELLED,
+            15,
+            Instant.parse("2026-07-17T10:00:00Z"),
+            user);
+    update(
+        qa,
+        StackUpdate.Kind.UPDATE,
+        StackUpdate.Status.SUCCEEDED,
+        7,
+        Instant.parse("2026-07-17T10:00:00Z"),
+        user);
+    update(
+        qa,
+        StackUpdate.Kind.REFRESH,
+        StackUpdate.Status.SUCCEEDED,
+        8,
+        Instant.parse("2026-07-18T10:00:00Z"),
+        user);
+    em.flush();
+    setCreatedAt(prodStartedAtMax, Instant.parse("2026-07-17T10:00:00Z"));
+    setCreatedAt(prodStartedTie, Instant.parse("2026-07-17T10:00:01Z"));
     lock(staging, "alice@example.test", Instant.parse("2026-07-17T11:00:00Z"));
     snapshotResources(prod, 2);
     em.flush();
@@ -65,20 +92,25 @@ class WorkspaceListFinderTest {
 
     List<WorkspaceSummary> rows = finder.findVisibleToUser(user.id);
 
-    assertEquals(2, rows.size());
+    assertEquals(3, rows.size());
     WorkspaceSummary prodRow = rows.get(0);
-    WorkspaceSummary stagingRow = rows.get(1);
+    WorkspaceSummary qaRow = rows.get(1);
+    WorkspaceSummary stagingRow = rows.get(2);
 
     assertEquals("workspace-visible", prodRow.orgName());
     assertEquals("networking", prodRow.projectName());
     assertEquals("prod", prodRow.stackName());
-    assertEquals("update", prodRow.lastUpdate().kind());
-    assertEquals("succeeded", prodRow.lastUpdate().status());
-    assertEquals(14, prodRow.lastUpdate().version());
+    assertEquals("destroy", prodRow.lastUpdate().kind());
+    assertEquals("cancelled", prodRow.lastUpdate().status());
+    assertEquals(15, prodRow.lastUpdate().version());
     assertEquals("User workspace-user", prodRow.lastUpdate().actor().displayName());
     assertEquals("workspace-user@example.test", prodRow.lastUpdate().actor().email());
     assertEquals(2L, prodRow.resourceCount());
     assertNull(prodRow.lock());
+
+    assertEquals("qa", qaRow.stackName());
+    assertEquals("refresh", qaRow.lastUpdate().kind());
+    assertEquals(8, qaRow.lastUpdate().version());
 
     assertEquals("staging", stagingRow.stackName());
     assertEquals("alice@example.test", stagingRow.lock().lockedBy());
@@ -86,7 +118,7 @@ class WorkspaceListFinderTest {
     assertNull(stagingRow.lastUpdate());
 
     assertEquals(
-        List.of("prod", "staging"),
+        List.of("prod", "qa", "staging"),
         finder.findVisibleToUser(user.id, "workspace-visible", "networking").stream()
             .map(WorkspaceSummary::stackName)
             .toList());
@@ -153,7 +185,7 @@ class WorkspaceListFinderTest {
     return stack;
   }
 
-  private static void update(
+  private static StackUpdate update(
       Stack stack,
       StackUpdate.Kind kind,
       StackUpdate.Status status,
@@ -169,6 +201,16 @@ class WorkspaceListFinderTest {
     update.startedByUserId = user.id;
     update.dryRun = false;
     update.persist();
+    return update;
+  }
+
+  private void setCreatedAt(StackUpdate update, Instant createdAt) {
+    // created_at is Hibernate-managed and immutable on the entity; set it directly for this
+    // tie-break fixture.
+    em.createNativeQuery("update stack_updates set created_at = ?1 where id = ?2")
+        .setParameter(1, createdAt)
+        .setParameter(2, update.id)
+        .executeUpdate();
   }
 
   private static void lock(Stack stack, String lockedBy, Instant lockedAt) {
