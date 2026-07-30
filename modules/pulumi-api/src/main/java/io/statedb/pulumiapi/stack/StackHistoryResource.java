@@ -64,7 +64,7 @@ public class StackHistoryResource {
     return new UpdateInfo(
         u.kind.wireValue(),
         u.startedAt.getEpochSecond(),
-        u.message,
+        u.message == null ? "" : u.message,
         environmentOf(u),
         u.config == null ? Map.of() : u.config,
         result(u.status),
@@ -98,7 +98,10 @@ public class StackHistoryResource {
   // Mirrors apitype.UpdateInfo. config and environment are carried through verbatim from what the
   // update was started with (both share Pulumi's wire shapes); an absent map serializes as {}
   // rather
-  // than being dropped. resourceChanges is omitted for now. Times are epoch seconds.
+  // than being dropped, and an absent message as "" — apitype.UpdateInfo declares all three as
+  // non-pointer types, so dropping the key would put a shape on the wire stock Pulumi never emits
+  // (import updates are recorded without a message). resourceChanges is omitted for now. Times are
+  // epoch seconds.
   @JsonInclude(JsonInclude.Include.NON_NULL)
   public record UpdateInfo(
       @JsonProperty("kind") String kind,

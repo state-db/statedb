@@ -2,6 +2,7 @@ package io.statedb.app.stack;
 
 import static io.restassured.RestAssured.given;
 import static org.hamcrest.Matchers.equalTo;
+import static org.hamcrest.Matchers.hasKey;
 import static org.hamcrest.Matchers.hasSize;
 
 import io.quarkus.narayana.jta.QuarkusTransaction;
@@ -126,6 +127,24 @@ class StackHistoryContractTest {
         .body("updates[0].endTime", equalTo(1_700_000_042))
         .body("updates[0].environment", equalTo(Map.of()))
         .body("updates[0].config", equalTo(Map.of()));
+  }
+
+  @Test
+  void updateWithoutMessageStillCarriesTheKey() {
+    // Import updates are recorded without a message. apitype.UpdateInfo declares Message as a
+    // non-pointer string, so the key must still appear as "" rather than being dropped.
+    Instant t = Instant.ofEpochSecond(1_700_000_000L);
+    addUpdate(StackUpdate.Kind.IMPORT, StackUpdate.Status.SUCCEEDED, 1, t, t, null);
+
+    given()
+        .header("Authorization", "token " + RAW_TOKEN)
+        .when()
+        .get(UPDATES)
+        .then()
+        .statusCode(200)
+        .body("updates[0].kind", equalTo("import"))
+        .body("updates[0]", hasKey("message"))
+        .body("updates[0].message", equalTo(""));
   }
 
   @Test
