@@ -48,7 +48,7 @@ resources:
         printf '{"environment":"${environment}","revision":${revision},"buildId":"${build-id.hex}"}\n' > ${build-id.hex}/config/manifest.json &&
         printf '# ${environment} artifact bundle\n\nGenerated locally for state-db workbench revision ${revision}.\n' > ${build-id.hex}/docs/README.md &&
         printf 'feature.console=true\nfeature.history=true\n' > ${build-id.hex}/config/features.properties
-      delete: find ${build-id.hex} -type f -delete
+      delete: rm -rf ${build-id.hex}
       archivePaths:
         - ${build-id.hex}/**
       assetPaths:
