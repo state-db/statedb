@@ -86,6 +86,11 @@ export interface AuthProviders {
   breakGlass: boolean;
 }
 
+export interface MintedCliToken {
+  id: string;
+  token: string;
+}
+
 export interface OidcProvider {
   id: string;
   name: string;
@@ -370,6 +375,11 @@ export const api = {
   },
   tokens: {
     list: () => request<ApiToken[]>("/tokens"),
+    mintCli: () =>
+      request<MintedCliToken>("/auth/cli-mint", {
+        method: "POST",
+        body: "{}",
+      }),
     revoke: (id: string) =>
       request<void>(`/tokens/${encodeURIComponent(id)}`, { method: "DELETE" }),
   },

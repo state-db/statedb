@@ -3,6 +3,7 @@ package io.statedb.app.console;
 import static io.restassured.RestAssured.given;
 import static org.hamcrest.Matchers.containsString;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -12,6 +13,7 @@ import io.quarkus.test.junit.QuarkusTest;
 import io.quarkus.test.oidc.server.OidcWiremockTestResource;
 import io.restassured.http.Cookie;
 import io.restassured.response.Response;
+import io.restassured.specification.RequestSpecification;
 import io.statedb.persistence.identity.OidcProvider;
 import io.statedb.persistence.identity.User;
 import jakarta.inject.Inject;
@@ -192,11 +194,7 @@ class CliLoginFlowTest {
 
     String signedRequest = hiddenInput(confirmation.asString(), "request");
     Response mint =
-        given()
-            .redirects()
-            .follow(false)
-            .cookie(session.getName(), session.getValue())
-            .contentType("application/x-www-form-urlencoded")
+        approvalPost(session, confirmation)
             .formParam("request", signedRequest)
             .formParam("decision", "allow")
             .when()
@@ -226,6 +224,59 @@ class CliLoginFlowTest {
   }
 
   @Test
+  void cliMintIsJsonConsoleMutation() {
+    Cookie session = establishSession();
+
+    Response mint =
+        given()
+            .cookie(session.getName(), session.getValue())
+            .header("Origin", "http://state-db.test")
+            .contentType("application/json")
+            .body("{}")
+            .when()
+            .post("/api/auth/cli-mint");
+    mint.then().statusCode(200);
+
+    String tokenId = mint.jsonPath().getString("id");
+    String accessToken = mint.jsonPath().getString("token");
+    assertNotNull(tokenId, "mint response carries the token id");
+    assertNotNull(accessToken, "mint response reveals the raw token once");
+    assertFalse(accessToken.isBlank(), "raw token must not be blank");
+
+    given()
+        .header("Authorization", "token " + accessToken)
+        .header("Accept", "application/vnd.pulumi+9")
+        .when()
+        .get("/pulumi/api/user")
+        .then()
+        .statusCode(200)
+        .body("githubLogin", containsString(FIXTURE_SUB));
+  }
+
+  @Test
+  void secondApprovalPageDoesNotInvalidateTheFirst() {
+    Cookie session = establishSession();
+    Response firstTab = approvalPage(session, null, "59123", "nonce-tab-1");
+    Cookie firstCsrf = firstTab.getDetailedCookie("state-db-csrf");
+    assertNotNull(firstCsrf, "approval page must set a CSRF cookie");
+
+    // The browser replays the cookie it already holds; the token must be reused, not rotated.
+    Response secondTab = approvalPage(session, firstCsrf, "59124", "nonce-tab-2");
+    Cookie secondCsrf = secondTab.getDetailedCookie("state-db-csrf");
+    assertNotNull(secondCsrf, "approval page must refresh the CSRF cookie");
+    assertEquals(firstCsrf.getValue(), secondCsrf.getValue(), "CSRF token is reused across tabs");
+
+    // Submitting the form left open in the first tab still works.
+    approvalPost(session, firstTab)
+        .formParam("request", hiddenInput(firstTab.asString(), "request"))
+        .formParam("decision", "allow")
+        .when()
+        .post("/api/auth/cli-login/approve")
+        .then()
+        .statusCode(302);
+  }
+
+  @Test
   void approvalRequestIsSingleUse() {
     Cookie session = establishSession();
     Response confirmation =
@@ -239,6 +290,10 @@ class CliLoginFlowTest {
             .when()
             .get("/api/auth/cli-login");
     confirmation.then().statusCode(200);
+    Cookie issued = confirmation.getDetailedCookie("state-db-csrf");
+    assertNotNull(issued, "approval page must set a CSRF cookie");
+    assertTrue(issued.isHttpOnly(), "CSRF cookie is HttpOnly");
+    assertEquals("Lax", issued.getSameSite(), "CSRF cookie is SameSite=Lax");
     String signedRequest = hiddenInput(confirmation.asString(), "request");
 
     given()
@@ -251,14 +306,34 @@ class CliLoginFlowTest {
         .when()
         .post("/api/auth/cli-login/approve")
         .then()
-        .statusCode(302);
+        .statusCode(400);
 
-    // Replaying the same signed request must not mint a second token.
+    Cookie csrf = confirmation.getDetailedCookie("state-db-csrf");
+    assertNotNull(csrf, "approval page must set a CSRF cookie");
     given()
         .redirects()
         .follow(false)
         .cookie(session.getName(), session.getValue())
+        .cookie(csrf.getName(), csrf.getValue())
         .contentType("application/x-www-form-urlencoded")
+        .formParam("state-db-csrf", "not*base64!!")
+        .formParam("request", signedRequest)
+        .formParam("decision", "allow")
+        .when()
+        .post("/api/auth/cli-login/approve")
+        .then()
+        .statusCode(400);
+
+    approvalPost(session, confirmation)
+        .formParam("request", signedRequest)
+        .formParam("decision", "allow")
+        .when()
+        .post("/api/auth/cli-login/approve")
+        .then()
+        .statusCode(302);
+
+    // Replaying the same signed request must not mint a second token.
+    approvalPost(session, confirmation)
         .formParam("request", signedRequest)
         .formParam("decision", "allow")
         .when()
@@ -295,11 +370,7 @@ class CliLoginFlowTest {
             .get("/api/auth/cli-login");
     confirmation.then().statusCode(200);
 
-    given()
-        .redirects()
-        .follow(false)
-        .cookie(session.getName(), session.getValue())
-        .contentType("application/x-www-form-urlencoded")
+    approvalPost(session, confirmation)
         .formParam("request", hiddenInput(confirmation.asString(), "request"))
         .formParam("decision", "cancel")
         .when()
@@ -384,6 +455,35 @@ class CliLoginFlowTest {
   private static String pathWithQuery(String url) {
     URI u = URI.create(url);
     return u.getQuery() == null ? u.getPath() : u.getPath() + "?" + u.getRawQuery();
+  }
+
+  private static Response approvalPage(Cookie session, Cookie csrf, String port, String nonce) {
+    RequestSpecification request =
+        given()
+            .redirects()
+            .follow(false)
+            .cookie(session.getName(), session.getValue())
+            .accept("text/html")
+            .queryParam("cliSessionPort", port)
+            .queryParam("cliSessionNonce", nonce);
+    if (csrf != null) {
+      request.cookie(csrf.getName(), csrf.getValue());
+    }
+    Response response = request.when().get("/api/auth/cli-login");
+    response.then().statusCode(200);
+    return response;
+  }
+
+  private static RequestSpecification approvalPost(Cookie session, Response confirmation) {
+    Cookie csrf = confirmation.getDetailedCookie("state-db-csrf");
+    assertNotNull(csrf, "approval page must set a CSRF cookie");
+    return given()
+        .redirects()
+        .follow(false)
+        .cookie(session.getName(), session.getValue())
+        .cookie(csrf.getName(), csrf.getValue())
+        .contentType("application/x-www-form-urlencoded")
+        .formParam("state-db-csrf", hiddenInput(confirmation.asString(), "state-db-csrf"));
   }
 
   private static Map<String, String> queryParams(String url) {

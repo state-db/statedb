@@ -1,5 +1,7 @@
 package io.statedb.consoleapi.auth;
 
+import io.quarkus.qute.Location;
+import io.quarkus.qute.Template;
 import io.quarkus.security.identity.SecurityIdentity;
 import io.smallrye.common.annotation.Blocking;
 import io.statedb.consoleapi.auth.CliLoginApprovalSigner.CliLoginApproval;
@@ -8,6 +10,7 @@ import io.statedb.persistence.auth.CliTokenMinter.MintedCliToken;
 import io.statedb.persistence.identity.OidcProvider;
 import jakarta.inject.Inject;
 import jakarta.ws.rs.Consumes;
+import jakarta.ws.rs.CookieParam;
 import jakarta.ws.rs.FormParam;
 import jakarta.ws.rs.GET;
 import jakarta.ws.rs.NotAuthorizedException;
@@ -24,6 +27,7 @@ import jakarta.ws.rs.core.HttpHeaders;
 import jakarta.ws.rs.core.MediaType;
 import jakarta.ws.rs.core.NewCookie;
 import jakarta.ws.rs.core.Response;
+import jakarta.ws.rs.core.UriInfo;
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.net.URLEncoder;
@@ -70,9 +74,17 @@ public class AuthRoutesResource {
 
   public record AuthProviders(List<AuthProvider> providers, boolean breakGlass) {}
 
+  public record MintedToken(String id, String token) {}
+
   @Inject SecurityIdentity identity;
 
+  @Inject
+  @Location("auth/cli-login-approval.html")
+  Template cliLoginApproval;
+
   @Inject LocalGlass glass;
+
+  @Inject CliLoginCsrf cliLoginCsrf;
 
   @Inject CliTokenMinter minter;
 
@@ -167,25 +179,16 @@ public class AuthRoutesResource {
 
   /**
    * Mints a short-lived CLI token from the current console session and reveals it once to the SPA.
-   *
-   * <p>No CSRF token is required: the Lax session cookie is not sent on cross-site POSTs.
    */
   @POST
   @Path("/cli-mint")
   @Blocking
-  public Response cliMint() {
+  @Consumes(MediaType.APPLICATION_JSON)
+  @Produces(MediaType.APPLICATION_JSON)
+  public MintedToken cliMint() {
     JsonWebToken jwt = sessionJwt();
     MintedCliToken minted = minter.mint(jwt.getIssuer(), jwt.getSubject(), "CLI token");
-    String target =
-        "/console/account/tokens?minted="
-            + minted.id()
-            + "#token="
-            + CliLoginResource.enc(minted.rawToken());
-    return Response.status(Response.Status.FOUND)
-        .location(URI.create(target))
-        .header("Cache-Control", "no-store")
-        .header("Referrer-Policy", "no-referrer")
-        .build();
+    return new MintedToken(minted.id().toString(), minted.rawToken());
   }
 
   @GET
@@ -209,6 +212,8 @@ public class AuthRoutesResource {
   @Blocking
   @Produces(MediaType.TEXT_HTML)
   public Response cliLogin(
+      @Context UriInfo uriInfo,
+      @CookieParam(CliLoginCsrf.COOKIE) String csrfCookie,
       @QueryParam("cliSessionPort") String port,
       @QueryParam("cliSessionNonce") String nonce,
       @QueryParam("cliSessionDescription") String description) {
@@ -225,7 +230,17 @@ public class AuthRoutesResource {
     String signedInAs =
         Optional.ofNullable(jwt.getClaim("email")).map(Object::toString).orElse(jwt.getSubject());
     String clientLabel = CliLoginResource.isBlank(description) ? "Pulumi CLI" : description.strip();
-    return credentialPage(CliLoginPages.approvalPage(signedInAs, clientLabel, p, signedRequest))
+    CliLoginCsrf.Issued csrf = cliLoginCsrf.issue(csrfCookie, isHttps(uriInfo));
+    return credentialPage(
+            cliLoginApproval
+                .data("signedInAs", signedInAs)
+                .data("clientLabel", clientLabel)
+                .data("port", p)
+                .data("csrfFieldName", csrf.fieldName())
+                .data("csrfToken", csrf.formValue())
+                .data("signedRequest", signedRequest)
+                .render())
+        .cookie(csrf.cookie())
         .build();
   }
 
@@ -234,7 +249,13 @@ public class AuthRoutesResource {
   @Blocking
   @Consumes(MediaType.APPLICATION_FORM_URLENCODED)
   public Response approveCliLogin(
-      @FormParam("request") String signedRequest, @FormParam("decision") String decision) {
+      @FormParam(CliLoginCsrf.FIELD) String csrfToken,
+      @CookieParam(CliLoginCsrf.COOKIE) String csrfCookie,
+      @FormParam("request") String signedRequest,
+      @FormParam("decision") String decision) {
+    if (!cliLoginCsrf.valid(csrfToken, csrfCookie)) {
+      throw new WebApplicationException(Response.Status.BAD_REQUEST);
+    }
     JsonWebToken jwt = sessionJwt();
     CliLoginApproval approval = signer.consume(signedRequest);
     if (!approval.iss().equals(jwt.getIssuer()) || !approval.sub().equals(jwt.getSubject())) {
@@ -254,6 +275,10 @@ public class AuthRoutesResource {
             + "&nonce="
             + CliLoginResource.enc(approval.nonce());
     return Response.status(Response.Status.FOUND).location(URI.create(loopback)).build();
+  }
+
+  private static boolean isHttps(UriInfo uriInfo) {
+    return "https".equalsIgnoreCase(uriInfo.getRequestUri().getScheme());
   }
 
   private JsonWebToken sessionJwt() {

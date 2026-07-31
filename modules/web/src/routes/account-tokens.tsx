@@ -2,7 +2,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { ColumnDef } from "@tanstack/react-table";
 import { formatDistanceToNow } from "date-fns";
 import { KeyRound, Trash2 } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { toast } from "sonner";
 
 import { DataTable, sortableHeader } from "@/components/console/DataTable";
@@ -38,13 +38,10 @@ const TOKENS_KEY = ["tokens"] as const;
 export function AccountTokensPage() {
   const queryClient = useQueryClient();
   const [revokeTarget, setRevokeTarget] = useState<ApiToken | null>(null);
-  const [minted, setMinted] = useState(readMintedToken);
-  // The raw token arrives in the URL fragment; strip it immediately once captured into state so it
-  // never lingers in the address bar, history, or a bookmark. The dialog reads it from state.
-  useEffect(() => {
-    if (minted.rawToken) clearMintedToken();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  const [minted, setMinted] = useState<{ id: string | null; rawToken: string | null }>({
+    id: null,
+    rawToken: null,
+  });
   const query = useQuery({
     queryKey: TOKENS_KEY,
     queryFn: api.tokens.list,
@@ -61,6 +58,14 @@ export function AccountTokensPage() {
       toast.success("Token revoked");
     },
     onError: (error) => toast.error(error instanceof Error ? error.message : "Could not revoke token"),
+  });
+  const mintCli = useMutation({
+    mutationFn: api.tokens.mintCli,
+    onSuccess: (token) => {
+      setMinted({ id: token.id, rawToken: token.token });
+      void queryClient.invalidateQueries({ queryKey: TOKENS_KEY });
+    },
+    onError: (error) => toast.error(error instanceof Error ? error.message : "Could not create token"),
   });
 
   const columns = useMemo<ColumnDef<ApiToken>[]>(() => [
@@ -126,10 +131,9 @@ export function AccountTokensPage() {
           Use it with <code className="font-mono text-sm">pulumi login</code> from your terminal.
         </CardContent>
         <CardFooter>
-          {/* Form POST, not a link: keep minting off GET. Browser follows the server redirect. */}
-          <form method="post" action="/api/auth/cli-mint">
-            <Button type="submit"><KeyRound data-icon="inline-start" />Create CLI token</Button>
-          </form>
+          <Button type="button" onClick={() => mintCli.mutate()} disabled={mintCli.isPending}>
+            <KeyRound data-icon="inline-start" />Create CLI token
+          </Button>
         </CardFooter>
       </Card>
 
@@ -189,7 +193,6 @@ export function AccountTokensPage() {
       <OneTimeTokenDialog
         rawToken={minted.rawToken}
         onClose={() => {
-          clearMintedToken();
           setMinted({ id: null, rawToken: null });
         }}
       />
@@ -223,22 +226,6 @@ function TokenTableSkeleton() {
       <Skeleton className="h-12 w-full" />
     </div>
   );
-}
-
-export function readMintedToken() {
-  const query = new URLSearchParams(window.location.search);
-  const fragment = new URLSearchParams(window.location.hash.slice(1));
-  return {
-    id: query.get("minted"),
-    rawToken: query.has("minted") ? fragment.get("token") : null,
-  };
-}
-
-export function clearMintedToken() {
-  const url = new URL(window.location.href);
-  url.searchParams.delete("minted");
-  url.hash = "";
-  window.history.replaceState(null, "", `${url.pathname}${url.search}`);
 }
 
 export function expirationState(value: string, now = Date.now()) {

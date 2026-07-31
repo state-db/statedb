@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="referrer" content="no-referrer" />
+    <title>Allow CLI access</title>
+    <style>
+      body { font-family: system-ui, sans-serif; margin: 3rem auto; max-width: 40rem; line-height: 1.45; }
+      dl { display: grid; grid-template-columns: 9rem 1fr; gap: .5rem 1rem; }
+      dt { color: #555; }
+      dd { margin: 0; }
+      button { padding: .65rem 1rem; margin-right: .5rem; }
+    </style>
+  </head>
+  <body>
+    <h1>Allow CLI access?</h1>
+    <p>Pulumi CLI is requesting a 24-hour state-db token for your account.</p>
+    <dl>
+      <dt>Signed in as</dt><dd>{signedInAs}</dd>
+      <dt>Client</dt><dd>{clientLabel}</dd>
+      <dt>Access</dt><dd>Organizations you currently belong to</dd>
+      <dt>Loopback</dt><dd>127.0.0.1:{port}</dd>
+    </dl>
+    <form method="post" action="/api/auth/cli-login/approve">
+      <input type="hidden" name="{csrfFieldName}" value="{csrfToken}" />
+      <input type="hidden" name="request" value="{signedRequest}" />
+      <button type="submit" name="decision" value="allow">Allow access</button>
+      <button type="submit" name="decision" value="cancel">Cancel</button>
+    </form>
+  </body>
+</html>
