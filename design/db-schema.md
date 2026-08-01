@@ -715,7 +715,7 @@ The tables below split what the schema enforces from what application code must 
 
 | # | Concern | Why not applicable |
 |---|---------|-------------------|
-| 16 | Portability | Deliberately Postgres-only: `JSONB`, `TIMESTAMPTZ`, `DEFERRABLE FK`, partial indexes, BRIN, `FOR UPDATE`. No abstraction layer is planned. |
+| 16 | Portability | Deliberately Postgres-only: `JSONB`, `TIMESTAMPTZ`, `DEFERRABLE FK`, partial indexes, BRIN, `FOR UPDATE`. No abstraction layer is planned. Minimum server is PostgreSQL 14 built `--with-lz4`, set by the lz4 TOAST compression in V020 and enforced by the `beforeMigrate` Flyway callback. |
 
 ---
 

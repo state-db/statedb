@@ -22,7 +22,14 @@ web console.
 
 ## Database
 
-- Postgres is the only supported database.
+- Postgres is the only supported database. **PostgreSQL 14 or newer, built with
+  lz4 support (`--with-lz4`)**, is required — statedb stores its large payload
+  columns with lz4 TOAST compression. The official Postgres images and the major
+  managed offerings qualify; some minimal or distribution builds do not.
+  Releases are tested against Postgres 16 and 18.
+- The requirement is checked at startup before any migration is applied, so an
+  unsupported server fails immediately with a clear error rather than leaving a
+  partly migrated database.
 - Schema is owned by Flyway migrations bundled with the service; they apply
   automatically at startup. Upgrading statedb upgrades the schema.
 - **Backups are Postgres backups.** Your existing `pg_dump` / WAL archiving /
