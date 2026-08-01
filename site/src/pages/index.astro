@@ -7,14 +7,6 @@ import mascot from "../assets/statedb-mascot.png";
 
 const github = "https://github.com/state-db/state-db";
 
-const reportRows = [
-  { scenario: "CLI killed mid-update", outcome: "recovers after lease expiry" },
-  { scenario: "Two concurrent up runs", outcome: "exactly one wins" },
-  { scenario: "Provider error mid-deploy", outcome: "completed resources retained" },
-  { scenario: "Tampered checkpoint import", outcome: "rejected, prior state intact" },
-  { scenario: "Secrets after compaction", outcome: "decrypt from a fresh machine" },
-];
-
 const tiers = [
   {
     label: "CONTRACT REPLAY",
@@ -30,7 +22,7 @@ const tiers = [
   },
   {
     label: "FAULT INJECTION",
-    body: "Adversarial scenarios with the real CLI: killed mid-update, concurrent updates, failed deployments, corrupted imports. Each run emits a State Safety Report, and a nightly matrix repeats every scenario across every supported CLI version.",
+    body: "Adversarial scenarios with the real CLI: killed mid-update, concurrent updates, failed deployments, corrupted imports. The nightly matrix repeats every scenario across every supported CLI version.",
   },
 ];
 ---
@@ -74,7 +66,7 @@ const tiers = [
         <div class="shell hero-grid">
           <div class="hero-copy">
             <p class="eyebrow">Self-hosted state backend</p>
-            <h1>Your infrastructure's state, on your&nbsp;infrastructure.</h1>
+            <h1>Your infrastructure's<br />state, on<br />your&nbsp;infrastructure.</h1>
             <p class="hero-sub">
               statedb keeps your infrastructure state in your own Postgres, behind your own
               firewall, and pairs it with a web console for browsing stacks, resources, and
@@ -91,8 +83,8 @@ const tiers = [
                 </button>
               </div>
               <div class="terminal" id="term-pulumi" role="tabpanel">
-                <span class="t-line"><span class="t-prompt">$</span> pulumi login https://statedb.internal.example.com</span>
-                <span class="t-line t-out">Logged in to statedb.internal.example.com</span>
+                <span class="t-line"><span class="t-prompt">$</span> pulumi login https://infra.acme.corp/pulumi</span>
+                <span class="t-line t-out">Logged in to infra.acme.corp</span>
               </div>
               <div class="terminal" id="term-tofu" role="tabpanel" hidden>
                 <span class="t-line t-comment"># OpenTofu's http backend is on the roadmap.</span>
@@ -107,24 +99,61 @@ const tiers = [
             </div>
           </div>
 
-          <aside class="report" aria-label="State Safety Report, all scenarios passing">
-            <div class="report-head">
-              <span class="report-title">State Safety Report</span>
-              <span class="report-meta">fault-injection matrix</span>
+          <aside class="deploy-terminal" aria-label="Terminal showing a Pulumi preview using statedb">
+            <div class="terminal-chrome" aria-hidden="true">
+              <span></span>
+              <span></span>
+              <span></span>
+              <strong>acme / payments-api / prod</strong>
             </div>
-            <ul class="report-rows">
-              {reportRows.map((row) => (
-                <li class="report-row">
-                  <span class="r-scenario">{row.scenario}</span>
-                  <span class="r-dots" aria-hidden="true"></span>
-                  <span class="r-outcome">{row.outcome}</span>
-                  <span class="r-check" role="img" aria-label="pass">✓</span>
-                </li>
-              ))}
-            </ul>
-            <p class="report-foot">
-              5 / 5 scenarios passing &middot; every supported CLI version, nightly.
-            </p>
+            <div class="terminal-screen">
+              <div class="terminal-scrollback">
+                <span class="term-row term-command" style="--d: 60ms; --ch: 44; --hold: 220ms"
+                  ><span class="t-prompt">$</span><span class="cmd"
+                    >export PULUMI_CONSOLE_DOMAIN=infra.acme.corp</span
+                  ></span
+                >
+                <span class="term-row term-command" style="--d: 676ms; --ch: 56; --hold: 220ms"
+                  ><span class="t-prompt">$</span><span class="cmd"
+                    >export PULUMI_BACKEND_URL=https://infra.acme.corp/pulumi</span
+                  ></span
+                >
+                <span class="term-row term-command" style="--d: 1400ms; --ch: 34; --hold: 520ms"
+                  ><span class="t-prompt">$</span><span class="cmd"
+                    >pulumi login "$PULUMI_BACKEND_URL"</span
+                  ></span
+                >
+                <span class="term-row t-out" style="--d: 2226ms"
+                  >Logged in to https://infra.acme.corp/pulumi as platform-admin</span
+                >
+                <span class="term-row term-command" style="--d: 2490ms; --ch: 29; --hold: 200ms"
+                  ><span class="t-prompt">$</span><span class="cmd"
+                    >pulumi stack select acme/prod</span
+                  ></span
+                >
+                <span class="term-row term-command" style="--d: 2951ms; --ch: 14; --hold: 130ms"
+                  ><span class="t-prompt">$</span><span class="cmd">pulumi preview</span></span
+                >
+                <span class="term-row t-blank" style="--d: 3210ms" aria-hidden="true"></span>
+                <span class="term-row t-heading" style="--d: 3290ms"
+                  ><span class="spinner" aria-hidden="true"></span>Previewing update (acme/prod)</span
+                >
+                <span class="term-row t-blank" style="--d: 3630ms" aria-hidden="true"></span>
+                <span class="term-row t-link" style="--d: 3710ms">View in Browser (Ctrl+O): https://infra.acme.corp/acme/payments/prod/previews/01J6E9M9</span>
+                <span class="term-row t-blank" style="--d: 3870ms" aria-hidden="true"></span>
+                <span class="term-row t-table t-table-head" style="--d: 3950ms"><span>Type</span><span>Name</span><span>Plan</span></span>
+                <span class="term-row t-table t-resource" style="--d: 4050ms"><span>+ pulumi:pulumi:Stack</span><span>payments-api-prod</span><span>create</span></span>
+                <span class="term-row t-table t-resource" style="--d: 4150ms"><span>+ |- aws:rds:Cluster</span><span>payments-db</span><span>create</span></span>
+                <span class="term-row t-table t-resource" style="--d: 4250ms"><span>+ |- aws:ecs:Service</span><span>api</span><span>create</span></span>
+                <span class="term-row t-table t-resource" style="--d: 4350ms"><span>+ |- aws:sqs:Queue</span><span>billing-events</span><span>create</span></span>
+                <span class="term-row t-table t-resource" style="--d: 4450ms"><span>+ |- aws:cloudwatch:LogGroup</span><span>api-logs</span><span>create</span></span>
+                <span class="term-row t-table t-resource" style="--d: 4550ms"><span>+ `- random:index:RandomPassword</span><span>db-password</span><span>create</span></span>
+                <span class="term-row t-blank" style="--d: 4650ms" aria-hidden="true"></span>
+                <span class="term-row t-section" style="--d: 4730ms">Resources:</span>
+                <span class="term-row t-summary" style="--d: 4850ms">+ 6 to create<span class="terminal-cursor" aria-hidden="true"></span></span>
+              </div>
+              <div class="terminal-flash" aria-hidden="true"></div>
+            </div>
           </aside>
         </div>
       </section>
@@ -331,6 +360,51 @@ const tiers = [
           });
         });
       });
+
+      /* The hero terminal replays on a loop. Every CSS delay on it is absolute
+         from cycle start, so replaying is just rewinding the whole timeline to
+         zero — no class toggling, no reflow hack, nothing to keep in sync but
+         the period below. It only runs while the terminal is on screen. */
+      const term = document.querySelector<HTMLElement>(".deploy-terminal");
+      const stillMotion = matchMedia("(prefers-reduced-motion: reduce)");
+
+      if (term && !stillMotion.matches) {
+        const TERMINAL_CYCLE_MS = 9900;
+        let timer: number | undefined;
+
+        term.dataset.loop = "on";
+
+        const replay = () => {
+          term.getAnimations({ subtree: true }).forEach((a) => {
+            /* The hero's entrance animation sits on the terminal element
+               itself. Rewinding that would fade the whole window out and back
+               in every cycle; only the session inside it replays. Its own
+               pseudo-elements (the sheen) are still part of the loop. */
+            const effect = a.effect;
+            if (
+              effect instanceof KeyframeEffect &&
+              effect.target === term &&
+              !effect.pseudoElement
+            ) {
+              return;
+            }
+            a.currentTime = 0;
+          });
+        };
+
+        new IntersectionObserver(
+          ([entry]) => {
+            if (entry.isIntersecting) {
+              replay();
+              timer ??= window.setInterval(replay, TERMINAL_CYCLE_MS);
+            } else if (timer !== undefined) {
+              clearInterval(timer);
+              timer = undefined;
+            }
+          },
+          { threshold: 0.2 },
+        ).observe(term);
+      }
     </script>
   </body>
 </html>
@@ -374,6 +448,7 @@ const tiers = [
 
   html {
     scroll-behavior: smooth;
+    overflow-x: hidden;
   }
 
   body {
@@ -384,6 +459,7 @@ const tiers = [
     color: var(--ink);
     background: var(--paper);
     -webkit-font-smoothing: antialiased;
+    overflow-x: hidden;
   }
 
   .shell {
@@ -540,11 +616,22 @@ const tiers = [
     overflow: hidden;
   }
 
+  .hero .shell {
+    max-width: 78rem;
+  }
+
   .hero-grid {
     display: grid;
-    grid-template-columns: minmax(0, 1.05fr) minmax(0, 0.95fr);
-    gap: 4rem;
+    grid-template-columns: minmax(0, 0.92fr) minmax(34rem, 1.08fr);
+    gap: 3rem;
     align-items: center;
+  }
+
+  .hero-copy,
+  .deploy-terminal,
+  .term,
+  .terminal {
+    min-width: 0;
   }
 
   .hero h1 {
@@ -571,6 +658,10 @@ const tiers = [
     display: flex;
     flex-direction: column;
     overflow-x: auto;
+  }
+
+  .terminal[hidden] {
+    display: none;
   }
 
   .term-tabs {
@@ -686,91 +777,576 @@ const tiers = [
     background: transparent;
   }
 
-  /* ---------- safety report (signature) ---------- */
+  /* ---------- deploy terminal (signature) ---------- */
 
-  .report {
-    background: var(--card);
-    color: var(--ink);
-    border-radius: 10px;
+  .deploy-terminal {
+    /* The screen is sized in whole text rows so the scroll distance is exact:
+       the session is --total rows tall, --visible of them fit on screen. */
+    --rowfs: clamp(0.7rem, 0.92vw, 0.85rem);
+    --row: calc(var(--rowfs) * 1.62);
+    --total: 22;
+    --visible: 16;
+    --pad-block: clamp(0.85rem, 1.3vw, 1.05rem);
+    --pad-inline: clamp(0.95rem, 1.6vw, 1.15rem);
+    color: var(--text-on-ink);
+    width: min(100%, 43rem);
+    margin-inline: auto;
+    position: relative;
+    display: grid;
+    grid-template-rows: 2.65rem calc(var(--visible) * var(--row) + var(--pad-block) * 2);
+    border: 1px solid rgba(219, 228, 242, 0.22);
+    border-radius: 8px;
+    background:
+      linear-gradient(180deg, rgba(219, 228, 242, 0.08), transparent 18%),
+      var(--abyss);
     box-shadow:
-      0 1px 2px rgba(9, 18, 36, 0.3),
-      0 18px 48px rgba(9, 18, 36, 0.45);
-    padding: 1.5rem 1.6rem 1.25rem;
+      inset 0 1px 0 rgba(255, 255, 255, 0.08),
+      0 1px 2px rgba(9, 18, 36, 0.35),
+      0 22px 60px rgba(9, 18, 36, 0.5);
+    overflow: hidden;
     font-family: var(--mono);
   }
 
-  .report-head {
+  .terminal-chrome {
     display: flex;
-    align-items: baseline;
-    justify-content: space-between;
-    gap: 1rem;
-    background: var(--cream);
-    margin: -1.5rem -1.6rem 1.1rem;
-    padding: 0.85rem 1.6rem;
-    border-radius: 10px 10px 0 0;
-    border-bottom: 1px solid var(--rule);
+    align-items: center;
+    gap: 0.48rem;
+    min-height: 0;
+    padding: 0 1rem;
+    border-bottom: 1px solid rgba(219, 228, 242, 0.16);
+    background:
+      linear-gradient(180deg, rgba(255, 255, 255, 0.1), rgba(255, 255, 255, 0.025)),
+      rgba(12, 29, 49, 0.92);
   }
 
-  .report-title {
-    font-family: var(--display);
-    font-weight: 700;
-    font-size: 0.95rem;
-    text-transform: uppercase;
-    letter-spacing: 0.08em;
+  .terminal-chrome span {
+    width: 0.68rem;
+    height: 0.68rem;
+    border-radius: 50%;
+    background: var(--coral-lit);
+    box-shadow:
+      inset 0 0 0 1px rgba(8, 22, 37, 0.24),
+      0 0 0 1px rgba(255, 255, 255, 0.06);
   }
 
-  .report-meta {
+  .terminal-chrome span:nth-child(2) {
+    background: var(--gold-lit);
+  }
+
+  .terminal-chrome span:nth-child(3) {
+    background: var(--kelp-lit);
+  }
+
+  .terminal-chrome strong {
+    margin-left: auto;
+    color: var(--muted-on-ink);
     font-size: 0.7rem;
-    color: var(--muted);
-    letter-spacing: 0.05em;
-  }
-
-  .report-rows {
-    list-style: none;
-    margin: 0;
-    padding: 0;
-  }
-
-  .report-row {
-    display: flex;
-    align-items: baseline;
-    gap: 0.6ch;
-    font-size: 0.78rem;
-    padding-block: 0.55rem;
-  }
-
-  .report-row + .report-row {
-    border-top: 1px solid var(--paper);
-  }
-
-  .r-scenario {
+    font-weight: 600;
+    max-width: 60%;
+    overflow: hidden;
+    text-overflow: ellipsis;
     white-space: nowrap;
   }
 
-  .r-dots {
-    flex: 1;
-    min-width: 1.5ch;
-    border-bottom: 1px dotted var(--rule);
-    transform: translateY(-0.3em);
+  .terminal-screen {
+    min-height: 0;
+    padding: 0;
+    overflow: hidden;
+    position: relative;
+    background:
+      radial-gradient(circle at 20% 0, rgba(63, 211, 232, 0.08), transparent 28%),
+      linear-gradient(180deg, rgba(10, 24, 41, 0.96), rgba(8, 22, 37, 1));
   }
 
-  .r-outcome {
-    color: var(--muted);
-    text-align: right;
+  /* Both fades are confined to the padding gutters: lines dissolve as they
+     scroll off rather than being cut hard, but no on-screen row is dimmed. */
+  .terminal-screen::after {
+    content: "";
+    position: absolute;
+    inset: 0 0 auto;
+    height: var(--pad-block);
+    background: linear-gradient(180deg, rgba(10, 24, 41, 1) 55%, rgba(10, 24, 41, 0));
+    pointer-events: none;
+    z-index: 3;
   }
 
-  .r-check {
-    color: var(--pass);
+  .terminal-screen::before {
+    content: "";
+    position: absolute;
+    inset: auto 0 0;
+    height: var(--pad-block);
+    background: linear-gradient(180deg, rgba(8, 22, 37, 0), rgba(8, 22, 37, 1) 55%);
+    pointer-events: none;
+    z-index: 3;
+  }
+
+  .terminal-scrollback {
+    display: grid;
+    align-content: start;
+    position: absolute;
+    inset: var(--pad-block) var(--pad-inline) auto;
+    z-index: 1;
+    will-change: transform;
+  }
+
+  /* Wipes the screen at the end of a cycle: the session is cut instantly, and
+     this catches the light for a moment the way a screen does when it clears. */
+  .terminal-flash {
+    position: absolute;
+    inset: 0;
+    z-index: 4;
+    pointer-events: none;
+    opacity: 0;
+    background: radial-gradient(
+      ellipse at 50% 45%,
+      rgba(63, 211, 232, 0.09),
+      rgba(219, 228, 242, 0.045) 55%,
+      transparent 80%
+    );
+  }
+
+  /* A slow sheen across the glass, the way light crosses a real screen. */
+  .deploy-terminal::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    z-index: 4;
+    pointer-events: none;
+    border-radius: inherit;
+    background: linear-gradient(
+      104deg,
+      transparent 38%,
+      rgba(219, 228, 242, 0.05) 47%,
+      rgba(219, 228, 242, 0.08) 50%,
+      rgba(219, 228, 242, 0.05) 53%,
+      transparent 62%
+    );
+    background-size: 300% 100%;
+    background-position: 120% 0;
+  }
+
+  .term-row {
+    --rows: 1;
+    display: block;
+    min-width: 0;
+    width: 100%;
+    height: calc(var(--rows) * var(--row));
+    color: var(--text-on-ink);
+    font-size: var(--rowfs);
+    line-height: var(--row);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    position: relative;
+    z-index: 1;
+  }
+
+  .term-command {
+    color: #ffffff;
+  }
+
+  /* Typed commands: the text is revealed left to right behind a block caret. */
+  .cmd {
+    display: inline-block;
+    max-width: 100%;
+    overflow: hidden;
+    white-space: pre;
+    vertical-align: bottom;
+    border-right: 0.5ch solid transparent;
+  }
+
+  /* Reserves its slot for the whole run so the heading never reflows. */
+  .spinner {
+    display: inline-block;
+    width: 2ch;
+    color: var(--tide-lit);
+    font-weight: 400;
+  }
+
+  .spinner::before {
+    content: "⠋";
+  }
+
+  .t-heading,
+  .t-section {
+    color: #ffffff;
     font-weight: 700;
-    flex-shrink: 0;
   }
 
-  .report-foot {
-    margin: 1rem 0 0;
-    padding-top: 0.85rem;
-    border-top: 1px solid var(--rule);
-    font-size: 0.72rem;
-    color: var(--muted);
+  .t-table {
+    display: grid;
+    grid-template-columns: minmax(0, 1.45fr) minmax(0, 1fr) minmax(3.5rem, 0.35fr);
+    gap: 0.9rem;
+    align-items: baseline;
+  }
+
+  .t-table span {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .t-table-head {
+    color: var(--tide-lit);
+    text-decoration: underline;
+    text-underline-offset: 0.18rem;
+  }
+
+  .t-resource {
+    color: var(--muted-on-ink);
+  }
+
+  .t-resource span:first-child,
+  .t-resource span:last-child {
+    color: var(--kelp-lit);
+  }
+
+  .t-resource span:nth-child(2) {
+    color: var(--text-on-ink);
+  }
+
+  .t-summary {
+    color: var(--kelp-lit);
+    font-weight: 700;
+    padding-left: 1.3rem;
+  }
+
+  .t-link {
+    /* Capped so the URL always wraps to exactly the two rows reserved for it,
+       at every width — the row budget above depends on it. */
+    --rows: 2;
+    max-width: 60ch;
+    color: var(--biolume);
+    white-space: normal;
+    overflow-wrap: anywhere;
+    text-overflow: clip;
+  }
+
+  .terminal-cursor {
+    display: inline-block;
+    width: 0.62rem;
+    height: 1em;
+    margin-left: 0.52rem;
+    vertical-align: -0.16em;
+    background: var(--biolume);
+    box-shadow: 0 0 16px rgba(63, 211, 232, 0.3);
+  }
+
+  @media (prefers-reduced-motion: no-preference) {
+    /* One master timeline. Every delay below is absolute from cycle start, so
+       the loop is just "rewind every animation to 0" — see the script. Cycle:
+       session runs to ~5.65s, the finished frame holds, then it clears at 9.2s.
+       Keep TERMINAL_CYCLE_MS in the script in step with the tail end here. */
+
+    /* Once the session is taller than the screen, the whole scrollback slides
+       up by the overflow — the same lines, further along, not a second card. */
+    .terminal-scrollback {
+      animation: terminal-scroll 1100ms cubic-bezier(0.33, 0.1, 0.2, 1) 4260ms both;
+    }
+
+    /* The closing clear only exists if something is going to replay it, so a
+       no-JS page ends on the finished frame instead of an empty screen. The
+       session is cut in one frame — a terminal clears, it doesn't fade out. */
+    .deploy-terminal[data-loop] .terminal-scrollback {
+      animation:
+        terminal-scroll 1100ms cubic-bezier(0.33, 0.1, 0.2, 1) 4260ms both,
+        terminal-clear 1ms linear 9700ms forwards;
+    }
+
+    /* Runs right up to the cycle boundary: it is still fading as the next
+       session's first prompt lands, so the screen is never empty and still. */
+    .deploy-terminal[data-loop] .terminal-flash {
+      animation: screen-flash 260ms ease-out 9640ms both;
+    }
+
+    .terminal-scrollback .term-row {
+      opacity: 0;
+      animation: terminal-row-in 220ms ease-out var(--d) both;
+    }
+
+    .terminal-scrollback .term-command {
+      animation-duration: 90ms;
+    }
+
+    /* Type the line out, blinking the caret until --hold expires. caret-off is
+       last and fills forwards, so it wins once the line is finished. */
+    .term-command .cmd {
+      animation:
+        terminal-type calc(var(--ch) * 9ms) steps(22, end) var(--d) both,
+        caret-blink 880ms steps(2, jump-none) var(--d) infinite,
+        caret-off 1ms linear calc(var(--d) + var(--ch) * 9ms + var(--hold, 200ms)) forwards;
+    }
+
+    .spinner::before {
+      animation: spinner-frames 640ms steps(1, end) 3290ms infinite;
+    }
+
+    .spinner {
+      animation: spinner-done 140ms ease-out 3830ms forwards;
+    }
+
+    .t-resource span:first-child {
+      animation: marker-land 620ms ease-out var(--d) both;
+    }
+
+    .t-link {
+      animation:
+        terminal-row-in 220ms ease-out var(--d) both,
+        link-glow 1400ms ease-out calc(var(--d) + 260ms) both;
+    }
+
+    .terminal-cursor {
+      animation: cursor-blink 1s steps(2, jump-none) 5360ms infinite;
+    }
+
+    /* Crosses once per cycle, timed to sweep over the finished frame. */
+    .deploy-terminal::after {
+      animation: glass-sheen 2600ms cubic-bezier(0.4, 0, 0.5, 1) 5610ms both;
+    }
+
+    @keyframes glass-sheen {
+      from {
+        background-position: 120% 0;
+      }
+      to {
+        background-position: -60% 0;
+      }
+    }
+
+    @keyframes terminal-scroll {
+      from {
+        transform: translateY(0);
+      }
+      to {
+        transform: translateY(calc((var(--visible) - var(--total)) * var(--row)));
+      }
+    }
+
+    /* Holds the scrolled position so the lines vanish in place, not upward. */
+    @keyframes terminal-clear {
+      to {
+        opacity: 0;
+        transform: translateY(calc((var(--visible) - var(--total)) * var(--row)));
+      }
+    }
+
+    @keyframes screen-flash {
+      0% {
+        opacity: 0;
+      }
+      23% {
+        opacity: 1;
+      }
+      100% {
+        opacity: 0;
+      }
+    }
+
+    @keyframes terminal-row-in {
+      from {
+        opacity: 0;
+        transform: translateY(0.3rem);
+      }
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+
+    @keyframes terminal-type {
+      from {
+        width: 0;
+      }
+      to {
+        /* text + the 0.5ch caret border, plus slack so nothing clips */
+        width: calc(var(--ch) * 1ch + 1.1ch);
+      }
+    }
+
+    @keyframes caret-blink {
+      from {
+        border-right-color: var(--biolume);
+      }
+      to {
+        border-right-color: rgba(63, 211, 232, 0.12);
+      }
+    }
+
+    @keyframes caret-off {
+      to {
+        border-right-color: transparent;
+      }
+    }
+
+    @keyframes spinner-frames {
+      0% { content: "⠋"; }
+      12.5% { content: "⠙"; }
+      25% { content: "⠹"; }
+      37.5% { content: "⠸"; }
+      50% { content: "⠼"; }
+      62.5% { content: "⠴"; }
+      75% { content: "⠦"; }
+      87.5% { content: "⠧"; }
+    }
+
+    @keyframes spinner-done {
+      to {
+        opacity: 0;
+      }
+    }
+
+    /* Each resource's + flares as the line lands, then settles. */
+    @keyframes marker-land {
+      0% {
+        color: #ffffff;
+        text-shadow: 0 0 12px rgba(126, 224, 160, 0.55);
+      }
+      100% {
+        color: var(--kelp-lit);
+        text-shadow: 0 0 0 rgba(126, 224, 160, 0);
+      }
+    }
+
+    @keyframes cursor-blink {
+      0%, 48% {
+        opacity: 1;
+      }
+      49%, 100% {
+        opacity: 0.18;
+      }
+    }
+
+    @keyframes link-glow {
+      0% {
+        text-shadow: 0 0 0 rgba(63, 211, 232, 0);
+      }
+      40% {
+        text-shadow: 0 0 18px rgba(63, 211, 232, 0.42);
+      }
+      100% {
+        text-shadow: 0 0 0 rgba(63, 211, 232, 0);
+      }
+    }
+
+  }
+
+  @media (max-width: 36rem) {
+    .shell {
+      padding-inline: 1.1rem;
+    }
+
+    .nav-row {
+      align-items: flex-start;
+      flex-wrap: wrap;
+      gap: 0.9rem;
+    }
+
+    .nav-links {
+      width: 100%;
+      flex-wrap: wrap;
+      gap: 0.5rem 1.15rem;
+      justify-content: flex-start;
+    }
+
+    .nav-links a {
+      font-size: 0.84rem;
+    }
+
+    .hero {
+      padding-block: 3.25rem 4rem;
+    }
+
+    .hero h1 {
+      max-width: 100%;
+      font-size: clamp(1.85rem, 8.4vw, 2.05rem);
+    }
+
+    .hero-sub {
+      max-width: 32ch;
+      font-size: 1rem;
+    }
+
+    .term {
+      width: 100%;
+      max-width: 100%;
+      overflow: hidden;
+    }
+
+    .term-tabs {
+      max-width: 100%;
+    }
+
+    .terminal {
+      width: 100%;
+      max-width: 100%;
+      padding: 0.9rem 1rem;
+    }
+
+    .t-line {
+      display: block;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .btn {
+      flex: 1 1 100%;
+      padding-inline: 1.15rem;
+      text-align: center;
+    }
+
+    .deploy-terminal {
+      --rowfs: clamp(0.5rem, 2.42vw, 0.62rem);
+      --visible: 14;
+      --pad-block: 0.7rem;
+      --pad-inline: 0.72rem;
+      grid-template-rows: 2.45rem calc(var(--visible) * var(--row) + var(--pad-block) * 2);
+      width: 100%;
+    }
+
+    .terminal-chrome {
+      gap: 0.38rem;
+      padding-inline: 0.78rem;
+    }
+
+    .terminal-chrome span {
+      width: 0.58rem;
+      height: 0.58rem;
+    }
+
+    .terminal-chrome strong {
+      max-width: 52%;
+      font-size: 0.62rem;
+    }
+
+    .terminal-screen {
+      padding: 0;
+    }
+
+    .t-table {
+      grid-template-columns: minmax(0, 1.48fr) minmax(0, 0.8fr) 2.85rem;
+      gap: 0.34rem;
+    }
+
+    .t-summary {
+      padding-left: 0.9rem;
+    }
+  }
+
+  /* Without motion the session is shown whole and finished: no scroll, no
+     typing, no loop. The spinner keeps its slot but hides — a frozen spinner
+     would imply work still in progress. */
+  @media (prefers-reduced-motion: reduce) {
+    .deploy-terminal {
+      --visible: var(--total);
+    }
+
+    .terminal-cursor {
+      display: none;
+    }
+
+    .spinner {
+      visibility: hidden;
+    }
   }
 
   /* ---------- paper sections ---------- */
@@ -1052,11 +1628,11 @@ const tiers = [
 
   @media (prefers-reduced-motion: no-preference) {
     .hero-copy,
-    .report {
+    .deploy-terminal {
       animation: rise 600ms ease-out both;
     }
 
-    .report {
+    .deploy-terminal {
       animation-delay: 150ms;
     }
 
@@ -1068,30 +1644,6 @@ const tiers = [
       to {
         opacity: 1;
         transform: translateY(0);
-      }
-    }
-
-    /* The report is a scan, so let it finish like one: the passes land in
-       order once the card has settled, rather than arriving pre-answered.
-       Without this block every check is simply present. */
-    .r-check {
-      animation: sounded 380ms ease-out both;
-    }
-
-    .report-row:nth-child(1) .r-check { animation-delay: 750ms; }
-    .report-row:nth-child(2) .r-check { animation-delay: 860ms; }
-    .report-row:nth-child(3) .r-check { animation-delay: 970ms; }
-    .report-row:nth-child(4) .r-check { animation-delay: 1080ms; }
-    .report-row:nth-child(5) .r-check { animation-delay: 1190ms; }
-
-    @keyframes sounded {
-      from {
-        opacity: 0;
-        transform: translateX(-3px);
-      }
-      to {
-        opacity: 1;
-        transform: translateX(0);
       }
     }
   }
@@ -1114,12 +1666,8 @@ const tiers = [
       gap: 1.1rem;
     }
 
-    .report-row {
-      flex-wrap: wrap;
-    }
-
-    .r-outcome {
-      text-align: left;
+    .deploy-terminal {
+      max-width: 38rem;
     }
   }
 </style>
