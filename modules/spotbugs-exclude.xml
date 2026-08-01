@@ -1,0 +1,92 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  SpotBugs / find-sec-bugs suppressions.
+
+  Each entry says why the finding is wrong or deliberate, and matches the
+  narrowest thing that works — Class and Method where the finding is specific
+  to a call site. Do not suppress a SECURITY pattern without either fixing the
+  finding or explaining why it is not exploitable.
+-->
+<FindBugsFilter>
+
+    <!--
+      Records used as DTOs and projections carry List/Map/Set components, and
+      the accessor returns the same instance the canonical constructor was
+      given, which is what a record is specified to do. FindBugsFilter has no
+      "is a record" predicate, so this cannot be narrowed below the pattern.
+
+      That breadth has a cost: it also hides the finding on ordinary mutable
+      classes, where it is legitimate. PolicySetCache was one such case and was
+      fixed (Set.copyOf) rather than suppressed. Every remaining match in the
+      current baseline is a record.
+    -->
+    <Match>
+        <Bug pattern="EI_EXPOSE_REP,EI_EXPOSE_REP2"/>
+    </Match>
+
+    <!--
+      Panache entities declare public fields that Hibernate reads and writes
+      reflectively, so SpotBugs sees no bytecode doing either. It reports the
+      class that uses the field rather than the entity declaring it, so a Class
+      match on the entity would not catch these.
+    -->
+    <Match>
+        <Bug pattern="URF_UNREAD_PUBLIC_OR_PROTECTED_FIELD,UWF_UNWRITTEN_PUBLIC_OR_PROTECTED_FIELD"/>
+    </Match>
+
+    <!--
+      Each of these names a variable that is read further down the same method:
+      liveLocks returns it, complete assigns it to endJournalSeq, and the three
+      console-api resources all read theirs. Listed per method so a genuine
+      dead store elsewhere still reports.
+    -->
+    <Match>
+        <Bug pattern="DLS_DEAD_LOCAL_STORE"/>
+        <Or>
+            <And>
+                <Class name="io.statedb.persistence.stack.WorkspaceListFinder"/>
+                <Method name="liveLocks"/>
+            </And>
+            <And>
+                <Class name="io.statedb.persistence.update.StackUpdateCompleter"/>
+                <Method name="complete"/>
+            </And>
+            <And>
+                <Class name="io.statedb.consoleapi.token.TokensResource"/>
+                <Method name="revoke"/>
+            </And>
+            <And>
+                <Class name="io.statedb.consoleapi.user.AdminUsersResource"/>
+                <Method name="list"/>
+            </And>
+            <And>
+                <Class name="io.statedb.consoleapi.workspace.WorkspacesResource"/>
+                <Method name="get"/>
+            </And>
+        </Or>
+    </Match>
+
+    <!--
+      Both sites are SQL/HQL text blocks assembled with String.formatted(). The
+      newlines are query formatting, not console output — %n would splice a
+      platform-dependent line separator into a query string.
+    -->
+    <Match>
+        <Bug pattern="VA_FORMAT_STRING_USES_NEWLINE"/>
+        <Or>
+            <Class name="io.statedb.persistence.operations.OperationalInventoryFinder"/>
+            <Class name="io.statedb.persistence.stack.CompactionWorker"/>
+        </Or>
+    </Match>
+
+    <!--
+      findOrg() returns a Panache firstResult(), which is null when no row
+      matches; SpotBugs infers non-null from the return type instead.
+    -->
+    <Match>
+        <Bug pattern="RCN_REDUNDANT_NULLCHECK_OF_NONNULL_VALUE"/>
+        <Class name="io.statedb.persistence.authz.OrgEntityLoader"/>
+        <Method name="load"/>
+    </Match>
+
+</FindBugsFilter>

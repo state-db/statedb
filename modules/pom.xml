@@ -27,6 +27,8 @@
         <license-maven-plugin.version>2.6.0</license-maven-plugin.version>
         <spotless-maven-plugin.version>3.4.0</spotless-maven-plugin.version>
         <maven-failsafe-plugin.version>3.5.4</maven-failsafe-plugin.version>
+        <spotbugs-maven-plugin.version>4.9.3.0</spotbugs-maven-plugin.version>
+        <findsecbugs-plugin.version>1.14.0</findsecbugs-plugin.version>
         <google-java-format.version>1.35.0</google-java-format.version>
         <cedar-java.version>4.10.0</cedar-java.version>
         <tink.version>1.18.0</tink.version>
@@ -101,6 +103,41 @@
         </pluginManagement>
 
         <plugins>
+            <!--
+              SpotBugs with the find-sec-bugs plugin: bytecode analysis for
+              correctness bugs plus injection, path traversal and weak crypto.
+              `mvn verify` fails on any finding; `make analyze-java` runs it
+              without the test phase. Suppressions go in spotbugs-exclude.xml.
+            -->
+            <plugin>
+                <groupId>com.github.spotbugs</groupId>
+                <artifactId>spotbugs-maven-plugin</artifactId>
+                <version>${spotbugs-maven-plugin.version}</version>
+                <configuration>
+                    <effort>Max</effort>
+                    <threshold>Medium</threshold>
+                    <includeTests>false</includeTests>
+                    <!-- Resolves relative to each module; all modules are direct
+                         children of modules/. -->
+                    <excludeFilterFile>${project.basedir}/../spotbugs-exclude.xml</excludeFilterFile>
+                    <plugins>
+                        <plugin>
+                            <groupId>com.h3xstream.findsecbugs</groupId>
+                            <artifactId>findsecbugs-plugin</artifactId>
+                            <version>${findsecbugs-plugin.version}</version>
+                        </plugin>
+                    </plugins>
+                </configuration>
+                <executions>
+                    <execution>
+                        <id>spotbugs-check</id>
+                        <goals>
+                            <goal>check</goal>
+                        </goals>
+                        <phase>verify</phase>
+                    </execution>
+                </executions>
+            </plugin>
             <!--
               Spotless runs on every module (Java, pom.xml, YAML, Markdown).
               `mvn verify` calls `spotless:check` and fails on any unformatted

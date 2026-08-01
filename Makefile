@@ -2,6 +2,7 @@
 	app-dev app-build app-image app-test app-clean \
 	web-dev \
 	format format-check \
+	analyze analyze-java analyze-web analyze-semgrep analyze-deps \
 	notices notices-check \
 	pulumi-extract pulumi-compare pulumi-discover pulumi-api-test \
 	pulumi-recorder-run pulumi-recorder-run-no-build pulumi-recorder-catalog pulumi-recorder-verify pulumi-recorder-discover \
@@ -103,6 +104,64 @@ format-check:
 		echo "$$unformatted"; \
 		exit 1; \
 	fi
+
+## -------------------------
+## Static analysis
+## -------------------------
+## Four passes, each runnable on its own.
+##
+## Deliberate exception to the dev-container rule: semgrep and osv-scanner are
+## not installed in the dev container, and both ship official images. They run
+## from the host against a read-only bind mount of the working tree, the same
+## way tools/pulumi/recorder manages its own image.
+
+SEMGREP_IMAGE ?= semgrep/semgrep:latest
+OSV_IMAGE     ?= ghcr.io/google/osv-scanner:latest
+SEMGREP_RULES ?= --config=p/java --config=p/typescript --config=p/react \
+                 --config=p/owasp-top-ten --config=p/secrets
+
+## Run every pass, then fail only on the two with an enforced-clean baseline.
+##
+## analyze-java and analyze-web are gates: both are green today, so a non-zero
+## exit means this change introduced something. analyze-semgrep and analyze-deps
+## report findings that are not all actionable here — third-party CVEs reachable
+## only through a Quarkus platform bump, workflow and Dockerfile hygiene — so
+## they print but do not decide the exit code. Run them directly to gate on one.
+analyze:
+	@rc=0; \
+	for t in analyze-java analyze-web; do \
+		echo "==> $$t"; \
+		$(MAKE) $$t || rc=1; \
+	done; \
+	for t in analyze-semgrep analyze-deps; do \
+		echo "==> $$t (report only)"; \
+		$(MAKE) $$t || true; \
+	done; \
+	exit $$rc
+
+## SpotBugs + find-sec-bugs, also bound to `mvn verify` so CI enforces it.
+## Suppressions live in modules/spotbugs-exclude.xml.
+analyze-java:
+	$(IN_CONTAINER) mvn -f modules/pom.xml compile spotbugs:check
+
+## ESLint (type-aware rules + React Hooks) and the TypeScript compiler.
+analyze-web:
+	$(IN_CONTAINER) bash -lc 'cd modules/web && bun install && bun run lint && bun run typecheck'
+
+## Semgrep OSS. --oss-only keeps it off the hosted Pro engine (no login, no
+## code leaves the machine); --metrics=off suppresses usage telemetry.
+analyze-semgrep:
+	docker run --rm -v "$(CURDIR):/src:ro" -w /src $(SEMGREP_IMAGE) \
+		semgrep scan $(SEMGREP_RULES) \
+		--oss-only --metrics=off --error \
+		--exclude=node_modules --exclude=dist --exclude=target
+
+## Known vulnerabilities across pom.xml, bun.lock and go.mod. Exits non-zero on
+## any finding, including transitives no direct bump can reach — a report to
+## triage, not a gate.
+analyze-deps:
+	docker run --rm -v "$(CURDIR):/src:ro" -w /src $(OSV_IMAGE) \
+		scan source -r /src
 
 ## -------------------------
 ## Third-party notices

@@ -163,9 +163,17 @@ on one issuer. Open the console at `http://127.0.0.1:15173`; the backend is at
 `http://localhost:18080`.
 
 Deliberate exception: `tools/pulumi/api-extract` (pure-Go host tool),
-`tools/pulumi/recorder` (builds and runs its own docker image), and
-`workbench/soak` (drives its own Compose stack) are not routed through the
+`tools/pulumi/recorder` (builds and runs its own docker image),
+`workbench/soak` (drives its own Compose stack), and the `analyze-semgrep` /
+`analyze-deps` Make targets (run the upstream Semgrep and osv-scanner images
+against a read-only bind mount of the tree) are not routed through the
 gateway — they manage their own execution environments.
+
+Semgrep and osv-scanner are deliberately not devcontainer features: adding them
+would force a container rebuild on every contributor for two tools that are
+only invoked from `make analyze`, and both publish maintained images. The other
+two analysis passes (`analyze-java`, `analyze-web`) do route through
+`./bin/in-container` as usual.
 
 `workbench/soak` runs Compose from the host so the dev container can be stopped
 for the duration of a run: it is a ~4GB co-tenant on the same Docker VM as the
