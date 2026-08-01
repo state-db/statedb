@@ -86,7 +86,11 @@ export function RunDetailPage({
     if (status) previousStatus.current = status;
   }, [query.data?.status]);
 
+  // Clearing the buffer when the run changes belongs in a remount keyed by run
+  // id, with the stream state owned by the child. Left as an effect for now:
+  // the streaming view has no component tests to refactor against.
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- see above
     setEvents([]);
     eventCursor.current = -1;
   }, [query.data?.id]);
@@ -118,7 +122,7 @@ export function RunDetailPage({
     };
 
     void follow();
-    const interval = run.status === "in-progress" ? window.setInterval(follow, 3_000) : undefined;
+    const interval = run.status === "in-progress" ? window.setInterval(() => void follow(), 3_000) : undefined;
     return () => {
       stopped = true;
       controller.abort();
@@ -331,7 +335,7 @@ function DiagnosticOutput({ events, rows, preview }: { events: RunEvent[]; rows:
   const groups = new Map<string, RunEvent[]>();
   for (const event of diagnostics) {
     const body = event.kind === "diagnostic" && isRecord(event.payload.diagnosticEvent) ? event.payload.diagnosticEvent : {};
-    const urn = String(body.urn ?? "");
+    const urn = asText(body.urn);
     groups.set(urn, [...(groups.get(urn) ?? []), event]);
   }
   const names = new Map(rows.map((row) => [row.urn, `${row.type} (${row.name})`]));
@@ -499,7 +503,6 @@ function useNow(active: boolean) {
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => {
     if (!active) return;
-    setNow(Date.now());
     const id = window.setInterval(() => setNow(Date.now()), 1_000);
     return () => window.clearInterval(id);
   }, [active]);
@@ -687,7 +690,7 @@ function isSecretConfig(value: unknown) { return typeof value === "object" && va
 function configValue(value: unknown) {
   if (!isRecord(value)) return value;
   if ("string" in value) {
-    const raw = String(value.string ?? "");
+    const raw = asText(value.string);
     if (value.object === true) {
       try { return JSON.parse(raw) as unknown; } catch { return raw; }
     }
@@ -699,7 +702,8 @@ function displayValue(value: unknown) { return typeof value === "string" ? value
 
 // Strips both real ANSI escape sequences and Pulumi's internal colorization
 // tokens (`<{%fg 3%}>`, `<{%reset%}>`, …) that the CLI embeds in event payloads.
-export function stripAnsi(value: string) { return value.replace(/[\u001B\u009B][[\]()#;?]*(?:(?:(?:[a-zA-Z\d]*(?:;[-a-zA-Z\d\/#&.:=?%@~_]+)*)?\u0007)|(?:(?:\d{1,4}(?:[;:]\d{0,4})*)?[\dA-PR-TZcf-nq-uy=><~]))/g, "").replace(/<\{%.*?%\}>/g, ""); }
+// eslint-disable-next-line no-control-regex -- ESC/CSI/BEL are the delimiters being stripped
+export function stripAnsi(value: string) { return value.replace(/[\u001B\u009B][[\]()#;?]*(?:(?:(?:[a-zA-Z\d]*(?:;[-a-zA-Z\d/#&.:=?%@~_]+)*)?\u0007)|(?:(?:\d{1,4}(?:[;:]\d{0,4})*)?[\dA-PR-TZcf-nq-uy=><~]))/g, "").replace(/<\{%.*?%\}>/g, ""); }
 
 export function formatEventLine(event: RunEvent, preview: boolean): { marker: string; text: string } | null {
   const envelope = event.payload[`${event.kind}Event`];
@@ -711,11 +715,11 @@ export function formatEventLine(event: RunEvent, preview: boolean): { marker: st
   if (event.kind === "error" && typeof body.error === "string") return { marker: "!", text: body.error };
   if (["resourcePre", "resOutputs", "resOpFailed"].includes(event.kind)) {
     const metadata = isRecord(body.metadata) ? body.metadata : {};
-    const op = String(metadata.op ?? "read");
-    const urn = String(metadata.urn ?? "");
+    const op = asText(metadata.op, "read");
+    const urn = asText(metadata.urn);
     const parts = urn.split("::");
     const name = parts[parts.length - 1] || "resource";
-    const type = String(metadata.type ?? urnType(urn));
+    const type = asText(metadata.type, urnType(urn));
     if (op === "same" || isReadOperation(op)) return null;
     const phase = preview ? previewOperation(op) : event.kind === "resourcePre" ? operationVerb(op, false) : event.kind === "resOpFailed" ? `${operationVerb(op, false)} failed` : operationVerb(op, true);
     return { marker: event.kind === "resOpFailed" ? "!" : operationMarker(op), text: `${type} ${name} ${phase}` };
@@ -740,11 +744,11 @@ export function resourceChanges(events: RunEvent[], collapseReplacements = false
   events.filter((event) => ["resourcePre", "resOutputs", "resOpFailed"].includes(event.kind)).forEach((event) => {
     const envelope = event.payload[`${event.kind}Event`] as Record<string, unknown> | undefined;
     const metadata = (envelope?.metadata ?? {}) as Record<string, unknown>;
-    const urn = String(metadata.urn ?? "");
+    const urn = asText(metadata.urn);
     const urnParts = urn.split("::");
-    const rawOp = String(metadata.op ?? "read");
+    const rawOp = asText(metadata.op, "read");
     const op = collapseReplacements && isReplacementOperation(rawOp) ? "replace" : rawOp;
-    changes.set(`${urn}\0${op}`, { sequence: event.sequence, op, type: String(metadata.type ?? urnType(urn)), name: urnParts[urnParts.length - 1] ?? urn, detail: envelope ?? event.payload });
+    changes.set(`${urn}\0${op}`, { sequence: event.sequence, op, type: asText(metadata.type, urnType(urn)), name: urnParts[urnParts.length - 1] ?? urn, detail: envelope ?? event.payload });
   });
   return [...changes.values()].sort((a, b) => a.sequence - b.sequence);
 }
@@ -757,9 +761,9 @@ export function resourceRows(events: RunEvent[], preview: boolean): ResourceDisp
     if (!["resourcePre", "resOutputs", "resOpFailed"].includes(event.kind)) continue;
     const body = isRecord(event.payload[`${event.kind}Event`]) ? event.payload[`${event.kind}Event`] as Record<string, unknown> : {};
     const metadata = isRecord(body.metadata) ? body.metadata : {};
-    const rawOp = String(metadata.op ?? "read");
-    const type = String(metadata.type ?? "unknown");
-    const urn = String(metadata.urn ?? "");
+    const rawOp = asText(metadata.op, "read");
+    const type = asText(metadata.type, "unknown");
+    const urn = asText(metadata.urn);
     const root = type === "pulumi:pulumi:Stack";
     if (!root && !diagnostics.has(urn) && (rawOp === "same" || isReadOperation(rawOp))) continue;
     const op = collapseReplacements && isReplacementOperation(rawOp) ? "replace" : rawOp;
@@ -777,7 +781,7 @@ export function resourceRows(events: RunEvent[], preview: boolean): ResourceDisp
     rows.set(urn, {
       sequence: current?.sequence ?? event.sequence,
       urn,
-      parent: String(state.parent ?? ""),
+      parent: asText(state.parent),
       op,
       marker: root && rawOp === "same" ? "  " : operationMarker(op),
       type,
@@ -807,11 +811,11 @@ export function propertyChanges(metadata: Record<string, unknown>): PropertyChan
     ? Object.keys(detailed)
     : Array.isArray(metadata.diffs) ? metadata.diffs.map(String) : changedTopLevelKeys(oldInputs, newInputs);
   return paths.filter((path) => !hidden.some((hiddenPath) => path === hiddenPath || path.startsWith(`${hiddenPath}.`) || path.startsWith(`${hiddenPath}[`))).sort().map((path) => {
-    const diff = isRecord(detailed[path]) ? detailed[path] as Record<string, unknown> : {};
+    const diff = isRecord(detailed[path]) ? detailed[path] : {};
     const oldValues = diff.inputDiff === true ? oldInputs : oldOutputs;
     return {
       path,
-      kind: String(diff.diffKind ?? inferDiffKind(readPropertyPath(oldValues, path), readPropertyPath(newInputs, path))),
+      kind: asText(diff.diffKind, inferDiffKind(readPropertyPath(oldValues, path), readPropertyPath(newInputs, path))),
       oldValue: readPropertyPath(oldValues, path),
       newValue: readPropertyPath(newInputs, path),
     };
@@ -884,6 +888,10 @@ export function stackOutputsDiff(events: RunEvent[]): OutputDiffEntry[] {
 }
 function urnType(urn: string) { const parts = urn.split("::"); const types = parts[parts.length - 2]?.split("$") ?? []; return types[types.length - 1] ?? "unknown"; }
 function isRecord(value: unknown): value is Record<string, unknown> { return typeof value === "object" && value !== null && !Array.isArray(value); }
+// Event payloads are untyped JSON from the CLI, so a field that is normally a
+// string can arrive as an object or array. String() would render those as
+// "[object Object]"; this coerces only primitives and otherwise falls back.
+function asText(value: unknown, fallback = ""): string { return typeof value === "string" ? value : typeof value === "number" || typeof value === "boolean" ? String(value) : fallback; }
 function pickEntries(values: Record<string, unknown>, keys: string[]) { return Object.fromEntries(keys.filter((key) => key in values).map((key) => [key, values[key]])); }
 function friendlyKey(value: string) { return value.replace(/^pulumi\./, "").replace(/[._-]/g, " ").replace(/([a-z])([A-Z])/g, "$1 $2").replace(/^./, (letter) => letter.toUpperCase()); }
 function operationMarker(op: string) {
@@ -951,7 +959,7 @@ function resourceDepth(row: ResourceDisplayRow, rows: ResourceDisplayRow[]) {
 function diagnosticUrn(event: RunEvent): string {
   if (event.kind === "stdout") return "";
   const body = isRecord(event.payload.diagnosticEvent) ? event.payload.diagnosticEvent : {};
-  return String(body.urn ?? "");
+  return asText(body.urn);
 }
 function formatDiffKeys(diffs: string[]) {
   const shown = diffs.slice(0, 4);
@@ -963,7 +971,7 @@ function diagnosticCounts(events: RunEvent[]) {
   for (const event of events) {
     if (event.kind !== "diagnostic") continue;
     const body = isRecord(event.payload.diagnosticEvent) ? event.payload.diagnosticEvent : {};
-    const urn = String(body.urn ?? "");
+    const urn = asText(body.urn);
     const count = counts.get(urn) ?? { errors: 0, warnings: 0, messages: 0 };
     if (event.severity === "error") count.errors++; else if (event.severity === "warning") count.warnings++; else count.messages++;
     counts.set(urn, count);

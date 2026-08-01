@@ -309,8 +309,12 @@ function MintDialog({
   const [org, setOrg] = useState(initialOrg);
   const [expiry, setExpiry] = useState<30 | 90 | 365>(90);
   const [submitted, setSubmitted] = useState(false);
+  // Repopulates the org field when the dialog reopens after the user cleared
+  // it. Belongs in a remount keyed by `open`; left as an effect for now because
+  // the dialog has no component tests to refactor against.
   useEffect(() => {
     if (open && !org) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- see above
       setOrg(initialOrg);
     }
   }, [initialOrg, open, org]);

@@ -15,7 +15,12 @@ export function CopyableId({
   const [copied, setCopied] = useState(false);
 
   async function copy() {
-    await navigator.clipboard.writeText(value);
+    try {
+      await navigator.clipboard.writeText(value);
+    } catch {
+      toast("Could not copy to clipboard");
+      return;
+    }
     setCopied(true);
     toast("Copied");
     window.setTimeout(() => setCopied(false), 1200);
@@ -26,7 +31,7 @@ export function CopyableId({
       <code className="min-w-0 flex-1 truncate font-mono text-xs" title={value}>
         {value}
       </code>
-      <Button type="button" variant="ghost" size="icon" onClick={copy}>
+      <Button type="button" variant="ghost" size="icon" onClick={() => void copy()}>
         {copied ? <Check /> : <Copy />}
         <span className="sr-only">Copy identifier</span>
       </Button>

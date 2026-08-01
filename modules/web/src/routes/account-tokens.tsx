@@ -202,9 +202,8 @@ export function AccountTokensPage() {
 
 function Expiry({ value }: { value: string }) {
   const date = new Date(value);
-  const remaining = date.getTime() - Date.now();
   const state = expirationState(value);
-  const label = remaining <= 0 ? "Expired" : formatDistanceToNow(date);
+  const label = state === "expired" ? "Expired" : formatDistanceToNow(date);
   if (state === "expired") return <Badge variant="destructive">{label}</Badge>;
   if (state === "expiring") return <Badge variant="warning">{label}</Badge>;
   return <Timestamp value={value} />;

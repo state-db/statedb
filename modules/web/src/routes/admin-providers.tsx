@@ -278,7 +278,7 @@ function ProviderDialog({
           </DialogDescription>
         </DialogHeader>
         <Form {...form}>
-          <form className="flex flex-col gap-4" onSubmit={form.handleSubmit((values) => mutation.mutate(values))}>
+          <form className="flex flex-col gap-4" onSubmit={(event) => void form.handleSubmit((values) => mutation.mutate(values))(event)}>
             <FormField
               control={form.control}
               name="name"

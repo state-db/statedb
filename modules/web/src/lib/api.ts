@@ -45,7 +45,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
       throw new NotFoundError();
     }
     if (!res.ok) {
-      const body = await res.json().catch(() => ({ error: res.statusText }));
+      const body: unknown = await res.json().catch(() => ({ error: res.statusText }));
       throw new Error((body as { error?: string }).error ?? res.statusText);
     }
     const text = await res.text();
