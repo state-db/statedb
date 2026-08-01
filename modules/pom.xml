@@ -22,7 +22,7 @@
         <project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
         <quarkus.platform.group-id>io.quarkus.platform</quarkus.platform.group-id>
         <quarkus.platform.artifact-id>quarkus-bom</quarkus.platform.artifact-id>
-        <quarkus.platform.version>3.33.1</quarkus.platform.version>
+        <quarkus.platform.version>3.38.0</quarkus.platform.version>
         <jandex-maven-plugin.version>3.5.3</jandex-maven-plugin.version>
         <license-maven-plugin.version>2.6.0</license-maven-plugin.version>
         <spotless-maven-plugin.version>3.4.0</spotless-maven-plugin.version>
