@@ -162,6 +162,9 @@ public class PolicySetCache {
         entities.add(new Entity(ACTION.of(action.getKey()), parents));
       }
     }
-    return entities;
+    // Copied once here rather than on each actionEntities() call: this is an
+    // application-scoped singleton on the authorization path, and every caller
+    // only reads the set.
+    return Set.copyOf(entities);
   }
 }
