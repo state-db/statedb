@@ -1,0 +1,107 @@
+version: 2
+
+# Actions are pinned to commit SHAs (a mutable tag on a third-party action in a
+# pull_request_target workflow is a supply-chain hole). Pinning only trades that
+# risk for staleness unless something updates the pins, which is what the
+# github-actions entry below is for. Do not unpin to avoid maintenance.
+#
+# Minor and patch updates are grouped into one PR per ecosystem per week.
+# Majors stay ungrouped: they need reading.
+#
+# dependabot[bot] is already on the CLA allowlist in .github/workflows/cla.yml,
+# so these PRs are not blocked waiting for a signature.
+#
+# `cooldown` holds newly published versions for 7 days before proposing them,
+# so a compromised release is not merged within minutes of publication. It
+# applies to these version updates, not to Dependabot security-alert PRs.
+#
+# 7 days here vs 3 in modules/web/bunfig.toml is deliberate, not drift: a
+# cooldown only delays a review PR, so a long window costs nothing, whereas
+# bunfig's minimumReleaseAge blocks installs and builds.
+#
+# The JS directories use `bun`, not `npm` — they carry bun.lock and no
+# package-lock.json. Note Dependabot's bun support is version updates only; it
+# does not raise security-update PRs, so `make analyze-deps` stays the backstop
+# for JS CVEs.
+
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    cooldown:
+      default-days: 7
+    groups:
+      actions:
+        patterns: ["*"]
+        update-types: [minor, patch]
+
+  # Server dependencies. Most versions come from the Quarkus platform BOM, so
+  # the high-value update is the quarkus.platform.version property — that one
+  # carries the netty/jackson/pgjdbc chain with it. Run the full suite plus
+  # `make pulumi-compat-sweep` before merging a platform bump.
+  - package-ecosystem: maven
+    directory: /modules
+    schedule:
+      interval: weekly
+    cooldown:
+      default-days: 7
+    open-pull-requests-limit: 5
+    groups:
+      maven-minor-patch:
+        patterns: ["*"]
+        update-types: [minor, patch]
+
+  # Web console. Bundled into the server image, so these matter most of the
+  # three JS targets.
+  - package-ecosystem: bun
+    directory: /modules/web
+    schedule:
+      interval: weekly
+    cooldown:
+      default-days: 7
+    groups:
+      web-minor-patch:
+        patterns: ["*"]
+        update-types: [minor, patch]
+
+  # Documentation site — static output, no user data. Lower stakes.
+  - package-ecosystem: bun
+    directory: /site
+    schedule:
+      interval: weekly
+    cooldown:
+      default-days: 7
+    groups:
+      site-minor-patch:
+        patterns: ["*"]
+        update-types: [minor, patch]
+
+  - package-ecosystem: bun
+    directory: /assets/brand/trace
+    schedule:
+      interval: monthly
+    cooldown:
+      default-days: 7
+    groups:
+      brand-minor-patch:
+        patterns: ["*"]
+        update-types: [minor, patch]
+
+  # Go tooling. Not shipped in the server image, but these modules carry the
+  # largest raw CVE counts in the tree (golang.org/x/crypto and go-git), and
+  # they run in CI against the repo.
+  - package-ecosystem: gomod
+    directories:
+      - /tools/pulumi/api-extract
+      - /tools/pulumi/recorder
+      - /tools/pulumi/verify
+      - /workbench/pulumi/providers/statedbsim
+    schedule:
+      interval: weekly
+    cooldown:
+      default-days: 7
+    groups:
+      go-minor-patch:
+        patterns: ["*"]
+        update-types: [minor, patch]
