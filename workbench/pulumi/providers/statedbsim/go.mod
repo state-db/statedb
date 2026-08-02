@@ -1,4 +1,4 @@
-module statedb/workbench/pulumi/providers/statedbsim
+module statedb.app/workbench/pulumi/providers/statedbsim
 
 go 1.25.8
 

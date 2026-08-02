@@ -1,4 +1,4 @@
-module github.com/state-db/state-db/tools/pulumi/verify
+module statedb.app/tools/pulumi/verify
 
 go 1.25.8
 

@@ -86,11 +86,11 @@ a cosmetic one.
 
 **Scope**
 
-- New `persistence/src/main/java/io/statedb/persistence/stack/`:
+- New `persistence/src/main/java/app/statedb/persistence/stack/`:
   - `StackRef` record `{ stackId, workspaceId, orgId, orgName, projectName, stackName, version, activeUpdateId }`.
   - `StackRefResolver` (`@ApplicationScoped`) with `Optional<StackRef> resolve(String org, String project, String stack)` joining `stacks → projects → organizations` by name via HQL.
   - `StackNotFoundException` (domain shorthand, throwable from either HTTP module).
-- New `pulumi-api/src/main/java/io/statedb/pulumiapi/stack/StackNotFoundExceptionMapper.java` mapping the exception to a Pulumi-shaped 404. Console-api writes its own mapper when it adopts the pattern — wire formats deliberately diverge.
+- New `pulumi-api/src/main/java/app/statedb/pulumiapi/stack/StackNotFoundExceptionMapper.java` mapping the exception to a Pulumi-shaped 404. Console-api writes its own mapper when it adopts the pattern — wire formats deliberately diverge.
 
 **Out of scope.** Auth filter wiring; using the resolver from real endpoints.
 
@@ -291,7 +291,7 @@ pulumi stack ls
 
 **Scope**
 
-- `app/src/test/java/io/statedb/app/contract/FixtureReplay.java`:
+- `app/src/test/java/app/statedb/app/contract/FixtureReplay.java`:
   - Walks `tools/pulumi/recorder/fixtures/by-command/<command>/`.
   - For each `<method>_<url-encoded-path>__<nonce>.{req,resp}` pair, replays the request against the running `@QuarkusTest` server.
   - Asserts status code matches.

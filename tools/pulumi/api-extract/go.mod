@@ -1,4 +1,4 @@
-module github.com/state-db/state-db/tools/pulumi/api-extract
+module statedb.app/tools/pulumi/api-extract
 
 go 1.25.0
 

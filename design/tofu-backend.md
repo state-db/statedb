@@ -368,7 +368,7 @@ CREATE TABLE tofu_locks (
 ```
 
 Entity mapping (`modules/persistence`, new package
-`io/statedb/persistence/tofu/`):
+`app/statedb/persistence/tofu/`):
 
 - `TofuWorkspace extends TimestampedEntity`... **no** — its PK is
   `workspace_id` (shared with the parent), not a self-generated id, so it does
@@ -391,12 +391,12 @@ Entity mapping (`modules/persistence`, new package
 Mirror `pulumi-api`'s pom (Quarkus REST + dependency on
 `state-db-persistence`). Register it in `modules/pom.xml` `<modules>` and add
 it as a dependency of `modules/app/pom.xml` (grep for `state-db-pulumi-api`
-there and mirror the block). Package root: `io.statedb.tofuapi`.
+there and mirror the block). Package root: `app.statedb.tofuapi`.
 
 ### 4.2 Classes and responsibilities
 
 ```
-tofu-api/src/main/java/io/statedb/tofuapi/
+tofu-api/src/main/java/app/statedb/tofuapi/
   http/LOCK.java              @HttpMethod("LOCK")  custom-verb annotation
   http/UNLOCK.java            @HttpMethod("UNLOCK")
   auth/TofuAuthFilter.java    ContainerRequestFilter, @Priority(AUTHENTICATION), @Blocking
@@ -433,7 +433,7 @@ responses: `TofuLockConflictException` (carries the stored lock-info JSON) →
 `423` with that JSON body; `TofuStateSafetyException` → `409` with a
 plain-text explanation including the escape hatch (§2.4).
 
-### 4.3 Persistence services (package `io.statedb.persistence.tofu`)
+### 4.3 Persistence services (package `app.statedb.persistence.tofu`)
 
 Named per the house command/query naming rules:
 
@@ -573,7 +573,7 @@ curl -X LOCK http://localhost:8080/tofu/o/p/w   # expect 501, not 405
 ### Slice 31.1 · Schema + entities
 
 **Scope.** The Part 3 migration and the four entities/records in
-`io.statedb.persistence.tofu`. No endpoints change.
+`app.statedb.persistence.tofu`. No endpoints change.
 
 **Tests.** Migration applies on a fresh DB (existing Flyway test setup);
 entity round-trip persists and reads back; cascade delete from `workspaces`

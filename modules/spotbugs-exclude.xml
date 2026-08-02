@@ -44,23 +44,23 @@
         <Bug pattern="DLS_DEAD_LOCAL_STORE"/>
         <Or>
             <And>
-                <Class name="io.statedb.persistence.stack.WorkspaceListFinder"/>
+                <Class name="app.statedb.persistence.stack.WorkspaceListFinder"/>
                 <Method name="liveLocks"/>
             </And>
             <And>
-                <Class name="io.statedb.persistence.update.StackUpdateCompleter"/>
+                <Class name="app.statedb.persistence.update.StackUpdateCompleter"/>
                 <Method name="complete"/>
             </And>
             <And>
-                <Class name="io.statedb.consoleapi.token.TokensResource"/>
+                <Class name="app.statedb.consoleapi.token.TokensResource"/>
                 <Method name="revoke"/>
             </And>
             <And>
-                <Class name="io.statedb.consoleapi.user.AdminUsersResource"/>
+                <Class name="app.statedb.consoleapi.user.AdminUsersResource"/>
                 <Method name="list"/>
             </And>
             <And>
-                <Class name="io.statedb.consoleapi.workspace.WorkspacesResource"/>
+                <Class name="app.statedb.consoleapi.workspace.WorkspacesResource"/>
                 <Method name="get"/>
             </And>
         </Or>
@@ -74,8 +74,8 @@
     <Match>
         <Bug pattern="VA_FORMAT_STRING_USES_NEWLINE"/>
         <Or>
-            <Class name="io.statedb.persistence.operations.OperationalInventoryFinder"/>
-            <Class name="io.statedb.persistence.stack.CompactionWorker"/>
+            <Class name="app.statedb.persistence.operations.OperationalInventoryFinder"/>
+            <Class name="app.statedb.persistence.stack.CompactionWorker"/>
         </Or>
     </Match>
 
@@ -85,7 +85,7 @@
     -->
     <Match>
         <Bug pattern="RCN_REDUNDANT_NULLCHECK_OF_NONNULL_VALUE"/>
-        <Class name="io.statedb.persistence.authz.OrgEntityLoader"/>
+        <Class name="app.statedb.persistence.authz.OrgEntityLoader"/>
         <Method name="load"/>
     </Match>
 

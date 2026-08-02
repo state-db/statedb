@@ -3,7 +3,7 @@
     <modelVersion>4.0.0</modelVersion>
 
     <parent>
-        <groupId>io.statedb</groupId>
+        <groupId>app.statedb</groupId>
         <artifactId>state-db-parent</artifactId>
         <version>0.1.0-SNAPSHOT</version>
     </parent>

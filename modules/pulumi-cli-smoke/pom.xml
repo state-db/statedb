@@ -3,7 +3,7 @@
     <modelVersion>4.0.0</modelVersion>
 
     <parent>
-        <groupId>io.statedb</groupId>
+        <groupId>app.statedb</groupId>
         <artifactId>state-db-parent</artifactId>
         <version>0.1.0-SNAPSHOT</version>
     </parent>
@@ -22,18 +22,18 @@
 
     <dependencies>
         <dependency>
-            <groupId>io.statedb</groupId>
+            <groupId>app.statedb</groupId>
             <artifactId>state-db-app</artifactId>
             <version>${project.version}</version>
         </dependency>
         <dependency>
-            <groupId>io.statedb</groupId>
+            <groupId>app.statedb</groupId>
             <artifactId>state-db-persistence</artifactId>
             <version>${project.version}</version>
         </dependency>
 
         <dependency>
-            <groupId>io.statedb</groupId>
+            <groupId>app.statedb</groupId>
             <artifactId>state-db-test-support</artifactId>
             <version>${project.version}</version>
             <scope>test</scope>
