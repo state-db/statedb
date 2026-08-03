@@ -18,6 +18,7 @@ import {
   Fragment,
   useContext,
   useEffect,
+  useMemo,
   useState,
 } from "react";
 import { useQuery } from "@tanstack/react-query";
@@ -41,6 +42,18 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import {
+  Command,
+  CommandEmpty,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from "@/components/ui/command";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { BrandMark } from "@/components/brand/BrandMark";
 import {
@@ -251,10 +264,16 @@ function OrgSwitcher({ user }: { user: CurrentUser }) {
   const selected = organizations.find((org) => org.name === selectedOrg);
 
   useEffect(() => {
-    if (organizations.length === 1 && selectedOrg === null) {
+    // Default a single-org member into their org. Admins are excluded so
+    // auto-select can't fight their "All organizations" choice.
+    if (!user.siteAdmin && organizations.length === 1 && selectedOrg === null) {
       setSelectedOrg(organizations[0].name);
     }
-  }, [organizations, selectedOrg, setSelectedOrg]);
+  }, [user.siteAdmin, organizations, selectedOrg, setSelectedOrg]);
+
+  if (user.siteAdmin && allOrgs.isPending) {
+    return <Skeleton className="h-9 w-full" />;
+  }
 
   if (organizations.length === 0) {
     return (
@@ -273,6 +292,12 @@ function OrgSwitcher({ user }: { user: CurrentUser }) {
         </span>
       </div>
     );
+  }
+
+  // Admins see every org (unbounded), so they get a searchable, capped list.
+  // Non-admins keep the plain dropdown, bounded by their memberships.
+  if (user.siteAdmin) {
+    return <AdminOrgSwitcher organizations={organizations} selected={selected} />;
   }
 
   return (
@@ -315,6 +340,97 @@ function OrgSwitcher({ user }: { user: CurrentUser }) {
         </DropdownMenuGroup>
       </DropdownMenuContent>
     </DropdownMenu>
+  );
+}
+
+// Cap on org rows rendered at once; search narrows past it.
+const MAX_ORG_RESULTS = 50;
+
+function AdminOrgSwitcher({
+  organizations,
+  selected,
+}: {
+  organizations: OrgMembership[];
+  selected: OrgMembership | undefined;
+}) {
+  const { setSelectedOrg } = useShell();
+  const navigate = useNavigate();
+  const [open, setOpen] = useState(false);
+  const [search, setSearch] = useState("");
+
+  const query = search.trim().toLowerCase();
+  const matches = useMemo(
+    () =>
+      query
+        ? organizations.filter(
+            (org) =>
+              org.displayName.toLowerCase().includes(query) ||
+              org.name.toLowerCase().includes(query),
+          )
+        : organizations,
+    [organizations, query],
+  );
+  const shown = matches.slice(0, MAX_ORG_RESULTS);
+  const hidden = matches.length - shown.length;
+  const showAll = !query || "all organizations".includes(query);
+
+  const choose = (org: string | null) => {
+    setSelectedOrg(org);
+    setSearch("");
+    setOpen(false);
+    void navigate(
+      org ? { to: "/console/$org", params: { org } } : { to: "/console" },
+    );
+  };
+
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <SidebarMenuButton>
+          <Building2 />
+          <span className="truncate group-data-[sidebar-open=false]/sidebar-wrapper:sr-only">
+            {selected?.displayName ?? "All organizations"}
+          </span>
+          <ChevronDown className="ml-auto group-data-[sidebar-open=false]/sidebar-wrapper:hidden" />
+        </SidebarMenuButton>
+      </PopoverTrigger>
+      <PopoverContent side="right" align="end" className="w-64 p-0">
+        <Command>
+          <CommandInput
+            placeholder="Search organizations…"
+            value={search}
+            onChange={(event) => setSearch(event.target.value)}
+          />
+          <CommandList>
+            {showAll && (
+              <CommandItem
+                className="cursor-pointer hover:bg-accent"
+                onClick={() => choose(null)}
+              >
+                All organizations
+              </CommandItem>
+            )}
+            {shown.map((org) => (
+              <CommandItem
+                key={org.name}
+                className="cursor-pointer hover:bg-accent"
+                onClick={() => choose(org.name)}
+              >
+                <span className="truncate">{org.displayName}</span>
+              </CommandItem>
+            ))}
+            {!showAll && shown.length === 0 && (
+              <CommandEmpty>No organizations found.</CommandEmpty>
+            )}
+            {hidden > 0 && (
+              <div className="px-2 py-1.5 text-xs text-muted-foreground">
+                {hidden} more — refine your search.
+              </div>
+            )}
+          </CommandList>
+        </Command>
+      </PopoverContent>
+    </Popover>
   );
 }
 
