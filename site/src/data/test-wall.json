@@ -1,0 +1,280 @@
+{
+  "sessions": [
+    {
+      "label": "01-login",
+      "path": "modules/app/src/test/java/app/statedb/app/contract/ContractReplayTest.java"
+    },
+    {
+      "label": "02-stack-init",
+      "path": "modules/app/src/test/java/app/statedb/app/contract/ContractReplayTest.java"
+    },
+    {
+      "label": "10-stack-rm",
+      "path": "modules/app/src/test/java/app/statedb/app/contract/ContractReplayTest.java"
+    },
+    {
+      "label": "03-up",
+      "path": "modules/app/src/test/java/app/statedb/app/contract/ContractReplayTest.java"
+    },
+    {
+      "label": "04-preview",
+      "path": "modules/app/src/test/java/app/statedb/app/contract/ContractReplayTest.java"
+    },
+    {
+      "label": "05-refresh",
+      "path": "modules/app/src/test/java/app/statedb/app/contract/ContractReplayTest.java"
+    },
+    {
+      "label": "06-stack-ls",
+      "path": "modules/app/src/test/java/app/statedb/app/contract/ContractReplayTest.java"
+    },
+    {
+      "label": "07-stack-export",
+      "path": "modules/app/src/test/java/app/statedb/app/contract/ContractReplayTest.java"
+    },
+    {
+      "label": "08-destroy",
+      "path": "modules/app/src/test/java/app/statedb/app/contract/ContractReplayTest.java"
+    },
+    {
+      "label": "09-stack-export-after-destroy",
+      "path": "modules/app/src/test/java/app/statedb/app/contract/ContractReplayTest.java"
+    },
+    {
+      "label": "09a-up-after-destroy",
+      "path": "modules/app/src/test/java/app/statedb/app/contract/ContractReplayTest.java"
+    },
+    {
+      "label": "09b-destroy-after-rebuild",
+      "path": "modules/app/src/test/java/app/statedb/app/contract/ContractReplayTest.java"
+    },
+    {
+      "label": "11-stack-init",
+      "path": "modules/app/src/test/java/app/statedb/app/contract/ContractReplayTest.java"
+    },
+    {
+      "label": "12-up",
+      "path": "modules/app/src/test/java/app/statedb/app/contract/ContractReplayTest.java"
+    },
+    {
+      "label": "13-stack-output",
+      "path": "modules/app/src/test/java/app/statedb/app/contract/ContractReplayTest.java"
+    },
+    {
+      "label": "14-stack-get",
+      "path": "modules/app/src/test/java/app/statedb/app/contract/ContractReplayTest.java"
+    },
+    {
+      "label": "15-stack-history",
+      "path": "modules/app/src/test/java/app/statedb/app/contract/ContractReplayTest.java"
+    },
+    {
+      "label": "16-stack-tag-set",
+      "path": "modules/app/src/test/java/app/statedb/app/contract/ContractReplayTest.java"
+    },
+    {
+      "label": "17-stack-tag-ls",
+      "path": "modules/app/src/test/java/app/statedb/app/contract/ContractReplayTest.java"
+    },
+    {
+      "label": "18-stack-tag-get",
+      "path": "modules/app/src/test/java/app/statedb/app/contract/ContractReplayTest.java"
+    },
+    {
+      "label": "19-stack-tag-rm",
+      "path": "modules/app/src/test/java/app/statedb/app/contract/ContractReplayTest.java"
+    },
+    {
+      "label": "20-stack-select",
+      "path": "modules/app/src/test/java/app/statedb/app/contract/ContractReplayTest.java"
+    },
+    {
+      "label": "21-stack-unselect",
+      "path": "modules/app/src/test/java/app/statedb/app/contract/ContractReplayTest.java"
+    },
+    {
+      "label": "22-stack-graph",
+      "path": "modules/app/src/test/java/app/statedb/app/contract/ContractReplayTest.java"
+    },
+    {
+      "label": "26-destroy",
+      "path": "modules/app/src/test/java/app/statedb/app/contract/ContractReplayTest.java"
+    },
+    {
+      "label": "27-change-secrets-provider",
+      "path": "modules/app/src/test/java/app/statedb/app/contract/ContractReplayTest.java"
+    },
+    {
+      "label": "28-stack-rename",
+      "path": "modules/app/src/test/java/app/statedb/app/contract/ContractReplayTest.java"
+    },
+    {
+      "label": "29-stack-ls",
+      "path": "modules/app/src/test/java/app/statedb/app/contract/ContractReplayTest.java"
+    },
+    {
+      "label": "30-stack-rm",
+      "path": "modules/app/src/test/java/app/statedb/app/contract/ContractReplayTest.java"
+    },
+    {
+      "label": "31-stack-init-for-cancel",
+      "path": "modules/app/src/test/java/app/statedb/app/contract/ContractReplayTest.java"
+    },
+    {
+      "label": "32-cancel",
+      "path": "modules/app/src/test/java/app/statedb/app/contract/ContractReplayTest.java"
+    },
+    {
+      "label": "33-stack-rm-after-cancel",
+      "path": "modules/app/src/test/java/app/statedb/app/contract/ContractReplayTest.java"
+    }
+  ],
+  "classes": [
+    {
+      "label": "ContractReplayTest",
+      "path": "modules/app/src/test/java/app/statedb/app/contract/ContractReplayTest.java"
+    },
+    {
+      "label": "BackendInspectionSmokeIT",
+      "path": "modules/pulumi-cli-smoke/src/test/java/app/statedb/pulumiclismoke/BackendInspectionSmokeIT.java"
+    },
+    {
+      "label": "ConfigSmokeIT",
+      "path": "modules/pulumi-cli-smoke/src/test/java/app/statedb/pulumiclismoke/ConfigSmokeIT.java"
+    },
+    {
+      "label": "ResourceImportSmokeIT",
+      "path": "modules/pulumi-cli-smoke/src/test/java/app/statedb/pulumiclismoke/ResourceImportSmokeIT.java"
+    },
+    {
+      "label": "StackLifecycleSmokeIT",
+      "path": "modules/pulumi-cli-smoke/src/test/java/app/statedb/pulumiclismoke/StackLifecycleSmokeIT.java"
+    },
+    {
+      "label": "StackMetadataSmokeIT",
+      "path": "modules/pulumi-cli-smoke/src/test/java/app/statedb/pulumiclismoke/StackMetadataSmokeIT.java"
+    },
+    {
+      "label": "StackReferenceSmokeIT",
+      "path": "modules/pulumi-cli-smoke/src/test/java/app/statedb/pulumiclismoke/StackReferenceSmokeIT.java"
+    },
+    {
+      "label": "StateEditSmokeIT",
+      "path": "modules/pulumi-cli-smoke/src/test/java/app/statedb/pulumiclismoke/StateEditSmokeIT.java"
+    },
+    {
+      "label": "UnsupportedFeatureSmokeIT",
+      "path": "modules/pulumi-cli-smoke/src/test/java/app/statedb/pulumiclismoke/UnsupportedFeatureSmokeIT.java"
+    },
+    {
+      "label": "WatchSmokeIT",
+      "path": "modules/pulumi-cli-smoke/src/test/java/app/statedb/pulumiclismoke/WatchSmokeIT.java"
+    },
+    {
+      "label": "ConcurrentUpdateFaultIT",
+      "path": "modules/pulumi-cli-smoke/src/test/java/app/statedb/pulumiclismoke/faults/ConcurrentUpdateFaultIT.java"
+    },
+    {
+      "label": "CorruptedImportFaultIT",
+      "path": "modules/pulumi-cli-smoke/src/test/java/app/statedb/pulumiclismoke/faults/CorruptedImportFaultIT.java"
+    },
+    {
+      "label": "CrashRecoveryFaultIT",
+      "path": "modules/pulumi-cli-smoke/src/test/java/app/statedb/pulumiclismoke/faults/CrashRecoveryFaultIT.java"
+    },
+    {
+      "label": "FailedDeploymentFaultIT",
+      "path": "modules/pulumi-cli-smoke/src/test/java/app/statedb/pulumiclismoke/faults/FailedDeploymentFaultIT.java"
+    },
+    {
+      "label": "ForcedCancelFaultIT",
+      "path": "modules/pulumi-cli-smoke/src/test/java/app/statedb/pulumiclismoke/faults/ForcedCancelFaultIT.java"
+    },
+    {
+      "label": "SecretsDurabilityFaultIT",
+      "path": "modules/pulumi-cli-smoke/src/test/java/app/statedb/pulumiclismoke/faults/SecretsDurabilityFaultIT.java"
+    }
+  ],
+  "scenarios": [
+    {
+      "label": "secondConcurrentUpIsRefused",
+      "path": "modules/pulumi-cli-smoke/src/test/java/app/statedb/pulumiclismoke/faults/ConcurrentUpdateFaultIT.java"
+    },
+    {
+      "label": "corruptedImportIsRejectedAndStateUntouched",
+      "path": "modules/pulumi-cli-smoke/src/test/java/app/statedb/pulumiclismoke/faults/CorruptedImportFaultIT.java"
+    },
+    {
+      "label": "killedCliMidUpdateRecoversAfterLeaseExpiry",
+      "path": "modules/pulumi-cli-smoke/src/test/java/app/statedb/pulumiclismoke/faults/CrashRecoveryFaultIT.java"
+    },
+    {
+      "label": "failedDeploymentKeepsCompletedResourcesAndRecovers",
+      "path": "modules/pulumi-cli-smoke/src/test/java/app/statedb/pulumiclismoke/faults/FailedDeploymentFaultIT.java"
+    },
+    {
+      "label": "secondCliCancelRevokesStuckLease",
+      "path": "modules/pulumi-cli-smoke/src/test/java/app/statedb/pulumiclismoke/faults/ForcedCancelFaultIT.java"
+    },
+    {
+      "label": "secretsSurviveCompactionAndFreshCliReload",
+      "path": "modules/pulumi-cli-smoke/src/test/java/app/statedb/pulumiclismoke/faults/SecretsDurabilityFaultIT.java"
+    },
+    {
+      "label": "reportsBackendAndListsAcrossProjects",
+      "path": "modules/pulumi-cli-smoke/src/test/java/app/statedb/pulumiclismoke/BackendInspectionSmokeIT.java"
+    },
+    {
+      "label": "roundTripsPlainAndSecretConfig",
+      "path": "modules/pulumi-cli-smoke/src/test/java/app/statedb/pulumiclismoke/ConfigSmokeIT.java"
+    },
+    {
+      "label": "importsAnExistingResourceBackIntoState",
+      "path": "modules/pulumi-cli-smoke/src/test/java/app/statedb/pulumiclismoke/ResourceImportSmokeIT.java"
+    },
+    {
+      "label": "createsListsAndRemovesAnEmptyStack",
+      "path": "modules/pulumi-cli-smoke/src/test/java/app/statedb/pulumiclismoke/StackLifecycleSmokeIT.java"
+    },
+    {
+      "label": "importsAndExportsAStackCheckpoint",
+      "path": "modules/pulumi-cli-smoke/src/test/java/app/statedb/pulumiclismoke/StackLifecycleSmokeIT.java"
+    },
+    {
+      "label": "exportsAPriorVersionAfterTheStackIsEmptied",
+      "path": "modules/pulumi-cli-smoke/src/test/java/app/statedb/pulumiclismoke/StackLifecycleSmokeIT.java"
+    },
+    {
+      "label": "supportsTagGraphHistoryAndSelectCommands",
+      "path": "modules/pulumi-cli-smoke/src/test/java/app/statedb/pulumiclismoke/StackMetadataSmokeIT.java"
+    },
+    {
+      "label": "renamesAStack",
+      "path": "modules/pulumi-cli-smoke/src/test/java/app/statedb/pulumiclismoke/StackMetadataSmokeIT.java"
+    },
+    {
+      "label": "reEncryptsSecretsUnderANewProvider",
+      "path": "modules/pulumi-cli-smoke/src/test/java/app/statedb/pulumiclismoke/StackMetadataSmokeIT.java"
+    },
+    {
+      "label": "preservesStackReferenceOutputsAndSecrets",
+      "path": "modules/pulumi-cli-smoke/src/test/java/app/statedb/pulumiclismoke/StackReferenceSmokeIT.java"
+    },
+    {
+      "label": "editsResourcesInPlace",
+      "path": "modules/pulumi-cli-smoke/src/test/java/app/statedb/pulumiclismoke/StateEditSmokeIT.java"
+    },
+    {
+      "label": "movesAResourceToAnotherStack",
+      "path": "modules/pulumi-cli-smoke/src/test/java/app/statedb/pulumiclismoke/StateEditSmokeIT.java"
+    },
+    {
+      "label": "rejectsUnsupportedCloudCommands",
+      "path": "modules/pulumi-cli-smoke/src/test/java/app/statedb/pulumiclismoke/UnsupportedFeatureSmokeIT.java"
+    },
+    {
+      "label": "appliesTheFirstUpdateAndRecordsItInHistory",
+      "path": "modules/pulumi-cli-smoke/src/test/java/app/statedb/pulumiclismoke/WatchSmokeIT.java"
+    }
+  ]
+}

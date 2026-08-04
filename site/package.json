@@ -6,7 +6,8 @@
   "scripts": {
     "dev": "astro dev",
     "build": "astro build && pagefind --site dist",
-    "preview": "astro preview"
+    "preview": "astro preview",
+    "generate:test-wall": "node scripts/generate-test-wall.mjs"
   },
   "dependencies": {
     "@astrojs/starlight": "^0.36.0",

@@ -4,25 +4,155 @@ import "@fontsource-variable/jetbrains-mono";
 import "../styles/ocean.css";
 import logoDark from "../assets/statedb-logo-dark.svg";
 import mascot from "../assets/statedb-mascot.png";
+import testWall from "../data/test-wall.json";
 
 const github = "https://github.com/state-db/state-db";
+
+const scope = [
+  "No deployment runner. No access to repositories or cloud accounts",
+  "AI stays on the read path. MCP exposes state, resources, and history to the tools you choose",
+];
 
 const tiers = [
   {
     label: "CONTRACT REPLAY",
-    body: "Every HTTP exchange from recorded real-CLI sessions — up, preview, refresh, destroy, rename, export, import — is replayed against the server and must reproduce byte-for-byte, modulo documented volatile fields.",
+    claim: "Every byte of the protocol, replayed",
+    body: "Sessions recorded from the real CLI — preview, update, refresh, destroy, rename, export, import — are replayed against every build. Each response has to match byte for byte, apart from documented volatile fields.",
   },
   {
     label: "INTEGRITY VERIFICATION",
-    body: "Every deployment the server assembles in tests is checked with the CLI's own snapshot integrity verifier. Stored state is state the CLI itself would agree to load.",
+    claim: "Checked with the CLI's own verifier",
+    body: "Every state file a test produces goes through Pulumi's snapshot integrity verifier. If the CLI would refuse to load the result, the test fails.",
   },
   {
     label: "CLI SMOKE",
-    body: "The real CLI, running in Docker, drives the backend per command family on every build — stack lifecycle, tags, history, stack references, secrets.",
+    claim: "Released binaries drive the backend",
+    body: "The real CLI runs the whole lifecycle against statedb on every build: stacks, tags, history, stack references, and secrets.",
   },
   {
     label: "FAULT INJECTION",
-    body: "Adversarial scenarios with the real CLI: killed mid-update, concurrent updates, failed deployments, corrupted imports. The nightly matrix repeats every scenario across every supported CLI version.",
+    claim: "Then the tests try to break it",
+    body: "Scenarios kill the CLI mid-update, race concurrent runs, fail deployments partway, and tamper with imports — each one asserts both what the operator sees and what survives in the database.",
+  },
+];
+
+/* Test-wall rows are generated from the compatibility suite itself — run
+   `bun run generate:test-wall` after adding a session, class, or scenario. */
+const wallRow = (chips: { label: string; path: string }[], reverse: boolean) => ({
+  chips: chips.map(({ label, path }) => ({ label, href: `${github}/blob/main/${path}` })),
+  // A loop lasts as long as its content is wide, so rows keep one reading
+  // speed however many chips the generator emits.
+  dur: `${Math.round(chips.reduce((n, c) => n + c.label.length, 0) * 0.3)}s`,
+  reverse,
+});
+
+const wallRows = [
+  wallRow(testWall.sessions, false),
+  wallRow(testWall.classes, true),
+  wallRow(testWall.scenarios, false),
+];
+
+const access = [
+  {
+    title: "OIDC sign-in",
+    body: "Connect Okta, Microsoft Entra, Keycloak, Google, or another OpenID Connect provider. Provider settings live in the database, so adding or rotating one does not require a redeploy.",
+  },
+  {
+    title: "Organization roles",
+    body: "Owner, admin, member, viewer. One identity holds a different role in each organization.",
+  },
+  {
+    title: "Per-stack grants",
+    body: "Read or write access on a single stack, applied on top of the organization role.",
+  },
+  {
+    title: "Cedar policies",
+    body: "Authorization runs on Cedar. The owner, admin, member, viewer, service, and guardrail policies are all in the public repository.",
+  },
+  {
+    title: "Service accounts",
+    body: "Create and revoke long-lived automation tokens in the console. CI passes them through PULUMI_ACCESS_TOKEN.",
+  },
+  {
+    title: "Native CLI login",
+    body: "pulumi login opens the browser. The user signs in with your identity provider, and the CLI receives its token.",
+  },
+];
+
+const operating = [
+  {
+    q: "Backups",
+    a: "Everything is in PostgreSQL: checkpoints, history, users, and tokens. Your existing pg_dump, WAL archive, or managed snapshot process covers statedb too.",
+  },
+  {
+    q: "Upgrades",
+    a: "Migrations run at startup before the service accepts traffic. An advisory lock serializes migrations when several replicas start together.",
+  },
+  {
+    q: "Replicas",
+    a: "Update leases live in the database, so a request can land on any replica. Set one shared session encryption secret so browser sessions work across pods.",
+  },
+  {
+    q: "Requirements",
+    a: "Run one service with PostgreSQL 14 or newer, built with lz4. There is no queue, object store, or second application process. PostgreSQL 16 and 18 are covered by the test matrix.",
+  },
+  {
+    q: "Failure recovery",
+    a: "If statedb is unavailable, the CLI cannot reach its backend. State remains in PostgreSQL. If a run is interrupted, the stack becomes available again when its lease expires.",
+  },
+  {
+    q: "Air-gapped operation",
+    a: "At runtime, statedb connects to PostgreSQL and your identity provider. It does not require an external control plane or telemetry service.",
+  },
+];
+
+const security = [
+  {
+    title: "Source",
+    body: "The service, database migrations, Cedar policies, console, and compatibility tests are in one public repository. You can trace the code that accepts a checkpoint all the way to the code that stores it.",
+  },
+  {
+    title: "Secrets",
+    body: "The service secrets provider uses Google Tink with AES-GCM. Ciphertext is bound to the stack identity, so a value copied from one stack will not decrypt in another. Passphrase and cloud KMS providers remain client-side and work unchanged.",
+  },
+  {
+    title: "Key handling",
+    body: "statedb generates its encryption keyset on first boot and stores it in PostgreSQL, separate from checkpoint data. This protects leaked checkpoints and partial database dumps, not a full database compromise that includes the keyset.",
+  },
+  {
+    title: "Data residency",
+    body: "Checkpoints, history, users, and tokens stay in the PostgreSQL instance you configure. statedb does not send telemetry to an external service.",
+  },
+  {
+    title: "Break-glass access",
+    body: "The emergency local login is opt-in and loopback-only. It disables itself while any OIDC provider is enabled, with that condition checked at login and whenever a session is restored.",
+  },
+  {
+    title: "Dependencies",
+    body: "The repository includes targets for static analysis and dependency scanning. The vulnerability reporting process is public in SECURITY.md.",
+  },
+];
+
+const faq = [
+  {
+    q: "What happens if statedb is unavailable?",
+    a: "The CLI cannot read or update state until the service returns. The state itself remains in your PostgreSQL database. You can also export a standard checkpoint and import it into another backend.",
+  },
+  {
+    q: "How does statedb differ from Pulumi Cloud?",
+    a: "Pulumi Cloud is a broader platform with remote deployments, governance, an internal developer platform, and the Neo AI agent. statedb is deliberately narrower: a self-hosted state backend and console, with MCP tools focused on reading and understanding the state you already hold.",
+  },
+  {
+    q: "What does a commercial license cost?",
+    a: "$600 per month. There is one commercial tier, and it removes the ten-active-stack limit. Users and resources are not metered in either edition.",
+  },
+  {
+    q: "Does our CI/CD have to change?",
+    a: "The Pulumi commands stay the same. Point the pipeline at statedb and authenticate with a service account token through PULUMI_ACCESS_TOKEN.",
+  },
+  {
+    q: "Is OpenTofu supported?",
+    a: "Not yet. Its HTTP backend protocol is a planned target.",
   },
 ];
 ---
@@ -31,20 +161,12 @@ const tiers = [
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>statedb — self-hosted state backend with a web console</title>
+    <title>statedb — self-host infrastructure state without giving up the console</title>
     <meta
       name="description"
-      content="statedb stores your infrastructure state in your own Postgres, behind your own firewall, and pairs it with a web console. Compatible with the Pulumi CLI — no workflow changes."
+      content="Run a Pulumi-compatible state backend and web console inside your network. Keep state in PostgreSQL and keep the CLI workflow your team already uses."
     />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-    <link rel="canonical" href="https://statedb.app/" />
-    <meta property="og:title" content="statedb — your infrastructure's state, on your infrastructure" />
-    <meta
-      property="og:description"
-      content="Self-hosted state backend and web console. Your database, your network, your data — verified against the real CLI every night."
-    />
-    <meta property="og:url" content="https://statedb.app/" />
-    <meta property="og:type" content="website" />
   </head>
   <body>
     <header class="nav">
@@ -53,25 +175,31 @@ const tiers = [
           <img src={logoDark.src} alt="statedb" width="150" height="42" />
         </a>
         <nav class="nav-links" aria-label="Main">
+          <a href="#pricing">Pricing</a>
+          <a href="#security">Security</a>
           <a href="/docs/">Docs</a>
-          <a href="/docs/compatibility/">Compatibility</a>
-          <a href="/docs/license/">License</a>
           <a href={github}>GitHub</a>
         </nav>
       </div>
     </header>
 
     <main>
+      <!-- HERO -->
       <section class="hero">
         <div class="shell hero-grid">
           <div class="hero-copy">
-            <p class="eyebrow">Self-hosted state backend</p>
-            <h1>Your infrastructure's<br />state, on<br />your&nbsp;infrastructure.</h1>
+            <h1>
+              Self-host your infrastructure state.
+              <span>Keep the console.</span>
+            </h1>
             <p class="hero-sub">
-              statedb keeps your infrastructure state in your own Postgres, behind your own
-              firewall, and pairs it with a web console for browsing stacks, resources, and
-              history. It speaks the Pulumi CLI's backend protocol — your team changes one
-              login command and nothing else.
+              statedb gives the Pulumi CLI a backend inside your network and gives your team
+              a clear view of what is in it. Browse stacks, resources, outputs, and update
+              history from the same service that stores the state.
+            </p>
+            <p class="hero-sub">
+              Point <code>PULUMI_BACKEND_URL</code> at statedb. The CLI commands and CI
+              pipelines stay the same. The state stays in PostgreSQL you control.
             </p>
             <div class="term">
               <div class="term-tabs" role="tablist" aria-label="Choose your CLI">
@@ -83,20 +211,20 @@ const tiers = [
                 </button>
               </div>
               <div class="terminal" id="term-pulumi" role="tabpanel">
-                <span class="t-line"><span class="t-prompt">$</span> pulumi login https://infra.acme.corp/pulumi</span>
-                <span class="t-line t-out">Logged in to infra.acme.corp</span>
+                <span class="t-line"><span class="t-prompt">$</span> pulumi login https://statedb.acme.internal/pulumi</span>
+                <span class="t-line t-out">Logged in to statedb.acme.internal</span>
               </div>
               <div class="terminal" id="term-tofu" role="tabpanel" hidden>
-                <span class="t-line t-comment"># OpenTofu's http backend is on the roadmap.</span>
+                <span class="t-line t-comment"># OpenTofu's http backend is a planned target.</span>
                 <span class="t-line t-comment"># Where the protocols overlap, one implementation serves both.</span>
-                <span class="t-line t-comment"># Track progress: github.com/state-db/state-db</span>
+                <span class="t-line t-comment"># Progress: github.com/state-db/state-db</span>
               </div>
             </div>
-            <p class="terminal-caption">The only change your team makes.</p>
-            <div class="cta-row">
-              <a class="btn btn-solid" href="/docs/quickstart/">Get started</a>
-              <a class="btn btn-ghost" href="#proof">How we prove compatibility</a>
-            </div>
+            <p class="terminal-caption">One backend URL changes. The workflow does not.</p>
+            <p class="hero-price">
+              Free for up to <strong>ten active stacks</strong>, then $600 per month.
+              Users and resources are not metered.
+            </p>
           </div>
 
           <aside class="deploy-terminal" aria-label="Terminal showing a Pulumi preview using statedb">
@@ -108,49 +236,49 @@ const tiers = [
             </div>
             <div class="terminal-screen">
               <div class="terminal-scrollback">
-                <span class="term-row term-command" style="--d: 60ms; --ch: 44; --hold: 220ms"
+                <span class="term-row term-command" style="--d: 60ms; --ch: 50; --hold: 220ms"
                   ><span class="t-prompt">$</span><span class="cmd"
-                    >export PULUMI_CONSOLE_DOMAIN=infra.acme.corp</span
+                    >export PULUMI_CONSOLE_DOMAIN=statedb.acme.internal</span
                   ></span
                 >
-                <span class="term-row term-command" style="--d: 676ms; --ch: 56; --hold: 220ms"
+                <span class="term-row term-command" style="--d: 730ms; --ch: 62; --hold: 220ms"
                   ><span class="t-prompt">$</span><span class="cmd"
-                    >export PULUMI_BACKEND_URL=https://infra.acme.corp/pulumi</span
+                    >export PULUMI_BACKEND_URL=https://statedb.acme.internal/pulumi</span
                   ></span
                 >
-                <span class="term-row term-command" style="--d: 1400ms; --ch: 34; --hold: 520ms"
+                <span class="term-row term-command" style="--d: 1508ms; --ch: 34; --hold: 520ms"
                   ><span class="t-prompt">$</span><span class="cmd"
                     >pulumi login "$PULUMI_BACKEND_URL"</span
                   ></span
                 >
-                <span class="term-row t-out" style="--d: 2226ms"
-                  >Logged in to https://infra.acme.corp/pulumi as platform-admin</span
+                <span class="term-row t-out" style="--d: 2334ms"
+                  >Logged in to https://statedb.acme.internal/pulumi as platform-admin</span
                 >
-                <span class="term-row term-command" style="--d: 2490ms; --ch: 29; --hold: 200ms"
+                <span class="term-row term-command" style="--d: 2598ms; --ch: 29; --hold: 200ms"
                   ><span class="t-prompt">$</span><span class="cmd"
                     >pulumi stack select acme/prod</span
                   ></span
                 >
-                <span class="term-row term-command" style="--d: 2951ms; --ch: 14; --hold: 130ms"
+                <span class="term-row term-command" style="--d: 3059ms; --ch: 14; --hold: 130ms"
                   ><span class="t-prompt">$</span><span class="cmd">pulumi preview</span></span
                 >
-                <span class="term-row t-blank" style="--d: 3210ms" aria-hidden="true"></span>
-                <span class="term-row t-heading" style="--d: 3290ms"
+                <span class="term-row t-blank" style="--d: 3318ms" aria-hidden="true"></span>
+                <span class="term-row t-heading" style="--d: 3398ms"
                   ><span class="spinner" aria-hidden="true"></span>Previewing update (acme/prod)</span
                 >
-                <span class="term-row t-blank" style="--d: 3630ms" aria-hidden="true"></span>
-                <span class="term-row t-link" style="--d: 3710ms">View in Browser (Ctrl+O): https://infra.acme.corp/acme/payments/prod/previews/01J6E9M9</span>
-                <span class="term-row t-blank" style="--d: 3870ms" aria-hidden="true"></span>
-                <span class="term-row t-table t-table-head" style="--d: 3950ms"><span>Type</span><span>Name</span><span>Plan</span></span>
-                <span class="term-row t-table t-resource" style="--d: 4050ms"><span>+ pulumi:pulumi:Stack</span><span>payments-api-prod</span><span>create</span></span>
-                <span class="term-row t-table t-resource" style="--d: 4150ms"><span>+ |- aws:rds:Cluster</span><span>payments-db</span><span>create</span></span>
-                <span class="term-row t-table t-resource" style="--d: 4250ms"><span>+ |- aws:ecs:Service</span><span>api</span><span>create</span></span>
-                <span class="term-row t-table t-resource" style="--d: 4350ms"><span>+ |- aws:sqs:Queue</span><span>billing-events</span><span>create</span></span>
-                <span class="term-row t-table t-resource" style="--d: 4450ms"><span>+ |- aws:cloudwatch:LogGroup</span><span>api-logs</span><span>create</span></span>
-                <span class="term-row t-table t-resource" style="--d: 4550ms"><span>+ `- random:index:RandomPassword</span><span>db-password</span><span>create</span></span>
-                <span class="term-row t-blank" style="--d: 4650ms" aria-hidden="true"></span>
-                <span class="term-row t-section" style="--d: 4730ms">Resources:</span>
-                <span class="term-row t-summary" style="--d: 4850ms">+ 6 to create<span class="terminal-cursor" aria-hidden="true"></span></span>
+                <span class="term-row t-blank" style="--d: 3738ms" aria-hidden="true"></span>
+                <span class="term-row t-link" style="--d: 3818ms">View in Browser (Ctrl+O): https://statedb.acme.internal/acme/payments/prod/previews/01J6E9M9</span>
+                <span class="term-row t-blank" style="--d: 3978ms" aria-hidden="true"></span>
+                <span class="term-row t-table t-table-head" style="--d: 4058ms"><span>Type</span><span>Name</span><span>Plan</span></span>
+                <span class="term-row t-table t-resource" style="--d: 4158ms"><span>+ pulumi:pulumi:Stack</span><span>payments-api-prod</span><span>create</span></span>
+                <span class="term-row t-table t-resource" style="--d: 4258ms"><span>+ |- aws:rds:Cluster</span><span>payments-db</span><span>create</span></span>
+                <span class="term-row t-table t-resource" style="--d: 4358ms"><span>+ |- aws:ecs:Service</span><span>api</span><span>create</span></span>
+                <span class="term-row t-table t-resource" style="--d: 4458ms"><span>+ |- aws:sqs:Queue</span><span>billing-events</span><span>create</span></span>
+                <span class="term-row t-table t-resource" style="--d: 4558ms"><span>+ |- aws:cloudwatch:LogGroup</span><span>api-logs</span><span>create</span></span>
+                <span class="term-row t-table t-resource" style="--d: 4658ms"><span>+ `- random:index:RandomPassword</span><span>db-password</span><span>create</span></span>
+                <span class="term-row t-blank" style="--d: 4758ms" aria-hidden="true"></span>
+                <span class="term-row t-section" style="--d: 4838ms">Resources:</span>
+                <span class="term-row t-summary" style="--d: 4958ms">+ 6 to create<span class="terminal-cursor" aria-hidden="true"></span></span>
               </div>
               <div class="terminal-flash" aria-hidden="true"></div>
             </div>
@@ -158,158 +286,542 @@ const tiers = [
         </div>
       </section>
 
-      <section class="gap">
+      <!-- SCOPE -->
+      <section class="scope">
         <div class="shell">
-          <h2>Self-hosted <em>or</em> a console. You used to have to choose.</h2>
-          <div class="gap-grid">
-            <div class="gap-card">
-              <h3>Object-store backends</h3>
-              <p>
-                S3, filesystem, and database backends store state and stop there. No history
-                you can browse, no resource view, no visibility for the rest of the team.
-              </p>
+          <p class="kicker">Scope</p>
+          <h2>A backend, not a delivery platform</h2>
+          <p class="section-lead">
+            IaC platforms increasingly bundle state with remote execution, deployment
+            workflows, self-service portals, and built-in AI. statedb stops at the backend and
+            console. Keep the rest of your toolchain.
+          </p>
+          <ul class="scope-list">
+            {scope.map((item) => (
+              <li class="scope-no">{item}</li>
+            ))}
+            <li class="scope-yes">State, locking, history, access control, and a console in one service</li>
+          </ul>
+        </div>
+      </section>
+
+      <!-- CONSOLE -->
+      <section class="console">
+        <div class="shell">
+          <p class="kicker">Console</p>
+          <h2>A console for self-hosted state</h2>
+          <p class="section-lead">
+            Object storage can hold a checkpoint, but it stops at storage. statedb adds the
+            console missing from a typical self-hosted backend. Browse from organizations and
+            projects into each stack's current resources and update history.
+          </p>
+
+          <figure class="shot shot-main">
+            <div class="shot-frame">
+              <div class="shot-chrome" aria-hidden="true">
+                <span></span>
+                <span></span>
+                <span></span>
+                <strong>statedb.acme.internal/console</strong>
+              </div>
+              <div
+                class="mock mock-stacks"
+                role="img"
+                aria-label="statedb console stacks view: the acme organization's projects and stacks with their latest runs"
+              >
+                <aside class="mock-side" aria-hidden="true">
+                  <span class="mock-logo">statedb</span>
+                  <span class="mock-nav is-active">Stacks</span>
+                  <span class="mock-nav">Tokens</span>
+                  <span class="mock-nav-label">Manage</span>
+                  <span class="mock-nav">Providers</span>
+                  <span class="mock-nav">Orgs</span>
+                  <span class="mock-nav">Users</span>
+                  <span class="mock-nav">Operations</span>
+                </aside>
+                <div class="mock-main" aria-hidden="true">
+                  <div class="mock-head">
+                    <span class="mock-title">Stacks</span>
+                    <span class="mock-sub">3 projects &middot; 6 stacks</span>
+                  </div>
+                  <div class="mock-stats">
+                    <div class="mock-stat"><span>Resources in latest state</span><strong>132</strong></div>
+                    <div class="mock-stat"><span>Failed updates</span><strong>0</strong></div>
+                    <div class="mock-stat"><span>Active updates</span><strong>1</strong></div>
+                  </div>
+                  <div class="mock-table">
+                    <div class="mock-row mock-row-head">
+                      <span>Stack</span><span>Last update</span><span class="num">Resources</span><span>Status</span>
+                    </div>
+                    <div class="mock-row mock-row-project">
+                      <span>acme / payments-api</span><span></span><span class="num">3 stacks</span><span>34 resources</span>
+                    </div>
+                    <div class="mock-row">
+                      <span>prod</span>
+                      <span><span class="mchip mchip-ok">succeeded</span> 2h ago &middot; v41</span>
+                      <span class="num">12</span>
+                      <span><span class="mchip mchip-idle">idle</span></span>
+                    </div>
+                    <div class="mock-row">
+                      <span>staging</span>
+                      <span><span class="mchip mchip-ok">succeeded</span> 5h ago &middot; v38</span>
+                      <span class="num">12</span>
+                      <span><span class="mchip mchip-idle">idle</span></span>
+                    </div>
+                    <div class="mock-row">
+                      <span>dev</span>
+                      <span><span class="mchip mchip-run">running</span> now &middot; v112</span>
+                      <span class="num">10</span>
+                      <span><span class="mchip mchip-run">updating</span></span>
+                    </div>
+                    <div class="mock-row mock-row-project">
+                      <span>acme / identity</span><span></span><span class="num">1 stack</span><span>6 resources</span>
+                    </div>
+                    <div class="mock-row">
+                      <span>prod</span>
+                      <span><span class="mchip mchip-ok">succeeded</span> 3d ago &middot; v17</span>
+                      <span class="num">6</span>
+                      <span><span class="mchip mchip-idle">idle</span></span>
+                    </div>
+                    <div class="mock-row mock-row-project">
+                      <span>acme / data-platform</span><span></span><span class="num">2 stacks</span><span>92 resources</span>
+                    </div>
+                    <div class="mock-row">
+                      <span>prod</span>
+                      <span><span class="mchip mchip-ok">succeeded</span> 1d ago &middot; v26</span>
+                      <span class="num">48</span>
+                      <span><span class="mchip mchip-idle">idle</span></span>
+                    </div>
+                    <div class="mock-row">
+                      <span>staging</span>
+                      <span><span class="mchip mchip-ok">succeeded</span> 1d ago &middot; v25</span>
+                      <span class="num">44</span>
+                      <span><span class="mchip mchip-idle">idle</span></span>
+                    </div>
+                  </div>
+                </div>
+              </div>
             </div>
-            <div class="gap-card">
-              <h3>Managed cloud</h3>
-              <p>
-                A polished console — but your state lives on someone else's servers, and the
-                bill scales with your resource count.
-              </p>
+            <figcaption>
+              <span class="shot-label">Stacks</span>
+              Every project and stack in the organization, with its latest run, resource
+              count, and status.
+            </figcaption>
+          </figure>
+
+          <div class="console-details">
+            <figure class="shot">
+              <div class="shot-frame">
+                <div
+                  class="mock mock-panel"
+                  role="img"
+                  aria-label="statedb console resources view: the current resources of the payments-api prod stack"
+                >
+                  <div class="mock-panel-head" aria-hidden="true">
+                    <span class="mock-crumb">acme / payments-api / prod</span>
+                    <span class="mock-tabs">
+                      <span class="is-active">Resources</span><span>Outputs</span><span>Activity</span>
+                    </span>
+                  </div>
+                  <div class="mock-toolbar" aria-hidden="true">
+                    <span class="mock-search">Filter by type or name&hellip;</span>
+                    <span class="mock-toggle"><span class="is-active">Flat</span><span>Tree</span></span>
+                  </div>
+                  <div class="mock-table" aria-hidden="true">
+                    <div class="mock-row mock-row-res mock-row-head">
+                      <span>Type</span><span>Name</span><span>Provider</span>
+                    </div>
+                    <div class="mock-row mock-row-res">
+                      <span class="mono">pulumi:pulumi:Stack</span><span>payments-api-prod</span><span>pulumi</span>
+                    </div>
+                    <div class="mock-row mock-row-res">
+                      <span class="mono">aws:rds:Cluster</span><span>payments-db</span><span>aws</span>
+                    </div>
+                    <div class="mock-row mock-row-res">
+                      <span class="mono">aws:ecs:Service</span><span>api</span><span>aws</span>
+                    </div>
+                    <div class="mock-row mock-row-res">
+                      <span class="mono">aws:sqs:Queue</span><span>billing-events</span><span>aws</span>
+                    </div>
+                    <div class="mock-row mock-row-res">
+                      <span class="mono">aws:cloudwatch:LogGroup</span><span>api-logs</span><span>aws</span>
+                    </div>
+                    <div class="mock-row mock-row-res">
+                      <span class="mono">random:index:RandomPassword</span><span>db-password</span><span>random</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <figcaption>
+                <span class="shot-label">Resources</span>
+                The current state of one stack. Filter by type or name, flat or as a tree.
+              </figcaption>
+            </figure>
+            <figure class="shot">
+              <div class="shot-frame">
+                <div
+                  class="mock mock-panel"
+                  role="img"
+                  aria-label="statedb console activity view: the update history of the payments-api prod stack"
+                >
+                  <div class="mock-panel-head" aria-hidden="true">
+                    <span class="mock-crumb">acme / payments-api / prod</span>
+                    <span class="mock-tabs">
+                      <span>Resources</span><span>Outputs</span><span class="is-active">Activity</span>
+                    </span>
+                  </div>
+                  <div class="mock-toolbar" aria-hidden="true">
+                    <span class="mock-select">All kinds &#9662;</span>
+                    <span class="mock-select">All statuses &#9662;</span>
+                  </div>
+                  <div class="mock-table" aria-hidden="true">
+                    <div class="mock-row mock-row-act mock-row-head">
+                      <span>Version</span><span>Status</span><span>Message</span><span>Changes</span><span class="num">Duration</span>
+                    </div>
+                    <div class="mock-row mock-row-act">
+                      <span class="mono">v41</span>
+                      <span><span class="mchip mchip-ok">succeeded</span></span>
+                      <span>Scale api service</span>
+                      <span><span class="mchip mchip-diff">+2</span></span>
+                      <span class="num">34s</span>
+                    </div>
+                    <div class="mock-row mock-row-act">
+                      <span class="mono">v40</span>
+                      <span><span class="mchip mchip-ok">succeeded</span></span>
+                      <span>Rotate db-password</span>
+                      <span><span class="mchip mchip-diff">~1</span></span>
+                      <span class="num">12s</span>
+                    </div>
+                    <div class="mock-row mock-row-act">
+                      <span class="mono">v39</span>
+                      <span><span class="mchip mchip-ok">succeeded</span></span>
+                      <span>Scheduled drift check</span>
+                      <span>no changes</span>
+                      <span class="num">8s</span>
+                    </div>
+                    <div class="mock-row mock-row-act">
+                      <span class="mono">v38</span>
+                      <span><span class="mchip mchip-ok">succeeded</span></span>
+                      <span>Add billing-events DLQ</span>
+                      <span><span class="mchip mchip-diff">+1</span></span>
+                      <span class="num">26s</span>
+                    </div>
+                    <div class="mock-row mock-row-act">
+                      <span class="mono">v37</span>
+                      <span><span class="mchip mchip-ok">succeeded</span></span>
+                      <span>Bump api image</span>
+                      <span><span class="mchip mchip-diff">~1</span></span>
+                      <span class="num">41s</span>
+                    </div>
+                    <div class="mock-row mock-row-act">
+                      <span class="mono">v36</span>
+                      <span><span class="mchip mchip-ok">succeeded</span></span>
+                      <span>Tighten security groups</span>
+                      <span><span class="mchip mchip-diff">~2</span></span>
+                      <span class="num">33s</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <figcaption>
+                <span class="shot-label">Update history</span>
+                Every version with its changes, duration, and result.
+              </figcaption>
+            </figure>
+          </div>
+        </div>
+      </section>
+
+      <!-- PRICING -->
+      <section class="pricing" id="pricing">
+        <div class="shell">
+          <p class="kicker">Pricing</p>
+          <h2>Free up to ten stacks. $600 a month after.</h2>
+          <p class="section-lead">
+            That is the whole price list. One commercial tier, no feature gates, and no meter
+            on users or resources in either edition.
+          </p>
+          <div class="price-tiers">
+            <div class="price-tier">
+              <span class="price-tier-name">Free edition</span>
+              <div class="price-figure">
+                <span class="price-amount">$0</span>
+                <span class="price-period">up to ten active stacks</span>
+              </div>
+              <ul class="price-points">
+                <li>The full product, not a trial or a feature cut</li>
+                <li>OIDC, organization roles, and per-stack grants included</li>
+                <li>Evaluate on one stack, grow to ten</li>
+              </ul>
             </div>
-            <div class="gap-card gap-card-us">
-              <h3>statedb</h3>
-              <p>
-                The backend and the console in one self-hosted service. Your database, your
-                network, your data — with the visibility of a managed product.
-              </p>
+            <div class="price-tier price-tier-commercial">
+              <span class="price-tier-name">Commercial</span>
+              <div class="price-figure">
+                <span class="price-amount">$600</span>
+                <span class="price-period">per month</span>
+              </div>
+              <ul class="price-points">
+                <li>The same product, past ten active stacks</li>
+                <li>No per-user or per-resource meter, at any scale</li>
+                <li>One tier — nothing to size, nothing to upgrade into</li>
+              </ul>
+            </div>
+          </div>
+          <div class="price-foot">
+            <p>
+              statedb is source-available under the Elastic License 2.0 and may not be offered
+              to third parties as a hosted service.
+            </p>
+            <div class="cta-row">
+              <a class="btn btn-outline" href="/docs/license/">License &amp; terms</a>
+              <a class="btn btn-outline" href={`${github}/blob/main/COMMERCIAL.md`}>Commercial licensing</a>
             </div>
           </div>
         </div>
       </section>
 
-      <section class="proof" id="proof">
+      <!-- COMPATIBILITY -->
+      <section class="proof" id="compatibility">
         <div class="shell">
-          <p class="eyebrow eyebrow-ink">How we prove compatibility</p>
-          <h2>Trust is a test suite, not a promise.</h2>
+          <p class="kicker">Compatibility</p>
+          <h2>The CLI is the contract</h2>
           <p class="section-lead">
-            A state backend earns trust through its failure modes, not its happy paths.
-            statedb is tested in four tiers against the real CLI — not against our idea of
-            the protocol.
+            A state backend cannot be mostly compatible. statedb tests against released Pulumi
+            CLI versions, not just an interpretation of the protocol. Four layers cover the
+            normal workflow and the failures most likely to damage state.
           </p>
+          <p class="proof-badge">Nightly matrix &middot; Pulumi CLI 3.242 &ndash; 3.253</p>
           <div class="tier-list">
             {tiers.map((tier) => (
               <div class="tier">
                 <span class="tier-label">{tier.label}</span>
+                <p class="tier-claim">{tier.claim}</p>
                 <p>{tier.body}</p>
               </div>
             ))}
           </div>
           <p class="section-foot">
-            The full scenario catalog and how to run these tiers yourself:
+            The scenario catalogue, and how to run these tiers yourself:
             <a href="/docs/compatibility/">compatibility docs</a>.
           </p>
         </div>
       </section>
 
+      <!-- TEST WALL -->
+      <section class="testwall" aria-label="Names from the compatibility test suite">
+        <div class="testwall-rows">
+          {wallRows.map((row) => (
+            <div class={`testwall-row${row.reverse ? " testwall-row-reverse" : ""}`}>
+              <div class="testwall-track" style={`--dur: ${row.dur}`}>
+                {[0, 1].map((copy) => (
+                  <div class="testwall-set" aria-hidden={copy === 1 ? "true" : undefined}>
+                    {row.chips.map((chip) => (
+                      <a
+                        class="testwall-chip"
+                        href={chip.href}
+                        tabindex={copy === 1 ? -1 : undefined}
+                      >
+                        {chip.label}
+                      </a>
+                    ))}
+                  </div>
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+        <div class="shell">
+          <p class="testwall-note">
+            Recorded CLI sessions, the classes that replay them, and the scenarios they
+            assert. Every chip links to its source in the
+            <a href={github}>public repository</a>.
+          </p>
+        </div>
+      </section>
+
+      <!-- ACCESS CONTROL -->
+      <section class="access">
+        <div class="shell">
+          <p class="kicker">Access control</p>
+          <h2>Your identities, your rules</h2>
+          <p class="section-lead">
+            Console users sign in through your OIDC provider. CLI users and automation receive
+            tokens. Cedar policies decide what each identity can do in each organization and
+            stack.
+          </p>
+          <div class="access-grid">
+            {access.map((item) => (
+              <div class="access-card">
+                <h3>{item.title}</h3>
+                <p>{item.body}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      <!-- OPERATIONS -->
+      <section class="ops">
+        <div class="shell">
+          <p class="kicker">Operations</p>
+          <h2>What self-hosting asks of you</h2>
+          <p class="section-lead">
+            Control comes with an operational job: run the service, back up PostgreSQL, and
+            connect your identity provider. Here is the whole footprint.
+          </p>
+          <dl class="ops-list">
+            {operating.map((item) => (
+              <div class="ops-item">
+                <dt>{item.q}</dt>
+                <dd>{item.a}</dd>
+              </div>
+            ))}
+          </dl>
+          <p class="section-foot">
+            Configuration, replicas, and upgrades in detail:
+            <a href="/docs/deployment/">deployment docs</a>.
+          </p>
+        </div>
+      </section>
+
+      <!-- EXPORT -->
       <section class="lockin">
         <div class="shell lockin-grid">
           <div>
-            <p class="eyebrow">No lock-in</p>
-            <h2>Leaving takes one command. That's the point.</h2>
+            <p class="kicker">Portability</p>
+            <h2>Your exit is a checkpoint file</h2>
             <p class="band-sub">
-              statedb stores state in the CLI's native checkpoint format — not a proprietary
-              schema you'd have to escape from. Export works from day one, so the cost of
-              leaving stays at one command and we have to keep earning the next
-              <code>pulumi up</code>.
+              statedb stores the CLI's own checkpoint format. Export a stack at any time and
+              import that file into another backend. Moving in and moving out use the same
+              commands.
             </p>
           </div>
           <div class="terminal terminal-tall" role="img" aria-label="Terminal: exporting state and moving to another backend">
             <span class="t-line"><span class="t-prompt">$</span> pulumi stack export --file prod.checkpoint.json</span>
-            <span class="t-line t-comment"># standard checkpoint JSON — yours to keep</span>
+            <span class="t-line t-comment"># standard checkpoint JSON</span>
             <span class="t-line"><span class="t-prompt">$</span> pulumi login s3://your-bucket</span>
             <span class="t-line t-comment"># any other backend</span>
             <span class="t-line"><span class="t-prompt">$</span> pulumi stack import --file prod.checkpoint.json</span>
-            <span class="t-line t-comment"># carry on</span>
           </div>
         </div>
       </section>
 
-      <section class="console">
+      <!-- SECURITY -->
+      <section class="security" id="security">
         <div class="shell">
-          <h2>A console for humans, next to the backend for machines.</h2>
+          <p class="kicker">Security</p>
+          <h2>A security model you can inspect</h2>
           <p class="section-lead">
-            One process serves both. Nothing extra to deploy, nothing extra to secure.
+            Infrastructure state deserves more than a list of security adjectives. The code,
+            policies, migrations, encryption design, and test harness are available for review.
           </p>
-          <ul class="feature-grid">
-            <li>
-              <h3>Current resources</h3>
-              <p>Every resource in a stack, parsed from the checkpoint — types, parents, providers.</p>
-            </li>
-            <li>
-              <h3>Update history &amp; diffs</h3>
-              <p>Who ran what, when, and what changed — browsable without touching a terminal.</p>
-            </li>
-            <li>
-              <h3>Stack outputs</h3>
-              <p>Output values at a glance, with secrets masked.</p>
-            </li>
-            <li>
-              <h3>Activity per stack</h3>
-              <p>Settings, tags, and the operations log — the paper trail your audits ask for.</p>
-            </li>
-          </ul>
+          <div class="security-grid">
+            {security.map((item) => (
+              <div class="security-card">
+                <h3>{item.title}</h3>
+                <p>{item.body}</p>
+              </div>
+            ))}
+          </div>
+          <p class="section-foot">
+            Reporting a vulnerability:
+            <a href={`${github}/blob/main/SECURITY.md`}>SECURITY.md</a>.
+          </p>
         </div>
       </section>
 
-      <section class="auth">
+      <!-- MIGRATION -->
+      <section class="adopt">
         <div class="shell">
-          <h2>Authentication that fits how teams actually run.</h2>
-          <div class="auth-grid">
-            <div class="auth-card">
-              <h3>Native CLI login</h3>
-              <p>
-                <code>pulumi login</code> opens your browser, you approve, the CLI gets a
-                token. <code>PULUMI_ACCESS_TOKEN</code> works for CI, same as you're used to.
-              </p>
-            </div>
-            <div class="auth-card">
-              <h3>Your identity provider</h3>
-              <p>
-                Console sign-in is OIDC. Point statedb at the IdP you already run — Okta,
-                Entra, Keycloak, anything that speaks the protocol.
-              </p>
-            </div>
-            <div class="auth-card">
-              <h3>Break-glass, done carefully</h3>
-              <p>
-                A loopback-only local login for when your IdP is down — enabled by an env
-                var, and it stands down automatically while OIDC is configured.
-              </p>
-            </div>
-            <div class="auth-card">
-              <h3>Service accounts</h3>
-              <p>
-                Long-lived tokens for CI pipelines, managed in the console instead of a
-                spreadsheet.
-              </p>
+          <p class="kicker">Migration</p>
+          <h2>Try one stack, not the whole estate</h2>
+          <p class="section-lead">
+            Migration uses the CLI's standard export and import commands. Start with one stack
+            while every other team stays on its current backend.
+          </p>
+          <div class="adopt-grid">
+            <ol class="adopt-steps">
+              <li>
+                <h3>Keep the existing backend running</h3>
+                <p>
+                  statedb does not modify it. Only the stack being evaluated needs the new
+                  backend URL.
+                </p>
+              </li>
+              <li>
+                <h3>Migrate one stack</h3>
+                <p>
+                  Export from the current backend and import into statedb. The same commands
+                  move it back.
+                </p>
+              </li>
+              <li>
+                <h3>Run it with one team</h3>
+                <p>
+                  Put the console, access rules, backups, and update path through a real
+                  production workflow. Other teams remain unaffected.
+                </p>
+              </li>
+              <li>
+                <h3>Expand when it fits</h3>
+                <p>
+                  The free edition supports ten active stacks, so the first evaluation does not
+                  require a commercial license.
+                </p>
+              </li>
+            </ol>
+            <div class="terminal terminal-tall" role="img" aria-label="Terminal: migrating a stack into statedb">
+              <span class="t-line t-comment"># on your current backend</span>
+              <span class="t-line"><span class="t-prompt">$</span> pulumi stack export --file prod.json</span>
+              <span class="t-line t-blank">&nbsp;</span>
+              <span class="t-line t-comment"># on statedb</span>
+              <span class="t-line"><span class="t-prompt">$</span> pulumi login https://statedb.acme.internal</span>
+              <span class="t-line"><span class="t-prompt">$</span> pulumi stack init acme/payments/prod</span>
+              <span class="t-line"><span class="t-prompt">$</span> pulumi stack import --file prod.json</span>
+              <span class="t-line t-out">Import successful.</span>
             </div>
           </div>
+          <p class="section-foot">
+            Step by step, in both directions:
+            <a href="/docs/migration/">migration docs</a>.
+          </p>
         </div>
       </section>
 
-      <section class="license">
-        <div class="shell license-inner">
-          <h2>Free to run. Honest about the rest.</h2>
+      <!-- QUESTIONS -->
+      <section class="faq">
+        <div class="shell">
+          <h2>Questions</h2>
+          <dl class="faq-list">
+            {faq.map((item) => (
+              <div class="faq-item">
+                <dt>{item.q}</dt>
+                <dd>{item.a}</dd>
+              </div>
+            ))}
+          </dl>
+        </div>
+      </section>
+
+      <!-- GETTING STARTED -->
+      <section class="close">
+        <div class="shell close-inner">
+          <h2>Start with one stack</h2>
           <p>
-            statedb is source-available under the Elastic License 2.0. Self-host it free for
-            up to <strong>ten active stacks per deployment</strong>; beyond that, a
-            commercial license funds the project. The one hard restriction: you can't resell
-            statedb as a managed service.
+            statedb is under active development and currently runs from source. Connect a test
+            PostgreSQL database, point the CLI at it, and put the compatibility claim through
+            your own workflow. The free edition covers up to ten active stacks.
           </p>
           <div class="cta-row">
-            <a class="btn btn-solid" href="/docs/license/">License &amp; pricing</a>
-            <a class="btn btn-outline" href={`${github}/blob/main/LICENSE`}>Read the full terms</a>
+            <a class="btn btn-solid" href="/docs/quickstart/">Quickstart</a>
+            <a class="btn btn-outline" href={`${github}/blob/main/COMMERCIAL.md`}>Commercial licensing</a>
           </div>
+          <p class="close-procurement">
+            For procurement: <a href="/docs/license/">license terms</a> ·
+            <a href={`${github}/blob/main/COMMERCIAL.md`}>commercial terms</a> ·
+            <a href={`${github}/blob/main/SECURITY.md`}>security policy</a> ·
+            <a href={github}>full source</a>
+          </p>
         </div>
       </section>
     </main>
@@ -318,7 +830,7 @@ const tiers = [
       <div class="shell footer-grid">
         <div class="footer-brand">
           <img src={logoDark.src} alt="statedb" width="130" height="37" />
-          <p class="footer-tag">Your state. Your database. Your&nbsp;network.</p>
+          <p class="footer-tag">Self-hosted state backend for the&nbsp;Pulumi&nbsp;CLI.</p>
         </div>
         <nav class="footer-col" aria-label="Product">
           <span class="footer-head">Product</span>
@@ -369,17 +881,13 @@ const tiers = [
       const stillMotion = matchMedia("(prefers-reduced-motion: reduce)");
 
       if (term && !stillMotion.matches) {
-        const TERMINAL_CYCLE_MS = 9900;
+        const TERMINAL_CYCLE_MS = 10008;
         let timer: number | undefined;
 
         term.dataset.loop = "on";
 
         const replay = () => {
           term.getAnimations({ subtree: true }).forEach((a) => {
-            /* The hero's entrance animation sits on the terminal element
-               itself. Rewinding that would fade the whole window out and back
-               in every cycle; only the session inside it replays. Its own
-               pseudo-elements (the sheen) are still part of the loop. */
             const effect = a.effect;
             if (
               effect instanceof KeyframeEffect &&
@@ -411,7 +919,7 @@ const tiers = [
 
 <style>
   /* Page roles, drawn from the shared ocean ramp in styles/ocean.css. The
-     navy bands (nav, hero, lock-in, footer) are the water; the paper sections
+     navy bands (nav, hero, export, footer) are the water; the paper sections
      between them are the surface you read from. */
   :root {
     --ink: var(--navy);
@@ -421,14 +929,10 @@ const tiers = [
     --blue-deep: #1b57cf;
     --mist-dark: rgba(219, 228, 242, 0.22);
     --cream: var(--sand);
-    --pass: var(--kelp);
-    --pass-bright: var(--kelp-lit);
     --text-on-ink: #e6eff8;
     --muted-on-ink: var(--haze-lit);
     --muted: var(--haze);
     --rule: var(--edge);
-    /* Focus glows bioluminescent over water, lagoon over paper — the same
-       signal the console uses. */
     --focus: var(--lagoon);
     --display: "Bricolage Grotesque Variable", "Avenir Next", "Segoe UI", sans-serif;
     --mono: "JetBrains Mono Variable", ui-monospace, "SF Mono", Menlo, monospace;
@@ -437,6 +941,7 @@ const tiers = [
 
   .nav,
   .hero,
+  .console,
   .lockin,
   .footer {
     --focus: var(--biolume);
@@ -472,15 +977,15 @@ const tiers = [
   h2,
   h3 {
     font-family: var(--display);
-    line-height: 1.12;
+    line-height: 1.08;
     margin: 0 0 1rem;
-    letter-spacing: -0.01em;
+    letter-spacing: -0.015em;
   }
 
   h2 {
-    font-size: clamp(1.75rem, 3.2vw, 2.4rem);
+    font-size: clamp(1.9rem, 3.4vw, 3rem);
     font-weight: 600;
-    max-width: 34ch;
+    max-width: 30ch;
   }
 
   h3 {
@@ -508,33 +1013,11 @@ const tiers = [
     border-radius: 2px;
   }
 
-  .eyebrow {
-    font-family: var(--mono);
-    font-size: 0.75rem;
-    font-weight: 600;
-    letter-spacing: 0.16em;
-    text-transform: uppercase;
-    color: var(--biolume);
-    margin-bottom: 1.25rem;
-  }
-
-  .eyebrow-ink {
-    color: var(--blue);
-  }
-
   /* ---------- the water column ---------- */
 
-  /* The navy bands descend as you scroll: the nav and hero are the surface,
-     the lock-in band is mid water, the footer is the abyss. The texture over
-     them is bathymetric — contour lines from public/contours.svg, generated
-     by tools/contours.gen.ts — under a fine grain that also keeps the large
-     flat navy areas from banding on 8-bit displays.
-
-     Contours are left off the nav: it is only ~80px tall and sits directly on
-     the hero, so its tile would restart mid-pattern and leave a seam. Grain is
-     noise, so it tiles across that boundary invisibly. */
   .nav,
   .hero,
+  .console,
   .lockin,
   .footer {
     position: relative;
@@ -543,12 +1026,14 @@ const tiers = [
 
   .nav > *,
   .hero > *,
+  .console > *,
   .lockin > *,
   .footer > * {
     position: relative;
   }
 
   .hero::before,
+  .console::before,
   .lockin::before,
   .footer::before {
     content: "";
@@ -562,6 +1047,7 @@ const tiers = [
 
   .nav::after,
   .hero::after,
+  .console::after,
   .lockin::after,
   .footer::after {
     content: "";
@@ -574,7 +1060,7 @@ const tiers = [
     pointer-events: none;
   }
 
-  /* ---------- nav + hero (surface) ---------- */
+  /* ---------- nav + hero ---------- */
 
   .nav {
     background: var(--ink);
@@ -634,17 +1120,39 @@ const tiers = [
     min-width: 0;
   }
 
+  /* No eyebrow: the logo lockup already carries the category line. */
   .hero h1 {
     color: #ffffff;
-    font-size: clamp(2.2rem, 4.8vw, 3.6rem);
+    font-size: clamp(2.2rem, 4.6vw, 3.8rem);
     font-weight: 650;
-    max-width: 22ch;
+    letter-spacing: -0.02em;
+    max-width: 24ch;
+  }
+
+  .hero h1 span {
+    display: block;
+    color: var(--tide-lit);
   }
 
   .hero-sub {
     color: var(--muted-on-ink);
-    max-width: 52ch;
+    max-width: 54ch;
+  }
+
+  .hero-sub:last-of-type {
     margin-bottom: 1.75rem;
+  }
+
+  .hero-price {
+    margin: 1.25rem 0 0;
+    font-size: 0.92rem;
+    color: var(--muted-on-ink);
+    max-width: 46ch;
+  }
+
+  .hero-price strong {
+    color: #ffffff;
+    font-weight: 600;
   }
 
   .terminal {
@@ -729,7 +1237,7 @@ const tiers = [
   .terminal-caption {
     font-size: 0.85rem;
     color: var(--muted-on-ink);
-    margin: 0.6rem 0 1.75rem;
+    margin: 0.6rem 0 1.25rem;
   }
 
   .cta-row {
@@ -762,15 +1270,6 @@ const tiers = [
     background: var(--blue-deep);
   }
 
-  .btn-ghost {
-    color: var(--text-on-ink);
-    border: 1px solid var(--mist-dark);
-  }
-
-  .btn-ghost:hover {
-    border-color: var(--muted-on-ink);
-  }
-
   .btn-outline {
     color: var(--ink);
     border: 1px solid var(--rule);
@@ -780,8 +1279,6 @@ const tiers = [
   /* ---------- deploy terminal (signature) ---------- */
 
   .deploy-terminal {
-    /* The screen is sized in whole text rows so the scroll distance is exact:
-       the session is --total rows tall, --visible of them fit on screen. */
     --rowfs: clamp(0.7rem, 0.92vw, 0.85rem);
     --row: calc(var(--rowfs) * 1.62);
     --total: 22;
@@ -858,8 +1355,6 @@ const tiers = [
       linear-gradient(180deg, rgba(10, 24, 41, 0.96), rgba(8, 22, 37, 1));
   }
 
-  /* Both fades are confined to the padding gutters: lines dissolve as they
-     scroll off rather than being cut hard, but no on-screen row is dimmed. */
   .terminal-screen::after {
     content: "";
     position: absolute;
@@ -889,8 +1384,6 @@ const tiers = [
     will-change: transform;
   }
 
-  /* Wipes the screen at the end of a cycle: the session is cut instantly, and
-     this catches the light for a moment the way a screen does when it clears. */
   .terminal-flash {
     position: absolute;
     inset: 0;
@@ -905,7 +1398,6 @@ const tiers = [
     );
   }
 
-  /* A slow sheen across the glass, the way light crosses a real screen. */
   .deploy-terminal::after {
     content: "";
     position: absolute;
@@ -945,7 +1437,6 @@ const tiers = [
     color: #ffffff;
   }
 
-  /* Typed commands: the text is revealed left to right behind a block caret. */
   .cmd {
     display: inline-block;
     max-width: 100%;
@@ -955,7 +1446,6 @@ const tiers = [
     border-right: 0.5ch solid transparent;
   }
 
-  /* Reserves its slot for the whole run so the heading never reflows. */
   .spinner {
     display: inline-block;
     width: 2ch;
@@ -1012,8 +1502,6 @@ const tiers = [
   }
 
   .t-link {
-    /* Capped so the URL always wraps to exactly the two rows reserved for it,
-       at every width — the row budget above depends on it. */
     --rows: 2;
     max-width: 60ch;
     color: var(--biolume);
@@ -1033,30 +1521,18 @@ const tiers = [
   }
 
   @media (prefers-reduced-motion: no-preference) {
-    /* One master timeline. Every delay below is absolute from cycle start, so
-       the loop is just "rewind every animation to 0" — see the script. Cycle:
-       session runs to ~5.65s, the finished frame holds, then it clears at 9.2s.
-       Keep TERMINAL_CYCLE_MS in the script in step with the tail end here. */
-
-    /* Once the session is taller than the screen, the whole scrollback slides
-       up by the overflow — the same lines, further along, not a second card. */
     .terminal-scrollback {
-      animation: terminal-scroll 1100ms cubic-bezier(0.33, 0.1, 0.2, 1) 4260ms both;
+      animation: terminal-scroll 1100ms cubic-bezier(0.33, 0.1, 0.2, 1) 4368ms both;
     }
 
-    /* The closing clear only exists if something is going to replay it, so a
-       no-JS page ends on the finished frame instead of an empty screen. The
-       session is cut in one frame — a terminal clears, it doesn't fade out. */
     .deploy-terminal[data-loop] .terminal-scrollback {
       animation:
-        terminal-scroll 1100ms cubic-bezier(0.33, 0.1, 0.2, 1) 4260ms both,
-        terminal-clear 1ms linear 9700ms forwards;
+        terminal-scroll 1100ms cubic-bezier(0.33, 0.1, 0.2, 1) 4368ms both,
+        terminal-clear 1ms linear 9808ms forwards;
     }
 
-    /* Runs right up to the cycle boundary: it is still fading as the next
-       session's first prompt lands, so the screen is never empty and still. */
     .deploy-terminal[data-loop] .terminal-flash {
-      animation: screen-flash 260ms ease-out 9640ms both;
+      animation: screen-flash 260ms ease-out 9748ms both;
     }
 
     .terminal-scrollback .term-row {
@@ -1068,8 +1544,6 @@ const tiers = [
       animation-duration: 90ms;
     }
 
-    /* Type the line out, blinking the caret until --hold expires. caret-off is
-       last and fills forwards, so it wins once the line is finished. */
     .term-command .cmd {
       animation:
         terminal-type calc(var(--ch) * 9ms) steps(22, end) var(--d) both,
@@ -1078,11 +1552,11 @@ const tiers = [
     }
 
     .spinner::before {
-      animation: spinner-frames 640ms steps(1, end) 3290ms infinite;
+      animation: spinner-frames 640ms steps(1, end) 3398ms infinite;
     }
 
     .spinner {
-      animation: spinner-done 140ms ease-out 3830ms forwards;
+      animation: spinner-done 140ms ease-out 3938ms forwards;
     }
 
     .t-resource span:first-child {
@@ -1096,33 +1570,23 @@ const tiers = [
     }
 
     .terminal-cursor {
-      animation: cursor-blink 1s steps(2, jump-none) 5360ms infinite;
+      animation: cursor-blink 1s steps(2, jump-none) 5468ms infinite;
     }
 
-    /* Crosses once per cycle, timed to sweep over the finished frame. */
     .deploy-terminal::after {
-      animation: glass-sheen 2600ms cubic-bezier(0.4, 0, 0.5, 1) 5610ms both;
+      animation: glass-sheen 2600ms cubic-bezier(0.4, 0, 0.5, 1) 5718ms both;
     }
 
     @keyframes glass-sheen {
-      from {
-        background-position: 120% 0;
-      }
-      to {
-        background-position: -60% 0;
-      }
+      from { background-position: 120% 0; }
+      to { background-position: -60% 0; }
     }
 
     @keyframes terminal-scroll {
-      from {
-        transform: translateY(0);
-      }
-      to {
-        transform: translateY(calc((var(--visible) - var(--total)) * var(--row)));
-      }
+      from { transform: translateY(0); }
+      to { transform: translateY(calc((var(--visible) - var(--total)) * var(--row))); }
     }
 
-    /* Holds the scrolled position so the lines vanish in place, not upward. */
     @keyframes terminal-clear {
       to {
         opacity: 0;
@@ -1131,51 +1595,28 @@ const tiers = [
     }
 
     @keyframes screen-flash {
-      0% {
-        opacity: 0;
-      }
-      23% {
-        opacity: 1;
-      }
-      100% {
-        opacity: 0;
-      }
+      0% { opacity: 0; }
+      23% { opacity: 1; }
+      100% { opacity: 0; }
     }
 
     @keyframes terminal-row-in {
-      from {
-        opacity: 0;
-        transform: translateY(0.3rem);
-      }
-      to {
-        opacity: 1;
-        transform: translateY(0);
-      }
+      from { opacity: 0; transform: translateY(0.3rem); }
+      to { opacity: 1; transform: translateY(0); }
     }
 
     @keyframes terminal-type {
-      from {
-        width: 0;
-      }
-      to {
-        /* text + the 0.5ch caret border, plus slack so nothing clips */
-        width: calc(var(--ch) * 1ch + 1.1ch);
-      }
+      from { width: 0; }
+      to { width: calc(var(--ch) * 1ch + 1.1ch); }
     }
 
     @keyframes caret-blink {
-      from {
-        border-right-color: var(--biolume);
-      }
-      to {
-        border-right-color: rgba(63, 211, 232, 0.12);
-      }
+      from { border-right-color: var(--biolume); }
+      to { border-right-color: rgba(63, 211, 232, 0.12); }
     }
 
     @keyframes caret-off {
-      to {
-        border-right-color: transparent;
-      }
+      to { border-right-color: transparent; }
     }
 
     @keyframes spinner-frames {
@@ -1190,151 +1631,26 @@ const tiers = [
     }
 
     @keyframes spinner-done {
-      to {
-        opacity: 0;
-      }
+      to { opacity: 0; }
     }
 
-    /* Each resource's + flares as the line lands, then settles. */
     @keyframes marker-land {
-      0% {
-        color: #ffffff;
-        text-shadow: 0 0 12px rgba(126, 224, 160, 0.55);
-      }
-      100% {
-        color: var(--kelp-lit);
-        text-shadow: 0 0 0 rgba(126, 224, 160, 0);
-      }
+      0% { color: #ffffff; text-shadow: 0 0 12px rgba(126, 224, 160, 0.55); }
+      100% { color: var(--kelp-lit); text-shadow: 0 0 0 rgba(126, 224, 160, 0); }
     }
 
     @keyframes cursor-blink {
-      0%, 48% {
-        opacity: 1;
-      }
-      49%, 100% {
-        opacity: 0.18;
-      }
+      0%, 48% { opacity: 1; }
+      49%, 100% { opacity: 0.18; }
     }
 
     @keyframes link-glow {
-      0% {
-        text-shadow: 0 0 0 rgba(63, 211, 232, 0);
-      }
-      40% {
-        text-shadow: 0 0 18px rgba(63, 211, 232, 0.42);
-      }
-      100% {
-        text-shadow: 0 0 0 rgba(63, 211, 232, 0);
-      }
-    }
-
-  }
-
-  @media (max-width: 36rem) {
-    .shell {
-      padding-inline: 1.1rem;
-    }
-
-    .nav-row {
-      align-items: flex-start;
-      flex-wrap: wrap;
-      gap: 0.9rem;
-    }
-
-    .nav-links {
-      width: 100%;
-      flex-wrap: wrap;
-      gap: 0.5rem 1.15rem;
-      justify-content: flex-start;
-    }
-
-    .nav-links a {
-      font-size: 0.84rem;
-    }
-
-    .hero {
-      padding-block: 3.25rem 4rem;
-    }
-
-    .hero h1 {
-      max-width: 100%;
-      font-size: clamp(1.85rem, 8.4vw, 2.05rem);
-    }
-
-    .hero-sub {
-      max-width: 32ch;
-      font-size: 1rem;
-    }
-
-    .term {
-      width: 100%;
-      max-width: 100%;
-      overflow: hidden;
-    }
-
-    .term-tabs {
-      max-width: 100%;
-    }
-
-    .terminal {
-      width: 100%;
-      max-width: 100%;
-      padding: 0.9rem 1rem;
-    }
-
-    .t-line {
-      display: block;
-      overflow: hidden;
-      text-overflow: ellipsis;
-    }
-
-    .btn {
-      flex: 1 1 100%;
-      padding-inline: 1.15rem;
-      text-align: center;
-    }
-
-    .deploy-terminal {
-      --rowfs: clamp(0.5rem, 2.42vw, 0.62rem);
-      --visible: 14;
-      --pad-block: 0.7rem;
-      --pad-inline: 0.72rem;
-      grid-template-rows: 2.45rem calc(var(--visible) * var(--row) + var(--pad-block) * 2);
-      width: 100%;
-    }
-
-    .terminal-chrome {
-      gap: 0.38rem;
-      padding-inline: 0.78rem;
-    }
-
-    .terminal-chrome span {
-      width: 0.58rem;
-      height: 0.58rem;
-    }
-
-    .terminal-chrome strong {
-      max-width: 52%;
-      font-size: 0.62rem;
-    }
-
-    .terminal-screen {
-      padding: 0;
-    }
-
-    .t-table {
-      grid-template-columns: minmax(0, 1.48fr) minmax(0, 0.8fr) 2.85rem;
-      gap: 0.34rem;
-    }
-
-    .t-summary {
-      padding-left: 0.9rem;
+      0% { text-shadow: 0 0 0 rgba(63, 211, 232, 0); }
+      40% { text-shadow: 0 0 18px rgba(63, 211, 232, 0.42); }
+      100% { text-shadow: 0 0 0 rgba(63, 211, 232, 0); }
     }
   }
 
-  /* Without motion the session is shown whole and finished: no scroll, no
-     typing, no loop. The spinner keeps its slot but hides — a frozen spinner
-     would imply work still in progress. */
   @media (prefers-reduced-motion: reduce) {
     .deploy-terminal {
       --visible: var(--total);
@@ -1349,76 +1665,223 @@ const tiers = [
     }
   }
 
-  /* ---------- paper sections ---------- */
+  /* ---------- section rhythm ---------- */
 
-  .gap,
+  .scope,
+  .pricing,
   .proof,
   .console,
-  .auth,
-  .license {
-    padding-block: 5rem;
+  .access,
+  .ops,
+  .security,
+  .adopt,
+  .faq,
+  .close {
+    padding-block: clamp(5rem, 7vw, 6.5rem);
   }
 
-  .gap-grid,
-  .auth-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr));
-    gap: 1.25rem;
-    margin-top: 2.25rem;
-  }
-
-  .gap-card,
-  .auth-card {
-    background: var(--card);
-    border: 1px solid var(--rule);
-    border-radius: 10px;
-    padding: 1.5rem 1.5rem 0.75rem;
-  }
-
-  .gap-card p,
-  .auth-card p {
-    color: var(--muted);
-    font-size: 0.95rem;
-  }
-
-  .gap-card-us {
-    border-color: var(--blue);
-    border-width: 1.5px;
-  }
-
-  .gap-card-us h3 {
-    color: var(--blue);
+  .kicker {
     font-family: var(--mono);
+    font-size: 0.72rem;
     font-weight: 700;
-  }
-
-  .gap h2 em {
-    font-style: italic;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
     color: var(--blue);
+    margin: 0 0 0.9rem;
   }
 
-  .proof {
-    border-top: 1px solid var(--rule);
-    border-bottom: 1px solid var(--rule);
-    background: var(--card);
+  .console .kicker,
+  .lockin .kicker {
+    color: var(--tide-lit);
   }
 
   .section-lead {
     color: var(--muted);
+    max-width: 62ch;
+  }
+
+  .section-foot {
+    margin-top: 2rem;
+    margin-bottom: 0;
+    font-size: 0.95rem;
+    color: var(--muted);
+  }
+
+  .band-sub {
+    color: var(--muted-on-ink);
+    max-width: 52ch;
+  }
+
+  /* ---------- scope ---------- */
+
+  .scope-list {
+    list-style: none;
+    margin: 1.5rem 0 0;
+    padding: 0;
+    max-width: 46rem;
+  }
+
+  .scope-list li {
+    font-family: var(--display);
+    font-size: 1.05rem;
+    padding-block: 1rem;
+    border-top: 1px solid var(--rule);
+    display: flex;
+    align-items: baseline;
+    gap: 0.9rem;
+  }
+
+  .scope-list li::before {
+    font-family: var(--mono);
+    font-size: 0.9rem;
+    flex-shrink: 0;
+  }
+
+  .scope-no {
+    color: var(--muted);
+  }
+
+  .scope-no::before {
+    content: "×";
+    color: var(--haze);
+  }
+
+  .scope-yes {
+    color: var(--ink);
+    font-weight: 600;
+    border-top-color: var(--blue) !important;
+    border-bottom: 1px solid var(--blue);
+  }
+
+  .scope-yes::before {
+    content: "✓";
+    color: var(--blue);
+  }
+
+  /* ---------- pricing ---------- */
+
+  .price-tiers {
+    margin-top: 2.25rem;
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 1.5rem;
+  }
+
+  .price-tier {
+    display: flex;
+    flex-direction: column;
+    gap: 1.4rem;
+    border: 1px solid var(--rule);
+    border-radius: 12px;
+    padding: 2rem 2.25rem 2.25rem;
+    background: var(--card);
+  }
+
+  .price-tier-commercial {
+    border: 1.5px solid var(--blue);
+    background: linear-gradient(160deg, rgba(37, 99, 235, 0.06), transparent 60%), var(--card);
+  }
+
+  .price-tier-name {
+    font-family: var(--mono);
+    font-size: 0.75rem;
+    font-weight: 700;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: var(--muted);
+  }
+
+  .price-tier-commercial .price-tier-name {
+    color: var(--blue);
+  }
+
+  .price-figure {
+    display: flex;
+    flex-direction: column;
+    gap: 0.35rem;
+  }
+
+  .price-amount {
+    font-family: var(--display);
+    font-size: clamp(2.6rem, 5vw, 3.6rem);
+    font-weight: 700;
+    line-height: 1;
+    letter-spacing: -0.02em;
+    color: var(--ink);
+  }
+
+  .price-period {
+    font-family: var(--mono);
+    font-size: 0.8rem;
+    letter-spacing: 0.04em;
+    color: var(--muted);
+  }
+
+  .price-points {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 0.65rem;
+  }
+
+  .price-points li {
+    position: relative;
+    padding-left: 1.6rem;
+    color: var(--muted);
+    font-size: 0.95rem;
+    line-height: 1.5;
+  }
+
+  .price-points li::before {
+    content: "✓";
+    position: absolute;
+    left: 0;
+    font-family: var(--mono);
+    font-size: 0.9rem;
+    color: var(--blue);
+  }
+
+  .price-foot {
+    margin-top: 1.75rem;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 1rem 2rem;
+  }
+
+  .price-foot p {
+    color: var(--muted);
+    font-size: 0.95rem;
     max-width: 58ch;
+    margin: 0;
+  }
+
+  /* ---------- compatibility ---------- */
+
+  .proof-badge {
+    display: inline-block;
+    font-family: var(--mono);
+    font-size: 0.75rem;
+    font-weight: 600;
+    letter-spacing: 0.05em;
+    color: var(--ink);
+    border: 1px solid var(--rule);
+    border-radius: 999px;
+    padding: 0.4em 1.1em;
+    margin: 0.25rem 0 0;
+    background: var(--card);
   }
 
   .tier-list {
-    margin-top: 2.5rem;
-    display: grid;
-    gap: 0;
+    margin-top: 2.25rem;
+    max-width: 46rem;
   }
 
   .tier {
-    display: grid;
-    grid-template-columns: 15rem minmax(0, 1fr);
-    gap: 2rem;
-    padding-block: 1.5rem;
+    padding-block: 1.3rem;
     border-top: 1px solid var(--rule);
   }
 
@@ -1427,27 +1890,567 @@ const tiers = [
   }
 
   .tier-label {
+    display: block;
     font-family: var(--mono);
-    font-size: 0.78rem;
+    font-size: 0.72rem;
     font-weight: 700;
     letter-spacing: 0.14em;
-    color: var(--ink);
-    padding-top: 0.2rem;
+    color: var(--muted);
+    margin-bottom: 0.4rem;
   }
 
-  .tier p {
+  .tier-claim {
+    font-family: var(--display);
+    font-weight: 600;
+    font-size: 1.08rem;
+    margin: 0 0 0.35rem;
+    color: var(--ink);
+  }
+
+  .tier p:not(.tier-claim) {
     margin: 0;
     color: var(--muted);
+    font-size: 0.95rem;
+    max-width: 56ch;
+  }
+
+  /* ---------- test wall ---------- */
+
+  .testwall {
+    --focus: var(--biolume);
+    background: var(--ink-deep);
+    padding-block: 2.75rem 2.25rem;
+    overflow: hidden;
+  }
+
+  .testwall-rows {
+    display: grid;
+    gap: 0.85rem;
+    mask-image: linear-gradient(90deg, transparent, #000 12%, #000 88%, transparent);
+    -webkit-mask-image: linear-gradient(90deg, transparent, #000 12%, #000 88%, transparent);
+  }
+
+  .testwall-row {
+    /* clip, not hidden: focus must never scroll the row and desync the loop */
+    overflow: clip;
+  }
+
+  .testwall-track {
+    display: flex;
+    width: max-content;
+  }
+
+  .testwall-set {
+    display: flex;
+    gap: 0.7rem;
+    padding-right: 0.7rem;
+  }
+
+  .testwall-chip {
+    font-family: var(--mono);
+    font-size: 0.78rem;
+    line-height: 1.4;
+    white-space: nowrap;
+    text-decoration: none;
+    color: var(--haze-lit);
+    border: 1px solid rgba(219, 228, 242, 0.13);
+    border-radius: 999px;
+    padding: 0.38em 1em;
+    background: rgba(23, 48, 74, 0.3);
+    transition: color 120ms ease, border-color 120ms ease, background-color 120ms ease;
+  }
+
+  .testwall-chip:hover,
+  .testwall-chip:focus-visible {
+    color: #ffffff;
+    border-color: var(--tide-lit);
+    background: rgba(37, 99, 235, 0.22);
+  }
+
+  .testwall-row:nth-child(2) .testwall-chip {
+    color: var(--text-on-ink);
+  }
+
+  .testwall-note {
+    margin: 1.75rem 0 0;
+    font-size: 0.88rem;
+    color: var(--muted-on-ink);
     max-width: 62ch;
   }
 
-  .section-foot {
-    margin-top: 2rem;
-    font-size: 0.95rem;
-    color: var(--muted);
+  .testwall-note a {
+    color: var(--tide-lit);
   }
 
-  /* ---------- lock-in band (mid water) ---------- */
+  @media (prefers-reduced-motion: no-preference) {
+    .testwall-track {
+      animation: wall-scroll var(--dur, 100s) linear infinite;
+    }
+
+    .testwall-row-reverse .testwall-track {
+      animation-direction: reverse;
+    }
+
+    /* Links need to hold still while being aimed at or tabbed through. */
+    .testwall-row:hover .testwall-track,
+    .testwall-row:focus-within .testwall-track {
+      animation-play-state: paused;
+    }
+
+    @keyframes wall-scroll {
+      to {
+        transform: translateX(-50%);
+      }
+    }
+  }
+
+  /* ---------- console ---------- */
+
+  .console {
+    background: var(--ink-deep);
+    color: var(--text-on-ink);
+  }
+
+  .console h2 {
+    color: #ffffff;
+  }
+
+  .console .section-lead {
+    color: var(--muted-on-ink);
+  }
+
+  .shot {
+    margin: 0;
+    min-width: 0;
+  }
+
+  .shot-main {
+    margin-top: 2.75rem;
+  }
+
+  .shot-frame {
+    border: 1px solid var(--mist-dark);
+    border-radius: 10px;
+    overflow: hidden;
+    background: var(--abyss);
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, 0.06),
+      0 1px 2px rgba(9, 18, 36, 0.35),
+      0 22px 60px rgba(9, 18, 36, 0.5);
+  }
+
+  .shot-chrome {
+    display: flex;
+    align-items: center;
+    gap: 0.48rem;
+    height: 2.5rem;
+    padding: 0 1rem;
+    border-bottom: 1px solid rgba(219, 228, 242, 0.16);
+    background:
+      linear-gradient(180deg, rgba(255, 255, 255, 0.08), rgba(255, 255, 255, 0.02)),
+      rgba(12, 29, 49, 0.92);
+  }
+
+  .shot-chrome span {
+    width: 0.62rem;
+    height: 0.62rem;
+    border-radius: 50%;
+    background: var(--coral-lit);
+    box-shadow:
+      inset 0 0 0 1px rgba(8, 22, 37, 0.24),
+      0 0 0 1px rgba(255, 255, 255, 0.06);
+  }
+
+  .shot-chrome span:nth-child(2) {
+    background: var(--gold-lit);
+  }
+
+  .shot-chrome span:nth-child(3) {
+    background: var(--kelp-lit);
+  }
+
+  .shot-chrome strong {
+    margin-inline: auto;
+    color: var(--muted-on-ink);
+    font-family: var(--mono);
+    font-size: 0.72rem;
+    font-weight: 500;
+    letter-spacing: 0.02em;
+  }
+
+  .shot figcaption {
+    margin-top: 0.85rem;
+    font-size: 0.92rem;
+    line-height: 1.55;
+    color: var(--muted-on-ink);
+    max-width: 72ch;
+  }
+
+  .shot-label {
+    font-family: var(--mono);
+    font-size: 0.72rem;
+    font-weight: 700;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--tide-lit);
+    margin-right: 0.65rem;
+  }
+
+  .console-details {
+    margin-top: 2.25rem;
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 1.75rem;
+  }
+
+  .console-details .shot {
+    display: flex;
+    flex-direction: column;
+  }
+
+  .console-details .shot-frame {
+    flex: 1;
+  }
+
+  /* Hand-drawn console mocks. Everything inside a .mock is sized in em off
+     one clamp so the whole drawing scales with the viewport, like the hero
+     terminal. */
+  .mock {
+    font-size: clamp(0.55rem, 0.72vw, 0.82rem);
+    line-height: 1.45;
+    color: var(--haze-lit);
+  }
+
+  .mock-stacks {
+    display: grid;
+    grid-template-columns: 11.5em minmax(0, 1fr);
+  }
+
+  .mock-side {
+    display: flex;
+    flex-direction: column;
+    gap: 0.3em;
+    padding: 1.1em 0.9em;
+    border-right: 1px solid rgba(219, 228, 242, 0.1);
+    background: rgba(12, 29, 49, 0.55);
+  }
+
+  .mock-logo {
+    font-family: var(--display);
+    font-weight: 700;
+    font-size: 1.05em;
+    color: #ffffff;
+    padding: 0 0.7em;
+    margin-bottom: 0.9em;
+  }
+
+  .mock-nav {
+    font-size: 0.92em;
+    padding: 0.42em 0.78em;
+    border-radius: 6px;
+  }
+
+  .mock-nav.is-active {
+    background: rgba(37, 99, 235, 0.24);
+    color: #ffffff;
+  }
+
+  .mock-nav-label {
+    margin-top: 1em;
+    padding: 0 0.9em;
+    font-family: var(--mono);
+    font-size: 0.62em;
+    font-weight: 600;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: rgba(147, 170, 198, 0.6);
+  }
+
+  .mock-main {
+    min-width: 0;
+    padding: 1.2em 1.4em 1.4em;
+  }
+
+  .mock-head {
+    display: flex;
+    align-items: baseline;
+    gap: 1em;
+  }
+
+  .mock-title {
+    font-family: var(--display);
+    font-weight: 650;
+    font-size: 1.5em;
+    color: #ffffff;
+  }
+
+  .mock-sub {
+    font-size: 0.9em;
+  }
+
+  .mock-stats {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 0.9em;
+    margin: 1em 0 1.1em;
+  }
+
+  .mock-stat {
+    display: flex;
+    flex-direction: column;
+    gap: 0.1em;
+    padding: 0.7em 1em;
+    border: 1px solid rgba(219, 228, 242, 0.1);
+    border-radius: 8px;
+    background: rgba(23, 48, 74, 0.35);
+  }
+
+  .mock-stat span {
+    font-size: 0.78em;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .mock-stat strong {
+    font-family: var(--mono);
+    font-size: 1.35em;
+    font-weight: 700;
+    color: #ffffff;
+  }
+
+  .mock-table {
+    border: 1px solid rgba(219, 228, 242, 0.1);
+    border-radius: 8px;
+    overflow: hidden;
+  }
+
+  .mock-panel .mock-table {
+    border: 0;
+    border-radius: 0;
+  }
+
+  .mock-row {
+    display: grid;
+    grid-template-columns: minmax(0, 1.3fr) minmax(0, 1.7fr) 6em 5.6em;
+    gap: 1em;
+    align-items: center;
+    padding: 0.52em 1.1em;
+    border-top: 1px solid rgba(219, 228, 242, 0.07);
+  }
+
+  .mock-row:first-child {
+    border-top: 0;
+  }
+
+  .mock-row > span {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .mock-row-head {
+    background: rgba(12, 29, 49, 0.75);
+  }
+
+  .mock-row-head > span {
+    font-family: var(--mono);
+    font-size: 0.68em;
+    font-weight: 600;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: rgba(147, 170, 198, 0.75);
+  }
+
+  .mock-row-project {
+    background: rgba(23, 48, 74, 0.3);
+  }
+
+  .mock-row-project > span:first-child {
+    color: #ffffff;
+    font-weight: 600;
+  }
+
+  .mock-row-project > span:not(:first-child) {
+    font-size: 0.82em;
+  }
+
+  .mock-row .num {
+    font-family: var(--mono);
+    text-align: right;
+  }
+
+  .mock-row .mono {
+    font-family: var(--mono);
+    font-size: 0.88em;
+  }
+
+  .mchip {
+    display: inline-block;
+    font-family: var(--mono);
+    font-size: 0.66em;
+    font-weight: 600;
+    line-height: 1.5;
+    padding: 0.18em 0.85em;
+    border-radius: 999px;
+    vertical-align: 0.14em;
+  }
+
+  .mchip-ok {
+    color: var(--kelp-lit);
+    background: rgba(52, 217, 162, 0.12);
+  }
+
+  .mchip-idle {
+    color: var(--haze-lit);
+    background: rgba(147, 170, 198, 0.14);
+  }
+
+  .mchip-run {
+    color: var(--gold-lit);
+    background: rgba(242, 180, 87, 0.14);
+  }
+
+  .mchip-diff {
+    color: var(--biolume);
+    background: rgba(63, 211, 232, 0.1);
+  }
+
+  /* detail panels */
+
+  .mock-panel-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1em;
+    padding: 0.75em 1.1em;
+    border-bottom: 1px solid rgba(219, 228, 242, 0.1);
+    background: rgba(12, 29, 49, 0.75);
+  }
+
+  .mock-crumb {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-weight: 600;
+    color: #ffffff;
+  }
+
+  .mock-tabs,
+  .mock-toggle {
+    display: flex;
+    gap: 0.2em;
+    flex-shrink: 0;
+    font-size: 0.85em;
+  }
+
+  .mock-tabs span,
+  .mock-toggle span {
+    padding: 0.3em 0.85em;
+    border-radius: 6px;
+  }
+
+  .mock-tabs .is-active,
+  .mock-toggle .is-active {
+    background: rgba(37, 99, 235, 0.24);
+    color: #ffffff;
+  }
+
+  .mock-toolbar {
+    display: flex;
+    align-items: center;
+    gap: 0.6em;
+    padding: 0.7em 1.1em;
+  }
+
+  .mock-toolbar .mock-toggle {
+    margin-left: auto;
+  }
+
+  .mock-search,
+  .mock-select {
+    font-size: 0.85em;
+    padding: 0.35em 0.9em;
+    border: 1px solid rgba(219, 228, 242, 0.12);
+    border-radius: 6px;
+    background: rgba(12, 29, 49, 0.6);
+    color: rgba(147, 170, 198, 0.75);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .mock-search {
+    flex: 1 1 auto;
+    min-width: 0;
+    max-width: 18em;
+  }
+
+  .mock-row-res {
+    grid-template-columns: minmax(0, 1.5fr) minmax(0, 1fr) 4.5em;
+  }
+
+  .mock-row-act {
+    grid-template-columns: 2.4em 6em minmax(0, 1fr) 4.6em 4em;
+    gap: 0.8em;
+  }
+
+  .mock-row-act > span:nth-child(4) {
+    font-size: 0.85em;
+  }
+
+  /* ---------- access control ---------- */
+
+  .access-grid {
+    margin-top: 1.5rem;
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(18rem, 1fr));
+    gap: 1.25rem;
+  }
+
+  .access-card {
+    background: var(--card);
+    border: 1px solid var(--rule);
+    border-radius: 10px;
+    padding: 1.5rem 1.5rem 0.75rem;
+  }
+
+  .access-card p {
+    color: var(--muted);
+    font-size: 0.95rem;
+  }
+
+  /* ---------- operations ---------- */
+
+  .ops-list {
+    margin: 1.5rem 0 0;
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(20rem, 1fr));
+    gap: 0 3rem;
+  }
+
+  .ops-item {
+    border-top: 1px solid var(--rule);
+    padding-block: 1.4rem;
+  }
+
+  .ops-item dt {
+    font-family: var(--display);
+    font-weight: 600;
+    font-size: 1.05rem;
+    margin-bottom: 0.4rem;
+  }
+
+  .ops-item dd {
+    margin: 0;
+    color: var(--muted);
+    font-size: 0.95rem;
+    max-width: 52ch;
+  }
+
+  /* ---------- export ---------- */
 
   .lockin {
     background: var(--ink-deep);
@@ -1466,64 +2469,138 @@ const tiers = [
     align-items: center;
   }
 
-  .band-sub {
-    color: var(--muted-on-ink);
-    max-width: 48ch;
-  }
-
-  .band-sub code {
-    color: var(--text-on-ink);
-  }
-
   .terminal-tall {
     font-size: 0.82rem;
   }
 
-  /* ---------- console + auth ---------- */
+  /* ---------- security ---------- */
 
-  .feature-grid {
-    list-style: none;
-    margin: 2.25rem 0 0;
-    padding: 0;
+  .security-grid {
+    margin-top: 1.5rem;
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr));
+    grid-template-columns: repeat(auto-fit, minmax(18rem, 1fr));
     gap: 2rem 2.5rem;
   }
 
-  .feature-grid h3 {
-    border-top: 2px solid var(--blue);
-    padding-top: 0.75rem;
+  .security-card h3 {
+    border-top: 1px solid var(--rule);
+    padding-top: 0.85rem;
   }
 
-  .feature-grid p {
+  .security-card p {
     color: var(--muted);
     font-size: 0.95rem;
     margin: 0;
   }
 
-  .auth {
-    background: var(--card);
-    border-top: 1px solid var(--rule);
+  /* ---------- migration ---------- */
+
+  .adopt-grid {
+    margin-top: 1.5rem;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    gap: 3rem;
+    align-items: center;
   }
 
-  /* ---------- license ---------- */
+  .adopt-steps {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    counter-reset: adopt;
+  }
 
-  .license-inner {
+  .adopt-steps li {
+    counter-increment: adopt;
+    position: relative;
+    padding-left: 3rem;
+    padding-bottom: 1.75rem;
+  }
+
+  .adopt-steps li::before {
+    content: counter(adopt);
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 2rem;
+    height: 2rem;
+    display: grid;
+    place-items: center;
+    border-radius: 50%;
+    background: var(--blue);
+    color: #ffffff;
+    font-family: var(--mono);
+    font-size: 0.85rem;
+    font-weight: 700;
+  }
+
+  .adopt-steps h3 {
+    margin-bottom: 0.35rem;
+  }
+
+  .adopt-steps p {
+    color: var(--muted);
+    font-size: 0.95rem;
+    margin: 0;
+  }
+
+  .adopt .t-blank {
+    line-height: 0.9;
+  }
+
+  /* ---------- questions ---------- */
+
+  .faq-list {
+    margin: 1.5rem 0 0;
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(22rem, 1fr));
+    gap: 0 3rem;
+  }
+
+  .faq-item {
+    border-top: 1px solid var(--rule);
+    padding-block: 1.5rem;
+  }
+
+  .faq-item dt {
+    font-family: var(--display);
+    font-weight: 600;
+    font-size: 1.05rem;
+    margin-bottom: 0.45rem;
+  }
+
+  .faq-item dd {
+    margin: 0;
+    color: var(--muted);
+    font-size: 0.95rem;
+    max-width: 56ch;
+  }
+
+  /* ---------- getting started ---------- */
+
+  .close-inner {
     max-width: 46rem;
     text-align: center;
   }
 
-  .license-inner h2 {
+  .close-inner h2 {
     margin-inline: auto;
   }
 
-  .license-inner p {
+  .close-inner > p {
     color: var(--muted);
     margin-bottom: 1.75rem;
   }
 
-  .license-inner .cta-row {
+  .close-inner .cta-row {
     justify-content: center;
+  }
+
+  .close-procurement {
+    margin-top: 2rem;
+    margin-bottom: 0;
+    font-size: 0.9rem;
+    color: var(--muted);
   }
 
   /* ---------- footer ---------- */
@@ -1637,14 +2714,8 @@ const tiers = [
     }
 
     @keyframes rise {
-      from {
-        opacity: 0;
-        transform: translateY(14px);
-      }
-      to {
-        opacity: 1;
-        transform: translateY(0);
-      }
+      from { opacity: 0; transform: translateY(14px); }
+      to { opacity: 1; transform: translateY(0); }
     }
   }
 
@@ -1652,14 +2723,18 @@ const tiers = [
 
   @media (max-width: 56rem) {
     .hero-grid,
-    .lockin-grid {
+    .lockin-grid,
+    .adopt-grid {
       grid-template-columns: 1fr;
       gap: 2.5rem;
     }
 
-    .tier {
+    .price-tiers {
       grid-template-columns: 1fr;
-      gap: 0.5rem;
+    }
+
+    .price-tier {
+      padding: 1.75rem 1.5rem;
     }
 
     .nav-links {
@@ -1668,6 +2743,125 @@ const tiers = [
 
     .deploy-terminal {
       max-width: 38rem;
+    }
+
+    .console-details {
+      grid-template-columns: 1fr;
+      gap: 2rem;
+    }
+  }
+
+  @media (max-width: 36rem) {
+    .shell {
+      padding-inline: 1.1rem;
+    }
+
+    .nav-row {
+      align-items: flex-start;
+      flex-wrap: wrap;
+      gap: 0.9rem;
+    }
+
+    .nav-links {
+      width: 100%;
+      flex-wrap: wrap;
+      gap: 0.5rem 1.15rem;
+      justify-content: flex-start;
+    }
+
+    .nav-links a {
+      font-size: 0.84rem;
+    }
+
+    .hero {
+      padding-block: 3.25rem 4rem;
+    }
+
+    .hero h1 {
+      max-width: 100%;
+      font-size: clamp(1.85rem, 8.4vw, 2.05rem);
+    }
+
+    .hero-sub {
+      max-width: 34ch;
+      font-size: 1rem;
+    }
+
+    .term {
+      width: 100%;
+      max-width: 100%;
+      overflow: hidden;
+    }
+
+    .term-tabs {
+      max-width: 100%;
+    }
+
+    .terminal {
+      width: 100%;
+      max-width: 100%;
+      padding: 0.9rem 1rem;
+    }
+
+    .t-line {
+      display: block;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .btn {
+      flex: 1 1 100%;
+      padding-inline: 1.15rem;
+      text-align: center;
+    }
+
+    .mock-stacks {
+      grid-template-columns: 1fr;
+    }
+
+    .mock-side {
+      display: none;
+    }
+
+    .mock-row-act {
+      grid-template-columns: 2.4em 6em minmax(0, 1fr) 4em;
+    }
+
+    .mock-row-act > span:nth-child(4) {
+      display: none;
+    }
+
+    .deploy-terminal {
+      --rowfs: clamp(0.5rem, 2.42vw, 0.62rem);
+      --visible: 14;
+      --pad-block: 0.7rem;
+      --pad-inline: 0.72rem;
+      grid-template-rows: 2.45rem calc(var(--visible) * var(--row) + var(--pad-block) * 2);
+      width: 100%;
+    }
+
+    .terminal-chrome {
+      gap: 0.38rem;
+      padding-inline: 0.78rem;
+    }
+
+    .terminal-chrome span {
+      width: 0.58rem;
+      height: 0.58rem;
+    }
+
+    .terminal-chrome strong {
+      max-width: 52%;
+      font-size: 0.62rem;
+    }
+
+    .t-table {
+      grid-template-columns: minmax(0, 1.48fr) minmax(0, 0.8fr) 2.85rem;
+      gap: 0.34rem;
+    }
+
+    .t-summary {
+      padding-left: 0.9rem;
     }
   }
 </style>
