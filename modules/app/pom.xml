@@ -10,6 +10,15 @@
 
     <artifactId>state-db-app</artifactId>
 
+    <properties>
+        <!-- Set true by the image build, whose Maven stage has no bun and supplies ../web/dist. -->
+        <web.build.skip>false</web.build.skip>
+        <!-- Filtered into build-info.properties, served at /api/version. -->
+        <statedb.build.version>unknown</statedb.build.version>
+        <statedb.build.commit>unknown</statedb.build.commit>
+        <statedb.build.timestamp>unknown</statedb.build.timestamp>
+    </properties>
+
     <dependencies>
         <dependency>
             <groupId>app.statedb</groupId>
@@ -67,6 +76,25 @@
     </dependencies>
 
     <build>
+        <!-- Only build-info.properties is filtered; application.yml's ${...} must stay runtime
+             config expressions, not Maven properties. -->
+        <resources>
+            <resource>
+                <filtering>true</filtering>
+                <directory>src/main/resources</directory>
+                <includes>
+                    <include>build-info.properties</include>
+                </includes>
+            </resource>
+            <resource>
+                <filtering>false</filtering>
+                <directory>src/main/resources</directory>
+                <excludes>
+                    <exclude>build-info.properties</exclude>
+                </excludes>
+            </resource>
+        </resources>
+
         <plugins>
             <plugin>
                 <groupId>${quarkus.platform.group-id}</groupId>
@@ -104,6 +132,7 @@
                         </goals>
                         <phase>prepare-package</phase>
                         <configuration>
+                            <skip>${web.build.skip}</skip>
                             <executable>bun</executable>
                             <workingDirectory>${project.basedir}/../web</workingDirectory>
                             <arguments>
@@ -121,6 +150,7 @@
                         </goals>
                         <phase>prepare-package</phase>
                         <configuration>
+                            <skip>${web.build.skip}</skip>
                             <executable>bun</executable>
                             <workingDirectory>${project.basedir}/../web</workingDirectory>
                             <arguments>
@@ -136,6 +166,7 @@
                         </goals>
                         <phase>prepare-package</phase>
                         <configuration>
+                            <skip>${web.build.skip}</skip>
                             <executable>bun</executable>
                             <workingDirectory>${project.basedir}/../web</workingDirectory>
                             <arguments>

@@ -1,5 +1,6 @@
 .PHONY: \
 	app-dev app-build app-image app-test app-clean \
+	release release-gate \
 	web-dev \
 	format format-check \
 	analyze analyze-java analyze-web analyze-semgrep analyze-deps \
@@ -17,10 +18,14 @@ PULUMI_SNAPSHOTS_DIR ?= $(CURDIR)/api-snapshots/pulumi
 ## -------------------------
 ## state-db Quarkus app
 ## -------------------------
-## All targets route through ./bin/in-container, which executes the command
-## inside the dev container (.devcontainer/devcontainer.json). Running these
-## targets on the host is not supported. The wrapper is a no-op when invoked
-## from inside the container, so nested calls don't bounce.
+## Project build/test/run targets route through ./bin/in-container, which executes the command
+## inside the dev container (.devcontainer/devcontainer.json). Running JVM, Maven, Bun, or DB
+## targets on the host is not supported. The wrapper is a no-op when invoked from inside the
+## container, so nested calls don't bounce.
+##
+## Deliberate exceptions: app-image, release, and release-gate talk to host Docker directly. They
+## build or run their own containers, and the image build's Maven/Bun toolchains live inside Docker
+## stages rather than on the host.
 
 IN_CONTAINER := ./bin/in-container
 
@@ -39,13 +44,17 @@ app-dev:
 app-build:
 	$(IN_CONTAINER) mvn -f modules/pom.xml -pl app -am package -DskipTests
 
-## Build the runtime image from the packaged fast-jar. The context is the quarkus-app output
-## directory so Docker does not walk workbench/.generated.
-app-image: app-build
-	$(IN_CONTAINER) sh -lc 'mkdir -p $(DOCKER_CFG) && DOCKER_CONFIG=$(DOCKER_CFG) docker build \
-		-f modules/app/src/main/docker/Dockerfile.jvm \
-		-t $(APP_IMAGE) \
-		modules/app/target/quarkus-app'
+## Build the runtime image. Multi-stage, so it needs no local JDK, Maven or bun.
+## The built image expects a memory limit; see JAVA_OPTS in Dockerfile.jvm.
+app-image:
+	sh -lc 'mkdir -p $(DOCKER_CFG) && export DOCKER_CONFIG=$(DOCKER_CFG) \
+		&& eval "$$(./bin/build-version --env)" \
+		&& docker build \
+			-f modules/app/src/main/docker/Dockerfile.jvm \
+			--build-arg BUILD_VERSION="$$BUILD_VERSION" \
+			--build-arg BUILD_COMMIT="$$BUILD_COMMIT" \
+			--build-arg SOURCE_DATE_EPOCH="$$SOURCE_DATE_EPOCH" \
+			-t $(APP_IMAGE) .'
 	@echo "Built $(APP_IMAGE)"
 
 ## Run unit + integration tests across all modules.
@@ -55,6 +64,25 @@ app-test:
 ## Clean all module build outputs.
 app-clean:
 	$(IN_CONTAINER) mvn -f modules/pom.xml clean
+
+## -------------------------
+## Release
+## -------------------------
+## Built and pushed from a maintainer's machine, never CI. See design/release.md.
+## These manage their own containers, so they talk to Docker directly, not via ./bin/in-container.
+
+## Verify a candidate image by running it.
+## Usage: make release-gate IMAGE=state-db:dev [PREVIOUS=ghcr.io/state-db/state-db:0.1.0]
+release-gate:
+ifndef IMAGE
+	$(error IMAGE is required, e.g. make release-gate IMAGE=$(APP_IMAGE))
+endif
+	./bin/release-gate $(IMAGE) $(if $(PREVIOUS),--previous $(PREVIOUS))
+
+## Cut a release: verify, build, gate, push, sign, tag, roll the changelog.
+## Usage: make release [ARGS=--dry-run|--rehearse]
+release:
+	./bin/release $(ARGS)
 
 ## Run the web console dev server (bun, http://localhost:5173) with HMR.
 ## Proxies /api and /pulumi to the Quarkus app on :8080, so run `app-dev` too.

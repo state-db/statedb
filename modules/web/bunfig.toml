@@ -11,3 +11,6 @@ minimumReleaseAgeExcludes = ["bun-types", "@types/bun"]
 # Most npm RATs execute via lifecycle scripts. Bun's trustedDependencies in
 # package.json still works for packages that legitimately need them.
 ignoreScripts = true
+# bun-plugin-tailwind peer-depends on `bun`, whose npm package shadows the runtime's built-in
+# module and needs the postinstall that ignoreScripts blocks. The runtime satisfies the peer.
+peer = false

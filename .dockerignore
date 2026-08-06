@@ -1,0 +1,10 @@
+# Root allow-list: keep workbench/.generated and other local caches out of the image context.
+*
+
+!modules/
+!modules/**
+!THIRD-PARTY-NOTICES.txt
+
+modules/**/target/
+modules/web/dist/
+modules/web/node_modules/

@@ -1,0 +1,52 @@
+#!/usr/bin/env bash
+# Derives this commit's build identity. Read-only: git plus the .version file, nothing else.
+#
+#   bin/build-version           0.1.0-dev.17+g4976296
+#   bin/build-version --env     BUILD_VERSION=... BUILD_COMMIT=... SOURCE_DATE_EPOCH=...
+#
+# .version holds the *next* release, so dev builds sort before it: 0.1.0-dev.17 < 0.1.0.
+set -euo pipefail
+
+cd "$(dirname "$0")/.."
+
+next=$(tr -d '[:space:]' <.version)
+[[ -n $next ]] || {
+  echo "build-version: .version is empty" >&2
+  exit 1
+}
+
+commit=$(git rev-parse --short=7 HEAD)
+# The commit's timestamp, not the clock: rebuilding an old commit must reproduce it.
+epoch=$(git log -1 --format=%ct HEAD)
+
+dirty=false
+[[ -z $(git status --porcelain) ]] || dirty=true
+
+if tag=$(git describe --exact-match --match 'v[0-9]*' HEAD 2>/dev/null); then
+  # `+dirty`, not `.dirty`: 0.1.0.dirty is not semver. The dev path already has `+g...`.
+  version="${tag#v}"
+  $dirty && version="${version}+dirty"
+else
+  if last=$(git describe --abbrev=0 --match 'v[0-9]*' HEAD 2>/dev/null); then
+    count=$(git rev-list --count "${last}..HEAD")
+  else
+    count=$(git rev-list --count HEAD)
+  fi
+  version="${next}-dev.${count}+g${commit}"
+  $dirty && version="${version}.dirty"
+fi
+
+case "${1:-}" in
+"")
+  echo "$version"
+  ;;
+--env)
+  echo "BUILD_VERSION=${version}"
+  echo "BUILD_COMMIT=${commit}"
+  echo "SOURCE_DATE_EPOCH=${epoch}"
+  ;;
+*)
+  echo "usage: build-version [--env]" >&2
+  exit 2
+  ;;
+esac

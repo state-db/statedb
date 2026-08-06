@@ -1,0 +1,196 @@
+#!/usr/bin/env bash
+# Verifies a candidate image by running it.
+#
+#   bin/release-gate ghcr.io/state-db/state-db:0.1.0
+#   bin/release-gate state-db:dev --previous ghcr.io/state-db/state-db:0.0.9
+#
+set -euo pipefail
+
+cd "$(dirname "$0")/.."
+
+readonly NET=state-db-gate
+readonly PG=state-db-gate-pg
+readonly APP=state-db-gate-app
+readonly CLI=state-db-gate-pulumi
+
+readonly PG_IMAGE=postgres:17-alpine
+readonly CURL_IMAGE=curlimages/curl:latest
+readonly PULUMI_IMAGE=${PULUMI_IMAGE:-pulumi/pulumi:3.234.0}
+
+readonly DB_USER=gate
+readonly DB_PASSWORD=gate
+readonly DB_NAME=gate
+readonly ORG=gate
+readonly STACK=gate
+readonly PROJECT_FILE=tools/pulumi/recorder/testproject/Pulumi.yaml
+readonly RECORDER_DOCKERFILE=tools/pulumi/recorder/Dockerfile
+
+readonly GLASS_PASSWORD='release-gate-password'
+readonly GLASS_HASH='$2y$05$I1KR5ZwHLG3AsJ/Iz9/ejO68cAdezEWhn1xDFHgVNjrAL/Lejcrjy'
+readonly SESSION_SECRET='release-gate-session-secret-32b!'
+readonly RAW_TOKEN=state-db-release-gate-token
+readonly CONFIG_PASSPHRASE=release-gate
+
+image=""
+previous=""
+expected_commit=""
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+  --previous)
+    previous=${2:?--previous needs an image ref}
+    shift 2
+    ;;
+  --expect-commit)
+    expected_commit=${2:?--expect-commit needs a commit}
+    shift 2
+    ;;
+  -*)
+    echo "unknown option: $1" >&2
+    exit 2
+    ;;
+  *)
+    image=$1
+    shift
+    ;;
+  esac
+done
+
+[[ -n $image ]] || {
+  echo "usage: release-gate <image> [--previous <image>] [--expect-commit <sha>]" >&2
+  exit 2
+}
+[[ -n $expected_commit ]] || expected_commit=$(git rev-parse --short=7 HEAD)
+
+step() { printf '\n\033[1m==> %s\033[0m\n' "$1"; }
+fail() {
+  printf '\033[31mgate failed: %s\033[0m\n' "$1" >&2
+  exit 1
+}
+
+cleanup() {
+  docker rm -f "$APP" "$PG" "$CLI" >/dev/null 2>&1 || true
+  docker network rm "$NET" >/dev/null 2>&1 || true
+}
+trap cleanup EXIT
+
+gate_curl() { docker run --rm --network "$NET" "$CURL_IMAGE" "$@"; }
+
+psql_gate() { docker exec -i "$PG" psql -v ON_ERROR_STOP=1 -U "$DB_USER" -d "$DB_NAME" "$@"; }
+
+# macOS has shasum by default; Linux images usually have sha256sum.
+sha256_hex() {
+  if command -v sha256sum >/dev/null 2>&1; then
+    sha256sum | cut -d' ' -f1
+  else
+    shasum -a 256 | cut -d' ' -f1
+  fi
+}
+
+start_app() {
+  local ref=$1 label=$2
+  docker rm -f "$APP" >/dev/null 2>&1 || true
+  docker run -d --name "$APP" --network "$NET" --memory=2g \
+    -e STATE_DB_JDBC_URL="jdbc:postgresql://$PG:5432/$DB_NAME" \
+    -e STATE_DB_DB_USER="$DB_USER" \
+    -e STATE_DB_DB_PASSWORD="$DB_PASSWORD" \
+    -e STATE_DB_BOOTSTRAP_ORG_NAME="$ORG" \
+    -e STATE_DB_LOCAL_GLASS_PASSWORD_HASH="$GLASS_HASH" \
+    -e STATE_DB_LOCAL_GLASS_ALLOW_REMOTE=true \
+    -e STATE_DB_SESSION_ENCRYPTION_SECRET="$SESSION_SECRET" \
+    "$ref" >/dev/null
+
+  for _ in $(seq 1 90); do
+    if gate_curl -sf "http://$APP:9000/q/health/ready" >/dev/null 2>&1; then
+      echo "$label ready"
+      return 0
+    fi
+    [[ $(docker inspect -f '{{.State.Status}}' "$APP") == running ]] || break
+    sleep 2
+  done
+
+  docker logs "$APP" 2>&1 | tail -30 >&2
+  fail "$label did not become ready"
+}
+
+step "Starting Postgres"
+docker network create "$NET" >/dev/null
+docker run -d --name "$PG" --network "$NET" \
+  -e POSTGRES_USER="$DB_USER" -e POSTGRES_PASSWORD="$DB_PASSWORD" -e POSTGRES_DB="$DB_NAME" \
+  "$PG_IMAGE" >/dev/null
+for _ in $(seq 1 60); do
+  docker exec "$PG" pg_isready -U "$DB_USER" >/dev/null 2>&1 && break
+  sleep 1
+done
+docker exec "$PG" pg_isready -U "$DB_USER" >/dev/null 2>&1 || fail "Postgres never became ready"
+
+step "1/4 Upgrade from the previous release"
+if [[ -n $previous ]]; then
+  start_app "$previous" "previous release ($previous)"
+  from_version=$(psql_gate -tA -c 'SELECT max(version) FROM flyway_schema_history')
+  docker rm -f "$APP" >/dev/null
+  echo "previous release left the schema at v${from_version}; starting the candidate on it"
+else
+  from_version=""
+  echo "SKIPPED: no previous release given. Pass --previous once a release exists — an upgrade"
+  echo "         that has never been exercised is the failure self-hosters feel first."
+fi
+
+step "2/4 Candidate boots"
+start_app "$image" "candidate ($image)"
+to_version=$(psql_gate -tA -c 'SELECT max(version) FROM flyway_schema_history')
+failed=$(psql_gate -tA -c 'SELECT count(*) FROM flyway_schema_history WHERE success = false')
+[[ $failed == 0 ]] || fail "$failed migration(s) recorded as failed"
+if [[ -n $from_version ]]; then
+  echo "migrations converged: v${from_version} -> v${to_version}"
+else
+  echo "schema at v${to_version}"
+fi
+
+step "3/4 Reported build identity"
+# Login and read in one container so the cookie jar survives both requests.
+version_json=$(docker run --rm --network "$NET" "$CURL_IMAGE" sh -c "
+  curl -sf -c /tmp/j -o /dev/null -X POST http://$APP:8080/api/auth/local \
+    -d username=gate -d password='$GLASS_PASSWORD'
+  curl -sf -b /tmp/j http://$APP:8080/api/version") ||
+  fail "break-glass login or /api/version failed"
+echo "$version_json"
+case "$version_json" in
+*"\"commit\":\"$expected_commit\""*) echo "commit matches $expected_commit" ;;
+*) fail "image reports a different commit than $expected_commit" ;;
+esac
+
+step "4/4 Pulumi up / refresh / destroy against the running image"
+token_hash=$(printf '%s' "$RAW_TOKEN" | sha256_hex)
+psql_gate -c "INSERT INTO api_tokens (id, token_hash, description, user_id, org_id, kind, expires_at)
+      SELECT gen_random_uuid(), '$token_hash', 'release-gate', u.id, o.id, 'service_account', now() + interval '1 day'
+      FROM organizations o, users u
+      WHERE o.name = '$ORG' AND u.iss = 'local:bootstrap' AND u.sub = 'admin'
+      ON CONFLICT (token_hash) DO NOTHING" >/dev/null
+
+docker run -d --name "$CLI" --network "$NET" \
+  -e PULUMI_ACCESS_TOKEN="$RAW_TOKEN" \
+  -e PULUMI_CONFIG_PASSPHRASE="$CONFIG_PASSPHRASE" \
+  -e PULUMI_SKIP_UPDATE_CHECK=true \
+  --entrypoint sh "$PULUMI_IMAGE" -c 'sleep infinity' >/dev/null
+
+docker exec "$CLI" mkdir -p /project
+docker cp "$PROJECT_FILE" "$CLI:/project/Pulumi.yaml"
+
+# Keep the gate aligned with the recorder fixture project.
+random_version=$(sed -n 's/^ARG RANDOM_PROVIDER_VERSION=//p' "$RECORDER_DOCKERFILE")
+[[ -n $random_version ]] || fail "no RANDOM_PROVIDER_VERSION in $RECORDER_DOCKERFILE"
+echo "pinning random provider $random_version"
+
+docker exec -w /project "$CLI" sh -eu -c "
+  pulumi plugin install resource random '$random_version'
+  pulumi login 'http://$APP:8080/pulumi' >/dev/null
+  pulumi stack init '$ORG/$STACK' >/dev/null
+  pulumi up --yes --skip-preview
+  pulumi refresh --yes --skip-preview
+  pulumi stack export >/tmp/export.json
+  pulumi destroy --yes --skip-preview
+  pulumi stack rm --yes
+" || fail "the Pulumi CLI could not complete a lifecycle against this image"
+
+printf '\n\033[32mgate passed: %s is releasable\033[0m\n' "$image"
