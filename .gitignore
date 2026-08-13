@@ -28,4 +28,7 @@ workbench/pulumi/projects/**/Pulumi.*.yaml
 # Soak harness: staged Docker build inputs and extracted run results
 workbench/soak/.build/
 workbench/soak/artifacts/
+
+# Local scratch space for build logs and throwaway working files
+.scratch/
 design/pulumi-state-testing-roadmap.md

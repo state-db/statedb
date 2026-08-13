@@ -24,13 +24,12 @@ services:
       timeout: 3s
       retries: 30
 
-  # Named volumes are root-owned but the app runs as UID 1000, so the JVM cannot open its GC log.
-  # Done here to keep soak-specific paths out of the runtime image.
+  # Named volumes are root-owned but the app runs as UID 1001.
   artifacts-init:
     image: ${APP_IMAGE:-state-db:dev}
     container_name: state-db-soak-artifacts-init
     user: root
-    entrypoint: ["sh", "-c", "mkdir -p /soak/artifacts && chown -R 1000:1000 /soak/artifacts"]
+    entrypoint: ["sh", "-c", "mkdir -p /soak/artifacts && chown -R 1001:1001 /soak/artifacts"]
     volumes:
       - artifacts:/soak/artifacts
 
@@ -48,6 +47,9 @@ services:
     cpus: ${SOAK_CPUS:-2.0}
     # Restarts are graded, so the container must come back to be counted.
     restart: unless-stopped
+    # Native Serial GC events complement the sampler's per-process RSS measurements. The image's
+    # fail-closed registration flag is in ENTRYPOINT, so this appends rather than replaces it.
+    command: ["-XX:+PrintGC"]
     environment:
       STATE_DB_JDBC_URL: jdbc:postgresql://postgres:5432/${DB_NAME:-statedb}
       STATE_DB_DB_USER: ${DB_USER:-statedb}
@@ -58,19 +60,22 @@ services:
       # No OIDC provider is bootstrapped, so break-glass is live; reached from the compose network.
       STATE_DB_LOCAL_GLASS_PASSWORD_HASH: ${GLASS_PASSWORD_HASH:-$$2a$$10$$T56PF8UE80K1VeLu6iMJjOLW68rR.xHzHUppcyvcd2ZAudpNUgn9O}
       STATE_DB_LOCAL_GLASS_ALLOW_REMOTE: "true"
-      # Appended to the image's JVM flags, not replacing them.
-      JAVA_OPTS_APPEND: >-
-        -XX:NativeMemoryTracking=summary
-        -XX:HeapDumpPath=/soak/artifacts
-        -Xlog:gc*:file=/soak/artifacts/gc.log:time,uptime:filecount=10,filesize=20M
     volumes:
       - artifacts:/soak/artifacts
     ports:
       - "127.0.0.1:${APP_PORT:-28080}:8080"
       - "127.0.0.1:${MGMT_PORT:-29000}:9000"
     # The sampler attaches to this PID namespace, so gate on readiness rather than "started".
+    # The UBI Micro runtime has no curl, grep, or coreutils, so probe with bash builtins only.
     healthcheck:
-      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:9000/q/health/ready"]
+      test:
+        - CMD
+        - bash
+        - -c
+        - >-
+          exec 3<>/dev/tcp/127.0.0.1/9000 &&
+          printf 'GET /q/health/ready HTTP/1.1\r\nHost: x\r\nConnection: close\r\n\r\n' >&3 &&
+          read -r s <&3 && [[ $$s == *" 200 "* ]]
       interval: 10s
       timeout: 5s
       retries: 30

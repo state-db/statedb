@@ -180,12 +180,19 @@ while true; do
     fi
   done
 
-  # A deterministic mid-graph failure forces the server through failed-update completion. It
-  # targets `update`: everything already exists by now, so a create-only fault would never fire.
+  # A deterministic mid-graph failure forces the server through failed-update completion. The
+  # fault must name the operation the node will actually see. Normally everything already exists
+  # and only `update` fires, but when this iteration's destroy also landed on this stack — every
+  # DESTROY_EVERY * FAULT_EVERY iterations — the stack is empty and only `create` fires. Naming
+  # the wrong one lets the up succeed, silently skipping the fault.
   if (( ITERATION % FAULT_EVERY == 0 )); then
     stack="$(stack_name 1)"
     dir="$WORK/$stack"
-    generate "$dir" "$ITERATION" $(( RESOURCES / 2 )) always update
+    fault_operation=update
+    if (( ITERATION % DESTROY_EVERY == 0 )); then
+      fault_operation=create
+    fi
+    generate "$dir" "$ITERATION" $(( RESOURCES / 2 )) always "$fault_operation"
     select_stack "$dir" "$ORG/$stack"
     run_op "$stack" fault-up 1 "$dir" \
       pulumi up --yes --skip-preview --parallel "$PARALLEL" \

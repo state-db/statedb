@@ -102,6 +102,12 @@ while true; do
     # The live set after the last major GC is the leak signal; approximating it from sampled
     # minima overestimates badly. gc_overhead corroborates.
     gc_live="$(metric_bare jvm_gc_live_data_size_bytes)"
+    # The native image does not export that gauge. Old-gen occupancy is the closest sampled
+    # stand-in and keeps this column and `make soak cmd=status` meaningful, but it includes
+    # uncollected garbage, so report.sh grades the GC log instead of this value.
+    if [[ -z "$gc_live" || "$gc_live" == "0" ]]; then
+      gc_live="$(metric_sum jvm_memory_used_bytes 'area="heap",id="old"')"
+    fi
     gc_overhead="$(metric_bare jvm_gc_overhead)"
   else
     # Record zeros rather than skipping the row, so a gap means the app was unreachable rather

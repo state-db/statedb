@@ -1,0 +1,15 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+build_directory=${1:?usage: prepare-native-metadata-test-run <build-directory> <agent-java>}
+agent_java=${2:?usage: prepare-native-metadata-test-run <build-directory> <agent-java>}
+
+[[ -x $agent_java ]] || {
+  echo "error: native-agent test JVM is missing at $agent_java" >&2
+  echo "run bin/prepare-native-agent-jvm inside the dev container first" >&2
+  exit 2
+}
+
+rm -rf \
+  "$build_directory/native-image-agent-base-config" \
+  "$build_directory/native-image-agent-review"

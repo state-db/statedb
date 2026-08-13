@@ -86,18 +86,20 @@ Values are filtered into `build-info.properties` during packaging from:
 The runtime image is built by:
 
 ```text
-modules/app/src/main/docker/Dockerfile.jvm
+modules/app/src/main/docker/Dockerfile.native
 ```
 
 The Docker build context is the repository root. `.dockerignore` allow-lists only the files needed
 for the image build and excludes local build outputs and generated caches.
 
-The image has three stages:
+The image has four stages:
 
 1. `web`: Bun installs with `--frozen-lockfile`, typechecks, and builds the console.
-2. `build`: Maven packages the Quarkus fast-jar with `-Dweb.build.skip=true`; it consumes the web
-   bundle from stage 1.
-3. `runtime`: UBI9 OpenJDK runtime image.
+2. `build`: Maven packages Quarkus native-image sources with `-Dweb.build.skip=true`; it consumes
+   the web bundle from stage 1.
+3. `native`: pinned Mandrel compiles the executable and verifies Cedar's architecture-specific JNI
+   library against its committed upstream checksum.
+4. `runtime`: a minimal UBI Micro image runs the executable as numeric UID 1001.
 
 Base images are pinned by digest.
 
@@ -107,8 +109,8 @@ The image is multi-arch:
 linux/amd64,linux/arm64
 ```
 
-The image should be run with a memory limit. Its default `JAVA_OPTS` use `AlwaysPreTouch` and
-`MaxRAMPercentage=75`; an unlimited container can try to commit too much host memory at startup.
+Run the image with an explicit memory limit and a writable `/tmp` tmpfs. The runtime filesystem may
+otherwise be read-only.
 
 ## Registry Tags
 
@@ -147,20 +149,29 @@ The cadence is intentionally lightweight while this is a solo-maintainer project
 The release commit must satisfy:
 
 1. `ci.yml` succeeded on exactly the release commit.
-2. The latest three `nightly.yml` runs succeeded.
+2. `native.yml` succeeded on exactly the release commit for amd64 and arm64.
+3. The latest three `nightly.yml` runs succeeded.
 
 `--rehearse` reports these checks instead of enforcing them. A real release enforces them.
+
+`native.yml` is `workflow_dispatch` only — three native compilations are too expensive to spend on
+every commit. Dispatch it against the release ref and let it finish before running `bin/release`;
+that run both satisfies gate 1 and publishes the per-architecture candidates the release manifest
+is assembled from.
 
 ### Gate 2: Candidate Image
 
 `bin/release-gate <image>` runs the candidate image and verifies:
 
-1. **Upgrade:** If `--previous` is provided, start the previous release on a fresh database, stop
-   it, then start the candidate on the same database. Flyway must converge with no failed rows.
-2. **Boot:** Candidate reaches readiness.
-3. **Identity:** Candidate reports the expected commit through `/api/version`.
-4. **Pulumi lifecycle:** A real Pulumi CLI performs `up`, `refresh`, `export`, `destroy`, and
-   stack removal against the candidate.
+1. upgrade from the previous compatible release;
+2. simultaneous two-replica cold start and migration convergence;
+3. non-root/read-only image, notices, and Cedar library integrity;
+4. anonymous rejection plus Cedar owner-allow/viewer-deny;
+5. OIDC and break-glass login, authenticated projections, SPA delivery, forced compaction, and
+   build identity;
+6. a real Pulumi `up`, `refresh`, `export`, `destroy`, and stack removal;
+7. database-outage readiness degradation and recovery without process restart;
+8. SIGTERM completion within the shutdown grace period.
 
 The Pulumi test project is:
 
@@ -204,8 +215,9 @@ Modes:
 4. Verify `bin/build-version` resolves to `X.Y.Z`.
 5. Build a loadable single-arch candidate image.
 6. Run `bin/release-gate` against the candidate.
-7. Build and push the multi-arch image with tags `X.Y.Z`, `X.Y`, and `latest`.
-8. Sign the published digest with `cosign`.
+7. Assemble a manifest in the candidates package from CI-gated `:<sha>-amd64` and
+   `:<sha>-arm64` images, pull it, and repeat the release gate.
+8. Copy the gated manifest to `X.Y.Z`, `X.Y`, and `latest`, then sign its digest with `cosign`.
 9. Push the Git tag.
 10. Create the GitHub Release from the changelog section.
 11. Move `CHANGELOG.md`'s `## Unreleased` section under the release heading.

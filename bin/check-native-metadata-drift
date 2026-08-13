@@ -1,0 +1,119 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+cd "$(dirname "$0")/.."
+
+usage() {
+  cat >&2 <<'EOF'
+usage: check-native-metadata-drift
+       check-native-metadata-drift --generated DIR --reviewed FILE \
+         --normalized FILE --production-resources FILE
+
+With no arguments, checks this repository's agent output against its reviewed
+baseline. The explicit form exists so tests can drive it over temporary files.
+EOF
+  exit 2
+}
+
+# Repository defaults. Maven runs the no-argument form at verify.
+generated=modules/app/target/native-image-agent-base-config
+reviewed=modules/app/src/test/native-image-agent-reviewed/reachability-metadata.json
+normalized=modules/app/target/native-image-agent-review/reachability-metadata.json
+production_resources=
+
+while [[ $# -gt 0 ]]; do
+  case $1 in
+    --generated) generated=${2:-}; shift 2 ;;
+    --reviewed) reviewed=${2:-}; shift 2 ;;
+    --normalized) normalized=${2:-}; shift 2 ;;
+    --production-resources) production_resources=${2:-}; shift 2 ;;
+    *) usage ;;
+  esac
+done
+
+[[ -n $generated && -n $reviewed && -n $normalized ]] || usage
+
+if [[ -z $production_resources ]]; then
+  production_resources=$(dirname "$normalized")/production-resources.txt
+  mkdir -p "$(dirname "$production_resources")"
+  find modules -path '*/src/main/resources/*' -type f \
+    | sed 's#^.*/src/main/resources/##' \
+    | sort -u > "$production_resources"
+fi
+
+mapfile -t metadata_files < <(find "$generated" -type f -name '*.json' -print | sort)
+if [[ ${#metadata_files[@]} -eq 0 ]]; then
+  echo "error: Native Image agent produced no metadata JSON under $generated" >&2
+  exit 2
+fi
+
+mkdir -p "$(dirname "$normalized")"
+jq -s \
+  --rawfile production_resources "$production_resources" '
+    def lines($text): $text | split("\n") | map(select(length > 0));
+    def canonical:
+      if type == "object" then
+        to_entries | sort_by(.key) | map(.value |= canonical) | from_entries
+      elif type == "array" then
+        # Object arrays (entries, methods, fields) are unordered sets, so sorting and
+        # deduplicating them makes the diff stable. Scalar arrays are signatures --
+        # parameterTypes, proxy interface lists -- where order is meaning and a repeated
+        # type is a second parameter. Reordering or deduplicating those rewrites the
+        # observation into a method that does not exist.
+        if any(.[]; type == "object") then
+          map(canonical) | unique_by(tojson) | sort_by(tojson)
+        else
+          .
+        end
+      else
+        .
+      end;
+    def base_type: sub("\\[\\]$"; "");
+    # Only Cedar is retained. Quarkus derives entities, Panache projections registered in
+    # ProjectionReflection, and REST payload types from the Jandex index at build time, so
+    # observing them here is churn, not signal.
+    def dependency_owned:
+      if (.type? | type) == "string" then
+        (.type | base_type) | startswith("com.cedarpolicy.")
+      else
+        tojson | contains("com.cedarpolicy.")
+      end;
+    def production_resource:
+      .glob? as $glob
+      | $glob != null and (lines($production_resources) | index($glob)) != null;
+    def merge_documents:
+      reduce .[] as $document ({};
+        reduce ($document | to_entries[]) as $entry (.;
+          .[$entry.key] = ((.[$entry.key] // []) + $entry.value)));
+
+    merge_documents
+    | with_entries(
+        if .key == "resources" then
+          .value |= map(select(production_resource))
+        elif .key == "reflection"
+            or .key == "jni"
+            or .key == "serialization"
+            or .key == "proxies" then
+          .value |= map(select(dependency_owned))
+        else
+          .value = []
+        end)
+    | with_entries(select(.value | length > 0))
+    | canonical
+  ' "${metadata_files[@]}" > "$normalized"
+
+if [[ ! -f $reviewed ]]; then
+  echo "Native metadata has no reviewed baseline at $reviewed" >&2
+  echo "Inspect $normalized and add only explained observations." >&2
+  exit 2
+fi
+
+if ! diff -u "$reviewed" "$normalized"; then
+  echo >&2
+  echo "Native contract violation: observed Native Image reachability drift." >&2
+  echo "Inspect $normalized; declare the source-local or dependency-owned contract," >&2
+  echo "then update the reviewed baseline only after explaining the change." >&2
+  exit 1
+fi
+
+echo "Native metadata matches the reviewed integration-test baseline."

@@ -11,6 +11,7 @@
 #   - Server: license-maven-plugin add-third-party on modules/app (runtime deps).
 #   - Console: modules/web/scripts/collect-licenses.ts (deps + license texts).
 #   - Pulumi: third_party/pulumi/LICENSE appended as the Apache-2.0 text.
+#   - Cedar: native-library notices vendored at the Maven dependency version.
 
 set -euo pipefail
 
@@ -21,6 +22,30 @@ CHECK=0
 if [[ "${1:-}" == "--check" ]]; then
   CHECK=1
 fi
+
+CEDAR_VERSION=$(sed -n 's:.*<cedar-java.version>\([^<]*\)</cedar-java.version>.*:\1:p' modules/pom.xml)
+grep -q "\`v${CEDAR_VERSION}\` tag" third_party/cedar-java/README.md || {
+  echo "error: third_party/cedar-java is not documented as Cedar v${CEDAR_VERSION}" >&2
+  exit 1
+}
+for file in LICENSE NOTICE THIRD_PARTY_LICENSES.txt SHA256SUMS; do
+  [[ -s "third_party/cedar-java/$file" ]] || {
+    echo "error: missing third_party/cedar-java/$file" >&2
+    exit 1
+  }
+done
+for file in LICENSE NOTICE THIRD_PARTY_LICENSES.txt; do
+  expected=$(awk -v path="$file" '$2 == path { print $1 }' third_party/cedar-java/SHA256SUMS)
+  if command -v sha256sum >/dev/null 2>&1; then
+    actual=$(sha256sum "third_party/cedar-java/$file" | cut -d' ' -f1)
+  else
+    actual=$(shasum -a 256 "third_party/cedar-java/$file" | cut -d' ' -f1)
+  fi
+  [[ -n "$expected" && "$actual" == "$expected" ]] || {
+    echo "error: third_party/cedar-java/$file does not match SHA256SUMS" >&2
+    exit 1
+  }
+done
 
 WORK_DIR="$(mktemp -d)"
 trap 'rm -rf "$WORK_DIR"' EXIT
@@ -132,6 +157,19 @@ checked against the dependency list by the generator.
 
 JAVATEXTS
   cat "$JAVA_TEXTS"
+  cat <<'CEDARHEADER'
+
+
+Cedar native library notices
+============================
+
+The cedar-java uber JAR includes Cedar and JNE native libraries. Their upstream
+distribution notices follow and are also shipped as separate files in the image.
+
+CEDARHEADER
+  cat third_party/cedar-java/NOTICE
+  printf '\n\n'
+  cat third_party/cedar-java/THIRD_PARTY_LICENSES.txt
   cat <<'WEBHEADER'
 
 

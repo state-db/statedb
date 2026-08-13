@@ -1,0 +1,115 @@
+name: Native image
+
+permissions:
+  contents: read
+  packages: write
+
+concurrency:
+  group: native-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
+# On demand only. Each run is three native compilations, so it is not worth spending
+# on every commit. `bin/release` requires a successful run on the exact release
+# commit, so dispatch this against the release ref before releasing.
+on:
+  workflow_dispatch:
+
+jobs:
+  strict-metadata-negative:
+    name: Prove missing metadata rejects native authorization readiness
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - name: Require a deliberately incomplete image to fail
+        env:
+          NATIVE_NEGATIVE_METADATA_TEST: "true"
+          NATIVE_IMAGE_XMX: 6g
+          NATIVE_IMAGE_PARALLELISM: 2
+        run: |
+          bin/build-native-app-image state-db:native-missing-registration
+          bin/verify-native-metadata-negative state-db:native-missing-registration
+
+  build-and-gate:
+    name: Build and gate (${{ matrix.arch }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: amd64
+            runner: ubuntu-24.04
+          - arch: arm64
+            runner: ubuntu-24.04-arm
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+
+      - name: Build native image on the target architecture
+        env:
+          NATIVE_IMAGE_XMX: 6g
+          NATIVE_IMAGE_PARALLELISM: 2
+        run: bin/build-native-app-image state-db:native-ci
+
+      - name: Generate dependency-level Java SBOM
+        if: matrix.arch == 'amd64'
+        run: bin/generate-java-sbom artifacts
+
+      - name: Run image, authorization, migration, and Pulumi contracts
+        run: bin/release-gate state-db:native-ci
+
+      - name: Scan the gated image
+        env:
+          TRIVY_IMAGE: aquasec/trivy@sha256:a22415a38938a56c379387a8163fcb0ce38b10ace73e593475d3658d578b2436
+        run: |
+          docker run --rm -v /var/run/docker.sock:/var/run/docker.sock "$TRIVY_IMAGE" \
+            image --exit-code 1 --ignore-unfixed --severity HIGH,CRITICAL state-db:native-ci
+          if [ "${{ matrix.arch }}" = amd64 ]; then
+            docker run --rm -v "$PWD:/work" "$TRIVY_IMAGE" \
+              sbom --exit-code 1 --ignore-unfixed --severity HIGH,CRITICAL \
+              /work/artifacts/state-db-java.cdx.json
+          fi
+          docker run --rm -v /var/run/docker.sock:/var/run/docker.sock -v "$PWD:/work" \
+            "$TRIVY_IMAGE" image --format cyclonedx --output /work/native-container-${{ matrix.arch }}.cdx.json \
+            state-db:native-ci
+
+      # Every run publishes its candidate: bin/release assembles the release manifest
+      # from the two per-architecture candidates this job pushes for the release commit.
+      - name: Log in to the container registry
+        uses: docker/login-action@5e57cd118135c172c3672efd75eb46360885c0ef # v3.6.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Publish the gated architecture candidate
+        env:
+          CANDIDATE: ghcr.io/${{ github.repository }}-candidates:${{ github.sha }}-${{ matrix.arch }}
+        run: |
+          docker tag state-db:native-ci "$CANDIDATE"
+          docker push "$CANDIDATE"
+
+      - name: Capture native build metadata
+        if: always()
+        run: |
+          docker image inspect state-db:native-ci > native-image-${{ matrix.arch }}.json
+          docker history --no-trunc state-db:native-ci > native-history-${{ matrix.arch }}.txt
+
+      - name: Upload build metadata
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: native-build-${{ matrix.arch }}
+          path: |
+            native-image-${{ matrix.arch }}.json
+            native-history-${{ matrix.arch }}.txt
+            native-container-${{ matrix.arch }}.cdx.json
+          retention-days: 14
+
+      - name: Upload Java SBOM
+        if: always() && matrix.arch == 'amd64'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: java-sbom
+          path: artifacts/state-db-java.cdx.json
+          retention-days: 14

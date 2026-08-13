@@ -465,15 +465,12 @@ Out of scope for Wave 1. The Pulumi CLI is well-behaved by default; abuse will c
 
 ## Native image
 
-Wave 1 ships JVM-only. `cedar-java` (the policy engine; see `auth.md`) uses JNI bindings into a Rust core, and GraalVM native image support for that combination is fragile enough that we don't gate the release on it. JVM startup and footprint are acceptable for a self-hosted backend; native image is an optimization, not a correctness requirement.
-
-Native build remains in CI as a non-blocking experimental job. When `cedar-java`'s native image story stabilizes, the experimental build is promoted to a release artifact alongside the JVM image.
-
-Known reflection sources to register when native is promoted:
-- All `@Entity` classes in `persistence/entity/` (Quarkus Hibernate extension auto-registers most; verify with `mvn package -Pnative -Dquarkus.native.enable-reports=true`).
-- The JSONB `AttributeConverter` and any custom `JsonDeserializer`s.
-- DTO classes used in JAX-RS request/response bodies (Quarkus REST extension auto-registers).
-- `cedar-java`'s JNI entrypoints and the bundled Rust shared library per target arch.
+The production artifact is a Mandrel native image. Cedar's JNI library is extracted and verified at
+build time, and exact reachability metadata plus the release gate cover its authorization paths.
+Application-owned Hibernate projections use source-local `@RegisterForReflection` contracts that
+normal verification enforces. The version-pinned central mapping is limited to Cedar/JDK/framework
+private details that cannot be annotated at their source. Dependency upgrades must pass the metadata
+member test and both native architecture gates. See [`native-image.md`](./native-image.md).
 
 ---
 
@@ -537,7 +534,7 @@ Future work. Each is additive — solvable inside Wave 1's architecture without 
 | Quarkus imperative (not reactive) | Short request-response, no streaming, simpler SQL paths |
 | Flyway migrations | No auto-migrate in prod; CI step before image rollout |
 | Bun build, copied into Quarkus resources | Dev: bun proxies to Quarkus. Prod: single static-served bundle |
-| JVM-only Wave 1; native image experimental | `cedar-java` JNI/native image story is fragile; ship JVM and revisit when upstream support stabilizes |
+| Native-only Wave 1 | State-db owns Cedar JNI/reachability compatibility and gates it on both release architectures |
 | `quarkus-oidc` web-app session via BFF | Standard library; SPA gets HttpOnly session cookie. No rolled-our-own session crypto |
 | Single Cedar PDP for authorization (see auth.md) | One source of truth for "who can do what"; org-scope and role checks fold into policy clauses rather than per-handler `if` |
 | App-level workspace lifecycle | App INSERTs workspace then stack in one transaction; lifecycle stays explicit rather than hidden in triggers |

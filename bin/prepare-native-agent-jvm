@@ -1,0 +1,53 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+repository_root=$(cd "$(dirname "$0")/.." && pwd)
+dockerfile=$repository_root/modules/app/src/main/docker/Dockerfile.native
+builder=$(awk '$1 == "FROM" && $NF == "native" { print $(NF - 2); exit }' "$dockerfile")
+destination=${NATIVE_AGENT_JAVA_HOME:-/tmp/state-db-native-agent-mandrel}
+marker=$destination/.state-db-builder
+
+[[ $builder == *@sha256:* ]] || {
+  echo "error: could not find the digest-pinned native builder in $dockerfile" >&2
+  exit 2
+}
+
+case $destination in
+  /tmp/state-db-native-agent-mandrel | /tmp/state-db-native-agent-mandrel-*) ;;
+  *)
+    echo "error: NATIVE_AGENT_JAVA_HOME must be /tmp/state-db-native-agent-mandrel or a suffixed path" >&2
+    exit 2
+    ;;
+esac
+
+if [[ -x $destination/bin/java \
+  && -f $destination/lib/libnative-image-agent.so \
+  && -f $marker \
+  && $(<"$marker") == "$builder" ]]; then
+  echo "$destination/bin/java"
+  exit 0
+fi
+
+staging=$(mktemp -d /tmp/state-db-native-agent-mandrel-staging.XXXXXX)
+cleanup() {
+  rm -rf "$staging"
+}
+trap cleanup EXIT
+
+echo "Extracting the pinned Mandrel test JVM..." >&2
+docker run --rm --entrypoint tar "$builder" -C /opt -czf - mandrel \
+  | tar -xzf - -C "$staging"
+
+[[ -x $staging/mandrel/bin/java && -f $staging/mandrel/lib/libnative-image-agent.so ]] || {
+  echo 'error: pinned Mandrel image did not contain the expected test JVM and tracing agent' >&2
+  exit 1
+}
+
+if [[ -e $destination ]]; then
+  rm -rf "$destination"
+fi
+mv "$staging/mandrel" "$destination"
+printf '%s\n' "$builder" > "$marker"
+
+"$destination/bin/java" -version >&2
+echo "$destination/bin/java"

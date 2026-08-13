@@ -1,0 +1,158 @@
+{
+  "reflection": [
+    {
+      "type": "io.quarkus.bootstrap.forkjoin.QuarkusForkJoinWorkerThreadFactory",
+      "allDeclaredConstructors": true
+    },
+    {
+      "type": "com.cedarpolicy.BasicAuthorizationEngine$AuthorizationRequest",
+      "allDeclaredFields": true,
+      "allPublicFields": true
+    },
+    {
+      "type": "com.cedarpolicy.BasicAuthorizationEngine$StatefulAuthRequest",
+      "allDeclaredFields": true
+    },
+    {
+      "type": "com.cedarpolicy.model.AuthorizationRequest",
+      "allDeclaredFields": true,
+      "allPublicFields": true
+    },
+    {
+      "type": "com.cedarpolicy.model.AuthorizationResponse",
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": [
+            "com.cedarpolicy.model.AuthorizationResponse$SuccessOrFailure",
+            "java.util.Optional",
+            "java.util.Optional",
+            "java.util.ArrayList"
+          ]
+        }
+      ]
+    },
+    { "type": "com.cedarpolicy.model.AuthorizationResponse$SuccessOrFailure" },
+    {
+      "type": "com.cedarpolicy.model.AuthorizationSuccessResponse",
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": [
+            "com.cedarpolicy.model.AuthorizationSuccessResponse$Decision",
+            "com.cedarpolicy.model.AuthorizationSuccessResponse$Diagnostics"
+          ]
+        }
+      ]
+    },
+    { "type": "com.cedarpolicy.model.AuthorizationSuccessResponse$AuthorizationError" },
+    { "type": "com.cedarpolicy.model.AuthorizationSuccessResponse$Decision" },
+    {
+      "type": "com.cedarpolicy.model.AuthorizationSuccessResponse$Diagnostics",
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": ["java.util.Set", "java.util.List"]
+        }
+      ]
+    },
+    { "type": "com.cedarpolicy.model.DetailedError" },
+    { "type": "com.cedarpolicy.model.DetailedError$Severity" },
+    { "type": "com.cedarpolicy.model.DetailedError$SourceLabel" },
+    { "type": "com.cedarpolicy.serializer.JsonEUID", "allDeclaredConstructors": true, "allPublicFields": true },
+    {
+      "type": "com.cedarpolicy.model.ValidationRequest",
+      "methods": [
+        { "name": "getPolicySet", "parameterTypes": [] },
+        { "name": "getSchema", "parameterTypes": [] }
+      ]
+    },
+    {
+      "type": "com.cedarpolicy.model.ValidationResponse",
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": [
+            "com.cedarpolicy.model.ValidationResponse$SuccessOrFailure",
+            "java.util.Optional",
+            "java.util.Optional",
+            "java.util.Optional",
+            "java.util.Optional"
+          ]
+        }
+      ]
+    },
+    { "type": "com.cedarpolicy.model.ValidationResponse$SuccessOrFailure" },
+    { "type": "com.cedarpolicy.model.ValidationResponse$ValidationError" },
+    { "type": "com.cedarpolicy.model.ValidationResponse$ValidationSuccessResponse" },
+    {
+      "type": "com.cedarpolicy.model.policy.Policy",
+      "jniAccessible": true,
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": ["java.lang.String", "java.lang.String"]
+        }
+      ]
+    },
+    {
+      "type": "com.cedarpolicy.model.policy.PolicySet",
+      "jniAccessible": true,
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": ["java.util.Set", "java.util.Set"]
+        }
+      ]
+    },
+    {
+      "type": "com.cedarpolicy.value.EntityTypeName",
+      "jniAccessible": true,
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": ["java.util.List", "java.lang.String"]
+        },
+        { "name": "getBaseName", "parameterTypes": [] },
+        { "name": "getNamespace", "parameterTypes": [] }
+      ]
+    },
+    { "type": "com.fasterxml.jackson.databind.deser.Deserializers[]" },
+    {
+      "type": "com.fasterxml.jackson.databind.ext.Java7SupportImpl",
+      "methods": [{ "name": "<init>", "parameterTypes": [] }]
+    },
+    { "type": "com.fasterxml.jackson.databind.ser.Serializers[]" },
+    {
+      "type": "java.lang.Boolean",
+      "jniAccessible": true,
+      "methods": [
+        { "name": "getBoolean", "parameterTypes": ["java.lang.String"] }
+      ]
+    },
+    { "type": "java.lang.String", "jniAccessible": true },
+    {
+      "type": "java.util.ArrayList",
+      "jniAccessible": true,
+      "methods": [
+        { "name": "<init>", "parameterTypes": [] },
+        { "name": "size", "parameterTypes": [] }
+      ]
+    },
+    {
+      "type": "java.util.HashSet",
+      "jniAccessible": true,
+      "methods": [
+        { "name": "<init>", "parameterTypes": [] },
+        { "name": "add", "parameterTypes": ["java.lang.Object"] }
+      ]
+    },
+    {
+      "type": "java.util.Optional",
+      "jniAccessible": true,
+      "methods": [
+        { "name": "of", "parameterTypes": ["java.lang.Object"] }
+      ]
+    }
+  ]
+}

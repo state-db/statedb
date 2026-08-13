@@ -65,6 +65,14 @@ quarkus:
     mapping:
       format:
         global: ignore
+  native:
+    # RawApiTokens owns a process-wide SecureRandom. Cedar's package loads its JNI library and owns
+    # Rust-side caches plus a Cleaner. zstd-jni extracts and loads its own .so from a static
+    # initializer, so build-time init bakes in a "loaded" flag for a library the running process
+    # never opened. These process resources must be created when the executable starts, not in the
+    # image-builder JVM. These arguments are consumed only by native-image.
+    march: compatibility
+    additional-build-args: --initialize-at-run-time=app.statedb.persistence.auth.RawApiTokens,--initialize-at-run-time=com.cedarpolicy,--initialize-at-run-time=com.github.luben.zstd,--initialize-at-run-time=app.statedb.persistence.policy.PolicySetCache,--initialize-at-run-time=app.statedb.persistence.authz.Authorizer,--exact-reachability-metadata=com.cedarpolicy,--exact-reachability-metadata=app.statedb
   log:
     level: INFO
 

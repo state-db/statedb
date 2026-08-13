@@ -9,7 +9,7 @@ jobs:
   test:
     name: Module tests (dev container)
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
@@ -24,8 +24,12 @@ jobs:
       # .devcontainer/devcontainer.json (JDK 21, Maven, Docker-outside-of-Docker
       # for Quarkus Dev Services and the integrity-verifier container).
       #
-      # `verify` (not `test`) so the run includes the spotless:check binding and
-      # the failsafe lifecycle. The Pulumi CLI smoke and fault tiers stay at
+      # `verify` (not `test`) includes the spotless:check binding and failsafe
+      # lifecycle. After the comprehensive suite, the app re-runs its
+      # authorization tests on the pinned Mandrel JVM with the tracing agent;
+      # verify then rejects reviewed Native Image reachability drift. Those tests
+      # reach every Cedar path, the only reachability Quarkus cannot derive at
+      # build time. The Pulumi CLI smoke and fault tiers stay at
       # their opt-in defaults here (skipped); nightly.yml runs them across the
       # CLI version matrix.
       - name: Run module tests and verification
@@ -33,7 +37,8 @@ jobs:
         with:
           push: never
           runCmd: |
-            mvn -f modules/pom.xml verify
+            ./bin/prepare-native-agent-jvm >/dev/null
+            mvn -f modules/pom.xml verify -Pnative-agent-tests
             ./bin/generate-third-party-notices --check
 
   verifier-tool:

@@ -1,5 +1,6 @@
 package app.statedb.persistence.policy;
 
+import io.quarkus.runtime.annotations.RegisterResources;
 import jakarta.enterprise.context.ApplicationScoped;
 import java.io.IOException;
 import java.io.InputStream;
@@ -9,6 +10,7 @@ import java.util.List;
 import java.util.Map;
 
 @ApplicationScoped
+@RegisterResources(globs = "policies/**")
 public class ClasspathPolicyStore implements PolicyStore {
 
   private static final List<String> POLICY_RESOURCES =

@@ -8,8 +8,7 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 
 readonly REGISTRY=${STATE_DB_REGISTRY:-ghcr.io/state-db/state-db}
-readonly DOCKERFILE=modules/app/src/main/docker/Dockerfile.jvm
-readonly PLATFORMS=linux/amd64,linux/arm64
+readonly CANDIDATE_REGISTRY=${STATE_DB_CANDIDATE_REGISTRY:-${REGISTRY}-candidates}
 readonly CHANGELOG=CHANGELOG.md
 readonly REQUIRED_NIGHTLIES=3
 
@@ -80,7 +79,8 @@ readonly minor=${version%.*}
 git rev-parse -q --verify "refs/tags/$tag" >/dev/null && fail "$tag already exists locally"
 [[ -z $(git ls-remote --tags origin "refs/tags/$tag") ]] || fail "$tag already exists on origin"
 
-commit=$(git rev-parse --short=7 HEAD)
+commit_full=$(git rev-parse HEAD)
+commit=${commit_full:0:7}
 note "releasing $commit as $version"
 
 [[ -f $CHANGELOG ]] || fail "$CHANGELOG is missing"
@@ -96,6 +96,18 @@ if [[ $ci_conclusion == success ]]; then
 else
   require "ci.yml has not succeeded on $commit (got: ${ci_conclusion:-no run})"
 fi
+
+# native.yml is dispatched against a ref, so look it up on the branch being released.
+release_branch=$(git rev-parse --abbrev-ref HEAD)
+native_conclusion=$(gh run list --workflow native.yml --branch "$release_branch" --limit 20 \
+  --json headSha,conclusion --jq "map(select(.headSha == \"$commit_full\")) | .[0].conclusion" 2>/dev/null || true)
+if [[ $native_conclusion == success ]]; then
+  note "native.yml green on amd64 and arm64"
+else
+  require "native.yml has not succeeded on $commit (got: ${native_conclusion:-no run})"
+fi
+native_run_id=$(gh run list --workflow native.yml --branch "$release_branch" --limit 20 \
+  --json databaseId,headSha --jq "map(select(.headSha == \"$commit_full\")) | .[0].databaseId" 2>/dev/null || true)
 
 nightly_conclusions=$(gh run list --workflow nightly.yml --limit "$REQUIRED_NIGHTLIES" \
   --json conclusion --jq '.[].conclusion' 2>/dev/null || true)
@@ -122,24 +134,13 @@ else
   fail "build identity resolved to '$built_version', expected '$version'"
 fi
 
-step "Building"
+step "Building the native release candidate"
 
-platforms=$(docker buildx inspect --bootstrap 2>/dev/null | sed -n 's/^Platforms:[[:space:]]*//p')
-for platform in ${PLATFORMS//,/ }; do
-  [[ $platforms == *"$platform"* ]] ||
-    fail "the current buildx builder cannot build $platform (it offers: ${platforms:-none}). Enable the containerd image store in Docker Desktop, or select a docker-container builder."
-done
+bin/generate-java-sbom artifacts
 
 eval "$(bin/build-version --env)"
-build_args=(
-  --build-arg "BUILD_VERSION=$BUILD_VERSION"
-  --build-arg "BUILD_COMMIT=$BUILD_COMMIT"
-  --build-arg "SOURCE_DATE_EPOCH=$SOURCE_DATE_EPOCH"
-  -f "$DOCKERFILE"
-)
-
 candidate="state-db:$version"
-docker buildx build "${build_args[@]}" --provenance=false --sbom=false --load -t "$candidate" .
+bin/build-native-app-image "$candidate"
 note "built $candidate for the gate"
 
 step "Gate: what this image does when it runs"
@@ -152,23 +153,35 @@ if [[ -n $previous_tag ]]; then
 fi
 bin/release-gate "${gate_args[@]}"
 
-step "Publishing $REGISTRY:$version"
+step "Assembling the immutable multi-architecture manifest"
 
-if ! would "buildx build --push --platform $PLATFORMS -t $REGISTRY:{$version,$minor,latest}"; then
-  docker buildx build "${build_args[@]}" \
-    --platform "$PLATFORMS" \
-    --sbom=true --provenance=true \
-    -t "$REGISTRY:$version" -t "$REGISTRY:$minor" -t "$REGISTRY:latest" \
-    --push .
+arch_candidates=(
+  "$CANDIDATE_REGISTRY:$commit_full-amd64"
+  "$CANDIDATE_REGISTRY:$commit_full-arm64"
+)
+candidate_manifest="$CANDIDATE_REGISTRY:$commit_full"
+if ! would "assemble and gate $candidate_manifest from the two gated CI architecture candidates"; then
+  for ref in "${arch_candidates[@]}"; do
+    docker buildx imagetools inspect "$ref" >/dev/null || fail "missing gated CI candidate $ref"
+  done
+  docker buildx imagetools create -t "$candidate_manifest" "${arch_candidates[@]}"
+  docker pull "$candidate_manifest"
+  published_gate_args=("$candidate_manifest" --expect-commit "$commit")
+  if [[ -n $previous_tag ]]; then
+    published_gate_args+=(--previous "$REGISTRY:${previous_tag#v}")
+  fi
+  bin/release-gate "${published_gate_args[@]}"
 fi
 
 digest=""
-if ! would "resolve and cosign sign the published digest"; then
-  digest=$(docker buildx imagetools inspect "$REGISTRY:$version" --format '{{json .Manifest.Digest}}' | tr -d '"')
+if ! would "sign the gated immutable digest and move the floating tags"; then
+  digest=$(docker buildx imagetools inspect "$candidate_manifest" --format '{{json .Manifest.Digest}}' | tr -d '"')
   [[ -n $digest ]] || fail "could not resolve the digest of $REGISTRY:$version"
   note "digest $digest"
+  docker buildx imagetools create -t "$REGISTRY:$version" "$candidate_manifest"
   cosign sign --yes "$REGISTRY@$digest"
-  note "signed"
+  docker buildx imagetools create -t "$REGISTRY:$minor" -t "$REGISTRY:latest" "$REGISTRY@$digest"
+  note "signed native $digest; moved $minor and latest"
 fi
 
 step "Tagging the release"
@@ -177,8 +190,19 @@ if ! would "git push origin $tag"; then
   # From here, deleting only the local tag would make retries harder to reason about.
   trap - EXIT
 fi
-would "gh release create $tag" || printf '%s\n' "$notes" | gh release create "$tag" \
-  --title "$version" --notes-file - --verify-tag
+if ! would "gh release create $tag with Java/container SBOMs and native build metadata"; then
+  [[ -n $native_run_id ]] || fail "could not identify native.yml run for release evidence"
+  rm -rf artifacts/native-release-evidence
+  mkdir -p artifacts/native-release-evidence
+  gh run download "$native_run_id" -n native-build-amd64 \
+    -D artifacts/native-release-evidence/amd64
+  gh run download "$native_run_id" -n native-build-arm64 \
+    -D artifacts/native-release-evidence/arm64
+  printf '%s\n' "$notes" | gh release create "$tag" \
+    --title "$version" --notes-file - --verify-tag \
+    artifacts/state-db-java.cdx.json \
+    artifacts/native-release-evidence/amd64/* artifacts/native-release-evidence/arm64/*
+fi
 
 step "Rolling the changelog and .version"
 

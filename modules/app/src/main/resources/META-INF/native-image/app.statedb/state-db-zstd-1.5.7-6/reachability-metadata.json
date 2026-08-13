@@ -1,0 +1,28 @@
+{
+  "comment": [
+    "zstd-jni's C code writes the stream position and frame-state fields back into the Java",
+    "objects through JNI, so they must be JNI-accessible in the native image. The native methods",
+    "themselves need no entry: GraalVM resolves their symbols from the loaded library.",
+    "Registered as whole-class field sets because the exact set the C code touches is an upstream",
+    "implementation detail that can change within a patch release; the pinned directory name is",
+    "what ties this file to a version."
+  ],
+  "reflection": [
+    {
+      "type": "com.github.luben.zstd.ZstdOutputStreamNoFinalizer",
+      "jniAccessible": true,
+      "allDeclaredFields": true
+    },
+    {
+      "type": "com.github.luben.zstd.ZstdInputStreamNoFinalizer",
+      "jniAccessible": true,
+      "allDeclaredFields": true
+    },
+    {
+      "type": "com.github.luben.zstd.ZstdException",
+      "jniAccessible": true,
+      "allDeclaredConstructors": true,
+      "allDeclaredFields": true
+    }
+  ]
+}

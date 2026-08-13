@@ -103,6 +103,81 @@ echo ""
 #
 # The leak signal is jvm_gc_live_data_size_bytes. Regressing raw heap usage would mostly measure
 # where in the GC cycle each sample landed. Slope in MB/hour.
+
+# The native image exports jvm_gc_overhead but not jvm_gc_live_data_size_bytes, so on that build
+# the live set comes from the -XX:+PrintGC lines instead:
+#
+#   [1234.5s] GC(42) Pause Full GC (Collect on allocation) 226.00M->48.00M 17.236ms
+#
+# The value after a *full* collection is the live set. Regress the minimum per window rather than
+# every sample: an individual full GC can be triggered mid-allocation and retain garbage, so the
+# floor tracks the leak and the raw points mostly track allocation rate.
+NATIVE_GC_LOG="${NATIVE_GC_LOG:-$ARTIFACTS_DIR/gc-native.log}"
+LIVE_SET_WINDOW_S="${LIVE_SET_WINDOW_S:-1800}"
+LIVE_SET_WARMUP_S="${LIVE_SET_WARMUP_S:-300}"
+
+grade_native_live_set() {
+  if [[ ! -f "$NATIVE_GC_LOG" ]]; then
+    fail "no live-set data: neither jvm_gc_live_data_size_bytes nor ${NATIVE_GC_LOG##*/} is present"
+    return
+  fi
+
+  # A restart resets the GC clock to zero. Fitting across that discontinuity invents a slope, so
+  # keep only the final segment and say so.
+  local parsed
+  parsed="$(awk -v warmup="$LIVE_SET_WARMUP_S" -v window="$LIVE_SET_WINDOW_S" '
+    match($0, /^\[[0-9.]+s\] GC\([0-9]+\) Pause Full GC .* [0-9.]+M->[0-9.]+M/) {
+      t = substr($1, 2, length($1) - 3) + 0
+      after = $0; sub(/.*->/, "", after); sub(/M .*/, "", after)
+      if (t < last_t) { segments++; delete floor; n = 0 }
+      last_t = t
+      total++
+      if (t < warmup) next
+      n++
+      w = int(t / window)
+      if (!(w in floor) || after + 0 < floor[w]) { floor[w] = after + 0; floor_t[w] = t }
+      if (first_t == "") first_t = t
+    }
+    END {
+      if (total == 0) { print "NOMATCH 0 0 0 0"; exit }
+      c = 0
+      for (w in floor) { c++; st += floor_t[w]; sv += floor[w]; stv += floor_t[w] * floor[w]; stt += floor_t[w] * floor_t[w] }
+      if (c < 3) { print "TOOFEW " total " 0 0 " segments; exit }
+      denom = (c * stt - st * st)
+      slope = denom == 0 ? 0 : (c * stv - st * sv) / denom
+      lo = ""; hi = ""
+      for (w in floor) {
+        if (lo == "" || floor_t[w] < lo_t) { lo_t = floor_t[w]; lo = floor[w] }
+        if (hi == "" || floor_t[w] > hi_t) { hi_t = floor_t[w]; hi = floor[w] }
+      }
+      printf "%.3f %d %.2f %.2f %d", slope * 3600, total, lo, hi, segments
+    }' "$NATIVE_GC_LOG")"
+
+  local slope count floor_first floor_last segments
+  read -r slope count floor_first floor_last segments <<<"$parsed"
+
+  case "$slope" in
+  NOMATCH)
+    fail "${NATIVE_GC_LOG##*/} has no 'Pause Full GC' lines — is -XX:+PrintGC still set on the app?"
+    return
+    ;;
+  TOOFEW)
+    info "only ${count} full GC(s) after warmup — too few ${LIVE_SET_WINDOW_S}s windows to fit a trend"
+    return
+    ;;
+  esac
+
+  (( segments > 0 )) && info "app restarted ${segments} time(s); live set fitted over the last run only"
+  info "post-GC live-set floor: ${floor_first}MB -> ${floor_last}MB (${count} full GCs)"
+  if (( GRADE_TRENDS == 0 )); then
+    info "live-set trend ${slope}MB/h (not graded: ${TREND_SKIP_REASON})"
+  elif awk "BEGIN { exit !($slope <= $HEAP_SLOPE_MAX_MB_H) }"; then
+    pass "live-set trend ${slope}MB/h (limit ${HEAP_SLOPE_MAX_MB_H}, from GC log)"
+  else
+    fail "live-set trend ${slope}MB/h exceeds ${HEAP_SLOPE_MAX_MB_H}MB/h — probable leak"
+  fi
+}
+
 echo "Memory"
 read -r live_slope live_first live_last <<<"$(awk -F'\t' '
   NR > 1 && $29 != "" && $29 + 0 > 0 { n++; t[n] = $2; v[n] = $29 }
@@ -121,8 +196,12 @@ heap_range="$(awk -F'\t' '
 gc_overhead_max="$(awk -F'\t' 'NR > 1 && $30 + 0 > m { m = $30 } END { printf "%.4f", m + 0 }' "$SERIES")"
 
 info "heap in use ranged $heap_range; peak GC overhead ${gc_overhead_max}"
-if [[ "$live_slope" == "NA" ]]; then
-  info "no post-GC live-set samples (series predates jvm_gc_live_data_size_bytes)"
+# The GC log wins when present: on a native run the series column holds old-gen occupancy, which
+# includes uncollected garbage and would grade allocation rate rather than the live set.
+if [[ -f "$NATIVE_GC_LOG" ]]; then
+  grade_native_live_set
+elif [[ "$live_slope" == "NA" ]]; then
+  fail "no live-set data: neither jvm_gc_live_data_size_bytes nor ${NATIVE_GC_LOG##*/} is present"
 else
   info "post-GC live set: ${live_first}MB -> ${live_last}MB"
   if (( GRADE_TRENDS == 0 )); then

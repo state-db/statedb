@@ -79,7 +79,7 @@
                     <version>${license-maven-plugin.version}</version>
                     <configuration>
                         <excludedScopes>test,provided</excludedScopes>
-                        <excludedGroups>^app[.]statedb$</excludedGroups>
+                        <excludedGroups>app\.statedb</excludedGroups>
                         <failOnMissing>false</failOnMissing>
                         <sortArtifactByName>true</sortArtifactByName>
                         <!-- Resolves relative to the module the goal runs on;

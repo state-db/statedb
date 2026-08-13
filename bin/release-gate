@@ -11,10 +11,13 @@ cd "$(dirname "$0")/.."
 readonly NET=state-db-gate
 readonly PG=state-db-gate-pg
 readonly APP=state-db-gate-app
+readonly FOLLOWER=state-db-gate-app-follower
 readonly CLI=state-db-gate-pulumi
+readonly IDP=state-db-gate-idp
+readonly IDP_IMAGE=state-db-gate-idp:local
 
 readonly PG_IMAGE=postgres:17-alpine
-readonly CURL_IMAGE=curlimages/curl:latest
+readonly CURL_IMAGE=curlimages/curl@sha256:463eaf6072688fe96ac64fa623fe73e1dbe25d8ad6c34404a669ad3ce1f104b6
 readonly PULUMI_IMAGE=${PULUMI_IMAGE:-pulumi/pulumi:3.234.0}
 
 readonly DB_USER=gate
@@ -25,11 +28,12 @@ readonly STACK=gate
 readonly PROJECT_FILE=tools/pulumi/recorder/testproject/Pulumi.yaml
 readonly RECORDER_DOCKERFILE=tools/pulumi/recorder/Dockerfile
 
-readonly GLASS_PASSWORD='release-gate-password'
-readonly GLASS_HASH='$2y$05$I1KR5ZwHLG3AsJ/Iz9/ejO68cAdezEWhn1xDFHgVNjrAL/Lejcrjy'
 readonly SESSION_SECRET='release-gate-session-secret-32b!'
 readonly RAW_TOKEN=state-db-release-gate-token
+readonly VIEWER_TOKEN=state-db-release-gate-viewer-token
 readonly CONFIG_PASSPHRASE=release-gate
+readonly GLASS_PASSWORD=glass-recovery-pw
+readonly GLASS_HASH='$2y$10$lL8GkJSvjMqOCqSTfXX6Xe1vs4EwlJ8UnPk2FNz7/zIGbVTsH.Cea'
 
 image=""
 previous=""
@@ -69,7 +73,7 @@ fail() {
 }
 
 cleanup() {
-  docker rm -f "$APP" "$PG" "$CLI" >/dev/null 2>&1 || true
+  docker rm -f "$APP" "$FOLLOWER" "$PG" "$CLI" "$IDP" >/dev/null 2>&1 || true
   docker network rm "$NET" >/dev/null 2>&1 || true
 }
 trap cleanup EXIT
@@ -87,30 +91,48 @@ sha256_hex() {
   fi
 }
 
-start_app() {
-  local ref=$1 label=$2
-  docker rm -f "$APP" >/dev/null 2>&1 || true
-  docker run -d --name "$APP" --network "$NET" --memory=2g \
+run_app() {
+  local container=$1 ref=$2
+  docker rm -f "$container" >/dev/null 2>&1 || true
+  docker run -d --name "$container" --network "$NET" --memory=2g --read-only \
+    --tmpfs /tmp:rw,noexec,nosuid,size=64m \
     -e STATE_DB_JDBC_URL="jdbc:postgresql://$PG:5432/$DB_NAME" \
     -e STATE_DB_DB_USER="$DB_USER" \
     -e STATE_DB_DB_PASSWORD="$DB_PASSWORD" \
     -e STATE_DB_BOOTSTRAP_ORG_NAME="$ORG" \
+    -e STATE_DB_SESSION_ENCRYPTION_SECRET="$SESSION_SECRET" \
+    -e STATE_DB_OIDC_BOOTSTRAP_NAME=mock \
+    -e STATE_DB_OIDC_BOOTSTRAP_ISSUER="http://$IDP:8080/default" \
+    -e STATE_DB_OIDC_BOOTSTRAP_CLIENT_ID=console \
+    -e STATE_DB_OIDC_BOOTSTRAP_CLIENT_SECRET=console-secret \
+    -e STATE_DB_OIDC_DEFAULT_PROVIDER=mock \
+    -e STATE_DB_ADMIN_SUBJECTS="http://$IDP:8080/default:admin" \
     -e STATE_DB_LOCAL_GLASS_PASSWORD_HASH="$GLASS_HASH" \
     -e STATE_DB_LOCAL_GLASS_ALLOW_REMOTE=true \
-    -e STATE_DB_SESSION_ENCRYPTION_SECRET="$SESSION_SECRET" \
     "$ref" >/dev/null
+}
 
+wait_ready() {
+  local container=$1 label=$2
   for _ in $(seq 1 90); do
-    if gate_curl -sf "http://$APP:9000/q/health/ready" >/dev/null 2>&1; then
-      echo "$label ready"
+    if readiness=$(gate_curl -sf "http://$container:9000/q/health/ready" 2>/dev/null); then
+      readiness_lower=$(printf '%s' "$readiness" | tr '[:upper:]' '[:lower:]')
+      [[ $readiness_lower == *cedar* ]] || fail "$label readiness omitted the Cedar self-test"
+      echo "$label ready (including Cedar authorization self-test)"
       return 0
     fi
-    [[ $(docker inspect -f '{{.State.Status}}' "$APP") == running ]] || break
+    [[ $(docker inspect -f '{{.State.Status}}' "$container") == running ]] || break
     sleep 2
   done
 
-  docker logs "$APP" 2>&1 | tail -30 >&2
+  docker logs "$container" 2>&1 | tail -100 >&2
   fail "$label did not become ready"
+}
+
+start_app() {
+  local ref=$1 label=$2
+  run_app "$APP" "$ref"
+  wait_ready "$APP" "$label"
 }
 
 step "Starting Postgres"
@@ -124,7 +146,18 @@ for _ in $(seq 1 60); do
 done
 docker exec "$PG" pg_isready -U "$DB_USER" >/dev/null 2>&1 || fail "Postgres never became ready"
 
-step "1/4 Upgrade from the previous release"
+step "Starting the OIDC provider"
+docker build -q -t "$IDP_IMAGE" -f workbench/pulumi/mock-oauth2.Dockerfile . >/dev/null
+docker run -d --name "$IDP" --network "$NET" \
+  -e 'JSON_CONFIG={"interactiveLogin":true,"httpServer":"NettyWrapper","loginPagePath":"/app/workbench-login.html"}' \
+  "$IDP_IMAGE" >/dev/null
+for _ in $(seq 1 60); do
+  gate_curl -sf "http://$IDP:8080/default/.well-known/openid-configuration" >/dev/null 2>&1 && break
+  sleep 1
+done
+gate_curl -sf "http://$IDP:8080/default/.well-known/openid-configuration" >/dev/null || fail "OIDC provider never became ready"
+
+step "1/8 Upgrade from the previous release"
 if [[ -n $previous ]]; then
   start_app "$previous" "previous release ($previous)"
   from_version=$(psql_gate -tA -c 'SELECT max(version) FROM flyway_schema_history')
@@ -136,8 +169,11 @@ else
   echo "         that has never been exercised is the failure self-hosters feel first."
 fi
 
-step "2/4 Candidate boots"
-start_app "$image" "candidate ($image)"
+step "2/8 Concurrent candidate cold start"
+run_app "$APP" "$image"
+run_app "$FOLLOWER" "$image"
+wait_ready "$APP" "candidate ($image)"
+wait_ready "$FOLLOWER" "concurrent candidate follower"
 to_version=$(psql_gate -tA -c 'SELECT max(version) FROM flyway_schema_history')
 failed=$(psql_gate -tA -c 'SELECT count(*) FROM flyway_schema_history WHERE success = false')
 [[ $failed == 0 ]] || fail "$failed migration(s) recorded as failed"
@@ -146,28 +182,137 @@ if [[ -n $from_version ]]; then
 else
   echo "schema at v${to_version}"
 fi
+docker rm -f "$FOLLOWER" >/dev/null
 
-step "3/4 Reported build identity"
-# Login and read in one container so the cookie jar survives both requests.
-version_json=$(docker run --rm --network "$NET" "$CURL_IMAGE" sh -c "
-  curl -sf -c /tmp/j -o /dev/null -X POST http://$APP:8080/api/auth/local \
-    -d username=gate -d password='$GLASS_PASSWORD'
-  curl -sf -b /tmp/j http://$APP:8080/api/version") ||
-  fail "break-glass login or /api/version failed"
+step "3/8 Image contract"
+image_user=$(docker image inspect "$image" --format '{{.Config.User}}')
+case "$image_user" in
+"" | "0" | "root" | "0:0" | "root:root") fail "candidate image runs as root" ;;
+*) echo "non-root runtime user: $image_user" ;;
+esac
+
+image_license=$(docker image inspect "$image" --format '{{index .Config.Labels "org.opencontainers.image.licenses"}}')
+[[ $image_license == Elastic-2.0 ]] || fail "candidate image license label is '$image_license', expected Elastic-2.0"
+
+license_dir=$(mktemp -d)
+trap 'rm -rf "$license_dir"; cleanup' EXIT
+docker cp "$APP:/licenses/." "$license_dir" >/dev/null 2>&1 || fail "candidate does not contain /licenses"
+for legal_file in LICENSE NOTICE THIRD-PARTY-NOTICES.txt CEDAR-LICENSE CEDAR-NOTICE CEDAR-THIRD-PARTY-LICENSES.txt; do
+  [[ -s "$license_dir/$legal_file" ]] || fail "candidate is missing /licenses/$legal_file"
+done
+if [[ -s "$license_dir/CEDAR-NATIVE-SHA256" ]]; then
+  docker cp "$APP:/work/libcedar_java_ffi.so" "$license_dir/libcedar_java_ffi.so"
+  expected_cedar_hash=$(cut -d' ' -f1 "$license_dir/CEDAR-NATIVE-SHA256")
+  actual_cedar_hash=$(sha256_hex < "$license_dir/libcedar_java_ffi.so")
+  [[ $actual_cedar_hash == "$expected_cedar_hash" ]] || fail "Cedar native library hash does not match its build manifest"
+  echo "Cedar native library: $actual_cedar_hash"
+fi
+rm -rf "$license_dir"
+trap cleanup EXIT
+echo "license label and distribution notices present"
+
+step "4/8 Native authorization contract"
+anonymous_status=$(gate_curl -s -o /dev/null -w '%{http_code}' "http://$APP:8080/api/user")
+[[ $anonymous_status == 401 ]] || fail "anonymous /api/user returned $anonymous_status, expected 401"
+
+owner_hash=$(printf '%s' "$RAW_TOKEN" | sha256_hex)
+viewer_hash=$(printf '%s' "$VIEWER_TOKEN" | sha256_hex)
+psql_gate >/dev/null <<SQL
+INSERT INTO users (id, iss, sub, email, display_name)
+VALUES (gen_random_uuid(), 'local:release-gate', 'viewer', 'viewer@release-gate.invalid', 'Release Gate Viewer')
+ON CONFLICT (iss, sub) DO UPDATE SET display_name = EXCLUDED.display_name;
+
+INSERT INTO org_members (org_id, user_id, role)
+SELECT o.id, u.id, 'viewer'
+FROM organizations o, users u
+WHERE o.name = '$ORG' AND u.iss = 'local:release-gate' AND u.sub = 'viewer'
+ON CONFLICT (org_id, user_id) DO UPDATE SET role = EXCLUDED.role;
+
+INSERT INTO api_tokens (id, token_hash, description, user_id, org_id, kind, expires_at)
+SELECT gen_random_uuid(), '$viewer_hash', 'release-gate-viewer', u.id, o.id, 'service_account', now() + interval '1 day'
+FROM organizations o, users u
+WHERE o.name = '$ORG' AND u.iss = 'local:release-gate' AND u.sub = 'viewer'
+ON CONFLICT (token_hash) DO NOTHING;
+
+INSERT INTO api_tokens (id, token_hash, description, user_id, org_id, kind, expires_at)
+SELECT gen_random_uuid(), '$owner_hash', 'release-gate-owner', u.id, o.id, 'service_account', now() + interval '1 day'
+FROM organizations o, users u
+WHERE o.name = '$ORG' AND u.iss = 'local:bootstrap' AND u.sub = 'admin'
+ON CONFLICT (token_hash) DO NOTHING;
+SQL
+
+viewer_status=$(gate_curl -s -o /dev/null -w '%{http_code}' \
+  -H "Authorization: token $VIEWER_TOKEN" \
+  -H 'Content-Type: application/json' \
+  -d '{"stackName":"native-authz-check","tags":{"pulumi:project":"native-gate"}}' \
+  "http://$APP:8080/pulumi/api/stacks/$ORG/native-gate")
+[[ $viewer_status == 403 ]] || fail "viewer stack creation returned $viewer_status, expected Cedar deny (403)"
+
+owner_status=$(gate_curl -s -o /dev/null -w '%{http_code}' \
+  -H "Authorization: token $RAW_TOKEN" \
+  -H 'Content-Type: application/json' \
+  -d '{"stackName":"native-authz-check","tags":{"pulumi:project":"native-gate"}}' \
+  "http://$APP:8080/pulumi/api/stacks/$ORG/native-gate")
+[[ $owner_status == 200 ]] || fail "owner stack creation returned $owner_status, expected Cedar allow (200)"
+echo "anonymous rejected; Cedar viewer deny and owner allow passed"
+
+step "5/8 OIDC, authenticated console, projections, SPA, compaction, and break-glass"
+console_results=$(
+  docker run --rm -i --network "$NET" -e GATE_APP="$APP" -e GATE_ORG="$ORG" "$CURL_IMAGE" sh -eu -s <<'EOF'
+  echo 'OIDC: starting authorization flow' >&2
+  login_url=$(curl -sfS -c /tmp/j -b /tmp/j -L -o /tmp/login -w '%{url_effective}' \
+    "http://$GATE_APP:8080/api/auth/login/mock?returnTo=/")
+  echo "OIDC: posting login to $login_url" >&2
+  curl -sfS -c /tmp/j -b /tmp/j -L -o /dev/null "$login_url" \
+    --data-urlencode username=admin \
+    --data-urlencode 'claims={"email":"admin@release-gate.invalid","name":"Release Gate Admin"}'
+  echo 'OIDC: reading authenticated APIs' >&2
+  curl -sfS -b /tmp/j "http://$GATE_APP:8080/api/version"
+  printf '\n'
+  curl -sfS -b /tmp/j "http://$GATE_APP:8080/api/user" >/dev/null
+  curl -sfS -b /tmp/j "http://$GATE_APP:8080/api/workspaces" >/dev/null
+  curl -sfS "http://$GATE_APP:8080/" | grep -qi '<!doctype html>'
+  echo 'OIDC: forcing compaction' >&2
+  curl -sfS -b /tmp/j -X POST \
+    "http://$GATE_APP:8080/api/admin/stacks/$GATE_ORG/native-gate/native-authz-check/compact" >/dev/null
+  completed=false
+  jobs='[]'
+  for _ in $(seq 1 30); do
+    jobs=$(curl -sfS -b /tmp/j "http://$GATE_APP:8080/api/admin/compaction-jobs")
+    if printf '%s' "$jobs" \
+      | grep -q '"project":"native-gate".*"stack":"native-authz-check".*"status":"completed"'; then
+      completed=true
+      break
+    fi
+    sleep 1
+  done
+  if ! $completed; then
+    echo "forced compaction did not complete: $jobs" >&2
+  fi
+  $completed
+EOF
+) || {
+  docker logs "$APP" 2>&1 | tail -150 >&2
+  fail "native OIDC login, authenticated projections, or SPA delivery failed"
+}
+version_json=$(printf '%s\n' "$console_results" | head -n 1)
 echo "$version_json"
 case "$version_json" in
 *"\"commit\":\"$expected_commit\""*) echo "commit matches $expected_commit" ;;
 *) fail "image reports a different commit than $expected_commit" ;;
 esac
 
-step "4/4 Pulumi up / refresh / destroy against the running image"
-token_hash=$(printf '%s' "$RAW_TOKEN" | sha256_hex)
-psql_gate -c "INSERT INTO api_tokens (id, token_hash, description, user_id, org_id, kind, expires_at)
-      SELECT gen_random_uuid(), '$token_hash', 'release-gate', u.id, o.id, 'service_account', now() + interval '1 day'
-      FROM organizations o, users u
-      WHERE o.name = '$ORG' AND u.iss = 'local:bootstrap' AND u.sub = 'admin'
-      ON CONFLICT (token_hash) DO NOTHING" >/dev/null
+psql_gate -c "UPDATE oidc_providers SET enabled = false" >/dev/null
+docker run --rm --network "$NET" "$CURL_IMAGE" sh -eu -c "
+  curl -sfS -c /tmp/glass -b /tmp/glass \
+    -H 'Content-Type: application/x-www-form-urlencoded' \
+    --data-urlencode username=admin --data-urlencode password='$GLASS_PASSWORD' \
+    http://$APP:8080/api/auth/local >/dev/null
+  curl -sfS -b /tmp/glass http://$APP:8080/api/user >/dev/null
+" || fail "native break-glass login or authenticated read failed"
+echo "break-glass bcrypt login and encrypted session passed"
 
+step "6/8 Pulumi up / refresh / destroy against the running image"
 docker run -d --name "$CLI" --network "$NET" \
   -e PULUMI_ACCESS_TOKEN="$RAW_TOKEN" \
   -e PULUMI_CONFIG_PASSPHRASE="$CONFIG_PASSPHRASE" \
@@ -192,5 +337,31 @@ docker exec -w /project "$CLI" sh -eu -c "
   pulumi destroy --yes --skip-preview
   pulumi stack rm --yes
 " || fail "the Pulumi CLI could not complete a lifecycle against this image"
+
+step "7/8 Database outage and readiness recovery"
+docker stop "$PG" >/dev/null
+outage_status=$(gate_curl --max-time 10 -s -o /dev/null -w '%{http_code}' \
+  "http://$APP:9000/q/health/ready" || true)
+[[ $(docker inspect -f '{{.State.Status}}' "$APP") == running ]] || fail "candidate died during the database outage"
+[[ $outage_status == 503 ]] || fail "readiness returned $outage_status during the database outage, expected 503"
+docker start "$PG" >/dev/null
+for _ in $(seq 1 60); do
+  docker exec "$PG" pg_isready -U "$DB_USER" >/dev/null 2>&1 && break
+  sleep 1
+done
+for _ in $(seq 1 60); do
+  gate_curl -sf "http://$APP:9000/q/health/ready" >/dev/null 2>&1 && break
+  sleep 1
+done
+gate_curl -sf "http://$APP:9000/q/health/ready" >/dev/null || fail "readiness did not recover after Postgres restarted"
+echo "readiness went down with Postgres and recovered without restarting the app"
+
+step "8/8 Graceful shutdown"
+docker stop --time 10 "$APP" >/dev/null
+app_exit=$(docker inspect -f '{{.State.ExitCode}}' "$APP")
+case "$app_exit" in
+0 | 143) echo "SIGTERM completed within the 10-second grace period (exit $app_exit)" ;;
+*) fail "candidate exited with status $app_exit after SIGTERM" ;;
+esac
 
 printf '\n\033[32mgate passed: %s is releasable\033[0m\n' "$image"

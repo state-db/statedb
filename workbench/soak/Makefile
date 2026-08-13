@@ -104,6 +104,10 @@ artifacts:
 			state-db-soak-load:local true >/dev/null; \
 		docker cp state-db-soak-copy:/artifacts/. artifacts/; \
 		docker rm state-db-soak-copy >/dev/null'
+	@## The native image has no jvm_gc_live_data_size_bytes, so the leak signal comes from the
+	@## -XX:+PrintGC lines on the app's stdout. Losing this file disables the live-set check.
+	@sh -c 'docker logs state-db-soak-app > artifacts/gc-native.log 2>&1 || \
+		echo "warning: could not capture app GC log" >&2'
 	@echo "artifacts copied to $(COMPOSE_DIR)/artifacts/"
 
 ## Grade the run. Non-zero exit if any check fails.

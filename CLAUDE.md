@@ -169,6 +169,11 @@ Deliberate exception: `tools/pulumi/api-extract` (pure-Go host tool),
 against a read-only bind mount of the tree) are not routed through the
 gateway — they manage their own execution environments.
 
+Native image and release tooling (`bin/build-native-app-image`, `bin/release-gate`,
+`bin/generate-java-sbom`, and `bin/release`) is also host-Docker tooling. Mandrel
+compilation and all runtime checks happen inside pinned containers; do not run a
+host JDK or Maven for these commands.
+
 Semgrep and osv-scanner are deliberately not devcontainer features: adding them
 would force a container rebuild on every contributor for two tools that are
 only invoked from `make analyze`, and both publish maintained images. The other

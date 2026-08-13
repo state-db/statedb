@@ -5,7 +5,7 @@
 	web-dev \
 	format format-check \
 	analyze analyze-java analyze-web analyze-semgrep analyze-deps \
-	notices notices-check \
+	notices notices-check sbom \
 	pulumi-extract pulumi-compare pulumi-discover pulumi-api-test \
 	$(PULUMI_RECORDER_TARGETS) \
 	pulumi-verify-build pulumi-verify-test \
@@ -16,7 +16,6 @@ IN_CONTAINER := ./bin/in-container
 MODULES_POM  := modules/pom.xml
 
 APP_IMAGE ?= state-db:dev
-DOCKER_CFG ?= /tmp/state-db-dockercfg
 
 PULUMI_SCOPE         ?= $(CURDIR)/tools/pulumi/api-extract/scopes/state-backend.yaml
 PULUMI_SNAPSHOTS_DIR ?= $(CURDIR)/api-snapshots/pulumi
@@ -41,7 +40,7 @@ app-build:
 
 # Host Docker is intentional here; the Maven/Bun toolchains run inside Docker build stages.
 app-image:
-	DOCKER_CFG='$(DOCKER_CFG)' ./bin/build-app-image '$(APP_IMAGE)'
+	./bin/build-native-app-image '$(APP_IMAGE)'
 
 app-test:
 	$(IN_CONTAINER) mvn -f $(MODULES_POM) test
@@ -109,6 +108,9 @@ notices:
 
 notices-check:
 	./bin/generate-third-party-notices --check
+
+sbom:
+	./bin/generate-java-sbom
 
 pulumi-workbench:
 ifndef cmd

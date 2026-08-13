@@ -1,0 +1,241 @@
+{
+  "reflection": [
+    {
+      "fields": [
+        {
+          "name": "action"
+        },
+        {
+          "name": "context"
+        },
+        {
+          "name": "entities"
+        },
+        {
+          "name": "preparsedPolicySetId"
+        },
+        {
+          "name": "preparsedSchemaName"
+        },
+        {
+          "name": "principal"
+        },
+        {
+          "name": "resource"
+        },
+        {
+          "name": "validateRequest"
+        }
+      ],
+      "type": "com.cedarpolicy.BasicAuthorizationEngine$StatefulAuthRequest"
+    },
+    {
+      "fields": [
+        {
+          "name": "actionEUID"
+        },
+        {
+          "name": "context"
+        },
+        {
+          "name": "enableRequestValidation"
+        },
+        {
+          "name": "principalEUID"
+        },
+        {
+          "name": "resourceEUID"
+        },
+        {
+          "name": "schema"
+        }
+      ],
+      "type": "com.cedarpolicy.model.AuthorizationRequest"
+    },
+    {
+      "fields": [
+        {
+          "name": "entities"
+        },
+        {
+          "name": "policies"
+        }
+      ],
+      "type": "com.cedarpolicy.BasicAuthorizationEngine$AuthorizationRequest"
+    },
+    {
+      "fields": [
+        {
+          "name": "id"
+        },
+        {
+          "name": "type"
+        }
+      ],
+      "type": "com.cedarpolicy.serializer.JsonEUID"
+    },
+    {
+      "jniAccessible": true,
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": [
+            "java.lang.String",
+            "java.lang.String"
+          ]
+        }
+      ],
+      "type": "com.cedarpolicy.model.policy.Policy"
+    },
+    {
+      "jniAccessible": true,
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": [
+            "java.util.List",
+            "java.lang.String"
+          ]
+        },
+        {
+          "name": "getBaseName",
+          "parameterTypes": []
+        },
+        {
+          "name": "getNamespace",
+          "parameterTypes": []
+        }
+      ],
+      "type": "com.cedarpolicy.value.EntityTypeName"
+    },
+    {
+      "jniAccessible": true,
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": [
+            "java.util.Set",
+            "java.util.Set"
+          ]
+        }
+      ],
+      "type": "com.cedarpolicy.model.policy.PolicySet"
+    },
+    {
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": [
+            "com.cedarpolicy.model.AuthorizationResponse$SuccessOrFailure",
+            "java.util.Optional",
+            "java.util.Optional",
+            "java.util.ArrayList"
+          ]
+        }
+      ],
+      "type": "com.cedarpolicy.model.AuthorizationResponse"
+    },
+    {
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": [
+            "com.cedarpolicy.model.AuthorizationSuccessResponse$Decision",
+            "com.cedarpolicy.model.AuthorizationSuccessResponse$Diagnostics"
+          ]
+        }
+      ],
+      "type": "com.cedarpolicy.model.AuthorizationSuccessResponse"
+    },
+    {
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": [
+            "com.cedarpolicy.model.ValidationResponse$SuccessOrFailure",
+            "java.util.Optional",
+            "java.util.Optional",
+            "java.util.Optional",
+            "java.util.Optional"
+          ]
+        }
+      ],
+      "type": "com.cedarpolicy.model.ValidationResponse"
+    },
+    {
+      "methods": [
+        {
+          "name": "<init>",
+          "parameterTypes": [
+            "java.util.Set",
+            "java.util.List"
+          ]
+        }
+      ],
+      "type": "com.cedarpolicy.model.AuthorizationSuccessResponse$Diagnostics"
+    },
+    {
+      "methods": [
+        {
+          "name": "getPolicySet",
+          "parameterTypes": []
+        },
+        {
+          "name": "getSchema",
+          "parameterTypes": []
+        }
+      ],
+      "type": "com.cedarpolicy.model.ValidationRequest"
+    },
+    {
+      "type": "com.cedarpolicy.model.AuthorizationResponse$SuccessOrFailure"
+    },
+    {
+      "type": "com.cedarpolicy.model.AuthorizationSuccessResponse$AuthorizationError"
+    },
+    {
+      "type": "com.cedarpolicy.model.AuthorizationSuccessResponse$Decision"
+    },
+    {
+      "type": "com.cedarpolicy.model.DetailedError"
+    },
+    {
+      "type": "com.cedarpolicy.model.DetailedError$Severity"
+    },
+    {
+      "type": "com.cedarpolicy.model.DetailedError$SourceLabel"
+    },
+    {
+      "type": "com.cedarpolicy.model.ValidationResponse$SuccessOrFailure"
+    },
+    {
+      "type": "com.cedarpolicy.model.ValidationResponse$ValidationError"
+    },
+    {
+      "type": "com.cedarpolicy.model.ValidationResponse$ValidationSuccessResponse"
+    }
+  ],
+  "resources": [
+    {
+      "glob": "application.yml"
+    },
+    {
+      "glob": "policies/admin.cedar"
+    },
+    {
+      "glob": "policies/guardrails.cedar"
+    },
+    {
+      "glob": "policies/member.cedar"
+    },
+    {
+      "glob": "policies/owner.cedar"
+    },
+    {
+      "glob": "policies/service.cedar"
+    },
+    {
+      "glob": "policies/viewer.cedar"
+    }
+  ]
+}

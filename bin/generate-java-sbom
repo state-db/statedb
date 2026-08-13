@@ -1,0 +1,27 @@
+#!/usr/bin/env bash
+# Generate the dependency-level SBOM that Native Image cannot embed when built with Mandrel.
+set -euo pipefail
+
+cd "$(dirname "$0")/.."
+
+readonly MAVEN_IMAGE=docker.io/library/maven:3.9-eclipse-temurin-21@sha256:c07f7ccfb8ca6c9fa29ee523f00afa7d2ca6132c92f8652c4aebb5ee3491f502
+readonly CYCLONEDX_VERSION=2.9.1
+
+out_dir=${1:-artifacts}
+mkdir -p "$out_dir"
+out_dir=$(cd "$out_dir" && pwd)
+
+docker run --rm \
+  --user "$(id -u):$(id -g)" \
+  -e MAVEN_CONFIG=/tmp/maven \
+  -v "$PWD:/src:ro" \
+  -v "$out_dir:/out" \
+  -w /src \
+  "$MAVEN_IMAGE" \
+  mvn -B -Dmaven.repo.local=/tmp/maven/repository -f modules/pom.xml -pl app -am -DskipTests \
+    "org.cyclonedx:cyclonedx-maven-plugin:${CYCLONEDX_VERSION}:makeAggregateBom" \
+    -DincludeProvidedScope=false -DincludeSystemScope=false -DincludeTestScope=false \
+    -DoutputFormat=json -DoutputDirectory=/out -DoutputName=state-db-java.cdx
+
+test -s "$out_dir/state-db-java.cdx.json"
+echo "Wrote $out_dir/state-db-java.cdx.json"

@@ -50,6 +50,9 @@ class ManagementEndpointsTest {
     assertTrue(
         body.path("checks").toString().toLowerCase(Locale.ROOT).contains("database"),
         "readiness should include a datasource check: " + response.body());
+    assertTrue(
+        body.path("checks").toString().toLowerCase(Locale.ROOT).contains("cedar"),
+        "readiness should include the Cedar authorization self-test: " + response.body());
   }
 
   @Test

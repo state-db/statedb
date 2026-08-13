@@ -1,0 +1,4 @@
+interface:
+  display_name: "Native Image Contract"
+  short_description: "Review Native Image reachability changes"
+  default_prompt: "Use $native-image-contract to review this workspace diff for Native Image reachability risks."

@@ -1,0 +1,142 @@
+# syntax=docker/dockerfile:1.19
+#
+#   make app-image
+
+# ---- console bundle -------------------------------------------------------------------------
+FROM --platform=$BUILDPLATFORM docker.io/oven/bun:1.3-alpine@sha256:5acc90a93e91ff07bf72aa90a7c9f0fa189765aec90b47bdbf2152d2196383c0 AS web
+
+WORKDIR /web
+
+COPY modules/web/package.json modules/web/bun.lock modules/web/bunfig.toml ./
+RUN bun install --frozen-lockfile
+
+COPY modules/web/ ./
+RUN bun run typecheck && bun run build
+
+# ---- Quarkus native-image inputs -------------------------------------------------------------
+FROM --platform=$BUILDPLATFORM docker.io/library/maven:3.9-eclipse-temurin-21@sha256:c07f7ccfb8ca6c9fa29ee523f00afa7d2ca6132c92f8652c4aebb5ee3491f502 AS sources
+
+WORKDIR /src
+COPY modules/ modules/
+COPY THIRD-PARTY-NOTICES.txt ./
+COPY --from=web /web/dist modules/web/dist
+
+ARG BUILD_VERSION=unknown
+ARG BUILD_COMMIT=unknown
+ARG SOURCE_DATE_EPOCH=0
+ARG NATIVE_NEGATIVE_METADATA_TEST=false
+
+RUN --mount=type=cache,target=/root/.m2/repository,sharing=locked <<'EOF'
+set -eu
+built_at="$(date -u -d "@${SOURCE_DATE_EPOCH}" +%Y-%m-%dT%H:%M:%SZ)"
+if [ "${NATIVE_NEGATIVE_METADATA_TEST}" = true ]; then
+  metadata=modules/app/src/main/resources/META-INF/native-image/app.statedb/state-db-cedar-4.10.0/reachability-metadata.json
+  # Coupled to one registration per line. Without this guard, reformatting the metadata would
+  # make the deletion a no-op and the negative build would fail as if a complete image had
+  # wrongly survived a missing registration.
+  grep -q '{ "type": "com.cedarpolicy.serializer.JsonEUID"' "$metadata"
+  sed -i '/{ "type": "com.cedarpolicy.serializer.JsonEUID"/d' "$metadata"
+fi
+mvn -B -f modules/pom.xml -pl app -am package \
+    -DskipTests \
+    -Dweb.build.skip=true \
+    -Dquarkus.native.enabled=true \
+    -Dquarkus.native.sources-only=true \
+    -Dstatedb.build.version="${BUILD_VERSION}" \
+    -Dstatedb.build.commit="${BUILD_COMMIT}" \
+    -Dstatedb.build.timestamp="${built_at}" \
+    -Dproject.build.outputTimestamp="${built_at}"
+EOF
+
+# ---- native executable and Cedar JNI library ------------------------------------------------
+# Native Image cannot cross-compile. Under buildx this stage runs on TARGETPLATFORM (using
+# emulation when necessary), producing one executable and Cedar library per target architecture.
+FROM quay.io/quarkus/ubi9-quarkus-mandrel-builder-image:jdk-25@sha256:93bcce120e35460b44c57efe2586e1d913cbfe32ddb418f0a7375a86850b54f1 AS native
+
+ARG TARGETARCH
+ARG NATIVE_IMAGE_XMX=6g
+ARG NATIVE_IMAGE_PARALLELISM=2
+ARG NATIVE_IMAGE_OPTIMIZATION=2
+
+WORKDIR /project
+COPY --from=sources --chown=quarkus:quarkus /src/modules/app/target/native-sources/ ./
+COPY --chown=quarkus:quarkus third_party/cedar-java/SHA256SUMS /project/CEDAR-UPSTREAM-SHA256SUMS
+
+RUN tr ' ' '\n' < native-image.args | grep -Fx -- '--exact-reachability-metadata=com.cedarpolicy' \
+ && tr ' ' '\n' < native-image.args | grep -Fx -- '--exact-reachability-metadata=app.statedb'
+RUN native-image -J-Xmx"${NATIVE_IMAGE_XMX}" --parallelism="${NATIVE_IMAGE_PARALLELISM}" @native-image.args -O"${NATIVE_IMAGE_OPTIMIZATION}"
+
+RUN <<'EOF'
+set -eu
+case "${TARGETARCH}" in
+  amd64) cedar_arch=x86_64 ;;
+  arm64) cedar_arch=aarch64 ;;
+  *) echo "unsupported Cedar architecture: ${TARGETARCH}" >&2; exit 1 ;;
+esac
+
+cedar_jar=$(find lib -name 'com.cedarpolicy.cedar-java-*-uber.jar' -print -quit)
+test -n "${cedar_jar}"
+jar xf "${cedar_jar}" "jne/linux/${cedar_arch}/libcedar_java_ffi.so"
+mv "jne/linux/${cedar_arch}/libcedar_java_ffi.so" /project/libcedar_java_ffi.so
+expected=$(awk -v path="jne/linux/${cedar_arch}/libcedar_java_ffi.so" '$2 == path { print $1 }' /project/CEDAR-UPSTREAM-SHA256SUMS)
+test -n "${expected}"
+actual=$(sha256sum /project/libcedar_java_ffi.so | cut -d' ' -f1)
+test "${actual}" = "${expected}"
+sha256sum /project/libcedar_java_ffi.so | sed 's#  /project/#  /work/#' > /project/CEDAR-NATIVE-SHA256
+EOF
+
+# zstd-jni is the application's second JNI library. Like Cedar, its .so is lifted out of the jar at
+# build time rather than left to the loader's extract-to-temp path, which has no jar to read from in
+# a native image and would need a writable filesystem at runtime. The basename must survive: the
+# loader asks for it by System.loadLibrary("zstd-jni-<version>").
+RUN <<'EOF'
+set -eu
+case "${TARGETARCH}" in
+  amd64) zstd_arch=amd64 ;;
+  arm64) zstd_arch=aarch64 ;;
+  *) echo "unsupported zstd architecture: ${TARGETARCH}" >&2; exit 1 ;;
+esac
+
+zstd_jar=$(find lib -name 'com.github.luben.zstd-jni-*.jar' -print -quit)
+test -n "${zstd_jar}"
+jar xf "${zstd_jar}" "linux/${zstd_arch}"
+zstd_so=$(find "linux/${zstd_arch}" -name 'libzstd-jni-*.so' -print -quit)
+test -n "${zstd_so}"
+mkdir -p /project/jni
+mv "${zstd_so}" "/project/jni/$(basename "${zstd_so}")"
+EOF
+
+# ---- runtime --------------------------------------------------------------------------------
+FROM quay.io/quarkus/ubi9-quarkus-micro-image:2.0@sha256:0c71064c81a42e6fa776d2deb1183fce538b4a97b24236ccc3a7ea730d83c267
+
+ARG BUILD_VERSION=unknown
+ARG BUILD_COMMIT=unknown
+
+LABEL org.opencontainers.image.title="state-db" \
+      org.opencontainers.image.description="Self-hosted state backend for the Pulumi CLI, with a web console." \
+      org.opencontainers.image.source="https://github.com/state-db/state-db" \
+      org.opencontainers.image.licenses="Elastic-2.0" \
+      org.opencontainers.image.version="${BUILD_VERSION}" \
+      org.opencontainers.image.revision="${BUILD_COMMIT}"
+
+WORKDIR /work/
+COPY --from=native --chown=0:0 --chmod=0555 /project/state-db-app-0.1.0-SNAPSHOT-runner /work/application
+COPY --from=native --chown=0:0 --chmod=0555 /project/libcedar_java_ffi.so /work/libcedar_java_ffi.so
+# /usr/lib64 is already on the default java.library.path, so no -Djava.library.path is needed.
+COPY --from=native --chown=0:0 --chmod=0555 /project/jni/ /usr/lib64/
+COPY --from=native --chown=0:0 --chmod=0444 /project/CEDAR-NATIVE-SHA256 /licenses/CEDAR-NATIVE-SHA256
+COPY --chown=0:0 --chmod=0444 third_party/cedar-java/SHA256SUMS /licenses/CEDAR-UPSTREAM-SHA256SUMS
+COPY --chown=0:0 --chmod=0444 LICENSE NOTICE THIRD-PARTY-NOTICES.txt /licenses/
+COPY --chown=0:0 --chmod=0444 third_party/cedar-java/LICENSE /licenses/CEDAR-LICENSE
+COPY --chown=0:0 --chmod=0444 third_party/cedar-java/NOTICE /licenses/CEDAR-NOTICE
+COPY --chown=0:0 --chmod=0444 third_party/cedar-java/THIRD_PARTY_LICENSES.txt /licenses/CEDAR-THIRD-PARTY-LICENSES.txt
+
+ENV CEDAR_JAVA_FFI_LIB=/work/libcedar_java_ffi.so
+
+USER 1001
+EXPOSE 8080 9000
+
+# The fail-closed flag belongs in ENTRYPOINT: as CMD, any `docker run <image> <args>` or
+# Kubernetes `args:` would silently drop it and turn a missing registration back into a
+# per-request failure.
+ENTRYPOINT ["/work/application", "-XX:MissingRegistrationReportingMode=Exit"]

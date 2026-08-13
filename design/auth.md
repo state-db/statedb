@@ -20,7 +20,7 @@ Companion to [`architecture.md`](./architecture.md) and [`db-schema.md`](./db-sc
 
 - **Per-resource ACLs in the console UI** for Wave 1. The *engine* supports them now — resource and managed (per-principal) policies are implemented via templates + `policy_grants` (see "User and resource policies") — but the admin screens to create and revoke grants are Wave 2. Grants are seeded directly today.
 - **Conditional access** (time-of-day, IP allow-lists, MFA-step-up). Cedar handles these as policy `when` clauses, but Wave 1 doesn't ship example policies that use them.
-- **Pluggable PDP.** OPA, AVP, Permit.io are *not* on the list. We commit to Cedar embedded as a library and accept the JVM-only consequence on native image.
+- **Pluggable PDP.** OPA, AVP, Permit.io are *not* on the list. We commit to Cedar embedded as a library and own its JNI/reachability integration in the native image.
 - **Policy-driven admin elevation.** Admin status is read from `STATE_DB_ADMIN_SUBJECTS` env at boot. The allow-list makes a principal a member of the global `Role::"admin"`; the admin policy references it. Storing admin status in the DB stays out of scope.
 
 ---
@@ -697,7 +697,9 @@ policy overlay ("Policy storage").
 
 `cedar-java` uses JNI bindings into a Rust core (`cedar-policy` crate). GraalVM native image *can* handle JNI, but it requires native shared libraries for `linux-amd64` and `linux-arm64`, per-target reflection registration, resource configuration declaring the loaded `.so`/`.dylib` files, and validation that no Cedar entrypoint hits dynamic class loading at runtime. This is real work and an ongoing maintenance burden tracking upstream `cedar-java` releases.
 
-Wave 1 ships JVM-only. JVM startup and footprint are acceptable for a self-hosted backend; native image is an optimization, not a correctness requirement. Native image build remains in CI as a non-blocking experimental job and is promoted to a release artifact when `cedar-java` native image support stabilizes.
+Wave 1 ships only a Mandrel native image. State-db owns Cedar's JNI extraction, integrity check,
+reachability mapping, startup self-test, and architecture-specific release gates until that support is
+available upstream. See [`native-image.md`](./native-image.md).
 
 ---
 
@@ -726,7 +728,7 @@ Wave 1 ships JVM-only. JVM startup and footprint are acceptable for a self-hoste
 | Classpath policies in Wave 1, DB overlay in Wave 2 | Avoid the "edit prod policy at 3am, broken regex, auth dies" failure mode until we have the operational tooling for it |
 | Policy reload preserves the prior set on compile failure | Authorization stays up even if an admin edits a broken policy |
 | No decision caching | Cedar is fast; cache invalidation is hard; correctness > microseconds |
-| JVM-only Wave 1; native image experimental | `cedar-java` JNI/native image story is fragile; ship JVM and revisit when upstream support stabilizes |
+| Native-only Wave 1 | State-db owns Cedar JNI/reachability compatibility and gates it on both release architectures |
 | Org-scope enforced by resolving the principal's role in the resource's org, not a separate filter | One tenancy seam feeds both the hard 404 boundary and the Cedar role; no per-filter authz logic |
 | Admin status from env, mirrored as `Role::"admin"` membership | No DB column for admin; env stays the source of truth and the role membership is rebuilt from it on each request |
 | `Lease` principal id is `lease:<stack_id>:<update_id>`, never the raw `lock_token` | The lock_token is a wire-level bearer secret; it must not appear in entity ids, log MDC, traces, or audit records |

@@ -1,0 +1,7 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+cd "$(dirname "$0")/.."
+
+./bin/in-container ./bin/prepare-native-agent-jvm >/dev/null
+./bin/in-container mvn -f modules/pom.xml verify -Pnative-agent-tests

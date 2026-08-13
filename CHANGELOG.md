@@ -10,11 +10,13 @@ body.
 
 - Maintainer-run release tooling for building, gating, signing, and publishing the Docker image.
 - Authenticated `/api/version` endpoint that reports the running build identity.
+- Signed amd64/arm64 native-image releases with Cedar authorization readiness checks, strict
+  reachability validation, vulnerability scanning, and Java/container SBOMs.
 
 ### Changed
 
-- Runtime images are now built end-to-end inside Docker with separate console, Maven, and runtime
-  stages.
+- Native is the sole production image type and is built end-to-end inside Docker with separate
+  console, Maven, Mandrel, and minimal runtime stages.
 - Build identity is derived from `.version`, Git tags, and the source commit instead of the Maven
   project version.
 

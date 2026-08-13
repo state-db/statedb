@@ -230,4 +230,81 @@
             </plugin>
         </plugins>
     </build>
+
+    <profiles>
+        <profile>
+            <id>native-agent-tests</id>
+            <properties>
+                <native.agent.java>/tmp/state-db-native-agent-mandrel/bin/java</native.agent.java>
+            </properties>
+            <build>
+                <plugins>
+                    <!-- Re-run the existing authorization tests — and only those — inside the same
+                         pinned Mandrel JVM used by the native build, and observe their dynamic
+                         reachability. They exercise every Cedar call path, which is the reachability
+                         Quarkus cannot derive at build time; everything else in the suite resolves to
+                         entities and REST payloads that augmentation already registers. The default
+                         Surefire execution above still runs the comprehensive suite on the ordinary
+                         dev-container JDK. -->
+                    <plugin>
+                        <groupId>org.apache.maven.plugins</groupId>
+                        <artifactId>maven-surefire-plugin</artifactId>
+                        <version>${maven-failsafe-plugin.version}</version>
+                        <executions>
+                            <execution>
+                                <id>native-agent-trace</id>
+                                <goals>
+                                    <goal>test</goal>
+                                </goals>
+                                <phase>test</phase>
+                                <configuration>
+                                    <jvm>${native.agent.java}</jvm>
+                                    <argLine>@{argLine} -agentlib:native-image-agent=config-output-dir=${project.build.directory}/native-image-agent-base-config</argLine>
+                                    <includes>
+                                        <include>app/statedb/app/auth/*Test.java</include>
+                                    </includes>
+                                    <reportsDirectory>${project.build.directory}/surefire-reports-native-agent</reportsDirectory>
+                                </configuration>
+                            </execution>
+                        </executions>
+                    </plugin>
+                    <!-- Clear stale agent output before tracing, then diff the observations against
+                         the reviewed baseline at verify. The reactor root is modules/, so the
+                         repository bin directory is one level above it. -->
+                    <plugin>
+                        <groupId>org.codehaus.mojo</groupId>
+                        <artifactId>exec-maven-plugin</artifactId>
+                        <version>3.5.0</version>
+                        <executions>
+                            <execution>
+                                <id>prepare-native-metadata-test-run</id>
+                                <goals>
+                                    <goal>exec</goal>
+                                </goals>
+                                <phase>process-test-classes</phase>
+                                <configuration>
+                                    <executable>${maven.multiModuleProjectDirectory}/../bin/prepare-native-metadata-test-run</executable>
+                                    <arguments>
+                                        <argument>${project.build.directory}</argument>
+                                        <argument>${native.agent.java}</argument>
+                                    </arguments>
+                                </configuration>
+                            </execution>
+                            <execution>
+                                <id>check-native-metadata-drift</id>
+                                <goals>
+                                    <goal>exec</goal>
+                                </goals>
+                                <phase>verify</phase>
+                                <configuration>
+                                    <executable>${maven.multiModuleProjectDirectory}/../bin/check-native-metadata-drift</executable>
+                                </configuration>
+                            </execution>
+                        </executions>
+                    </plugin>
+                </plugins>
+            </build>
+        </profile>
+    </profiles>
+
 </project>

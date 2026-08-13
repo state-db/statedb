@@ -1,0 +1,25 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+cd "$(dirname "$0")/.."
+
+image=${1:-state-db:native-dev}
+docker buildx version >/dev/null 2>&1 || {
+  echo "error: Docker Buildx is required for native image builds" >&2
+  exit 1
+}
+
+eval "$(./bin/build-version --env)"
+
+docker buildx build --load \
+  -f modules/app/src/main/docker/Dockerfile.native \
+  --build-arg BUILD_VERSION="$BUILD_VERSION" \
+  --build-arg BUILD_COMMIT="$BUILD_COMMIT" \
+  --build-arg SOURCE_DATE_EPOCH="$SOURCE_DATE_EPOCH" \
+  --build-arg NATIVE_IMAGE_XMX="${NATIVE_IMAGE_XMX:-6g}" \
+  --build-arg NATIVE_IMAGE_PARALLELISM="${NATIVE_IMAGE_PARALLELISM:-2}" \
+  --build-arg NATIVE_IMAGE_OPTIMIZATION="${NATIVE_IMAGE_OPTIMIZATION:-2}" \
+  --build-arg NATIVE_NEGATIVE_METADATA_TEST="${NATIVE_NEGATIVE_METADATA_TEST:-false}" \
+  -t "$image" .
+
+echo "Built $image"
