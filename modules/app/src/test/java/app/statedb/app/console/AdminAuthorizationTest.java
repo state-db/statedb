@@ -33,7 +33,7 @@ class AdminAuthorizationTest {
   public static final class AdminProfile implements QuarkusTestProfile {
     @Override
     public Map<String, String> getConfigOverrides() {
-      return Map.of("state-db.admin.subjects", "https://idp.test:admin-sub");
+      return Map.of("statedb.admin.subjects", "https://idp.test:admin-sub");
     }
   }
 

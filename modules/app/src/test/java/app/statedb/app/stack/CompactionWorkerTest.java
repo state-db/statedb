@@ -241,7 +241,7 @@ class CompactionWorkerTest {
   @Test
   void compactionPreservesSecretsProviderAndEncryptedSecretValues() throws Exception {
     JsonNode expectedProvider =
-        MAPPER.readTree("{\"type\":\"service\",\"state\":{\"url\":\"https://state-db.test\"}}");
+        MAPPER.readTree("{\"type\":\"service\",\"state\":{\"url\":\"https://statedb.test\"}}");
     JsonNode expectedSecret = MAPPER.readTree(secretValue("ciphertext-from-journal"));
     UUID update = update(stackId);
     entry(stackId, update, 6, 0L, "{\"secretsProvider\":" + expectedProvider + "}");

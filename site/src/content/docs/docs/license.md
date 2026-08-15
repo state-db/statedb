@@ -4,7 +4,7 @@ description: Elastic License 2.0, free for up to ten active stacks per deploymen
 ---
 
 statedb is source-available under the
-[Elastic License 2.0](https://github.com/state-db/state-db/blob/main/LICENSE)
+[Elastic License 2.0](https://github.com/state-db/statedb/blob/main/LICENSE)
 with an additional Free Edition Use Limit.
 
 ## The short version
@@ -13,7 +13,7 @@ with an additional Free Edition Use Limit.
   purposes, free of charge, for up to **ten active stacks per deployment**.
 - **Commercial** — beyond ten active stacks, a commercial license is required.
   See
-  [COMMERCIAL.md](https://github.com/state-db/state-db/blob/main/COMMERCIAL.md)
+  [COMMERCIAL.md](https://github.com/state-db/statedb/blob/main/COMMERCIAL.md)
   for terms and contact.
 - **One hard restriction** — you may not offer statedb to third parties as a
   hosted or managed service. Running it for your own company (including for
@@ -29,20 +29,20 @@ LICENSE file's definition is authoritative.
 
 **Is the source really available?**
 Yes — the full source is on
-[GitHub](https://github.com/state-db/state-db). You can read every line that
+[GitHub](https://github.com/state-db/statedb). You can read every line that
 touches your state, build it yourself, and audit the test suites the
 [compatibility claims](/docs/compatibility/) rest on.
 
 **What happens if I need more than ten stacks?**
 Get in touch via
-[COMMERCIAL.md](https://github.com/state-db/state-db/blob/main/COMMERCIAL.md) —
+[COMMERCIAL.md](https://github.com/state-db/statedb/blob/main/COMMERCIAL.md) —
 commercial licensing is how the project is funded. Deleting stacks you no
 longer use also frees up room under the free limit.
 
 **Can I contribute?**
 Yes. Pull requests are accepted from contributors who have signed the
-[CLA](https://github.com/state-db/state-db/blob/main/CLA.md); see
-[CONTRIBUTING.md](https://github.com/state-db/state-db/blob/main/CONTRIBUTING.md).
+[CLA](https://github.com/state-db/statedb/blob/main/CLA.md); see
+[CONTRIBUTING.md](https://github.com/state-db/statedb/blob/main/CONTRIBUTING.md).
 
 ## Offline commercial licenses
 
@@ -53,13 +53,13 @@ licenses all resolve to the Community entitlement and do not prevent startup.
 Mount the issued artifact and set:
 
 ```sh
-STATE_DB_LICENSE_PATH=/run/secrets/state-db/license.json
+STATEDB_LICENSE_PATH=/run/secrets/state-db/license.json
 ```
 
-`STATE_DB_LICENSE` may instead contain the compact envelope JSON or standard
+`STATEDB_LICENSE` may instead contain the compact envelope JSON or standard
 base64 encoding of that whole JSON document. The mounted file takes precedence.
 The file is read and verified on every enforced operation, so atomically
-replacing it restores entitlement without restarting. `STATE_DB_DEPLOYMENT_ID`
+replacing it restores entitlement without restarting. `STATEDB_DEPLOYMENT_ID`
 checks a certificate's `deploymentId`. A certificate containing that claim is
 invalid when the setting is absent or different. statedb does not fingerprint
 machines or containers. License artifacts are limited to 64 KiB.

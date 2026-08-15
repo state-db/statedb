@@ -10,7 +10,7 @@ import org.hibernate.id.uuid.UuidVersion7Strategy;
 import org.jboss.logging.Logger;
 
 /**
- * Idempotent boot-time upsert of one OIDC provider row from {@code STATE_DB_OIDC_BOOTSTRAP_*} env,
+ * Idempotent boot-time upsert of one OIDC provider row from {@code STATEDB_OIDC_BOOTSTRAP_*} env,
  * so a fresh deployment can authenticate console users against an IdP without a manual DB insert.
  *
  * <p>Env wins on conflict: re-running with a rotated {@code CLIENT_SECRET} (or a changed issuer /

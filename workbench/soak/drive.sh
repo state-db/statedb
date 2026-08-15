@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Continuous Pulumi churn against state-db.
+# Continuous Pulumi churn against statedb.
 #
 # Not `set -e`: injected faults and lock contention are supposed to fail. Exit codes are recorded
 # and report.sh separates expected failures from real ones.

@@ -35,13 +35,13 @@ the console when they should stop working.
 If your IdP is down, you can still reach the console through a deliberately
 constrained local login:
 
-- **Opt-in** — set `STATE_DB_LOCAL_GLASS_PASSWORD_HASH` to a bcrypt hash
+- **Opt-in** — set `STATEDB_LOCAL_GLASS_PASSWORD_HASH` to a bcrypt hash
   (modular crypt format). It lives in the environment, never the database, so
   recovery credentials stay readable when the database of record is the thing
   you're recovering.
 - **Loopback-only** — login is accepted only from the machine itself
   (`X-Forwarded-For` is never trusted). Set
-  `STATE_DB_LOCAL_GLASS_ALLOW_REMOTE=true` only for isolated evaluation
+  `STATEDB_LOCAL_GLASS_ALLOW_REMOTE=true` only for isolated evaluation
   setups.
 - **Self-disabling** — break-glass refuses to operate while an enabled OIDC
   provider exists, checked at login *and* on every session restore. Existing

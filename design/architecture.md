@@ -49,14 +49,14 @@ Two HTTP surfaces, one domain core, one DB. Same JAR. Same native binary.
 |--------|---------|-------|-------|
 | `/pulumi/api/...` | Pulumi backend protocol | `Authorization: token <tok>` | Users configure CLI as `pulumi login https://host/pulumi`. CLI then constructs `/pulumi/api/...`. Tofu ships under `/tofu/...` in Wave 3. |
 | `/api/...` | Console REST API | OIDC session cookie | Used only by the SPA. Never exposed to the Pulumi CLI. |
-| `/api/admin/...` | Admin-only console endpoints | OIDC session + admin allow-list | Subject `<iss>:<sub>` must be in `STATE_DB_ADMIN_SUBJECTS` env. |
+| `/api/admin/...` | Admin-only console endpoints | OIDC session + admin allow-list | Subject `<iss>:<sub>` must be in `STATEDB_ADMIN_SUBJECTS` env. |
 | `/api/auth/login/*`, `/api/auth/callback/*` | OIDC login + callback (one route per configured provider) | None (initiates auth) | Sets the encrypted session cookie on success. |
 | `/api/auth/cli-mint`, `/api/auth/cli-mint/callback` | OIDC `prompt=none` re-auth → mint a short-lived CLI token | OIDC session cookie | One-time-display page returns the raw token; see "CLI token issuance". |
-| `/api/auth/local` | Break-glass local login (Quarkus form auth) | Static credential from env (`STATE_DB_LOCAL_GLASS_PASSWORD_HASH`, bcrypt) | Honored only while (a) the hash is set, (b) zero `oidc_providers` rows are enabled, and (c) the TCP source is loopback (unless `STATE_DB_LOCAL_GLASS_ALLOW_REMOTE=true`). Any check failing = 401. |
+| `/api/auth/local` | Break-glass local login (Quarkus form auth) | Static credential from env (`STATEDB_LOCAL_GLASS_PASSWORD_HASH`, bcrypt) | Honored only while (a) the hash is set, (b) zero `oidc_providers` rows are enabled, and (c) the TCP source is loopback (unless `STATEDB_LOCAL_GLASS_ALLOW_REMOTE=true`). Any check failing = 401. |
 | `/assets/*`, `/favicon.ico`, etc. | Static SPA bundle | None | Served from `META-INF/resources/` populated by the bun build. |
 | Anything else | SPA fallback → `index.html` | None | Catches client-side router paths. Filter explicitly does NOT match `/api/*` or `/pulumi/*`. |
 
-The `/pulumi` prefix is mandatory in `PULUMI_BACKEND_URL` because Pulumi's CLI reserves `/api/`. Users will configure `pulumi login https://state-db.example.com/pulumi`; the CLI then constructs `https://state-db.example.com/pulumi/api/user`, etc.
+The `/pulumi` prefix is mandatory in `PULUMI_BACKEND_URL` because Pulumi's CLI reserves `/api/`. Users will configure `pulumi login https://statedb.example.com/pulumi`; the CLI then constructs `https://statedb.example.com/pulumi/api/user`, etc.
 
 ---
 
@@ -204,7 +204,7 @@ Per db-schema.md `stack_locks`. Lease lifecycle:
 - **Acquire** (`POST /update/{updateID}`): `INSERT … ON CONFLICT (stack_id) DO UPDATE SET … WHERE expires_at < now() RETURNING …`. Empty return = held by someone live → 409.
 - **Renew** (`POST /update/{updateID}/renew_lease`): `UPDATE stack_locks SET expires_at = now() + $1, heartbeat_at = now() WHERE stack_id = ? AND lock_token = ?`. Mismatch → 409.
 - **Release** (implicit on `complete` or explicit on cancel): delete row. Lock token validated.
-- **Stale recovery**: any acquire steals when `expires_at < now()`. TTL config `state-db.lock.lease-ttl=1h` (default), `state-db.lock.heartbeat-interval=30s` (advisory; CLI doesn't always renew).
+- **Stale recovery**: any acquire steals when `expires_at < now()`. TTL config `statedb.lock.lease-ttl=1h` (default), `statedb.lock.heartbeat-interval=30s` (advisory; CLI doesn't always renew).
 - **Manual unlock**: admin-only console endpoint `DELETE /api/admin/stacks/{ref}/lock`. No CLI equivalent — Pulumi's `pulumi cancel` calls our `cancel_lease` endpoint which is the same thing scoped to the lease holder.
 
 ### Events
@@ -217,7 +217,7 @@ Per db-schema.md `stack_locks`. Lease lifecycle:
 4. INSERT one `update_events` row per event with the original `sequence` preserved.
 5. Drop the gzip envelope; we don't store the raw bytes.
 
-A periodic vacuum job (`@Scheduled(every="1h")`) deletes events older than `state-db.events.retention-days=30`. Configurable per deployment. The journal is the system of record for state; events are observability.
+A periodic vacuum job (`@Scheduled(every="1h")`) deletes events older than `statedb.events.retention-days=30`. Configurable per deployment. The journal is the system of record for state; events are observability.
 
 ### Compaction
 
@@ -239,11 +239,11 @@ Multiple providers concurrently. One bootstrapped from env at startup so a fresh
 
 Bootstrap config (env):
 ```
-STATE_DB_OIDC_BOOTSTRAP_NAME=google
-STATE_DB_OIDC_BOOTSTRAP_ISSUER=https://accounts.google.com
-STATE_DB_OIDC_BOOTSTRAP_CLIENT_ID=...
-STATE_DB_OIDC_BOOTSTRAP_CLIENT_SECRET=...
-STATE_DB_OIDC_DEFAULT_PROVIDER=google
+STATEDB_OIDC_BOOTSTRAP_NAME=google
+STATEDB_OIDC_BOOTSTRAP_ISSUER=https://accounts.google.com
+STATEDB_OIDC_BOOTSTRAP_CLIENT_ID=...
+STATEDB_OIDC_BOOTSTRAP_CLIENT_SECRET=...
+STATEDB_OIDC_DEFAULT_PROVIDER=google
 ```
 
 At startup, the app upserts this row into `oidc_providers`. Env wins on conflict (so rotating client secrets via env redeploy works).
@@ -285,7 +285,7 @@ state-db /api/auth/cli-mint/callback
   verifies (iss, sub) match the current console session's user
   INSERT api_tokens (kind='oidc', expires_at = now() + 24h)
   → renders one-time-display page: raw token + ready-to-paste hints
-       pulumi login https://state-db.example.com/pulumi
+       pulumi login https://statedb.example.com/pulumi
        export PULUMI_ACCESS_TOKEN=<tok>
 ```
 
@@ -320,9 +320,9 @@ Both kinds share the wire format (`Authorization: token <tok>`) and the same `To
 
 ### Admin
 
-`AdminAllowList` is a singleton bean reading `STATE_DB_ADMIN_SUBJECTS` at boot:
+`AdminAllowList` is a singleton bean reading `STATEDB_ADMIN_SUBJECTS` at boot:
 ```
-STATE_DB_ADMIN_SUBJECTS=https://accounts.google.com:115...,https://accounts.google.com:117...
+STATEDB_ADMIN_SUBJECTS=https://accounts.google.com:115...,https://accounts.google.com:117...
 ```
 
 Format: `<iss>:<sub>` per entry, comma-separated. The list is in-memory; rotating admins requires a redeploy (or a SIGHUP-triggered re-read — defer).
@@ -338,9 +338,9 @@ Not profile-gated (a forgotten profile flag is a lockout footgun) and not a hand
 
 The gate, all enforced server-side, any failure → 401:
 
-1. `STATE_DB_LOCAL_GLASS_PASSWORD_HASH` is set (bcrypt, Modular Crypt Format). Unset = feature off; `LocalGlassStartupValidator` also fails the boot if the hash is set without `STATE_DB_SESSION_ENCRYPTION_SECRET` (the form cookie is AES-256-encrypted with it — shared with the OIDC session cookie so one secret keeps both stable across replicas).
+1. `STATEDB_LOCAL_GLASS_PASSWORD_HASH` is set (bcrypt, Modular Crypt Format). Unset = feature off; `LocalGlassStartupValidator` also fails the boot if the hash is set without `STATEDB_SESSION_ENCRYPTION_SECRET` (the form cookie is AES-256-encrypted with it — shared with the OIDC session cookie so one secret keeps both stable across replicas).
 2. Zero enabled `oidc_providers` rows. State-gated, not profile-gated: the route self-destructs once OIDC is configured, and IdP-down recovery re-opens it by deliberately disabling the provider row (`ssh` + `psql`).
-3. The request's raw TCP source is loopback (`InetAddress.isLoopbackAddress()`; `X-Forwarded-For` is never honored) — **unless** `STATE_DB_LOCAL_GLASS_ALLOW_REMOTE=true`. Loopback-only covers `ssh -L` tunnels, `kubectl port-forward`, and bare-metal recovery, but *not* `docker run -p` (published ports arrive from the bridge gateway); the explicit remote opt-in exists for the docker-compose evaluation path, where setting the password hash is already an operator decision.
+3. The request's raw TCP source is loopback (`InetAddress.isLoopbackAddress()`; `X-Forwarded-For` is never honored) — **unless** `STATEDB_LOCAL_GLASS_ALLOW_REMOTE=true`. Loopback-only covers `ssh -L` tunnels, `kubectl port-forward`, and bare-metal recovery, but *not* `docker run -p` (published ports arrive from the bridge gateway); the explicit remote opt-in exists for the docker-compose evaluation path, where setting the password hash is already an operator decision.
 
 **Credential source: env, never DB.** Recovery credentials live where the operator can read them while the DB is down. Rotation is via redeploy. Break-glass cannot escalate beyond what `AdminAllowList` already grants the bootstrap identity.
 
@@ -415,7 +415,7 @@ Filter explicitly excludes `/api/*` and `/pulumi/*` so unknown API paths return 
 
 Multi-tenant schema, but 99% of deployments will run with a single org. The console respects this:
 
-- On first OIDC login, if zero orgs exist AND the user is in `STATE_DB_ADMIN_SUBJECTS`, auto-create a `default` org and add the user as `owner`. This makes a fresh deployment usable in three clicks.
+- On first OIDC login, if zero orgs exist AND the user is in `STATEDB_ADMIN_SUBJECTS`, auto-create a `default` org and add the user as `owner`. This makes a fresh deployment usable in three clicks.
 - Subsequent admin-issued invites add users to orgs.
 - Pulumi `{org}` path segment is checked against the token's org name (`organizations.name`), not its UUID. CLI users see human-readable refs.
 

@@ -14,7 +14,7 @@ import org.jboss.logging.Logger;
 
 /**
  * Idempotent boot-time provisioning of the first organization plus the bootstrap admin's user and
- * membership rows from env. Operators set {@code STATE_DB_BOOTSTRAP_ORG_NAME} (and optionally a
+ * membership rows from env. Operators set {@code STATEDB_BOOTSTRAP_ORG_NAME} (and optionally a
  * display name); no credential material is involved — CLI tokens are minted through a console
  * session (break-glass or OIDC) via the {@code pulumi login} browser flow.
  *

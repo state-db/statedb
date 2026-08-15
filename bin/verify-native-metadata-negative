@@ -30,8 +30,8 @@ docker exec "$postgres" pg_isready -U negative >/dev/null 2>&1 || {
 }
 
 docker run -d --name "$application" --network "$network" \
-  -e STATE_DB_JDBC_URL="jdbc:postgresql://$postgres:5432/negative" \
-  -e STATE_DB_DB_USER=negative -e STATE_DB_DB_PASSWORD=negative \
+  -e STATEDB_JDBC_URL="jdbc:postgresql://$postgres:5432/negative" \
+  -e STATEDB_DB_USER=negative -e STATEDB_DB_PASSWORD=negative \
   "$image" >/dev/null
 
 for _ in $(seq 1 30); do

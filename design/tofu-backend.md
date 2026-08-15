@@ -1,7 +1,7 @@
 # OpenTofu backend — implementation guide (Wave 3)
 
 This document is the working spec for adding OpenTofu (and, for free, Terraform)
-state support to state-db. It is written for the engineer/agent doing the
+state support to statedb. It is written for the engineer/agent doing the
 implementation: protocol contract first, settled design decisions second, then a
 slice-by-slice task breakdown with acceptance criteria. Where a pattern already
 exists in the Pulumi implementation, this doc names the exact file to copy from —

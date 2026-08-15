@@ -17,9 +17,9 @@ final class LocalGlassTestSupport {
       // Keep the break-glass gate open by preventing bootstrap from provisioning an enabled
       // provider. Resource tests can still seed a provider explicitly when they need OIDC.
       return Map.of(
-          "state-db.local-glass.password-hash",
+          "statedb.local-glass.password-hash",
           BcryptUtil.bcryptHash(PASSWORD),
-          "state-db.oidc.bootstrap.name",
+          "statedb.oidc.bootstrap.name",
           "env-provider",
           "quarkus.arc.exclude-types",
           "app.statedb.persistence.bootstrap.OidcProviderBootstrap");

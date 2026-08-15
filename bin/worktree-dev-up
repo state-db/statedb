@@ -49,7 +49,7 @@ fi
 
 if [[ "$infra_ready" != true ]]; then
   "$REPO_ROOT/bin/in-container" sh -lc \
-    'cd /workspaces/state-db && make -C workbench/pulumi infra-up'
+    'cd /workspaces/statedb && make -C workbench/pulumi infra-up'
 else
   echo "shared workbench Postgres and mock IdP are already healthy; leaving them untouched"
 fi

@@ -18,8 +18,8 @@ the previous rung.
 
 | Key | Default | Bounds |
 |---|---|---|
-| `state-db.compaction.prune.ladder-journal-spacing` | 5000 | journal rows replayed |
-| `state-db.compaction.prune.ladder-update-spacing` | 50 | whole-deployment rebuilds |
+| `statedb.compaction.prune.ladder-journal-spacing` | 5000 | journal rows replayed |
+| `statedb.compaction.prune.ladder-update-spacing` | 50 | whole-deployment rebuilds |
 
 **Reason:** replay cost is not linear in entries. `StackAssembler.replay`
 rebuilds the entire deployment at every *update boundary* it crosses, because

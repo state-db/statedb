@@ -55,7 +55,7 @@ public class ProviderTenantConfigResolver implements TenantConfigResolver {
   @Inject EnabledOidcProviderLookup providerLookup;
 
   @Inject
-  @ConfigProperty(name = "state-db.oidc.default-provider")
+  @ConfigProperty(name = "statedb.oidc.default-provider")
   Optional<String> defaultProvider;
 
   // Encrypts the web-app session cookie. It must be stable across replicas; tests provide an

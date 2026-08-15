@@ -6,7 +6,7 @@ import java.util.Optional;
 import org.eclipse.microprofile.config.inject.ConfigProperty;
 
 /**
- * Single owner of the {@code STATE_DB_SESSION_ENCRYPTION_SECRET} contract: present and at least 32
+ * Single owner of the {@code STATEDB_SESSION_ENCRYPTION_SECRET} contract: present and at least 32
  * characters. quarkus-oidc encrypts the web-app session cookie with it (it must be stable across
  * replicas), and {@link CliLoginApprovalSigner} derives its approval-signing key from it. {@link
  * OidcStartupValidator} enforces the contract at boot when OIDC is configured, so the lazy {@link
@@ -18,7 +18,7 @@ public class SessionEncryptionSecret {
   private static final int MIN_LENGTH = 32;
 
   @Inject
-  @ConfigProperty(name = "state-db.session.encryption-secret")
+  @ConfigProperty(name = "statedb.session.encryption-secret")
   Optional<String> raw;
 
   public boolean isConfigured() {
@@ -31,7 +31,7 @@ public class SessionEncryptionSecret {
         .orElseThrow(
             () ->
                 new IllegalStateException(
-                    "STATE_DB_SESSION_ENCRYPTION_SECRET must contain at least "
+                    "STATEDB_SESSION_ENCRYPTION_SECRET must contain at least "
                         + MIN_LENGTH
                         + " characters"));
   }

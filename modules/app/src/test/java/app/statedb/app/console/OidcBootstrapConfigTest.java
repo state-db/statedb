@@ -22,9 +22,9 @@ class OidcBootstrapConfigTest {
         assertThrows(
             IllegalStateException.class,
             () -> OidcBootstrapConfig.fromMap(Map.of(OidcBootstrapConfig.PROP_NAME, "google")));
-    assertTrue(ex.getMessage().contains("STATE_DB_OIDC_BOOTSTRAP_ISSUER"), ex.getMessage());
-    assertTrue(ex.getMessage().contains("STATE_DB_OIDC_BOOTSTRAP_CLIENT_ID"), ex.getMessage());
-    assertTrue(ex.getMessage().contains("STATE_DB_OIDC_BOOTSTRAP_CLIENT_SECRET"), ex.getMessage());
+    assertTrue(ex.getMessage().contains("STATEDB_OIDC_BOOTSTRAP_ISSUER"), ex.getMessage());
+    assertTrue(ex.getMessage().contains("STATEDB_OIDC_BOOTSTRAP_CLIENT_ID"), ex.getMessage());
+    assertTrue(ex.getMessage().contains("STATEDB_OIDC_BOOTSTRAP_CLIENT_SECRET"), ex.getMessage());
   }
 
   @Test

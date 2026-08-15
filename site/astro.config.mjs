@@ -19,7 +19,7 @@ export default defineConfig({
         {
           icon: "github",
           label: "GitHub",
-          href: "https://github.com/state-db/state-db",
+          href: "https://github.com/state-db/statedb",
         },
       ],
       customCss: [

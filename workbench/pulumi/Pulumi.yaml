@@ -1,6 +1,6 @@
 name: state-db-workbench
 runtime: yaml
-description: Editable Pulumi project for running real CLI deployments against state-db.
+description: Editable Pulumi project for running real CLI deployments against statedb.
 resources:
   pet:
     type: random:RandomPet

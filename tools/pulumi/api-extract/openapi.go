@@ -19,7 +19,7 @@ const pulumiOpenAPIURL = "https://api.pulumi.com/api/openapi/pulumi-spec.json"
 
 const pulumiOpenAPIRepoPath = "pkg/cmd/pulumi/cloud/testdata/openapi_public.json"
 
-const apiExtractUserAgent = "state-db-api-extract/0.1 (+https://github.com/state-db/state-db; compatibility research)"
+const apiExtractUserAgent = "state-db-api-extract/0.1 (+https://github.com/state-db/statedb; compatibility research)"
 
 var (
 	httpGetOpenAPI   = getOpenAPI

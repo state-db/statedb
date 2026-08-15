@@ -20,7 +20,7 @@ import org.eclipse.microprofile.config.inject.ConfigProperty;
  * identity providers behind it:
  *
  * <ul>
- *   <li><b>Opt-in.</b> {@code STATE_DB_LOCAL_GLASS_PASSWORD_HASH} (bcrypt, Modular Crypt Format)
+ *   <li><b>Opt-in.</b> {@code STATEDB_LOCAL_GLASS_PASSWORD_HASH} (bcrypt, Modular Crypt Format)
  *       must be set. Env, never DB — recovery credentials must be readable while the IdP (and the
  *       console's own data) are unavailable.
  *   <li><b>Self-destruct.</b> No enabled {@code oidc_providers} row may exist. Checked at login
@@ -29,7 +29,7 @@ import org.eclipse.microprofile.config.inject.ConfigProperty;
  *       lock themselves out by forgetting a flag, and re-opening it during IdP-down recovery is a
  *       deliberate act (disable the provider row).
  *   <li><b>Loopback.</b> The raw TCP source must be loopback — {@code X-Forwarded-For} is never
- *       honored — unless {@code STATE_DB_LOCAL_GLASS_ALLOW_REMOTE=true} explicitly opts out (the
+ *       honored — unless {@code STATEDB_LOCAL_GLASS_ALLOW_REMOTE=true} explicitly opts out (the
  *       docker-compose evaluation path, where published ports arrive from the bridge gateway).
  *       Login-time only; a minted cookie is already bearer state.
  * </ul>
@@ -44,11 +44,11 @@ public class LocalGlass {
   @Inject BootstrapProvisioner provisioner;
 
   @Inject
-  @ConfigProperty(name = "state-db.local-glass.password-hash")
+  @ConfigProperty(name = "statedb.local-glass.password-hash")
   Optional<String> passwordHash;
 
   @Inject
-  @ConfigProperty(name = "state-db.local-glass.allow-remote", defaultValue = "false")
+  @ConfigProperty(name = "statedb.local-glass.allow-remote", defaultValue = "false")
   boolean allowRemote;
 
   public boolean passwordConfigured() {
@@ -79,7 +79,7 @@ public class LocalGlass {
   /**
    * Idempotently creates the bootstrap admin {@code users} row the break-glass session resolves to.
    * {@code SessionPrincipalFilter} and {@code CurrentUserResource} reject sessions without a user
-   * row, and the row only otherwise exists when {@code STATE_DB_BOOTSTRAP_*} provisioning ran.
+   * row, and the row only otherwise exists when {@code STATEDB_BOOTSTRAP_*} provisioning ran.
    * Delegates to {@link BootstrapProvisioner#upsertBootstrapUser()} so concurrent logins (and
    * boot-time provisioning) converge on one atomic {@code ON CONFLICT} insert.
    */

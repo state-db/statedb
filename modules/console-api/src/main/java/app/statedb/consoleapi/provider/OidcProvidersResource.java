@@ -43,7 +43,7 @@ public class OidcProvidersResource {
   @Inject SecurityIdentity identity;
   @Inject AdminAllowList adminAllowList;
 
-  @ConfigProperty(name = "state-db.oidc.bootstrap.name")
+  @ConfigProperty(name = "statedb.oidc.bootstrap.name")
   Optional<String> bootstrapName;
 
   @GET

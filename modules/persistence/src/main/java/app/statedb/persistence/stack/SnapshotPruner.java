@@ -37,14 +37,14 @@ public class SnapshotPruner {
    * Newest snapshots kept per stack, so exports of recent versions stay a single rung load. {@code
    * 0} disables pruning entirely and keeps every snapshot.
    */
-  @ConfigProperty(name = "state-db.compaction.prune.newest-snapshots", defaultValue = "10")
+  @ConfigProperty(name = "statedb.compaction.prune.newest-snapshots", defaultValue = "10")
   int newestSnapshots;
 
   /**
    * Minimum journal-entry distance between older ladder rungs; bounds the journal rows a historical
    * export replays. {@code 0} deactivates this bound.
    */
-  @ConfigProperty(name = "state-db.compaction.prune.ladder-journal-spacing", defaultValue = "5000")
+  @ConfigProperty(name = "statedb.compaction.prune.ladder-journal-spacing", defaultValue = "5000")
   long ladderJournalSpacing;
 
   /**
@@ -53,13 +53,13 @@ public class SnapshotPruner {
    * journal-entry bound: a stack whose updates each touch a few resources reaches the entry budget
    * only after hundreds of rebuilds. {@code 0} deactivates this bound.
    */
-  @ConfigProperty(name = "state-db.compaction.prune.ladder-update-spacing", defaultValue = "50")
+  @ConfigProperty(name = "statedb.compaction.prune.ladder-update-spacing", defaultValue = "50")
   int ladderUpdateSpacing;
 
   void validateConfig(@Observes StartupEvent event) {
     if (newestSnapshots < 0 || ladderJournalSpacing < 0 || ladderUpdateSpacing < 0) {
       throw new IllegalStateException(
-          "state-db.compaction.prune.{newest-snapshots,ladder-journal-spacing,"
+          "statedb.compaction.prune.{newest-snapshots,ladder-journal-spacing,"
               + "ladder-update-spacing} must be >= 0");
     }
   }

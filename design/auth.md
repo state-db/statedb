@@ -21,7 +21,7 @@ Companion to [`architecture.md`](./architecture.md) and [`db-schema.md`](./db-sc
 - **Per-resource ACLs in the console UI** for Wave 1. The *engine* supports them now — resource and managed (per-principal) policies are implemented via templates + `policy_grants` (see "User and resource policies") — but the admin screens to create and revoke grants are Wave 2. Grants are seeded directly today.
 - **Conditional access** (time-of-day, IP allow-lists, MFA-step-up). Cedar handles these as policy `when` clauses, but Wave 1 doesn't ship example policies that use them.
 - **Pluggable PDP.** OPA, AVP, Permit.io are *not* on the list. We commit to Cedar embedded as a library and own its JNI/reachability integration in the native image.
-- **Policy-driven admin elevation.** Admin status is read from `STATE_DB_ADMIN_SUBJECTS` env at boot. The allow-list makes a principal a member of the global `Role::"admin"`; the admin policy references it. Storing admin status in the DB stays out of scope.
+- **Policy-driven admin elevation.** Admin status is read from `STATEDB_ADMIN_SUBJECTS` env at boot. The allow-list makes a principal a member of the global `Role::"admin"`; the admin policy references it. Storing admin status in the DB stays out of scope.
 
 ---
 
@@ -99,7 +99,7 @@ The SPA contract is: HttpOnly cookie scoped to `/api/`, opaque to JavaScript. Fr
 SPA loads → fetch /api/user
   ├─ 200 → render console
   └─ 401 → location = /api/auth/login
-            → /api/auth/login selects STATE_DB_OIDC_DEFAULT_PROVIDER,
+            → /api/auth/login selects STATEDB_OIDC_DEFAULT_PROVIDER,
               validates it (unknown/disabled → 404),
               then 303 → /api/auth/flow/<provider_name>
             → authenticated HTTP permission on /api/auth/flow → Quarkus redirect to IdP
@@ -123,7 +123,7 @@ before the session cookie is issued, so provisioning failure fails authenticatio
 The default tenant is disabled (`quarkus.oidc.tenant-enabled=false`).
 
 The common entrypoint is `/api/auth/login`, which selects the provider named by
-`STATE_DB_OIDC_DEFAULT_PROVIDER`. Provider-specific links use `/api/auth/login/{provider}` directly;
+`STATEDB_OIDC_DEFAULT_PROVIDER`. Provider-specific links use `/api/auth/login/{provider}` directly;
 this supports organization or enterprise SSO links without making the SPA infer tenancy. A provider
 chooser can be added later if deployments with multiple interactive providers become common.
 
@@ -180,20 +180,20 @@ without claiming to defend against a compromised local machine.
 
 - Expires both console session cookies in the browser: the quarkus-oidc session cookie (any tenant suffix or chunk, scoped to `/api/`) and the break-glass form-auth cookie (`state-db-glass`, scoped to `/`). One endpoint covers both login flavours.
 - **Local logout only.** The IdP session is left intact, so re-signing in is a silent SSO round trip. RP-initiated (`end_session_endpoint`) logout is deliberately not done — for a self-hosted backend, signing the user out of their IdP entirely is surprising, and it would require resolving `end_session` per dynamic tenant.
-- **Stateless limitation.** Both cookies are stateless encrypted cookies with no server-side record, so logout can only instruct the browser to drop them. It cannot revoke a cookie value already copied elsewhere; such a copy stays valid until the cookie's own expiry. The only "kill every session now" lever is rotating `STATE_DB_SESSION_ENCRYPTION_SECRET`, which invalidates all outstanding cookies at once. Server-side session invalidation would require moving to server-side token state (`quarkus-oidc-db-token-state-manager`), a larger change not taken here.
+- **Stateless limitation.** Both cookies are stateless encrypted cookies with no server-side record, so logout can only instruct the browser to drop them. It cannot revoke a cookie value already copied elsewhere; such a copy stays valid until the cookie's own expiry. The only "kill every session now" lever is rotating `STATEDB_SESSION_ENCRYPTION_SECRET`, which invalidates all outstanding cookies at once. Server-side session invalidation would require moving to server-side token state (`quarkus-oidc-db-token-state-manager`), a larger change not taken here.
 
 The CLI has no server-side logout to mirror: `pulumi logout` only deletes the token from `~/.pulumi/credentials.json` and never calls the backend. The server-side counterpart to invalidating a CLI credential is revoking its `api_tokens` row via the tokens UI/API, which is independent of this console flow.
 
 #### Local break-glass
 
-`quarkus-oidc` has no primitive for minting its session cookie outside a real IdP code flow, so break-glass does not touch it. Instead it is Quarkus **form authentication** in SPA mode (`quarkus.http.auth.form`, all page locations empty → bare 401/200 status codes): the login POST to `/api/auth/local` is verified by `LocalGlassIdentityProvider` (bcrypt against `STATE_DB_LOCAL_GLASS_PASSWORD_HASH`, loopback/remote-opt-in and zero-enabled-providers gate), and on success the mechanism stores the principal in its own AES-256-encrypted cookie (`state-db-glass`), keyed by the same `STATE_DB_SESSION_ENCRYPTION_SECRET` that encrypts the OIDC session cookie, so it is stable across replicas. On every cookie restore `LocalGlassTrustedIdentityProvider` re-checks the zero-providers gate — enabling OIDC invalidates all outstanding break-glass sessions immediately. The resulting identity carries a synthetic `JsonWebToken` principal for the bootstrap admin (`local:bootstrap:admin`, `users` row created idempotently at login), so `SessionPrincipalFilter`, Cedar role resolution and the console API treat it exactly like an OIDC session. Gating rationale per `architecture.md`.
+`quarkus-oidc` has no primitive for minting its session cookie outside a real IdP code flow, so break-glass does not touch it. Instead it is Quarkus **form authentication** in SPA mode (`quarkus.http.auth.form`, all page locations empty → bare 401/200 status codes): the login POST to `/api/auth/local` is verified by `LocalGlassIdentityProvider` (bcrypt against `STATEDB_LOCAL_GLASS_PASSWORD_HASH`, loopback/remote-opt-in and zero-enabled-providers gate), and on success the mechanism stores the principal in its own AES-256-encrypted cookie (`state-db-glass`), keyed by the same `STATEDB_SESSION_ENCRYPTION_SECRET` that encrypts the OIDC session cookie, so it is stable across replicas. On every cookie restore `LocalGlassTrustedIdentityProvider` re-checks the zero-providers gate — enabling OIDC invalidates all outstanding break-glass sessions immediately. The resulting identity carries a synthetic `JsonWebToken` principal for the bootstrap admin (`local:bootstrap:admin`, `users` row created idempotently at login), so `SessionPrincipalFilter`, Cedar role resolution and the console API treat it exactly like an OIDC session. Gating rationale per `architecture.md`.
 
 #### CSRF protection
 
 Cookie-authenticated state-changing requests under `/api/*` are gated by a `CsrfFilter` bound `@PreMatching` to all non-`GET`/`HEAD`/`OPTIONS` methods on the `/api/*` surface. The filter enforces, in order:
 
 1. **`Content-Type` MUST be `application/json`** (or `application/json; charset=...`). Any other content type → 415. This forces a CORS preflight on every cross-origin browser fetch and rules out the classic `<form>`-submission CSRF vector entirely (HTML forms cannot send JSON).
-2. **`Origin` header MUST match `STATE_DB_PUBLIC_ORIGIN`** (env-supplied; e.g. `https://state-db.example.com`). Missing or mismatched → 403. `Origin` is set automatically by browsers on every fetch and cannot be forged from JavaScript.
+2. **`Origin` header MUST match `STATEDB_PUBLIC_ORIGIN`** (env-supplied; e.g. `https://statedb.example.com`). Missing or mismatched → 403. `Origin` is set automatically by browsers on every fetch and cannot be forged from JavaScript.
 3. **`Referer` is checked as a fallback** when `Origin` is absent (rare; some legacy proxies strip it). Same match rule as Origin; missing both → 403.
 
 The filter does *not* implement double-submit-cookie or synchronizer tokens. The Origin/Referer + JSON-content-type combination is sufficient for an SPA-only consumer and avoids token-management complexity.
@@ -273,7 +273,7 @@ User::"<users.id>"          (the global user UUID — matches policy_grants.prin
   parents:
     - Role::"owner" | Role::"member" | Role::"viewer" | Role::"guest"   (the role the user holds in
       THIS request's resource org, resolved per request — see "Role resolution"; absent if not a member)
-    - Role::"admin"   (only if the principal is in STATE_DB_ADMIN_SUBJECTS)
+    - Role::"admin"   (only if the principal is in STATEDB_ADMIN_SUBJECTS)
   attributes: (none)
 
 ServiceAccount::"service:<token_id>"

@@ -1,6 +1,6 @@
 quarkus:
   application:
-    name: state-db
+    name: statedb
   http:
     port: 8080
     # Pulumi's CLI gzips request bodies on `/batch-decrypt` (and may on other endpoints in
@@ -20,8 +20,8 @@ quarkus:
           policy: authenticated
       # Local break-glass console login: form auth in SPA mode (empty page locations → bare
       # status codes, no redirects). The mechanism is always assembled, but LocalGlass only
-      # honors it while STATE_DB_LOCAL_GLASS_PASSWORD_HASH is set, no oidc_providers row is
-      # enabled, and the TCP source is loopback (unless STATE_DB_LOCAL_GLASS_ALLOW_REMOTE=true).
+      # honors it while STATEDB_LOCAL_GLASS_PASSWORD_HASH is set, no oidc_providers row is
+      # enabled, and the TCP source is loopback (unless STATEDB_LOCAL_GLASS_ALLOW_REMOTE=true).
       form:
         enabled: true
         post-location: /api/auth/local
@@ -37,7 +37,7 @@ quarkus:
         # Form-auth cookie encryption. Same secret that encrypts the OIDC session cookie, so one
         # env var keeps both stable across replicas; when unset Quarkus warns and uses a per-boot
         # random key (LocalGlassStartupValidator fails the boot if break-glass is configured).
-        encryption-key: "${state-db.session.encryption-secret:}"
+        encryption-key: "${statedb.session.encryption-secret:}"
   # Health and metrics on a separate listener (:9000); the public port is internet-facing.
   management:
     enabled: true
@@ -76,11 +76,11 @@ quarkus:
   log:
     level: INFO
 
-state-db:
+statedb:
   license:
-    path: ${STATE_DB_LICENSE_PATH:}
-    inline: ${STATE_DB_LICENSE:}
-  deployment-id: ${STATE_DB_DEPLOYMENT_ID:}
+    path: ${STATEDB_LICENSE_PATH:}
+    inline: ${STATEDB_LICENSE:}
+  deployment-id: ${STATEDB_DEPLOYMENT_ID:}
   compaction:
     poll-interval: 10s
     per-tick-cap: 25
@@ -124,15 +124,15 @@ state-db:
   quarkus:
     datasource:
       jdbc:
-        url: ${STATE_DB_JDBC_URL}
-      username: ${STATE_DB_DB_USER}
-      password: ${STATE_DB_DB_PASSWORD}
+        url: ${STATEDB_JDBC_URL}
+      username: ${STATEDB_DB_USER}
+      password: ${STATEDB_DB_PASSWORD}
 
 # @TestTransaction wraps the whole test in one JTA tx; on cold-start runs the
 # default 60s ceiling can fire mid-test (Dev Services boot + Flyway + first
 # connection). Five minutes is generous; trim later if it masks real hangs.
 "%test":
-  state-db:
+  statedb:
     # The scheduler is off below, so tests drive compaction directly; nothing would clear a job.
     lock:
       compaction-wait: 0

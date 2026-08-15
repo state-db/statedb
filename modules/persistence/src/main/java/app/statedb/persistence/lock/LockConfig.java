@@ -4,7 +4,7 @@ import io.smallrye.config.ConfigMapping;
 import io.smallrye.config.WithDefault;
 import java.time.Duration;
 
-@ConfigMapping(prefix = "state-db.lock")
+@ConfigMapping(prefix = "statedb.lock")
 public interface LockConfig {
 
   @WithDefault("1h")

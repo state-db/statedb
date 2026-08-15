@@ -22,7 +22,7 @@ public class OidcStartupValidator {
   @Inject SessionEncryptionSecret sessionSecret;
 
   @Inject
-  @ConfigProperty(name = "state-db.oidc.default-provider")
+  @ConfigProperty(name = "statedb.oidc.default-provider")
   Optional<String> defaultProvider;
 
   void onStart(@Observes StartupEvent event) {

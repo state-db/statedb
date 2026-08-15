@@ -10,7 +10,7 @@ import org.eclipse.microprofile.config.ConfigProvider;
 
 /**
  * Env-driven configuration for the boot-time OIDC provider upsert ({@link OidcProviderBootstrap}).
- * Mirrors {@link BootstrapConfig}: {@code STATE_DB_OIDC_BOOTSTRAP_NAME} is the sentinel — unset
+ * Mirrors {@link BootstrapConfig}: {@code STATEDB_OIDC_BOOTSTRAP_NAME} is the sentinel — unset
  * means "no bootstrap provider," set means the remaining three keys are required, and partial
  * configuration fails fast before any DB work.
  *
@@ -27,18 +27,18 @@ public record OidcBootstrapConfig(
     Objects.requireNonNull(clientSecret, "clientSecret");
   }
 
-  public static final String PROP_NAME = "state-db.oidc.bootstrap.name";
-  public static final String PROP_ISSUER = "state-db.oidc.bootstrap.issuer";
-  public static final String PROP_CLIENT_ID = "state-db.oidc.bootstrap.client-id";
-  public static final String PROP_CLIENT_SECRET = "state-db.oidc.bootstrap.client-secret";
+  public static final String PROP_NAME = "statedb.oidc.bootstrap.name";
+  public static final String PROP_ISSUER = "statedb.oidc.bootstrap.issuer";
+  public static final String PROP_CLIENT_ID = "statedb.oidc.bootstrap.client-id";
+  public static final String PROP_CLIENT_SECRET = "statedb.oidc.bootstrap.client-secret";
 
-  public static final String ENV_NAME = "STATE_DB_OIDC_BOOTSTRAP_NAME";
+  public static final String ENV_NAME = "STATEDB_OIDC_BOOTSTRAP_NAME";
 
   private static final Map<String, String> ENV_FOR =
       Map.of(
-          PROP_ISSUER, "STATE_DB_OIDC_BOOTSTRAP_ISSUER",
-          PROP_CLIENT_ID, "STATE_DB_OIDC_BOOTSTRAP_CLIENT_ID",
-          PROP_CLIENT_SECRET, "STATE_DB_OIDC_BOOTSTRAP_CLIENT_SECRET");
+          PROP_ISSUER, "STATEDB_OIDC_BOOTSTRAP_ISSUER",
+          PROP_CLIENT_ID, "STATEDB_OIDC_BOOTSTRAP_CLIENT_ID",
+          PROP_CLIENT_SECRET, "STATEDB_OIDC_BOOTSTRAP_CLIENT_SECRET");
 
   public static Optional<OidcBootstrapConfig> fromEnv() {
     var config = ConfigProvider.getConfig();

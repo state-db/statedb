@@ -99,9 +99,9 @@ class SnapshotPrunerTest extends AbstractSnapshotPruningTest {
     @Override
     public Map<String, String> getConfigOverrides() {
       return Map.of(
-          "state-db.compaction.prune.newest-snapshots", "2",
-          "state-db.compaction.prune.ladder-journal-spacing", "3",
-          "state-db.compaction.prune.ladder-update-spacing", "0");
+          "statedb.compaction.prune.newest-snapshots", "2",
+          "statedb.compaction.prune.ladder-journal-spacing", "3",
+          "statedb.compaction.prune.ladder-update-spacing", "0");
     }
   }
 }

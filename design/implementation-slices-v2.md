@@ -102,21 +102,21 @@ a cosmetic one.
 
 ### Slice 4.5 · Bootstrap admin + default org + initial API token ✅
 
-> **Superseded in part by Slice 25.** The env-provisioned API token (`STATE_DB_BOOTSTRAP_ADMIN_TOKEN_HASH`, plus the admin email/display-name vars) was removed once break-glass landed: the break-glass console session mints CLI tokens through the standard `pulumi login` browser flow, so one human credential covers the whole pre-OIDC story. Bootstrap now seeds only the org + bootstrap-admin user + membership from `STATE_DB_BOOTSTRAP_ORG_NAME` (+ optional `_ORG_DISPLAY_NAME`, defaulting to the name). The workbench, which needs a non-interactive CLI token, seeds one directly via `seed-console.sh`. The spec below is preserved as written.
+> **Superseded in part by Slice 25.** The env-provisioned API token (`STATEDB_BOOTSTRAP_ADMIN_TOKEN_HASH`, plus the admin email/display-name vars) was removed once break-glass landed: the break-glass console session mints CLI tokens through the standard `pulumi login` browser flow, so one human credential covers the whole pre-OIDC story. Bootstrap now seeds only the org + bootstrap-admin user + membership from `STATEDB_BOOTSTRAP_ORG_NAME` (+ optional `_ORG_DISPLAY_NAME`, defaulting to the name). The workbench, which needs a non-interactive CLI token, seeds one directly via `seed-console.sh`. The spec below is preserved as written.
 
 **Why now.** Slice 5 needs real `users`, `organizations`, `org_members`, `api_tokens` rows to validate tokens against. This slice is the production onboarding path; without it, the only way to a usable deployment is hand-rolled SQL.
 
 **Scope**
 
 - `persistence/identity/BootstrapProvisioner` (`@ApplicationScoped`, fired from `@Startup` after Flyway). Idempotent across boots.
-- Env (or `state-db.bootstrap.*` config keys): `STATE_DB_BOOTSTRAP_ORG_NAME` (operators migrating off Pulumi Cloud point this at the same org name they used there), `STATE_DB_BOOTSTRAP_ORG_DISPLAY_NAME`, `STATE_DB_BOOTSTRAP_ADMIN_EMAIL`, `STATE_DB_BOOTSTRAP_ADMIN_DISPLAY_NAME`, `STATE_DB_BOOTSTRAP_ADMIN_TOKEN_HASH` (sha256 of an operator-chosen token; raw never reaches state-db).
-- Skip cleanly if `STATE_DB_BOOTSTRAP_ORG_NAME` is unset; fail fast if partial.
+- Env (or `statedb.bootstrap.*` config keys): `STATEDB_BOOTSTRAP_ORG_NAME` (operators migrating off Pulumi Cloud point this at the same org name they used there), `STATEDB_BOOTSTRAP_ORG_DISPLAY_NAME`, `STATEDB_BOOTSTRAP_ADMIN_EMAIL`, `STATEDB_BOOTSTRAP_ADMIN_DISPLAY_NAME`, `STATEDB_BOOTSTRAP_ADMIN_TOKEN_HASH` (sha256 of an operator-chosen token; raw never reaches state-db).
+- Skip cleanly if `STATEDB_BOOTSTRAP_ORG_NAME` is unset; fail fast if partial.
 - One transaction:
   - `INSERT organizations ... ON CONFLICT (name) DO UPDATE SET display_name`.
   - `INSERT users(iss='local:bootstrap', sub='admin', ...) ON CONFLICT (iss, sub) DO UPDATE`. `iss='local:bootstrap'` is the reserved namespace for non-OIDC bootstrap users; existing `users` schema is sufficient.
   - `INSERT org_members(role='owner') ON CONFLICT DO NOTHING`.
   - `INSERT api_tokens(kind='service_account', description='bootstrap', expires_at = now() + interval '1 year') ON CONFLICT (token_hash) DO NOTHING`.
-- `STATE_DB_ADMIN_SUBJECTS` semantics: `local:bootstrap:admin` is implicitly admin.
+- `STATEDB_ADMIN_SUBJECTS` semantics: `local:bootstrap:admin` is implicitly admin.
 - Boot log: `Bootstrap admin "<email>" provisioned in org "<orgName>"` or `Bootstrap skipped`.
 
 **Out of scope.** Console password-based break-glass — deferred to Slice 25 because no `/api/*` endpoint reads a session cookie before Slice 23 wires OIDC, and Slice 23 replaces any hand-rolled session mint with `quarkus-oidc`'s primitive. The bootstrap **API token** provisioned here is sufficient for Phase 2 (`pulumi login` / `pulumi whoami`), which targets `/pulumi/api/*` and uses `Authorization: token <raw>`, not cookies. Multiple orgs or users at bootstrap. Token rotation that auto-revokes prior tokens — re-running with a new hash *adds* a row; revoke manually via `psql` until Slice 26.
@@ -125,19 +125,19 @@ a cosmetic one.
 
 - Cold boot with all env set creates exactly one row in each of the four tables.
 - Identical re-boot is a no-op.
-- Re-boot with a changed `STATE_DB_BOOTSTRAP_ORG_DISPLAY_NAME` updates in place.
+- Re-boot with a changed `STATEDB_BOOTSTRAP_ORG_DISPLAY_NAME` updates in place.
 - Partial env fails before any INSERT.
-- No `STATE_DB_BOOTSTRAP_*` env → no writes; `Bootstrap skipped` logged.
+- No `STATEDB_BOOTSTRAP_*` env → no writes; `Bootstrap skipped` logged.
 
 **Manual verification**
 
 ```
 TOKEN=my-bootstrap-token
-STATE_DB_BOOTSTRAP_ORG_NAME=acme \
-STATE_DB_BOOTSTRAP_ORG_DISPLAY_NAME='Acme Inc' \
-STATE_DB_BOOTSTRAP_ADMIN_EMAIL=ops@acme.example \
-STATE_DB_BOOTSTRAP_ADMIN_DISPLAY_NAME='Acme Ops' \
-STATE_DB_BOOTSTRAP_ADMIN_TOKEN_HASH=$(printf %s "$TOKEN" | shasum -a 256 | cut -d' ' -f1) \
+STATEDB_BOOTSTRAP_ORG_NAME=acme \
+STATEDB_BOOTSTRAP_ORG_DISPLAY_NAME='Acme Inc' \
+STATEDB_BOOTSTRAP_ADMIN_EMAIL=ops@acme.example \
+STATEDB_BOOTSTRAP_ADMIN_DISPLAY_NAME='Acme Ops' \
+STATEDB_BOOTSTRAP_ADMIN_TOKEN_HASH=$(printf %s "$TOKEN" | shasum -a 256 | cut -d' ' -f1) \
 ./bin/in-container mvn -f modules/pom.xml -pl app -am quarkus:dev
 # psql: SELECT (SELECT count(*) FROM organizations), (SELECT count(*) FROM users), (SELECT count(*) FROM org_members), (SELECT count(*) FROM api_tokens); expect 1,1,1,1.
 ```
@@ -370,7 +370,7 @@ Each slice in this phase moves one step closer to a real `pulumi up` cycle succe
 
 - `POST .../update/{updateID}/renew_lease`: `UPDATE stack_locks SET expires_at = now() + $ttl, heartbeat_at = now() WHERE lock_token = ?`. Empty rowcount → 409.
 - Cancel path (`DELETE .../update/{id}`): delete the lock + update row in one tx; status flips to `cancelled` (subject to terminal-status guard).
-- Config: `state-db.lock.lease-ttl=1h`, `state-db.lock.heartbeat-interval=30s` in `application.yml`.
+- Config: `statedb.lock.lease-ttl=1h`, `statedb.lock.heartbeat-interval=30s` in `application.yml`.
 
 **Tests.** Renew with wrong token → 409. Renew advances `expires_at`. Cancel transitions `status='cancelled'` and removes the lock atomically.
 
@@ -591,7 +591,7 @@ re-scoping against the IAM model before implementation.
 - Migration `V008__compaction.sql`: `snapshots`, `compaction_jobs`, FK from `stack_state.base_snapshot_id`.
 - Enqueue a compaction job inside the `POST /complete` transaction after every completed update. The partial unique index on `compaction_jobs(stack_id) WHERE status IN ('pending','running')` coalesces bursts so a stack has at most one active job.
 - `persistence/stack/CompactionWorker` `@Scheduled`: claims jobs with `FOR UPDATE SKIP LOCKED`, locks `stack_state`, calls Slice 17.5's `StackAssembler` to build the snapshot (same code path as `/export` — drift here would split-brain compaction vs. read), INSERT `snapshots`, point `stack_state.base_snapshot_id` at it, reset `journal_entries_since_compaction`, mark job `completed`.
-- Failure path: mark failed/retryable with `error_message`, retry capped by `state-db.compaction.max-attempts`; reaper returns timed-out `running` jobs to `pending` or terminal `failed`.
+- Failure path: mark failed/retryable with `error_message`, retry capped by `statedb.compaction.max-attempts`; reaper returns timed-out `running` jobs to `pending` or terminal `failed`.
 - Add `quarkus-scheduler` and config: `poll-interval`, `per-tick-cap`, `claim-timeout`, `max-attempts`.
 - Wire `StackAssembler` to load `snapshots.checkpoint` as the base and replay only `journal_entries.sequence_id > snapshots.compacted_from_journal_seq`.
 
@@ -616,9 +616,9 @@ re-scoping against the IAM model before implementation.
 - Default policy: keep current-state correctness, not full historical replay. Delete rows for a stack where `journal_entries.sequence_id <= snapshots.compacted_from_journal_seq` for the active base snapshot.
 - Preserve `stack_updates` metadata so history lists still show completed operations even when their bulky journal rows have been pruned.
 - Make the behavior explicit in config:
-  - `state-db.journal-retention.enabled` default `false` until operators opt in.
-  - `state-db.journal-retention.keep-after-compaction` default `0` rows/updates unless a stronger audit requirement appears.
-  - Optional minimum age such as `state-db.journal-retention.min-age` so a just-compacted stack is not pruned immediately in debugging environments.
+  - `statedb.journal-retention.enabled` default `false` until operators opt in.
+  - `statedb.journal-retention.keep-after-compaction` default `0` rows/updates unless a stronger audit requirement appears.
+  - Optional minimum age such as `statedb.journal-retention.min-age` so a just-compacted stack is not pruned immediately in debugging environments.
 - Deletion must lock the stack's `stack_state` row or otherwise run from a snapshot boundary that cannot move underneath it.
 - Use a database-native bulk delete; this is a legitimate native SQL path because retention is set-based cleanup, not entity business logic.
 
@@ -639,7 +639,7 @@ re-scoping against the IAM model before implementation.
 **Scope**
 
 - Delete old `snapshots` rows once newer snapshots have become the active base for a stack.
-- Default policy: keep the active snapshot plus one previous snapshot per stack (`state-db.snapshot-retention.keep=2`) for debugging/rollback safety.
+- Default policy: keep the active snapshot plus one previous snapshot per stack (`statedb.snapshot-retention.keep=2`) for debugging/rollback safety.
 - Never delete `stack_state.base_snapshot_id`; the FK protects this, but the job should filter it out deliberately.
 - Delete `completed` `compaction_jobs` older than a configurable age after any referenced snapshot retention is complete. Keep `failed` jobs longer or indefinitely until there is an operator-visible failure surface.
 - Coordinate ordering with journal retention:
@@ -654,7 +654,7 @@ re-scoping against the IAM model before implementation.
 - A snapshot referenced by `stack_state.base_snapshot_id` is never deleted even if it would otherwise fall outside `keep`.
 - Old completed compaction jobs are pruned according to config; failed jobs remain.
 
-**Manual verification.** Set `state-db.snapshot-retention.keep=1`, run several compactions, run the retention job, and confirm the active snapshot remains while older unreferenced snapshots disappear.
+**Manual verification.** Set `statedb.snapshot-retention.keep=1`, run several compactions, run the retention job, and confirm the active snapshot remains while older unreferenced snapshots disappear.
 
 ---
 
@@ -663,7 +663,7 @@ re-scoping against the IAM model before implementation.
 **Scope**
 
 - `@Scheduled(every="1h")` job in `pulumi-api`:
-  - Reads `state-db.events.retention-days` (default 30).
+  - Reads `statedb.events.retention-days` (default 30).
   - `DELETE FROM update_events WHERE created_at < now() - interval`.
   - Logs row count.
 - Test profile overrides the schedule via `quarkus.scheduler.enabled=false` plus a manual trigger.
@@ -682,7 +682,7 @@ re-scoping against the IAM model before implementation.
 
 - `quarkus-oidc` dependency in `console-api/` in `web-app` mode.
 - `TenantConfigResolver` reading `oidc_providers` at request time.
-- Bootstrap upsert from `STATE_DB_OIDC_BOOTSTRAP_*` env at boot.
+- Bootstrap upsert from `STATEDB_OIDC_BOOTSTRAP_*` env at boot.
 - Default `/api/auth/login`, explicit `/api/auth/login/{provider}`, and `/api/auth/callback/{provider}` wired through Quarkus.
 - Current-user `/api/user`: returns `{ id, email, name, siteAdmin, organizations[] }`.
 - Session cookie scoped to `Path=/api/`.
@@ -702,7 +702,7 @@ re-scoping against the IAM model before implementation.
 - `console-api/filter/CsrfFilter.java`:
   - `@PreMatching` on non-`GET`/`HEAD`/`OPTIONS` `/api/*` requests.
   - Enforces `Content-Type: application/json[; charset=...]` → 415 otherwise.
-  - Enforces `Origin` matches `STATE_DB_PUBLIC_ORIGIN`; fallback `Referer` → 403 otherwise.
+  - Enforces `Origin` matches `STATEDB_PUBLIC_ORIGIN`; fallback `Referer` → 403 otherwise.
   - Skips `/api/auth/login/*`, `/api/auth/callback/*`.
 
 **Tests.** GET unaffected. POST with wrong Origin → 403. POST with form content-type → 415. POST with correct headers passes.
@@ -715,10 +715,10 @@ re-scoping against the IAM model before implementation.
 
 **Why now.** This is also the mechanism for pre-OIDC console access (the role originally proposed as Slice 4.6, then deferred when we noticed the cookie had no consumer until this phase). It covers both first-touch console login on a fresh deployment with no IdP configured *and* IdP-down recovery on an established deployment. Without it, a zero-IdP deployment has a console that is 100% inaccessible.
 
-**Mechanism decision.** `quarkus-oidc` exposes no API to mint its session cookie outside a real IdP code flow, so break-glass is built on Quarkus **form authentication** in SPA mode (the Quarkus team's recommended primitive for IdP-less session login): `quarkus.http.auth.form` with `post-location: /api/auth/local` and empty `login-page`/`error-page`/`landing-page`, so the mechanism answers with bare status codes (200 + cookie / 401) instead of redirects. The cookie (`state-db-glass`, HttpOnly, SameSite=Strict, 12h timeout) is AES-256-encrypted with `quarkus.http.auth.session.encryption-key`, wired to the existing `STATE_DB_SESSION_ENCRYPTION_SECRET` so sessions are stable across replicas. Quarkus owns cookie crypto, expiry, and renewal; we own only policy:
+**Mechanism decision.** `quarkus-oidc` exposes no API to mint its session cookie outside a real IdP code flow, so break-glass is built on Quarkus **form authentication** in SPA mode (the Quarkus team's recommended primitive for IdP-less session login): `quarkus.http.auth.form` with `post-location: /api/auth/local` and empty `login-page`/`error-page`/`landing-page`, so the mechanism answers with bare status codes (200 + cookie / 401) instead of redirects. The cookie (`state-db-glass`, HttpOnly, SameSite=Strict, 12h timeout) is AES-256-encrypted with `quarkus.http.auth.session.encryption-key`, wired to the existing `STATEDB_SESSION_ENCRYPTION_SECRET` so sessions are stable across replicas. Quarkus owns cookie crypto, expiry, and renewal; we own only policy:
 
-- `LocalGlass` — shared gate + bcrypt verify + idempotent bootstrap-admin `users`-row creation. Gate (any failure → 401): (1) `STATE_DB_LOCAL_GLASS_PASSWORD_HASH` set (bcrypt MCF); (2) zero enabled `oidc_providers` rows — state-gated, not profile-gated, so the route self-destructs once OIDC exists and IdP-down recovery re-opens it by disabling the provider row; (3) raw TCP source is loopback (`X-Forwarded-For` never honored) unless `STATE_DB_LOCAL_GLASS_ALLOW_REMOTE=true` (the `docker run -p` evaluation path — published ports arrive from the bridge gateway, not loopback).
-- `LocalGlassIdentityProvider` (`UsernamePasswordAuthenticationRequest`) — login-time check; all failure modes are the same 401. Success always authenticates as the bootstrap admin (`local:bootstrap:admin`) — never `STATE_DB_ADMIN_SUBJECTS` entries, which have no `users` row while zero providers exist.
+- `LocalGlass` — shared gate + bcrypt verify + idempotent bootstrap-admin `users`-row creation. Gate (any failure → 401): (1) `STATEDB_LOCAL_GLASS_PASSWORD_HASH` set (bcrypt MCF); (2) zero enabled `oidc_providers` rows — state-gated, not profile-gated, so the route self-destructs once OIDC exists and IdP-down recovery re-opens it by disabling the provider row; (3) raw TCP source is loopback (`X-Forwarded-For` never honored) unless `STATEDB_LOCAL_GLASS_ALLOW_REMOTE=true` (the `docker run -p` evaluation path — published ports arrive from the bridge gateway, not loopback).
+- `LocalGlassIdentityProvider` (`UsernamePasswordAuthenticationRequest`) — login-time check; all failure modes are the same 401. Success always authenticates as the bootstrap admin (`local:bootstrap:admin`) — never `STATEDB_ADMIN_SUBJECTS` entries, which have no `users` row while zero providers exist.
 - `LocalGlassTrustedIdentityProvider` (`TrustedAuthenticationRequest`) — cookie restore; re-checks the zero-providers gate on every request, so enabling OIDC kills outstanding break-glass sessions immediately.
 - `LocalGlassPrincipal` — synthetic `JsonWebToken` carrying the bootstrap `iss`/`sub`, so `SessionPrincipalFilter`, Cedar, and `/api/user` treat the session exactly like an OIDC one.
 - `LocalGlassStartupValidator` — boot fails if the hash is set without the session secret; WARN log when break-glass is configured.
@@ -728,7 +728,7 @@ re-scoping against the IAM model before implementation.
 
 **Manual verification.** With no `oidc_providers` rows and the hash set: `curl -i -d 'username=admin&password=...' http://localhost:8080/api/auth/local` → 200 + `state-db-glass` cookie; same call against the container's non-loopback interface (`curl http://$(hostname -i):8080/...`) → 401; insert an `enabled=true` provider row → 401 with the old cookie too.
 
-**Addendum — bootstrap token removed.** With break-glass in place, the env-provisioned bootstrap API token (Slice 4.5) became a redundant second credential for the same identity and was removed. The break-glass session carries a `JsonWebToken` principal, so the existing `/api/auth/cli-login` browser flow works off it unchanged: the pre-OIDC CLI story is break-glass sign-in → `pulumi login` → approve → 24h token, and the only bootstrap env left is org seeding (`STATE_DB_BOOTSTRAP_ORG_NAME`, optional display name). Deliberately **not** unified further: the glass password never authenticates `/pulumi/api/*` directly — low-entropy secret, bcrypt on a hot path, no revocation story. The workbench seeds its static non-interactive CLI token straight into `api_tokens` via `seed-console.sh`.
+**Addendum — bootstrap token removed.** With break-glass in place, the env-provisioned bootstrap API token (Slice 4.5) became a redundant second credential for the same identity and was removed. The break-glass session carries a `JsonWebToken` principal, so the existing `/api/auth/cli-login` browser flow works off it unchanged: the pre-OIDC CLI story is break-glass sign-in → `pulumi login` → approve → 24h token, and the only bootstrap env left is org seeding (`STATEDB_BOOTSTRAP_ORG_NAME`, optional display name). Deliberately **not** unified further: the glass password never authenticates `/pulumi/api/*` directly — low-entropy secret, bcrypt on a hot path, no revocation story. The workbench seeds its static non-interactive CLI token straight into `api_tokens` via `seed-console.sh`.
 
 ---
 
@@ -897,7 +897,7 @@ The cap in `LICENSE` (Free Edition Use Limit, ten active stacks per deployment) 
 - Header file `etc/header.txt` containing the copyright line, an ELv2-with-Additional-Limitations notice, and `SPDX-License-Identifier: LicenseRef-state-db`.
 - One-time `mvn license:format` to apply headers to every existing `.java` file.
 - Bind `mvn license:check` to the `verify` phase so missing or stale headers fail the build.
-- Add `LICENSES/LicenseRef-state-db.txt` (a copy of `LICENSE`) so SPDX-aware scanners can resolve the `LicenseRef-`.
+- Add `LICENSES/LicenseRef-statedb.txt` (a copy of `LICENSE`) so SPDX-aware scanners can resolve the `LicenseRef-`.
 
 **Out of scope.** Headers in other languages — none yet; revisit when the web console adds JS/TS.
 
@@ -920,7 +920,7 @@ The cap in `LICENSE` (Free Edition Use Limit, ten active stacks per deployment) 
 - New module `modules/licensing/`:
   - `LicenseKey` record + parser.
   - `LicenseKeyVerifier` using a bundled Ed25519 public key (classpath resource).
-  - Boot-time load from `STATE_DB_LICENSE_KEY` env var, falling back to `/etc/state-db/license.key`.
+  - Boot-time load from `STATEDB_LICENSE_KEY` env var, falling back to `/etc/state-db/license.key`.
   - `LicenseState` `@ApplicationScoped` CDI bean exposing `{ active, maxStacks, expiresAt, subject }`. Default with no key: `{ active: false, maxStacks: 10 }`.
 - Boot log line stating Free Edition or commercial subject + expiry.
 
@@ -933,7 +933,7 @@ The cap in `LICENSE` (Free Edition Use Limit, ten active stacks per deployment) 
 - Wrong-signature key is rejected.
 - Missing key leaves `LicenseState.active=false, maxStacks=10` (Free Edition default).
 
-**Manual verification.** Set `STATE_DB_LICENSE_KEY=<test-key>` and inspect the boot log; expect the active license fields to be printed.
+**Manual verification.** Set `STATEDB_LICENSE_KEY=<test-key>` and inspect the boot log; expect the active license fields to be printed.
 
 ---
 

@@ -184,7 +184,7 @@ Replace the current top-bar-only `AppShell` with a shadcn **Sidebar** layout
   Persist selection in localStorage; deep links to `/console/{org}/...` override it.
   **Site admins get an all-orgs switcher**: when `user.siteAdmin`, the list is
   sourced from `GET /api/admin/orgs` (all tenants), not `user.organizations` — a
-  site admin's power comes from the `STATE_DB_ADMIN_SUBJECTS` allow-list, not from
+  site admin's power comes from the `STATEDB_ADMIN_SUBJECTS` allow-list, not from
   `org_members` rows, so the switcher must not be membership-limited when they
   browse or manage another tenant. Selecting an org navigates to its scoped stacks
   home (`/console/{org}`), whose owner/admin-only "Manage members" action opens
@@ -314,7 +314,7 @@ allowed at deploy time. A 401 shows an inline destructive `Alert` (wrong
 password / gate closed — indistinguishable by design); success navigates to
 `returnTo`. When providers are empty and `breakGlass: false`, render an
 empty state ("Configure an OIDC provider, or set
-`STATE_DB_LOCAL_GLASS_PASSWORD_HASH`") — never a form that cannot succeed.
+`STATEDB_LOCAL_GLASS_PASSWORD_HASH`") — never a form that cannot succeed.
 
 **Data.** `GET /api/auth/providers` → `{ providers: [{ name, displayName }],
 breakGlass: boolean }` (public, unauthenticated; implemented).
@@ -664,7 +664,7 @@ client secret is never visible after save.
 **Purpose.** Tenant lifecycle: mint and retire organizations. Member and
 guest-share management do **not** live on this list screen — that is
 owner-or-admin work on the organization detail route (S17). This list screen is
-site-admin-only (`STATE_DB_ADMIN_SUBJECTS`); minting a new tenant has no natural
+site-admin-only (`STATEDB_ADMIN_SUBJECTS`); minting a new tenant has no natural
 per-org owner, so it stays a deployment-level act.
 
 **Layout.** Orgs `DataTable` (name | display name | members | stacks | created)
@@ -711,7 +711,7 @@ them, since S13 is org-scoped.
 
 **Layout.** `DataTable`: user (Avatar + name + email, with an inline `admin`
 `Badge` when the row is a site admin) | identity (`iss` short + `sub` mono,
-copyable — what an admin pastes into `STATE_DB_ADMIN_SUBJECTS`) | orgs (badges
+copyable — what an admin pastes into `STATEDB_ADMIN_SUBJECTS`) | orgs (badges
 with role) | last login (`Never` for machine identities) | created. A
 `ToggleGroup` (Humans / Service accounts / All, default **Humans**) segments on
 the DTO's `principalType` (`human` | `service`, `service` iff issuer is
@@ -722,7 +722,7 @@ audit rather than deleted. Deactivated humans remain visible with an `inactive`
 badge. Read-only except a per-row "Manage memberships" affordance: humans link into the applicable
 S17 organization detail (a single link for one org, a dropdown of orgs for
 several); service rows show none (S17 excludes them). `Alert` at top: "Admins are
-configured via `STATE_DB_ADMIN_SUBJECTS`, not here" — the current admin set is
+configured via `STATEDB_ADMIN_SUBJECTS`, not here" — the current admin set is
 rendered read-only inline via the per-row `siteAdmin` flag (no separate settings
 endpoint needed).
 

@@ -230,7 +230,7 @@ class CliLoginFlowTest {
     Response mint =
         given()
             .cookie(session.getName(), session.getValue())
-            .header("Origin", "http://state-db.test")
+            .header("Origin", "http://statedb.test")
             .contentType("application/json")
             .body("{}")
             .when()

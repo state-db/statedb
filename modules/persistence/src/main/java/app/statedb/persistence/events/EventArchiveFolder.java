@@ -60,14 +60,14 @@ public class EventArchiveFolder {
    * prefers an archive whenever one is present — so this is a complete rollback switch on its own;
    * {@link #unfold} turns individual archives back into rows.
    */
-  @ConfigProperty(name = "state-db.events.archive.enabled", defaultValue = "true")
+  @ConfigProperty(name = "statedb.events.archive.enabled", defaultValue = "true")
   boolean enabled;
 
   /** How long after an update ends before its events may be folded. */
-  @ConfigProperty(name = "state-db.events.archive.grace-period", defaultValue = "1h")
+  @ConfigProperty(name = "statedb.events.archive.grace-period", defaultValue = "1h")
   Duration gracePeriod;
 
-  @ConfigProperty(name = "state-db.events.archive.per-tick-cap", defaultValue = "50")
+  @ConfigProperty(name = "statedb.events.archive.per-tick-cap", defaultValue = "50")
   int perTickCap;
 
   // SKIP, not the default PROCEED: a tick that runs past the poll interval would otherwise be
@@ -75,7 +75,7 @@ public class EventArchiveFolder {
   // bulk deletes on this pod. Row locks stop the same update being folded twice; they do not bound
   // how much work the pod takes on at once.
   @Scheduled(
-      every = "{state-db.events.archive.poll-interval}",
+      every = "{statedb.events.archive.poll-interval}",
       concurrentExecution = ConcurrentExecution.SKIP)
   void scheduledTick() {
     foldOnce();

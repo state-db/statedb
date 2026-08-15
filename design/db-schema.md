@@ -92,7 +92,7 @@ CREATE TABLE oidc_providers (
 
 -- One user per (iss, sub). Email is a hint, not an identity key — IdPs change
 -- emails. Admin status is NOT stored here; it is computed per-request against
--- the env-driven STATE_DB_ADMIN_SUBJECTS allow-list so admins can be rotated
+-- the env-driven STATEDB_ADMIN_SUBJECTS allow-list so admins can be rotated
 -- without DB writes. Linking multiple identities (Google + Okta → same user)
 -- is future work.
 CREATE TABLE users (

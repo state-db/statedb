@@ -7,8 +7,8 @@ set -euo pipefail
 
 cd "$(dirname "$0")/.."
 
-readonly REGISTRY=${STATE_DB_REGISTRY:-ghcr.io/state-db/state-db}
-readonly CANDIDATE_REGISTRY=${STATE_DB_CANDIDATE_REGISTRY:-${REGISTRY}-candidates}
+readonly REGISTRY=${STATEDB_REGISTRY:-ghcr.io/state-db/statedb}
+readonly CANDIDATE_REGISTRY=${STATEDB_CANDIDATE_REGISTRY:-${REGISTRY}-candidates}
 readonly CHANGELOG=CHANGELOG.md
 
 dry_run=false

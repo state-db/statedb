@@ -115,7 +115,7 @@ function NoSignInMethods() {
       <AlertTitle>No sign-in methods available</AlertTitle>
       <AlertDescription>
         Configure an OIDC provider to sign in, or set
-        STATE_DB_LOCAL_GLASS_PASSWORD_HASH to enable break-glass access.
+        STATEDB_LOCAL_GLASS_PASSWORD_HASH to enable break-glass access.
       </AlertDescription>
     </Alert>
   );

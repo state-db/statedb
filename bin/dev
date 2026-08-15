@@ -4,7 +4,7 @@ set -euo pipefail
 
 cd "$(dirname "$0")/.."
 
-readonly VERIFY_VM=${STATE_DB_VERIFY_VM:-state-db-verify}
+readonly VERIFY_VM=${STATEDB_VERIFY_VM:-state-db-verify}
 readonly MISE_VERSION=v2026.8.5
 readonly MISE_SHA256_LINUX_ARM64=d2bde76b1f87ab50b6f456e05332bb02de56a6bf3c5d19343cc3661e5d294681
 readonly MISE_SHA256_LINUX_X64=ee362b6d96c648e27325a8bc7ee866bde4fffc20c88c777c5eb5c3b5c6f3e226
@@ -93,7 +93,7 @@ run_isolated() {
     LANG=C.UTF-8 \
     XDG_RUNTIME_DIR="/run/user/$guest_uid" \
     DOCKER_HOST="unix:///run/user/$guest_uid/docker.sock" \
-    STATE_DB_ISOLATED=1 \
+    STATEDB_ISOLATED=1 \
     bash "$guest_dir/bin/dev-vm-run" "$guest_dir" "$MISE_VERSION" \
       "$MISE_SHA256_LINUX_ARM64" "$MISE_SHA256_LINUX_X64" "$task"
 }
@@ -155,7 +155,7 @@ ci-protocol)
   [[ ${GITHUB_ACTIONS:-} == true ]] || fail "ci-protocol is only for a GitHub-hosted runner"
   [[ $# -le 1 ]] || fail "ci-protocol accepts at most one Pulumi image"
   require_mise
-  export STATE_DB_ISOLATED=1
+  export STATEDB_ISOLATED=1
   if [[ $# -eq 1 ]]; then
     exec mise run protocol -- "-Dpulumi.cli.image=$1"
   fi

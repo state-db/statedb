@@ -28,7 +28,7 @@ import org.junit.jupiter.api.BeforeEach;
 
 /**
  * Fixture for the snapshot retention tests. Each concrete subclass carries its own {@code
- * state-db.compaction.prune.*} profile, because one policy cannot exercise both ladder bounds at
+ * statedb.compaction.prune.*} profile, because one policy cannot exercise both ladder bounds at
  * once.
  */
 abstract class AbstractSnapshotPruningTest {

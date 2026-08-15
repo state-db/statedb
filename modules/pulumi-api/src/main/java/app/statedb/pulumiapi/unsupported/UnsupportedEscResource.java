@@ -9,7 +9,7 @@ import jakarta.ws.rs.core.Response;
 
 /**
  * Stubs the ESC environment surface behind {@code pulumi env *} and {@code pulumi config env *}.
- * ESC is a secrets/configuration service, not state storage, and is out of scope for state-db.
+ * ESC is a secrets/configuration service, not state storage, and is out of scope for statedb.
  *
  * <p>{@code env ls} hits the bare path; everything else nests under it as {@code
  * environments/{org}/{name}}, which the trailing {@code {sub:(/.*)?}} covers.

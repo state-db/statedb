@@ -7,8 +7,8 @@ import io.quarkus.test.junit.QuarkusTest;
 import org.junit.jupiter.api.Test;
 
 /**
- * With no {@code state-db.local-glass.password-hash} configured (the default), the break-glass
- * login rejects everything and the providers endpoint does not advertise it.
+ * With no {@code statedb.local-glass.password-hash} configured (the default), the break-glass login
+ * rejects everything and the providers endpoint does not advertise it.
  */
 @QuarkusTest
 class LocalGlassDisabledTest {

@@ -19,7 +19,7 @@ const KEY = ["admin", "users"] as const;
 
 export type UserFilter = "human" | "service" | "all";
 
-/** The canonical `<iss>:<sub>` identity — the exact string an operator pastes into STATE_DB_ADMIN_SUBJECTS. */
+/** The canonical `<iss>:<sub>` identity — the exact string an operator pastes into STATEDB_ADMIN_SUBJECTS. */
 export function identityString(user: Pick<AdminUser, "iss" | "sub">): string {
   return `${user.iss}:${user.sub}`;
 }
@@ -79,7 +79,7 @@ export function AdminUsersPage() {
                           <Badge variant="outline">admin</Badge>
                         </span>
                       </TooltipTrigger>
-                      <TooltipContent>Site admin — listed in STATE_DB_ADMIN_SUBJECTS</TooltipContent>
+                      <TooltipContent>Site admin — listed in STATEDB_ADMIN_SUBJECTS</TooltipContent>
                     </Tooltip>
                   )}
                 </div>

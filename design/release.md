@@ -6,7 +6,7 @@ This document defines how state-db versions, builds, verifies, and publishes rel
 
 state-db publishes one artifact:
 
-- OCI image: `ghcr.io/state-db/state-db`
+- OCI image: `ghcr.io/state-db/statedb`
 
 The project does not publish Maven artifacts. The Maven reactor remains at
 `0.1.0-SNAPSHOT`; release versions come from Git metadata and `.version`, not from poms.
@@ -123,9 +123,9 @@ Release publishing writes these tags:
 Example for `0.2.3`:
 
 ```text
-ghcr.io/state-db/state-db:0.2.3
-ghcr.io/state-db/state-db:0.2
-ghcr.io/state-db/state-db:latest
+ghcr.io/state-db/statedb:0.2.3
+ghcr.io/state-db/statedb:0.2
+ghcr.io/state-db/statedb:latest
 ```
 
 Documentation should prefer the minor tag (`0.2`) when automatic patch uptake is desired.

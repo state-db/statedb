@@ -31,9 +31,9 @@ public class Entitlements {
 
   @Inject
   public Entitlements(
-      @ConfigProperty(name = "state-db.license.path") Optional<String> path,
-      @ConfigProperty(name = "state-db.license.inline") Optional<String> inline,
-      @ConfigProperty(name = "state-db.deployment-id") Optional<String> deploymentId) {
+      @ConfigProperty(name = "statedb.license.path") Optional<String> path,
+      @ConfigProperty(name = "statedb.license.inline") Optional<String> inline,
+      @ConfigProperty(name = "statedb.deployment-id") Optional<String> deploymentId) {
     this(
         path.filter(value -> !value.isBlank()),
         inline.filter(value -> !value.isBlank()),

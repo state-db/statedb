@@ -28,16 +28,16 @@ public class CompactionWorker {
 
   @Inject SnapshotPruner snapshotPruner;
 
-  @ConfigProperty(name = "state-db.compaction.per-tick-cap", defaultValue = "25")
+  @ConfigProperty(name = "statedb.compaction.per-tick-cap", defaultValue = "25")
   int perTickCap;
 
-  @ConfigProperty(name = "state-db.compaction.claim-timeout", defaultValue = "5m")
+  @ConfigProperty(name = "statedb.compaction.claim-timeout", defaultValue = "5m")
   Duration claimTimeout;
 
-  @ConfigProperty(name = "state-db.compaction.max-attempts", defaultValue = "3")
+  @ConfigProperty(name = "statedb.compaction.max-attempts", defaultValue = "3")
   int maxAttempts;
 
-  @Scheduled(every = "{state-db.compaction.poll-interval}")
+  @Scheduled(every = "{statedb.compaction.poll-interval}")
   void scheduledTick() {
     reclaimStuckJobs();
     drainOnce();

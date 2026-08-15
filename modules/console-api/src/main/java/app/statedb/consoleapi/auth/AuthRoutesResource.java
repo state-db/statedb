@@ -91,7 +91,7 @@ public class AuthRoutesResource {
   @Inject CliLoginApprovalSigner signer;
 
   @Inject
-  @ConfigProperty(name = "state-db.oidc.default-provider")
+  @ConfigProperty(name = "statedb.oidc.default-provider")
   Optional<String> defaultProvider;
 
   @GET
@@ -100,8 +100,7 @@ public class AuthRoutesResource {
     return login(
         defaultProvider.orElseThrow(
             () ->
-                new ServiceUnavailableException(
-                    "STATE_DB_OIDC_DEFAULT_PROVIDER is not configured")),
+                new ServiceUnavailableException("STATEDB_OIDC_DEFAULT_PROVIDER is not configured")),
         returnTo);
   }
 

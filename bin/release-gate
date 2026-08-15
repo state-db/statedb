@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # Verifies a candidate image by running it.
 #
-#   bin/release-gate ghcr.io/state-db/state-db:0.1.0
-#   bin/release-gate state-db:dev --previous ghcr.io/state-db/state-db:0.0.9
+#   bin/release-gate ghcr.io/state-db/statedb:0.1.0
+#   bin/release-gate state-db:dev --previous ghcr.io/state-db/statedb:0.0.9
 #
 set -euo pipefail
 
@@ -96,19 +96,19 @@ run_app() {
   docker rm -f "$container" >/dev/null 2>&1 || true
   docker run -d --name "$container" --network "$NET" --memory=2g --read-only \
     --tmpfs /tmp:rw,noexec,nosuid,size=64m \
-    -e STATE_DB_JDBC_URL="jdbc:postgresql://$PG:5432/$DB_NAME" \
-    -e STATE_DB_DB_USER="$DB_USER" \
-    -e STATE_DB_DB_PASSWORD="$DB_PASSWORD" \
-    -e STATE_DB_BOOTSTRAP_ORG_NAME="$ORG" \
-    -e STATE_DB_SESSION_ENCRYPTION_SECRET="$SESSION_SECRET" \
-    -e STATE_DB_OIDC_BOOTSTRAP_NAME=mock \
-    -e STATE_DB_OIDC_BOOTSTRAP_ISSUER="http://$IDP:8080/default" \
-    -e STATE_DB_OIDC_BOOTSTRAP_CLIENT_ID=console \
-    -e STATE_DB_OIDC_BOOTSTRAP_CLIENT_SECRET=console-secret \
-    -e STATE_DB_OIDC_DEFAULT_PROVIDER=mock \
-    -e STATE_DB_ADMIN_SUBJECTS="http://$IDP:8080/default:admin" \
-    -e STATE_DB_LOCAL_GLASS_PASSWORD_HASH="$GLASS_HASH" \
-    -e STATE_DB_LOCAL_GLASS_ALLOW_REMOTE=true \
+    -e STATEDB_JDBC_URL="jdbc:postgresql://$PG:5432/$DB_NAME" \
+    -e STATEDB_DB_USER="$DB_USER" \
+    -e STATEDB_DB_PASSWORD="$DB_PASSWORD" \
+    -e STATEDB_BOOTSTRAP_ORG_NAME="$ORG" \
+    -e STATEDB_SESSION_ENCRYPTION_SECRET="$SESSION_SECRET" \
+    -e STATEDB_OIDC_BOOTSTRAP_NAME=mock \
+    -e STATEDB_OIDC_BOOTSTRAP_ISSUER="http://$IDP:8080/default" \
+    -e STATEDB_OIDC_BOOTSTRAP_CLIENT_ID=console \
+    -e STATEDB_OIDC_BOOTSTRAP_CLIENT_SECRET=console-secret \
+    -e STATEDB_OIDC_DEFAULT_PROVIDER=mock \
+    -e STATEDB_ADMIN_SUBJECTS="http://$IDP:8080/default:admin" \
+    -e STATEDB_LOCAL_GLASS_PASSWORD_HASH="$GLASS_HASH" \
+    -e STATEDB_LOCAL_GLASS_ALLOW_REMOTE=true \
     "$ref" >/dev/null
 }
 

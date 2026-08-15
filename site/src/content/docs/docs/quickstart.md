@@ -19,8 +19,8 @@ Clone the repository and start the service in dev mode, which brings up an
 ephemeral Postgres automatically:
 
 ```sh
-git clone https://github.com/state-db/state-db.git
-cd state-db
+git clone https://github.com/state-db/statedb.git
+cd statedb
 devcontainer up --workspace-folder .
 ./bin/in-container mvn -f modules/pom.xml -pl app -am quarkus:dev
 ```

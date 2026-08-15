@@ -28,7 +28,7 @@ go_verify() {
 
 case ${1:-} in
 quick)
-  [[ ${STATE_DB_ISOLATED:-} == 1 ]] || {
+  [[ ${STATEDB_ISOLATED:-} == 1 ]] || {
     echo "dev-task: quick checks must run inside bin/dev's isolated VM" >&2
     exit 1
   }
@@ -37,7 +37,7 @@ quick)
   go_verify
   ;;
 check)
-  [[ ${STATE_DB_ISOLATED:-} == 1 ]] || {
+  [[ ${STATEDB_ISOLATED:-} == 1 ]] || {
     echo "dev-task: authoritative check must run inside bin/dev's isolated VM" >&2
     exit 1
   }
@@ -47,21 +47,21 @@ check)
   go_verify
   ;;
 notices)
-  [[ ${STATE_DB_ISOLATED:-} == 1 ]] || {
+  [[ ${STATEDB_ISOLATED:-} == 1 ]] || {
     echo "dev-task: notices must be generated inside bin/dev's isolated VM" >&2
     exit 1
   }
   ./bin/generate-third-party-notices
   ;;
 native-contract)
-  [[ ${STATE_DB_ISOLATED:-} == 1 ]] || {
+  [[ ${STATEDB_ISOLATED:-} == 1 ]] || {
     echo "dev-task: native metadata verification must run inside bin/dev's isolated VM" >&2
     exit 1
   }
   java_verify
   ;;
 protocol)
-  [[ ${STATE_DB_ISOLATED:-} == 1 ]] || {
+  [[ ${STATEDB_ISOLATED:-} == 1 ]] || {
     echo "dev-task: protocol checks must run inside bin/dev's isolated VM" >&2
     exit 1
   }

@@ -118,7 +118,7 @@ console-seed: db-up
 ## Run the full console dev stack against the stable workbench Postgres: the mock IdP, Quarkus in dev
 ## mode (hot reload, :8080), and the bun console dev server (HMR, :$(CONSOLE_PORT)) proxying /api and
 ## /pulumi to Quarkus. Open the console at http://localhost:$(CONSOLE_PORT). The console OIDC provider
-## is auto-provisioned from the STATE_DB_OIDC_BOOTSTRAP_* vars; sign in as "$(ADMIN_SUB)",
+## is auto-provisioned from the STATEDB_OIDC_BOOTSTRAP_* vars; sign in as "$(ADMIN_SUB)",
 ## "developer", or "viewer". Ctrl-C stops Quarkus and the console dev server (the IdP and DB stay up; `cmd=reset`
 ## tears everything down). The Pulumi CLI targets :8080 directly and is unaffected.
 app: infra-up
@@ -147,16 +147,16 @@ app: infra-up
 			QUARKUS_HTTP_PROXY_PROXY_ADDRESS_FORWARDING=true \
 			QUARKUS_HTTP_PROXY_ENABLE_FORWARDED_HOST=true \
 			QUARKUS_HTTP_PROXY_ENABLE_FORWARDED_PREFIX=true \
-			STATE_DB_BOOTSTRAP_ORG_NAME=$(ORG) \
-			STATE_DB_BOOTSTRAP_ORG_DISPLAY_NAME="Acme Workbench" \
-			STATE_DB_OIDC_BOOTSTRAP_NAME=$(OIDC_PROVIDER) \
-			STATE_DB_OIDC_BOOTSTRAP_ISSUER=$(OIDC_ISSUER) \
-			STATE_DB_OIDC_BOOTSTRAP_CLIENT_ID=$(OIDC_CLIENT_ID) \
-			STATE_DB_OIDC_BOOTSTRAP_CLIENT_SECRET=$(OIDC_CLIENT_SECRET) \
-			STATE_DB_OIDC_DEFAULT_PROVIDER=$(OIDC_PROVIDER) \
-			STATE_DB_SESSION_ENCRYPTION_SECRET=state-db-workbench-session-secret-32-bytes \
-				STATE_DB_LOCAL_GLASS_PASSWORD_HASH='\''$(GLASS_PASSWORD_HASH)'\'' \
-			STATE_DB_ADMIN_SUBJECTS=$(OIDC_ISSUER):$(ADMIN_SUB) \
+			STATEDB_BOOTSTRAP_ORG_NAME=$(ORG) \
+			STATEDB_BOOTSTRAP_ORG_DISPLAY_NAME="Acme Workbench" \
+			STATEDB_OIDC_BOOTSTRAP_NAME=$(OIDC_PROVIDER) \
+			STATEDB_OIDC_BOOTSTRAP_ISSUER=$(OIDC_ISSUER) \
+			STATEDB_OIDC_BOOTSTRAP_CLIENT_ID=$(OIDC_CLIENT_ID) \
+			STATEDB_OIDC_BOOTSTRAP_CLIENT_SECRET=$(OIDC_CLIENT_SECRET) \
+			STATEDB_OIDC_DEFAULT_PROVIDER=$(OIDC_PROVIDER) \
+			STATEDB_SESSION_ENCRYPTION_SECRET=state-db-workbench-session-secret-32-bytes \
+				STATEDB_LOCAL_GLASS_PASSWORD_HASH='\''$(GLASS_PASSWORD_HASH)'\'' \
+			STATEDB_ADMIN_SUBJECTS=$(OIDC_ISSUER):$(ADMIN_SUB) \
 			mvn -f modules/pom.xml -pl app -am -Dquarkus.test.continuous-testing=disabled quarkus:dev & \
 		APP_PID=$$!; \
 		RUNNER_PID=$$$$; \
@@ -201,11 +201,11 @@ login: check-app
 init: login
 	$(IN_CONTAINER) sh -lc 'cd "$$(git rev-parse --show-toplevel)/workbench/pulumi" && $(PULUMI_ENV); pulumi stack select $(STACK_REF) || pulumi stack init $(STACK_REF)'
 
-## Run a real Pulumi preview against state-db.
+## Run a real Pulumi preview against statedb.
 preview: init
 	$(IN_CONTAINER) sh -lc 'cd "$$(git rev-parse --show-toplevel)/workbench/pulumi" && $(PULUMI_ENV); pulumi preview'
 
-## Run a real Pulumi deployment against state-db.
+## Run a real Pulumi deployment against statedb.
 up: init
 	$(IN_CONTAINER) sh -lc 'cd "$$(git rev-parse --show-toplevel)/workbench/pulumi" && $(PULUMI_ENV); pulumi up --yes --skip-preview'
 
@@ -313,7 +313,7 @@ scale-generate:
 		SCALE_FAIL_SEED=$(SCALE_FAIL_SEED) \
 		"$$repo/workbench/pulumi/projects/scale-simulator/generate.sh"'
 
-## Preview the generated high-cardinality stack against state-db.
+## Preview the generated high-cardinality stack against statedb.
 scale-preview: check-app scale-provider-install scale-generate
 	$(IN_CONTAINER) sh -lc 'repo="$$(git rev-parse --show-toplevel)"; \
 		cd "$$repo/workbench/.generated/pulumi/scale-simulator"; \
@@ -324,7 +324,7 @@ scale-preview: check-app scale-provider-install scale-generate
 		pulumi stack select $(SCALE_STACK_REF) >/dev/null 2>&1 || pulumi stack init $(SCALE_STACK_REF); \
 		pulumi preview --message "Scale simulator preview ($(SCALE_RESOURCES) resources)"'
 
-## Deploy the generated high-cardinality stack against state-db.
+## Deploy the generated high-cardinality stack against statedb.
 scale-up: check-app scale-provider-install scale-generate
 	$(IN_CONTAINER) sh -lc 'repo="$$(git rev-parse --show-toplevel)"; \
 		cd "$$repo/workbench/.generated/pulumi/scale-simulator"; \

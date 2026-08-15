@@ -51,15 +51,15 @@ services:
     # fail-closed registration flag is in ENTRYPOINT, so this appends rather than replaces it.
     command: ["-XX:+PrintGC"]
     environment:
-      STATE_DB_JDBC_URL: jdbc:postgresql://postgres:5432/${DB_NAME:-statedb}
-      STATE_DB_DB_USER: ${DB_USER:-statedb}
-      STATE_DB_DB_PASSWORD: ${DB_PASSWORD:-statedb}
-      STATE_DB_BOOTSTRAP_ORG_NAME: ${ORG:-soak}
-      STATE_DB_BOOTSTRAP_ORG_DISPLAY_NAME: Soak
-      STATE_DB_SESSION_ENCRYPTION_SECRET: state-db-soak-session-secret-32-bytes
+      STATEDB_JDBC_URL: jdbc:postgresql://postgres:5432/${DB_NAME:-statedb}
+      STATEDB_DB_USER: ${DB_USER:-statedb}
+      STATEDB_DB_PASSWORD: ${DB_PASSWORD:-statedb}
+      STATEDB_BOOTSTRAP_ORG_NAME: ${ORG:-soak}
+      STATEDB_BOOTSTRAP_ORG_DISPLAY_NAME: Soak
+      STATEDB_SESSION_ENCRYPTION_SECRET: state-db-soak-session-secret-32-bytes
       # No OIDC provider is bootstrapped, so break-glass is live; reached from the compose network.
-      STATE_DB_LOCAL_GLASS_PASSWORD_HASH: ${GLASS_PASSWORD_HASH:-$$2a$$10$$T56PF8UE80K1VeLu6iMJjOLW68rR.xHzHUppcyvcd2ZAudpNUgn9O}
-      STATE_DB_LOCAL_GLASS_ALLOW_REMOTE: "true"
+      STATEDB_LOCAL_GLASS_PASSWORD_HASH: ${GLASS_PASSWORD_HASH:-$$2a$$10$$T56PF8UE80K1VeLu6iMJjOLW68rR.xHzHUppcyvcd2ZAudpNUgn9O}
+      STATEDB_LOCAL_GLASS_ALLOW_REMOTE: "true"
     volumes:
       - artifacts:/soak/artifacts
     ports:

@@ -27,10 +27,9 @@ import org.eclipse.microprofile.jwt.JsonWebToken;
 /**
  * Site-admin support/audit view of every identity in the {@code users} table — the humans who have
  * signed in via OIDC and the machine identities minted as service accounts. Read-only: admin status
- * itself is env-driven ({@code STATE_DB_ADMIN_SUBJECTS}), surfaced here per row as {@code
- * siteAdmin} but never mutated. Service-account rows are discriminated by {@code principalType} so
- * the console can segment them and suppress the human-only affordances (last-login, admin-subject
- * paste).
+ * itself is env-driven ({@code STATEDB_ADMIN_SUBJECTS}), surfaced here per row as {@code siteAdmin}
+ * but never mutated. Service-account rows are discriminated by {@code principalType} so the console
+ * can segment them and suppress the human-only affordances (last-login, admin-subject paste).
  */
 @Path("/api/admin/users")
 @SessionPrincipal

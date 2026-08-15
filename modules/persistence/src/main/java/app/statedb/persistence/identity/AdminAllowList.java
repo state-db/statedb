@@ -9,7 +9,7 @@ import java.util.stream.Collectors;
 import org.eclipse.microprofile.config.inject.ConfigProperty;
 
 /**
- * The admin allow-list, read once from {@code STATE_DB_ADMIN_SUBJECTS} at boot.
+ * The admin allow-list, read once from {@code STATEDB_ADMIN_SUBJECTS} at boot.
  *
  * <p>Admin status is env-driven, not stored in the DB (see design/auth.md): an operator lists the
  * canonical {@code <iss>:<sub>} identity of each admin, comma-separated. There is deliberately no
@@ -33,7 +33,7 @@ public class AdminAllowList {
 
   private final Set<String> subjects;
 
-  public AdminAllowList(@ConfigProperty(name = "state-db.admin.subjects") Optional<String> raw) {
+  public AdminAllowList(@ConfigProperty(name = "statedb.admin.subjects") Optional<String> raw) {
     this.subjects = parse(raw.orElse(""));
   }
 
