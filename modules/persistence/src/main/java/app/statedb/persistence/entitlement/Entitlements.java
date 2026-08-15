@@ -3,8 +3,10 @@ package app.statedb.persistence.entitlement;
 import app.statedb.persistence.update.StackUpdate;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
+import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
+import java.nio.file.InvalidPathException;
 import java.nio.file.Path;
 import java.time.Clock;
 import java.util.Map;
@@ -64,7 +66,7 @@ public class Entitlements {
         } else {
           result = verifier.verify(new String(bytes, StandardCharsets.UTF_8));
         }
-      } catch (Exception e) {
+      } catch (IOException | InvalidPathException e) {
         result =
             EffectiveEntitlement.community(
                 LicenseStatus.INVALID, "configured license file cannot be read");

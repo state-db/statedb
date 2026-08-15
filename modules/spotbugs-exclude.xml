@@ -36,7 +36,8 @@
 
     <!--
       Each of these names a variable that is read further down the same method:
-      liveLocks returns it, complete assigns it to endJournalSeq, and the three
+      liveLocks returns it, complete assigns it to endJournalSeq,
+      JournalAppender uses it as the first journal offset, and the three
       console-api resources all read theirs. Listed per method so a genuine
       dead store elsewhere still reports.
     -->
@@ -50,6 +51,10 @@
             <And>
                 <Class name="app.statedb.persistence.update.StackUpdateCompleter"/>
                 <Method name="complete"/>
+            </And>
+            <And>
+                <Class name="app.statedb.persistence.journal.JournalAppender"/>
+                <Method name="append"/>
             </And>
             <And>
                 <Class name="app.statedb.consoleapi.token.TokensResource"/>

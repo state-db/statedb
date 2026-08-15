@@ -33,8 +33,6 @@ public class StackImporter {
     if (deployment == null || !deployment.isObject()) {
       throw new RequestValidationException("import request must contain a deployment object");
     }
-    EffectiveEntitlement entitlement = entitlements.effective();
-
     // Pulumi stack import does not run the normal update lease protocol: the CLI POSTs the whole
     // checkpoint, gets an updateId, then polls that already-completed update. Since there is no
     // cloud work between start and finish, the backend protects the operation with row locks and an
@@ -44,9 +42,7 @@ public class StackImporter {
     if (stack.activeUpdateId != null) {
       throw new StackLockedException(stackId);
     }
-    if (entitlement.tier() != EffectiveEntitlement.Tier.PAID) {
-      entitlements.requireUpdateAllowed(Stack.count(), StackUpdate.Kind.IMPORT, false, entitlement);
-    }
+    requireImportEntitlement();
 
     StackState state =
         StackState.find("stackId", stackId).withLock(LockModeType.PESSIMISTIC_WRITE).singleResult();
@@ -94,5 +90,13 @@ public class StackImporter {
 
     stack.version++;
     return update.id;
+  }
+
+  private void requireImportEntitlement() {
+    EffectiveEntitlement entitlement = entitlements.effective();
+    if (entitlement.tier() == EffectiveEntitlement.Tier.PAID) {
+      return;
+    }
+    entitlements.requireUpdateAllowed(Stack.count(), StackUpdate.Kind.IMPORT, false, entitlement);
   }
 }
