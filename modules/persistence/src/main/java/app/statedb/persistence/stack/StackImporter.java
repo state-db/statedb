@@ -1,6 +1,8 @@
 package app.statedb.persistence.stack;
 
 import app.statedb.persistence.RequestValidationException;
+import app.statedb.persistence.entitlement.EffectiveEntitlement;
+import app.statedb.persistence.entitlement.Entitlements;
 import app.statedb.persistence.lock.StackLockedException;
 import app.statedb.persistence.update.StackUpdate;
 import com.fasterxml.jackson.databind.JsonNode;
@@ -23,6 +25,7 @@ import java.util.UUID;
 public class StackImporter {
 
   @Inject EntityManager em;
+  @Inject Entitlements entitlements;
 
   @Transactional
   public UUID importDeployment(
@@ -30,6 +33,7 @@ public class StackImporter {
     if (deployment == null || !deployment.isObject()) {
       throw new RequestValidationException("import request must contain a deployment object");
     }
+    EffectiveEntitlement entitlement = entitlements.effective();
 
     // Pulumi stack import does not run the normal update lease protocol: the CLI POSTs the whole
     // checkpoint, gets an updateId, then polls that already-completed update. Since there is no
@@ -39,6 +43,9 @@ public class StackImporter {
         Stack.<Stack>find("id", stackId).withLock(LockModeType.PESSIMISTIC_WRITE).singleResult();
     if (stack.activeUpdateId != null) {
       throw new StackLockedException(stackId);
+    }
+    if (entitlement.tier() != EffectiveEntitlement.Tier.PAID) {
+      entitlements.requireUpdateAllowed(Stack.count(), StackUpdate.Kind.IMPORT, false, entitlement);
     }
 
     StackState state =

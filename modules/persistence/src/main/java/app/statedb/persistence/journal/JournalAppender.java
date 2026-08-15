@@ -2,6 +2,7 @@ package app.statedb.persistence.journal;
 
 import app.statedb.persistence.RequestValidationException;
 import app.statedb.persistence.lock.LeaseRevalidator;
+import app.statedb.persistence.update.StackUpdate;
 import com.fasterxml.jackson.databind.JsonNode;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
@@ -110,6 +111,13 @@ public class JournalAppender {
     //     never advance journal_seq past end_journal_seq. Lock order is stack_state → stack_locks,
     //     matching StackUpdateCompleter, so no deadlock.
     leaseRevalidator.requireLive(leaseId);
+
+    StackUpdate update =
+        StackUpdate.<StackUpdate>findByIdOptional(updateId)
+            .orElseThrow(() -> new RequestValidationException("update does not exist"));
+    if (update.dryRun) {
+      throw new RequestValidationException("dry-run updates cannot append journal entries");
+    }
 
     // 3. Atomically capture the per-update offset on first PATCH; otherwise read the existing one.
     //    Reuses stack_updates.start_journal_seq (added in V003) as the offset.

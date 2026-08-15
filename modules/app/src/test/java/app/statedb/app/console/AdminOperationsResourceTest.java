@@ -59,6 +59,18 @@ class AdminOperationsResourceTest {
   void listsLiveLocksAndFailedJobsAndGuardedlyCancelsTheDisplayedUpdate() {
     String cookie = login(PASSWORD).statusCode(200).extract().cookie(COOKIE);
     Seed seed = seed();
+    int stackCount = QuarkusTransaction.requiringNew().call(() -> Stack.count()).intValue();
+
+    given()
+        .cookie(COOKIE, cookie)
+        .when()
+        .get("/api/admin/entitlement")
+        .then()
+        .statusCode(200)
+        .body("tier", is("community"))
+        .body("status", is("missing"))
+        .body("stackCount", is(stackCount))
+        .body("stackLimit", is(10));
 
     given()
         .cookie(COOKIE, cookie)

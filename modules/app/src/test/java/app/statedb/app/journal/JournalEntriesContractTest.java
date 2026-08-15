@@ -90,7 +90,7 @@ class JournalEntriesContractTest {
 
   @Test
   void gzippedPatchPersistsEntries() throws Exception {
-    String updateId = startPreview();
+    String updateId = startUpdate();
     String token = acquireLock(updateId);
 
     byte[] body =
@@ -143,7 +143,7 @@ class JournalEntriesContractTest {
 
   @Test
   void duplicateWireSequenceRetryReturns200() throws Exception {
-    String updateId = startPreview();
+    String updateId = startUpdate();
     String token = acquireLock(updateId);
 
     byte[] firstBody =
@@ -297,6 +297,19 @@ class JournalEntriesContractTest {
         .body(Map.of("name", PROJECT, "runtime", "yaml"))
         .when()
         .post("/pulumi/api/stacks/" + ORG + "/" + PROJECT + "/" + STACK + "/preview")
+        .then()
+        .statusCode(200)
+        .extract()
+        .path("updateID");
+  }
+
+  private String startUpdate() {
+    return given()
+        .header("Authorization", "token " + RAW_TOKEN)
+        .contentType("application/json")
+        .body(Map.of("name", PROJECT, "runtime", "yaml"))
+        .when()
+        .post("/pulumi/api/stacks/" + ORG + "/" + PROJECT + "/" + STACK + "/update")
         .then()
         .statusCode(200)
         .extract()

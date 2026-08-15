@@ -161,6 +161,41 @@ class JournalAppenderTest {
   }
 
   @Test
+  void dryRunUpdateCannotAppendAuthoritativeJournalEntries() {
+    QuarkusTransaction.requiringNew()
+        .run(
+            () -> {
+              StackUpdate update = StackUpdate.findById(updateId);
+              update.dryRun = true;
+            });
+
+    RequestValidationException error =
+        assertThrows(
+            RequestValidationException.class,
+            () ->
+                appender.append(
+                    stackId,
+                    updateId,
+                    leaseId,
+                    List.of(entry(1, 1, 1L, "{\"state\":{\"urn\":\"urn:a\"}}"))));
+    assertTrue(error.getMessage().contains("dry-run"));
+  }
+
+  @Test
+  void missingUpdateCannotAppendJournalEntries() {
+    RequestValidationException error =
+        assertThrows(
+            RequestValidationException.class,
+            () ->
+                appender.append(
+                    stackId,
+                    UUID.randomUUID(),
+                    leaseId,
+                    List.of(entry(1, 1, 1L, "{\"state\":{\"urn\":\"urn:a\"}}"))));
+    assertEquals("update does not exist", error.getMessage());
+  }
+
+  @Test
   void outOfOrderWireIdsWithinBatchReplayCorrectly() {
     // Entries arrive [6, 5, 7]; replay by sequence_id should be [5, 6, 7].
     appender.append(

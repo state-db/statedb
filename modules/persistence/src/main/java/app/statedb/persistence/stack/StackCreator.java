@@ -1,6 +1,9 @@
 package app.statedb.persistence.stack;
 
+import app.statedb.persistence.AdvisoryLock;
 import app.statedb.persistence.NameGrammar;
+import app.statedb.persistence.entitlement.EffectiveEntitlement;
+import app.statedb.persistence.entitlement.Entitlements;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 import jakarta.persistence.PersistenceException;
@@ -18,6 +21,8 @@ import org.hibernate.exception.ConstraintViolationException;
 public class StackCreator {
 
   @Inject ProjectUpserter projectUpserter;
+  @Inject AdvisoryLock advisoryLock;
+  @Inject Entitlements entitlements;
 
   /**
    * @throws StackAlreadyExistsException if {@code stackName} already exists under {@code (orgId,
@@ -29,6 +34,11 @@ public class StackCreator {
       UUID orgId, String orgName, String projectName, String stackName, Map<String, String> tags) {
     NameGrammar.requireValid("project name", projectName);
     NameGrammar.requireValid("stack name", stackName);
+    EffectiveEntitlement entitlement = entitlements.effective();
+    if (entitlement.tier() != EffectiveEntitlement.Tier.PAID) {
+      advisoryLock.acquire(AdvisoryLock.STACK_CREATION_ENTITLEMENT_KEY);
+      entitlements.requireStackCreationAllowed(Stack.count(), entitlement);
+    }
     UUID projectId = projectUpserter.upsert(orgId, projectName);
 
     Workspace workspace = new Workspace();

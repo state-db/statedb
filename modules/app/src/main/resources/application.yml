@@ -77,6 +77,10 @@ quarkus:
     level: INFO
 
 state-db:
+  license:
+    path: ${STATE_DB_LICENSE_PATH:}
+    inline: ${STATE_DB_LICENSE:}
+  deployment-id: ${STATE_DB_DEPLOYMENT_ID:}
   compaction:
     poll-interval: 10s
     per-tick-cap: 25

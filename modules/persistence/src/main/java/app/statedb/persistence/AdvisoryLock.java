@@ -6,10 +6,10 @@ import jakarta.inject.Inject;
 import jakarta.persistence.EntityManager;
 
 /**
- * Cluster-wide mutual exclusion for run-once startup work, backed by PostgreSQL transaction-scoped
- * advisory locks ({@code pg_advisory_xact_lock}). The lock lives in the shared DB and is released
- * automatically on COMMIT/ROLLBACK, so a pod crashing mid-task leaks nothing — the next pod
- * acquires the lock as soon as the dead connection is reaped.
+ * Cluster-wide mutual exclusion backed by PostgreSQL transaction-scoped advisory locks ({@code
+ * pg_advisory_xact_lock}). The lock lives in the shared DB and is released automatically on
+ * COMMIT/ROLLBACK, so a pod crashing mid-task leaks nothing — the next pod acquires the lock as
+ * soon as the dead connection is reaped.
  *
  * <p>Use this to serialize any startup task whose effect we want exactly once per cluster (e.g.
  * {@link app.statedb.persistence.bootstrap.BootstrapProvisioner}). The task body still has to be
@@ -41,7 +41,15 @@ public class AdvisoryLock {
    */
   public static final long OIDC_PROVIDER_BOOTSTRAP_KEY = 0x5354415444425F33L;
 
+  /** Serializes the deployment-wide community stack-limit count-and-create decision. */
+  public static final long STACK_CREATION_ENTITLEMENT_KEY = 0x5354415444425F34L;
+
   @Inject EntityManager em;
+
+  /** Acquires {@code key} for the caller's current transaction. */
+  public void acquire(long key) {
+    em.createNativeQuery("SELECT pg_advisory_xact_lock(?1)").setParameter(1, key).getSingleResult();
+  }
 
   /**
    * Runs {@code task} inside a new JTA transaction that holds an exclusive Postgres advisory lock
