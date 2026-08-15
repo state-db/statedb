@@ -55,41 +55,49 @@ judgment for trivial tasks.
 - For multi-step tasks, keep a short plan with a verification step for each
   meaningful phase, then loop until the criteria are met.
 
-## Execution: dev container only (non-negotiable)
+## Execution architecture
 
-This repo MUST be built, tested, and run inside the dev container defined by
-`.devcontainer/devcontainer.json`. The host is treated as incomplete (wrong
-JDK, no Maven, no Postgres). Do not fall back to the host if an in-container
-command fails — diagnose and fix instead.
-
-All project commands route through `./bin/in-container`:
+The repository-owned interface is `./dev`; callers name intent and must not
+couple themselves to a particular environment adapter:
 
 ```
-./bin/in-container mvn -f modules/pom.xml test
-./bin/in-container mvn -f modules/pom.xml -pl app -am quarkus:dev
+./dev quick       # focused checks in the credential-free verification VM
+./dev check       # full check in the reusable Lima verification VM
+./dev protocol    # real Pulumi CLI smoke/fault tier in that VM
+./dev notices     # regenerate dependency notices inside that VM
+./dev signoff     # clean-VM check, then host-side signoff for the exact commit
 ```
 
-When running a single module or focused tests in a module, include Maven's
-reactor dependency build flag (`-am`) so sibling modules are built instead of
-failing with missing `0.1.0-SNAPSHOT` artifacts. If the focused test pattern
-only exists in the selected leaf module, also disable no-match failures for the
-upstream modules:
-
-```
-./bin/in-container mvn -f modules/pom.xml -pl app -am -Dtest=SomeTest -Dsurefire.failIfNoSpecifiedTests=false test
-```
+Mise pins the native Java, Bun, and Go toolchains; Maven Wrapper pins Maven.
+Those are reproducibility mechanisms, not the credential boundary. Authoritative
+verification copies the tree into a credential-free Lima VM with a private
+rootless Docker daemon. The VM receives no host home mount, SSH agent, GitHub
+token, cloud credentials, or general-purpose host Docker socket. Its system
+firewall rejects new connections to private, carrier-grade NAT, link-local, and
+unique-local networks—including the host's gateway, LAN, and tailnet addresses—while
+retaining public internet egress. Repository code runs without sudo so it cannot
+remove that rule. `./dev check` reuses guest caches;
+`./dev signoff` recreates the VM before checking the exact commit.
 
 Rules for agents:
 
-- Never invoke `mvn`, `gradle`, `java`, `npm`, `python`, `pytest`, `psql`,
-  etc. directly on the host. Always go through `./bin/in-container`. Show
-  that form in any commands you suggest to the user.
+- Use `./dev quick` during a change and `./dev check` for the final gate.
+- Never invoke dependency or build tools directly under the host's ambient
+  credentials. `./dev -- <command>` is an explicit human development escape
+  hatch, not an agent verification path.
+- Never pass the host Docker socket, SSH agent, credential directories, or
+  cloud configuration into build/test environments.
 - Read-only commands (`git`, `ls`, `rg`, file edits) are fine on the host.
-- If the wrapper reports no running container, **stop** and tell the user to
-  start it (Zed: "Rebuild Container"; or `devcontainer up --workspace-folder
-  .`). Do not retry on the host.
+- If `./dev doctor` reports that mise or Lima is absent, stop and report the
+  prerequisite. Do not fall back to unsandboxed host execution.
 
-### Codex worktrees: dedicated container and ports
+The dev container is an optional interactive editor adapter. It may invoke
+`./dev` but is not the execution policy for agents or CI.
+
+### Legacy interactive dev-container worktrees
+
+The following lifecycle exists only for humans who deliberately choose the
+legacy full-workbench dev-container experience. Agents do not need or start it.
 
 Use the lifecycle scripts from a linked Codex worktree:
 

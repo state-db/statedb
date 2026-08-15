@@ -10,7 +10,6 @@ cd "$(dirname "$0")/.."
 readonly REGISTRY=${STATE_DB_REGISTRY:-ghcr.io/state-db/state-db}
 readonly CANDIDATE_REGISTRY=${STATE_DB_CANDIDATE_REGISTRY:-${REGISTRY}-candidates}
 readonly CHANGELOG=CHANGELOG.md
-readonly REQUIRED_NIGHTLIES=3
 
 dry_run=false
 rehearse=false
@@ -87,14 +86,14 @@ note "releasing $commit as $version"
 notes=$(awk '/^## Unreleased/{flag=1; next} /^## /{flag=0} flag' "$CHANGELOG" | sed '/^[[:space:]]*$/d')
 [[ -n $notes ]] || fail "$CHANGELOG has an empty '## Unreleased' section"
 
-step "Gate: what CI has already proved about $commit"
+step "Gate: what verification has already proved about $commit"
 
-ci_conclusion=$(gh run list --workflow ci.yml --branch main --limit 20 \
-  --json headSha,conclusion --jq "map(select(.headSha == \"$(git rev-parse HEAD)\")) | .[0].conclusion" 2>/dev/null || true)
-if [[ $ci_conclusion == success ]]; then
-  note "ci.yml green"
+ci_signoff=$(gh api "repos/:owner/:repo/commits/$commit_full/status" \
+  --jq '[.statuses[] | select(.context == "signoff/ci")][0].state' 2>/dev/null || true)
+if [[ $ci_signoff == success ]]; then
+  note "local CI signed off"
 else
-  require "ci.yml has not succeeded on $commit (got: ${ci_conclusion:-no run})"
+  require "local CI has not signed off on $commit (run: ./dev signoff)"
 fi
 
 # native.yml is dispatched against a ref, so look it up on the branch being released.
@@ -102,21 +101,12 @@ release_branch=$(git rev-parse --abbrev-ref HEAD)
 native_conclusion=$(gh run list --workflow native.yml --branch "$release_branch" --limit 20 \
   --json headSha,conclusion --jq "map(select(.headSha == \"$commit_full\")) | .[0].conclusion" 2>/dev/null || true)
 if [[ $native_conclusion == success ]]; then
-  note "native.yml green on amd64 and arm64"
+  note "release build green: Pulumi compatibility plus native amd64 and arm64"
 else
   require "native.yml has not succeeded on $commit (got: ${native_conclusion:-no run})"
 fi
 native_run_id=$(gh run list --workflow native.yml --branch "$release_branch" --limit 20 \
   --json databaseId,headSha --jq "map(select(.headSha == \"$commit_full\")) | .[0].databaseId" 2>/dev/null || true)
-
-nightly_conclusions=$(gh run list --workflow nightly.yml --limit "$REQUIRED_NIGHTLIES" \
-  --json conclusion --jq '.[].conclusion' 2>/dev/null || true)
-nightly_green=$(grep -c '^success$' <<<"$nightly_conclusions" || true)
-if [[ $nightly_green -eq $REQUIRED_NIGHTLIES ]]; then
-  note "$REQUIRED_NIGHTLIES consecutive nightly runs green"
-else
-  require "need $REQUIRED_NIGHTLIES consecutive green nightly runs, found $nightly_green"
-fi
 
 step "Tagging locally"
 

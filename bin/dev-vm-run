@@ -1,0 +1,48 @@
+#!/usr/bin/env bash
+# Guest-side bootstrap for bin/dev. The VM has no host mounts or host credentials.
+set -euo pipefail
+
+readonly WORKSPACE=${1:?workspace is required}
+readonly EXPECTED_MISE_VERSION=${2:?mise version is required}
+readonly MISE_SHA256_LINUX_ARM64=${3:?linux arm64 mise checksum is required}
+readonly MISE_SHA256_LINUX_X64=${4:?linux x64 mise checksum is required}
+readonly TASK=${5:?task is required}
+
+cd "$WORKSPACE"
+
+case $(uname -m) in
+aarch64) mise_arch=arm64; expected_sha=$MISE_SHA256_LINUX_ARM64 ;;
+x86_64) mise_arch=x64; expected_sha=$MISE_SHA256_LINUX_X64 ;;
+*) echo "dev-vm-run: unsupported architecture $(uname -m)" >&2; exit 2 ;;
+esac
+
+mise_path="$HOME/.local/bin/mise"
+actual_sha=
+[[ ! -f $mise_path ]] || actual_sha=$(sha256sum "$mise_path" | cut -d' ' -f1)
+if [[ $actual_sha != "$expected_sha" ]]; then
+  mkdir -p "$HOME/.local/bin"
+  download=$(mktemp)
+  trap 'rm -f "$download"' EXIT
+  curl --proto '=https' --tlsv1.2 --fail --location --silent --show-error \
+    "https://github.com/jdx/mise/releases/download/$EXPECTED_MISE_VERSION/mise-$EXPECTED_MISE_VERSION-linux-$mise_arch" \
+    -o "$download"
+  printf '%s  %s\n' "$expected_sha" "$download" | sha256sum -c -
+  chmod 0755 "$download"
+  mv "$download" "$mise_path"
+fi
+
+[[ $("$mise_path" --version | awk '{print $1}') == "${EXPECTED_MISE_VERSION#v}" ]] ||
+  { echo "dev-vm-run: pinned mise binary reports the wrong version" >&2; exit 1; }
+
+export PATH="$HOME/.local/bin:$PATH"
+mise trust "$WORKSPACE/mise.toml"
+mise install --yes
+
+case "$TASK" in
+quick) exec mise run quick ;;
+check) exec mise run check-inner ;;
+protocol) exec mise run protocol ;;
+native-contract) exec mise run native-contract-inner ;;
+notices) exec mise run notices-inner ;;
+*) echo "dev-vm-run: unsupported task $TASK" >&2; exit 2 ;;
+esac

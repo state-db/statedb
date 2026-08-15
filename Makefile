@@ -12,7 +12,7 @@
 	pulumi-workbench soak \
 	pulumi-compat-sweep
 
-IN_CONTAINER := ./bin/in-container
+PINNED := ./dev --
 MODULES_POM  := modules/pom.xml
 
 APP_IMAGE ?= state-db:dev
@@ -33,23 +33,23 @@ PULUMI_RECORDER_TARGETS := \
 	pulumi-recorder-discover
 
 app-dev:
-	$(IN_CONTAINER) mvn -f $(MODULES_POM) -pl app -am quarkus:dev
+	$(PINNED) modules/mvnw -f $(MODULES_POM) -pl app -am quarkus:dev
 
 app-build:
-	$(IN_CONTAINER) mvn -f $(MODULES_POM) -pl app -am package -DskipTests
+	$(PINNED) modules/mvnw -f $(MODULES_POM) -pl app -am package -DskipTests
 
 # Host Docker is intentional here; the Maven/Bun toolchains run inside Docker build stages.
 app-image:
 	./bin/build-native-app-image '$(APP_IMAGE)'
 
 app-test:
-	$(IN_CONTAINER) mvn -f $(MODULES_POM) test
+	$(PINNED) modules/mvnw -f $(MODULES_POM) test
 
 app-clean:
-	$(IN_CONTAINER) mvn -f $(MODULES_POM) clean
+	$(PINNED) modules/mvnw -f $(MODULES_POM) clean
 
 web-dev:
-	$(IN_CONTAINER) bash -lc 'cd modules/web && bun install && bun dev.ts'
+	$(PINNED) bash -lc 'cd modules/web && bun install --frozen-lockfile && bun dev.ts'
 
 # Release scripts build, run, push, and sign containers from a maintainer's host.
 release-gate:
@@ -62,12 +62,12 @@ release:
 	./bin/release $(ARGS)
 
 format:
-	$(IN_CONTAINER) mvn -f $(MODULES_POM) spotless:apply
-	$(IN_CONTAINER) gofmt -w tools
+	$(PINNED) modules/mvnw -f $(MODULES_POM) spotless:apply
+	$(PINNED) gofmt -w tools
 
 format-check:
-	$(IN_CONTAINER) mvn -f $(MODULES_POM) spotless:check
-	@unformatted=$$($(IN_CONTAINER) gofmt -l tools); \
+	$(PINNED) modules/mvnw -f $(MODULES_POM) spotless:check
+	@unformatted=$$($(PINNED) gofmt -l tools); \
 	if [ -n "$$unformatted" ]; then \
 		echo "gofmt: the following files need formatting:"; \
 		echo "$$unformatted"; \
@@ -87,10 +87,10 @@ analyze:
 	exit $$rc
 
 analyze-java:
-	$(IN_CONTAINER) mvn -f $(MODULES_POM) compile spotbugs:check
+	$(PINNED) modules/mvnw -f $(MODULES_POM) compile spotbugs:check
 
 analyze-web:
-	$(IN_CONTAINER) bash -lc 'cd modules/web && bun install && bun run lint && bun run typecheck'
+	$(PINNED) bash -lc 'cd modules/web && bun install --frozen-lockfile && bun run lint && bun run typecheck'
 
 # These use maintained scanner images instead of adding rarely used tools to the dev container.
 analyze-semgrep:
@@ -104,10 +104,10 @@ analyze-deps:
 		scan source -r /src
 
 notices:
-	./bin/generate-third-party-notices
+	./dev notices
 
 notices-check:
-	./bin/generate-third-party-notices --check
+	./dev check
 
 sbom:
 	./bin/generate-java-sbom

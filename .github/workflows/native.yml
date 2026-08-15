@@ -1,26 +1,61 @@
-name: Native image
+name: Release build
 
 permissions:
   contents: read
-  packages: write
 
 concurrency:
   group: native-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: false
 
-# On demand only. Each run is three native compilations, so it is not worth spending
-# on every commit. `bin/release` requires a successful run on the exact release
-# commit, so dispatch this against the release ref before releasing.
+# On demand only. Ordinary changes are verified by ./dev check and signed off locally.
+# `bin/release` requires this workflow to succeed on the exact release commit.
 on:
   workflow_dispatch:
 
 jobs:
+  cli-battle-tests:
+    name: Pulumi compatibility (${{ matrix.pulumi-image }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      matrix:
+        pulumi-image:
+          - pulumi/pulumi:3.234.0
+          - pulumi/pulumi:3.242.0
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+      - name: Install the pinned verification toolchain
+        uses: jdx/mise-action@5228313ee0372e111a38da051671ca30fc5a96db # v3
+        with:
+          version: 2026.8.5
+          cache: false
+      - name: Run smoke and fault tiers against the real Pulumi CLI
+        env:
+          PULUMI_IMAGE: ${{ matrix.pulumi-image }}
+        run: ./dev ci-protocol "$PULUMI_IMAGE"
+      - name: Sanitize image tag for artifact name
+        if: always()
+        id: tag
+        run: echo "tag=$(echo '${{ matrix.pulumi-image }}' | tr '/:' '--')" >> "$GITHUB_OUTPUT"
+      - name: Publish State Safety Report
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: state-safety-report-${{ steps.tag.outputs.tag }}
+          path: modules/pulumi-cli-smoke/target/state-safety-report.md
+          if-no-files-found: warn
+
   strict-metadata-negative:
     name: Prove missing metadata rejects native authorization readiness
     runs-on: ubuntu-24.04
     timeout-minutes: 90
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
       - name: Require a deliberately incomplete image to fail
         env:
           NATIVE_NEGATIVE_METADATA_TEST: "true"
@@ -32,6 +67,9 @@ jobs:
 
   build-and-gate:
     name: Build and gate (${{ matrix.arch }})
+    permissions:
+      contents: read
+      packages: write
     strategy:
       fail-fast: false
       matrix:
@@ -44,6 +82,8 @@ jobs:
     timeout-minutes: 90
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
 
       - name: Build native image on the target architecture
         env:

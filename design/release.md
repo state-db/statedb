@@ -148,16 +148,17 @@ The cadence is intentionally lightweight while this is a solo-maintainer project
 
 The release commit must satisfy:
 
-1. `ci.yml` succeeded on exactly the release commit.
-2. `native.yml` succeeded on exactly the release commit for amd64 and arm64.
-3. The latest three `nightly.yml` runs succeeded.
+1. `./dev signoff` recreated the verification VM and published `signoff/ci` on
+   exactly the unchanged release commit after credential-free isolated verification.
+2. The manually dispatched `native.yml` release build succeeded on exactly the release commit. It
+   runs the Pulumi CLI compatibility matrix and builds and gates amd64 and arm64 candidates.
 
 `--rehearse` reports these checks instead of enforcing them. A real release enforces them.
 
-`native.yml` is `workflow_dispatch` only — three native compilations are too expensive to spend on
-every commit. Dispatch it against the release ref and let it finish before running `bin/release`;
-that run both satisfies gate 1 and publishes the per-architecture candidates the release manifest
-is assembled from.
+`native.yml` is `workflow_dispatch` only. Dispatch it against the release ref and let it finish
+before running `bin/release`; that run both satisfies gate 1 and publishes the per-architecture
+candidates the release manifest is assembled from. Ordinary pushes and pull requests consume no
+GitHub Actions minutes.
 
 ### Gate 2: Candidate Image
 

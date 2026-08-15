@@ -1,0 +1,20 @@
+#!/usr/bin/env bash
+# Compatibility adapter. The workspace interface now lives at ./dev.
+set -euo pipefail
+
+cd "$(dirname "$0")/.."
+
+signoff=false
+if [[ ${1:-} == --signoff ]]; then
+  signoff=true
+  shift
+fi
+if [[ $# -ne 0 ]]; then
+  echo "usage: bin/ci [--signoff]" >&2
+  exit 2
+fi
+
+if $signoff; then
+  exec ./dev signoff
+fi
+exec ./dev check

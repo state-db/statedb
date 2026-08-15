@@ -14,7 +14,9 @@ The full agreement is in [CLA.md](CLA.md). Please read it before submitting a PR
 
 ## Signing the CLA
 
-Pull requests are blocked from merging until the PR author has signed the CLA. On your first PR, the CLA Assistant bot will comment with a link to the agreement and a phrase to reply with in order to sign (`I have read the CLA Document and I hereby sign the CLA`). Once signed, your signature is recorded in `signatures/version1/cla.json` in this repository; subsequent PRs from the same GitHub account do not require re-signing.
+Include the CLA checkbox in the pull request template when submitting a contribution. The maintainer
+must record accepted contributions in `signatures/version1/cla.json` before merging. A pull request
+without that recorded consent must be closed unmerged; the checkbox alone is not sufficient.
 
 If you cannot or do not wish to sign the CLA, please open an issue describing the change instead — the maintainer can decide whether to implement it directly.
 
@@ -24,12 +26,35 @@ For non-trivial changes, please open an issue first to align on the approach. Th
 
 ## Development workflow
 
-All builds, tests, and runs go through the dev container — never run `mvn`, `gradle`, `java`, `npm`, or similar tools directly on the host. See [CLAUDE.md](CLAUDE.md) for the full conventions; in short:
+Install the local prerequisites and inspect the environment:
 
 ```
-./bin/in-container mvn -f modules/pom.xml test
-./bin/in-container mvn -f modules/pom.xml -pl app -am quarkus:dev
+brew install mise lima
+mise trust mise.toml
+./dev doctor
 ```
+
+Use the credential-free quick tier while iterating. Both commands copy the
+workspace into a Lima VM with no host mounts, no host-gateway access, and its
+own rootless Docker daemon. Private LAN, tailnet, and link-local destinations are
+also blocked while public dependency registries remain reachable:
+
+```
+./dev quick
+./dev check
+```
+
+Maintainers can publish its result on the commit with Basecamp's local-CI extension:
+
+```
+gh extension install basecamp/gh-signoff
+./dev signoff
+```
+
+`./dev signoff` recreates the VM before checking and refuses to publish if HEAD or the worktree
+changes during the run. `gh-signoff` requires the commit to be pushed before it publishes the
+status. The release command enforces `signoff/ci` on the exact release commit. GitHub branch protection cannot enforce that
+status while this private repository is on a plan without private-repository branch protection.
 
 Read-only commands (`git`, `ls`, `rg`, file edits) are fine on the host.
 
@@ -37,7 +62,7 @@ Read-only commands (`git`, `ls`, `rg`, file edits) are fine on the host.
 
 - [ ] You have signed (or are willing to sign) the [CLA](CLA.md).
 - [ ] The change has a clear motivation — bug fix, feature, refactor — stated in the PR description.
-- [ ] Tests pass via `./bin/in-container mvn -f modules/pom.xml test`.
+- [ ] Local CI passes via `./dev check`.
 - [ ] New behavior is covered by tests where practical.
 - [ ] Commit messages are short and focused (see existing history for style).
 - [ ] You have not introduced material from third-party sources or AI tools that you do not have the right to contribute under the CLA.

@@ -3,7 +3,7 @@
 # anything that affects state-db since the version we're pinned to?"
 #
 # Chains the three existing tools:
-#   1. Pin audit        — recorder Dockerfile pin vs verify go.mod vs nightly.yml
+#   1. Pin audit        — recorder Dockerfile pin vs verify go.mod vs native.yml
 #   2. api-extract      — source-level endpoint diff, baseline → target
 #   3. recorder         — trial capture with the target CLI into a scratch dir,
 #                         then a noise-masked diff against the committed fixtures
@@ -34,7 +34,7 @@ ROOT="$(cd "$HERE/../../.." && pwd)"
 RECORDER_DIR="$ROOT/tools/pulumi/recorder"
 VERIFY_DIR="$ROOT/tools/pulumi/verify"
 SNAPSHOTS_DIR="$ROOT/api-snapshots/pulumi"
-NIGHTLY_YML="$ROOT/.github/workflows/nightly.yml"
+RELEASE_YML="$ROOT/.github/workflows/native.yml"
 
 TO=""
 SKIP_RECORD=0
@@ -72,17 +72,17 @@ echo "==> sweep: baseline $BASELINE → target $TO"
 # --- 1. pin audit ------------------------------------------------------------
 
 VERIFY_SDK="$(sed -n 's|^require github.com/pulumi/pulumi/sdk/v3 v||p' "$VERIFY_DIR/go.mod" | tr -d ' ')"
-NIGHTLY_VERSIONS="$(grep -o 'pulumi/pulumi:[0-9][0-9.]*' "$NIGHTLY_YML" | cut -d: -f2 | sort -u | paste -sd ', ' -)"
+RELEASE_VERSIONS="$(grep -o 'pulumi/pulumi:[0-9][0-9.]*' "$RELEASE_YML" | cut -d: -f2 | sort -u | paste -sd ', ' -)"
 
 pin_status() { [[ "$1" == "$2" ]] && echo "OK" || echo "**MISMATCH**"; }
 VERIFY_STATUS="$(pin_status "$VERIFY_SDK" "$BASELINE_BARE")"
-if grep -q "pulumi/pulumi:$BASELINE_BARE" "$NIGHTLY_YML"; then
-  NIGHTLY_STATUS="OK (baseline in matrix)"
+if grep -q "pulumi/pulumi:$BASELINE_BARE" "$RELEASE_YML"; then
+  RELEASE_STATUS="OK (baseline in matrix)"
 else
-  NIGHTLY_STATUS="**MISMATCH** (baseline $BASELINE_BARE not in matrix)"
+  RELEASE_STATUS="**MISMATCH** (baseline $BASELINE_BARE not in matrix)"
 fi
-if [[ "$TO" != "$BASELINE" ]] && ! grep -q "pulumi/pulumi:$TO_BARE" "$NIGHTLY_YML"; then
-  NIGHTLY_STATUS="$NIGHTLY_STATUS; target $TO_BARE not yet in matrix"
+if [[ "$TO" != "$BASELINE" ]] && ! grep -q "pulumi/pulumi:$TO_BARE" "$RELEASE_YML"; then
+  RELEASE_STATUS="$RELEASE_STATUS; target $TO_BARE not yet in matrix"
 fi
 
 # Committed snapshot dirs for versions that are neither the baseline nor the
@@ -162,7 +162,7 @@ fi
   echo "|---|---|---|"
   echo "| recorder CLI (\`tools/pulumi/recorder/Dockerfile\`) | $BASELINE_BARE | baseline |"
   echo "| verify SDK (\`tools/pulumi/verify/go.mod\`) | $VERIFY_SDK | $VERIFY_STATUS |"
-  echo "| nightly matrix (\`.github/workflows/nightly.yml\`) | $NIGHTLY_VERSIONS | $NIGHTLY_STATUS |"
+  echo "| release matrix (\`.github/workflows/native.yml\`) | $RELEASE_VERSIONS | $RELEASE_STATUS |"
   echo
   if [[ -n "$PRUNABLE" ]]; then
     echo "Prunable committed snapshots (neither baseline nor target; regenerable from pinned refs): $PRUNABLE"
@@ -207,7 +207,7 @@ fi
   echo "1. Review the diffs above; adjust stubs/state-db if the protocol moved."
   echo "2. Bump \`ARG PULUMI_VERSION\` in \`tools/pulumi/recorder/Dockerfile\`, re-run \`make pulumi-recorder-discover\`, review + commit fixtures/catalog."
   echo "3. Bump \`github.com/pulumi/pulumi/sdk/v3\` in \`tools/pulumi/verify/go.mod\` to $TO (lockstep rule)."
-  echo "4. Update the nightly matrix in \`.github/workflows/nightly.yml\` (keep oldest-supported + new pin)."
+  echo "4. Update the release matrix in \`.github/workflows/native.yml\` (keep oldest-supported + new pin)."
   echo "5. Run the replay/smoke/fault tiers before committing pin bumps."
   echo "6. Delete superseded snapshot dirs under \`api-snapshots/pulumi/\` (see pin audit)."
 } > "$REPORT"

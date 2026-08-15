@@ -1,0 +1,69 @@
+# Disposable verification VM. Repository code runs as the unprivileged Lima user after
+# provisioning; it cannot alter the firewall or reach services bound to the host loopback.
+minimumLimaVersion: 2.2.0
+
+images:
+  - location: https://cloud-images.ubuntu.com/releases/resolute/release-20260720/ubuntu-26.04-server-cloudimg-amd64.img
+    arch: x86_64
+    digest: sha256:117816726abbdefc5ef3e38902e81a76f1c76c3610e709999d0885f9d5d9b477
+  - location: https://cloud-images.ubuntu.com/releases/resolute/release-20260720/ubuntu-26.04-server-cloudimg-arm64.img
+    arch: aarch64
+    digest: sha256:7bcf159e29ad0000bfed9c57875908c39268f5ed1257f4958fa6a9f5f60edd54
+
+mounts: []
+containerd:
+  system: false
+  user: false
+
+provision:
+  - mode: system
+    script: |
+      #!/bin/bash
+      set -eux -o pipefail
+      export DEBIAN_FRONTEND=noninteractive
+      apt-get update
+      apt-get install -y ca-certificates curl dbus-user-session docker.io nftables \
+        rootlesskit slirp4netns uidmap unzip
+      cat >/etc/nftables.conf <<'EOF'
+      table inet state_db_verify {
+        chain output {
+          type filter hook output priority filter; policy accept;
+          ct state established,related accept
+          ip daddr 192.168.5.2 udp dport 53 accept
+          ip daddr 192.168.5.2 tcp dport 53 accept
+          oifname "eth0" ip daddr { 10.0.0.0/8, 100.64.0.0/10, 169.254.0.0/16, 172.16.0.0/12, 192.168.0.0/16 } reject
+          oifname "eth0" ip6 daddr { fc00::/7, fe80::/10 } reject
+        }
+      }
+      EOF
+      systemctl enable --now nftables
+      nft list table inet state_db_verify >/dev/null
+      systemctl disable --now docker.service docker.socket containerd.service containerd.socket || true
+      systemctl mask docker.service docker.socket containerd.service containerd.socket || true
+      ln -sf /usr/share/docker.io/contrib/dockerd-rootless.sh /usr/local/bin/dockerd-rootless.sh
+      ln -sf /usr/share/docker.io/contrib/dockerd-rootless-setuptool.sh \
+        /usr/local/bin/dockerd-rootless-setuptool.sh
+      touch /etc/state-db-verification-vm-v2
+      rm -f /etc/sudoers.d/90-cloud-init-users
+  - mode: user
+    script: |
+      #!/bin/bash
+      set -eux -o pipefail
+      systemctl --user start dbus
+      dockerd-rootless-setuptool.sh install
+      docker context use rootless
+probes:
+  - script: |
+      #!/bin/bash
+      set -eux -o pipefail
+      command -v docker >/dev/null
+      pgrep rootlesskit >/dev/null
+      DOCKER_HOST=unix:///run/user/{{.UID}}/docker.sock docker info >/dev/null
+      test -f /etc/state-db-verification-vm-v2
+      ! sudo -n true
+      systemctl is-active --quiet nftables
+
+hostResolver:
+  # This name intentionally resolves, but the firewall rejects connections to the host.
+  hosts:
+    host.docker.internal: host.lima.internal

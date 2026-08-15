@@ -90,6 +90,10 @@ public abstract class PulumiSmokeBase {
   // command.
   protected GenericContainer<?> baseContainer() {
     return new GenericContainer<>(PULUMI_IMAGE)
+        // The task adapter pre-pulls this 3 GB image once. Registry-backed default policies made
+        // Testcontainers re-download it for every test container and exhausted the old 90-minute
+        // hosted job without ever starting a test.
+        .withImagePullPolicy(imageName -> false)
         .withEnv("PULUMI_ACCESS_TOKEN", RAW_TOKEN)
         .withEnv("PULUMI_CONFIG_PASSPHRASE", "test")
         .withEnv("PULUMI_HOME", "/tmp/pulumi-home")

@@ -5,7 +5,7 @@ since the version we're pinned to?"**
 
 It chains the three existing tools — `api-extract` (source-level endpoint
 diff), `recorder` (behavioral capture with the target CLI), and the pin
-registry (recorder Dockerfile, `verify/go.mod`, nightly workflow matrix) — into
+registry (recorder Dockerfile, `verify/go.mod`, release workflow matrix) — into
 a single report.
 
 ## Quick start
@@ -35,7 +35,7 @@ from pinned refs).
    `tools/pulumi/recorder/Dockerfile` and checks the two pins that must move in
    lockstep with it: `github.com/pulumi/pulumi/sdk/v3` in
    `tools/pulumi/verify/go.mod`, and the CLI image matrix in
-   `.github/workflows/nightly.yml`.
+   `.github/workflows/native.yml`.
 2. **Endpoint diff** — `api-extract` from baseline to target, into the scratch
    dir (the committed baseline snapshot is copied in if present, extracted
    otherwise). Source-level: catches added/removed endpoints in the scoped
@@ -82,8 +82,8 @@ there with no body changes is benign.
    catalog.
 3. Bump `github.com/pulumi/pulumi/sdk/v3` in `tools/pulumi/verify/go.mod` to
    the same version (lockstep rule) and run `make pulumi-verify-test`.
-4. Add the new version to the nightly matrix in
-   `.github/workflows/nightly.yml`; drop versions no longer worth supporting.
+4. Add the new version to the release compatibility matrix in
+   `.github/workflows/native.yml`; drop versions no longer worth supporting.
 5. Run the replay tier (`ContractReplayTest`) and, before release, the
    smoke/fault tiers.
 6. Re-run the sweep with `--publish` and commit the published report,
@@ -93,9 +93,9 @@ there with no body changes is benign.
 ## Cadence
 
 Pulumi ships roughly weekly. A sweep per two-to-four weeks keeps the diff
-small; the `--skip-record` form is cheap enough to run more often. The nightly
-workflow already exercises the pinned versions daily — the sweep is what tells
-you when to *move* the pins.
+small; the `--skip-record` form is cheap enough to run more often. The manual
+release build exercises the pinned versions before publishing — the sweep is
+what tells you when to *move* the pins.
 
 Like the recorder and verifier, this is a host tool (Go + Docker + python3) and
 is deliberately not routed through `./bin/in-container`.

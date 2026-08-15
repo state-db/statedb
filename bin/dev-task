@@ -1,0 +1,82 @@
+#!/usr/bin/env bash
+# Task implementation. Invoke through ./dev, not directly.
+set -euo pipefail
+cd "$(dirname "$0")/.."
+
+readonly MVNW=modules/mvnw
+
+java_verify() {
+  ./bin/prepare-native-agent-jvm >/dev/null
+  "$MVNW" -f modules/pom.xml verify -Pnative-agent-tests
+}
+
+web_verify() {
+  (
+    cd modules/web
+    bun install --frozen-lockfile
+    bun run lint
+    bun run typecheck
+  )
+}
+
+go_verify() {
+  local module
+  for module in tools/pulumi/api-extract tools/pulumi/verify tools/pulumi/recorder workbench/pulumi/providers/statedbsim; do
+    (cd "$module" && go test ./... && go build ./...)
+  done
+}
+
+case ${1:-} in
+quick)
+  [[ ${STATE_DB_ISOLATED:-} == 1 ]] || {
+    echo "dev-task: quick checks must run inside bin/dev's isolated VM" >&2
+    exit 1
+  }
+  "$MVNW" -f modules/pom.xml spotless:check
+  web_verify
+  go_verify
+  ;;
+check)
+  [[ ${STATE_DB_ISOLATED:-} == 1 ]] || {
+    echo "dev-task: authoritative check must run inside bin/dev's isolated VM" >&2
+    exit 1
+  }
+  java_verify
+  (cd modules/web && bun run lint)
+  ./bin/generate-third-party-notices --check
+  go_verify
+  ;;
+notices)
+  [[ ${STATE_DB_ISOLATED:-} == 1 ]] || {
+    echo "dev-task: notices must be generated inside bin/dev's isolated VM" >&2
+    exit 1
+  }
+  ./bin/generate-third-party-notices
+  ;;
+native-contract)
+  [[ ${STATE_DB_ISOLATED:-} == 1 ]] || {
+    echo "dev-task: native metadata verification must run inside bin/dev's isolated VM" >&2
+    exit 1
+  }
+  java_verify
+  ;;
+protocol)
+  [[ ${STATE_DB_ISOLATED:-} == 1 ]] || {
+    echo "dev-task: protocol checks must run inside bin/dev's isolated VM" >&2
+    exit 1
+  }
+  pulumi_image=pulumi/pulumi:3.234.0
+  for arg in "${@:2}"; do
+    case "$arg" in
+      -Dpulumi.cli.image=*) pulumi_image=${arg#*=} ;;
+    esac
+  done
+  docker pull "$pulumi_image"
+  "$MVNW" -f modules/pom.xml -pl pulumi-cli-smoke -am verify \
+    -Dsurefire.skip=true \
+    -DskipPulumiCliSmoke=false \
+    -DskipPulumiCliFaults=false \
+    "${@:2}"
+  ;;
+*) echo "usage: dev-task quick|check|protocol|notices|native-contract" >&2; exit 2 ;;
+esac
