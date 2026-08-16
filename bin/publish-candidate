@@ -1,0 +1,33 @@
+#!/usr/bin/env bash
+# Publishes this machine's architecture candidate for the current commit, the way
+# native.yml does, for when the workflow cannot run. bin/release still requires a
+# green native.yml on the release commit, so a candidate published here is for
+# testing a real pull, not a shortcut into a release.
+#
+#   bin/publish-candidate
+set -euo pipefail
+
+cd "$(dirname "$0")/.."
+
+readonly REGISTRY=${STATEDB_REGISTRY:-ghcr.io/state-db/statedb}
+readonly CANDIDATE_REGISTRY=${STATEDB_CANDIDATE_REGISTRY:-${REGISTRY}-candidates}
+
+[[ -z $(git status --porcelain --untracked-files=no) ]] ||
+  { echo "error: the tree has uncommitted changes; a candidate must name a real commit" >&2; exit 1; }
+
+commit=$(git rev-parse HEAD)
+arch=$(docker version --format '{{.Server.Arch}}')
+candidate="$CANDIDATE_REGISTRY:$commit-$arch"
+
+bin/build-native-app-image state-db:native-ci
+docker tag state-db:native-ci "$candidate"
+docker push "$candidate"
+
+# Gate the published bytes, not the local build: with the containerd image store
+# a local build is an index whose provenance child is not runnable, and only a
+# registry round trip proves the ref a puller resolves is the image.
+bin/release-gate "$candidate"
+
+digest=$(docker buildx imagetools inspect "$candidate" --format '{{json .Manifest.Digest}}' | tr -d '"')
+echo "published $candidate"
+echo "digest    $CANDIDATE_REGISTRY@$digest"
