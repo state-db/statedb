@@ -178,7 +178,7 @@ function SidebarRail() {
       className="absolute left-64 top-3 hidden size-8 -translate-x-1/2 items-center justify-center rounded-md border bg-background text-muted-foreground shadow-sm transition-[left] hover:text-foreground group-data-[sidebar-open=false]/sidebar-wrapper:left-16 lg:flex"
       onClick={() => setOpen(!open)}
     >
-      <PanelLeft />
+      <PanelLeft className="size-4" />
     </button>
   );
 }
