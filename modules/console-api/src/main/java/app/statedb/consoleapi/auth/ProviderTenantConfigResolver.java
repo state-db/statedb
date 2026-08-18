@@ -107,6 +107,12 @@ public class ProviderTenantConfigResolver implements TenantConfigResolver {
             .restorePathAfterRedirect()
             .cookiePath("/api/")
             .cookieSameSite(CookieSameSite.LAX)
+            // Reuse one state cookie per tenant instead of minting a new q_auth_<uuid> cookie for
+            // every challenge. Multi-tab concurrent logins aren't a requirement here, and without
+            // this an abandoned/retried login (e.g. hitting the IdP page then browser Back) leaves
+            // an orphaned state cookie behind each time — enough of them blow past the request
+            // header size limit and break every /api/* call.
+            .allowMultipleCodeFlows(false)
             // Request the provider's configured scopes verbatim (they include openid) so the IdP
             // returns profile/email claims for user provisioning; otherwise only openid is sent.
             .addOpenidScope(false)
