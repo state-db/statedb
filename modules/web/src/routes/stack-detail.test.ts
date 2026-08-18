@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 
 import { PULUMI_SECRET_SIG } from "@/components/console/SecretBadge";
 import {
+  buildPropertyRows,
   buildResourceRows,
   buildResourceTree,
   containsSecret,
@@ -12,6 +13,7 @@ import {
   maskSecrets,
   lastUpdateActorLabel,
   pageResources,
+  propertyPriorityRank,
   resourceTreeIndentRem,
   resourceName,
   resourceType,
@@ -180,6 +182,70 @@ describe("stack resource presentation", () => {
     expect(
       lastUpdateActorLabel({ displayName: null, email: null, fallback: "opaque" }),
     ).toBe("opaque");
+  });
+
+  test("ranks well-known identity keys ahead of everything else", () => {
+    expect(propertyPriorityRank("arn")).toBeLessThan(propertyPriorityRank("region"));
+    expect(propertyPriorityRank("Arn")).toBe(propertyPriorityRank("arn"));
+    expect(propertyPriorityRank("somethingElse")).toBeGreaterThan(propertyPriorityRank("status"));
+  });
+
+  test("sinks double-underscore engine/provider bookkeeping keys to the bottom", () => {
+    const rows = buildPropertyRows(
+      { __internal: { rotation: "2" }, arn: "arn:aws:s3:::bucket", zzz: "last-alphabetically" },
+      {},
+    );
+
+    expect(rows.map((row) => row.key)).toEqual(["arn", "zzz", "__internal"]);
+  });
+
+  test("merges inputs and outputs, sorting priority keys before the rest", () => {
+    const rows = buildPropertyRows(
+      { name: "web", timeout: 30 },
+      { name: "web", arn: "arn:aws:s3:::web", timeout: 30 },
+    );
+
+    expect(rows.map((row) => row.key)).toEqual(["arn", "name", "timeout"]);
+    expect(rows[0]).toMatchObject({ source: "output", differs: false });
+    expect(rows[1]).toMatchObject({ source: "both", differs: false, value: "web" });
+  });
+
+  test("flags a property whose deployed output disagrees with its input", () => {
+    const rows = buildPropertyRows({ replicas: 2 }, { replicas: 3 });
+
+    expect(rows).toEqual([
+      { key: "replicas", value: 3, source: "both", differs: true, inputValue: 2, outputValue: 3 },
+    ]);
+  });
+
+  test("does not flag a provider's own type coercion of a passthrough value as a difference", () => {
+    // random.RandomId's `keepers` schema is map[string]string: a number authored
+    // in the program round-trips through the provider as its string form. That's
+    // not a real disagreement worth flagging.
+    const rows = buildPropertyRows(
+      { keepers: { rotation: 2, active: true } },
+      { keepers: { rotation: "2", active: "true" } },
+    );
+
+    expect(rows).toEqual([
+      {
+        key: "keepers",
+        value: { rotation: "2", active: "true" },
+        source: "both",
+        differs: false,
+        inputValue: { rotation: 2, active: true },
+        outputValue: { rotation: "2", active: "true" },
+      },
+    ]);
+  });
+
+  test("treats a key present on only one side as input-only or output-only", () => {
+    const rows = buildPropertyRows({ writeOnlyToken: "secret-config" }, { computedId: "abc123" });
+
+    expect(rows.map((row) => ({ key: row.key, source: row.source }))).toEqual([
+      { key: "computedId", source: "output" },
+      { key: "writeOnlyToken", source: "input" },
+    ]);
   });
 
   test("unfiltered trees do not force-expand descendants", () => {

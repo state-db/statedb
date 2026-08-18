@@ -210,3 +210,26 @@ html, body, #root {
     -moz-osx-font-smoothing: grayscale;
   }
 }
+
+/* Small inline scroll containers (raw-JSON preview blocks, etc.) get a
+   themed hairline scrollbar instead of the platform's full-width default —
+   the default reads as a UI glitch at this size. Radix's ScrollArea covers
+   the sheet body itself; this covers the raw <pre> blocks nested inside it. */
+.scroll-thin {
+  scrollbar-width: thin;
+  scrollbar-color: var(--border) transparent;
+}
+.scroll-thin::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+.scroll-thin::-webkit-scrollbar-track {
+  background: transparent;
+}
+.scroll-thin::-webkit-scrollbar-thumb {
+  background-color: var(--border);
+  border-radius: 999px;
+}
+.scroll-thin::-webkit-scrollbar-thumb:hover {
+  background-color: var(--haze);
+}

@@ -846,7 +846,7 @@ function OutputValue({ value }: { value: PulumiValue }) {
           <CopyButton value={raw} label="Copy JSON output" />
         </div>
         <CollapsibleContent>
-          <pre className="mt-2 max-h-80 overflow-auto whitespace-pre rounded-md border bg-muted/30 p-3 font-mono text-xs leading-relaxed">
+          <pre className="scroll-thin mt-2 max-h-80 overflow-auto whitespace-pre rounded-md border bg-muted/30 p-3 font-mono text-xs leading-relaxed">
             <code>{JSON.stringify(value, null, 2)}</code>
           </pre>
         </CollapsibleContent>
@@ -862,7 +862,7 @@ function OutputValue({ value }: { value: PulumiValue }) {
   );
 }
 
-function CopyButton({ value, label }: { value: string; label: string }) {
+function CopyButton({ value, label, className }: { value: string; label: string; className?: string }) {
   const [copied, setCopied] = useState(false);
   async function copy() {
     try {
@@ -876,7 +876,14 @@ function CopyButton({ value, label }: { value: string; label: string }) {
     window.setTimeout(() => setCopied(false), 1200);
   }
   return (
-    <Button type="button" variant="ghost" size="icon" onClick={() => void copy()} aria-label={label}>
+    <Button
+      type="button"
+      variant="ghost"
+      size="icon"
+      className={cn("shrink-0", className)}
+      onClick={() => void copy()}
+      aria-label={label}
+    >
       {copied ? <Check /> : <Copy />}
     </Button>
   );
@@ -1228,7 +1235,7 @@ function ResourceSheet({
   ];
   return (
     <Sheet open onOpenChange={onOpenChange}>
-      <SheetContent className="flex w-full flex-col gap-0 overflow-hidden p-0 sm:max-w-[600px]">
+      <SheetContent className="flex w-full flex-col gap-0 overflow-hidden p-0 sm:max-w-[min(1040px,90vw)]">
         <SheetHeader className="gap-1 px-6 py-5 pr-14">
           <div className="flex min-w-0 items-center gap-2">
             <SheetTitle className="truncate" title={resourceName(resource)}>
@@ -1263,15 +1270,14 @@ function ResourceSheet({
                 )}
               </div>
             </section>
-            <PropertySection title="Inputs" values={resource.inputs} />
-            <PropertySection title="Outputs" values={resource.outputs} />
+            <PropertiesPanel key={resource.urn} inputs={resource.inputs} outputs={resource.outputs} />
             <section className="flex flex-col gap-3">
               <SectionHeading title="Relationships" count={references.length} />
               {references.length ? (
                 references.map(({ label, urn }, index) => (
                   <div
                     key={`${label}-${urn}-${index}`}
-                    className="grid min-w-0 gap-2 rounded-md border p-3 text-sm sm:grid-cols-[auto_minmax(0,1fr)]"
+                    className="grid min-w-0 gap-2 rounded-md border p-3 text-sm sm:grid-cols-[auto_minmax(0,1fr)_auto] sm:items-center"
                   >
                     <Badge variant="outline" className="w-fit">{label}</Badge>
                     {resourceByUrn.has(urn) ? (
@@ -1280,13 +1286,18 @@ function ResourceSheet({
                         className="h-auto min-w-0 justify-start overflow-hidden p-0 text-left"
                         onClick={() => onNavigate(urn)}
                       >
-                        <span className="truncate font-mono text-xs" title={urn}>{urn}</span>
+                        <span className="truncate text-left font-mono text-xs" dir="rtl" title={urn}>{urn}</span>
                       </Button>
                     ) : (
-                      <span className="truncate font-mono text-xs text-muted-foreground" title={urn}>
+                      <span
+                        className="truncate text-left font-mono text-xs text-muted-foreground"
+                        dir="rtl"
+                        title={urn}
+                      >
                         {urn}
                       </span>
                     )}
+                    <CopyButton value={urn} label="Copy URN" className="size-6 [&_svg]:size-3.5" />
                   </div>
                 ))
               ) : (
@@ -1328,44 +1339,162 @@ function SectionHeading({ title, count }: { title: string; count?: number }) {
   );
 }
 
-function PropertySection({ title, values }: { title: string; values?: Record<string, PulumiValue> }) {
-  const entries = Object.entries(values ?? {});
+const PROPERTY_SEARCH_THRESHOLD = 8;
+
+// Double-underscore keys (__internal, __pulumi_raw_state_*, ...) are
+// provider/engine bookkeeping a user never configured and rarely needs —
+// they're kept out of the main list and filter, tucked behind a closed
+// disclosure instead of competing with real resource state for attention.
+function isInternalPropertyKey(key: string): boolean {
+  return key.startsWith("__");
+}
+
+function PropertiesPanel({
+  inputs,
+  outputs,
+}: {
+  inputs?: Record<string, PulumiValue>;
+  outputs?: Record<string, PulumiValue>;
+}) {
+  const [query, setQuery] = useState("");
+  const rows = useMemo(() => buildPropertyRows(inputs, outputs), [inputs, outputs]);
+  const regularRows = useMemo(() => rows.filter((row) => !isInternalPropertyKey(row.key)), [rows]);
+  const internalRows = useMemo(() => rows.filter((row) => isInternalPropertyKey(row.key)), [rows]);
+  const needle = query.trim().toLowerCase();
+  const visible = needle
+    ? regularRows.filter(
+        (row) =>
+          row.key.toLowerCase().includes(needle) ||
+          serializeOutput(maskSecrets(row.value) as PulumiValue).toLowerCase().includes(needle),
+      )
+    : regularRows;
+
   return (
     <section className="flex min-w-0 flex-col gap-3">
-      <SectionHeading title={title} count={entries.length} />
-      {entries.length ? (
-        <div className="overflow-hidden rounded-lg border bg-card">
-          {entries.map(([key, value], index) => (
-            <div key={key} className="grid min-w-0 gap-2 p-3 text-sm sm:grid-cols-[minmax(0,9rem)_minmax(0,1fr)] sm:gap-4">
-              <span className="truncate font-medium" title={key}>{key}</span>
-              <div className="min-w-0"><PropertyValue value={value} /></div>
-              {index < entries.length - 1 && <Separator className="sm:col-span-2" />}
-            </div>
-          ))}
-        </div>
-      ) : <p className="text-sm text-muted-foreground">None.</p>}
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <SectionHeading title="Properties" count={regularRows.length} />
+        {regularRows.length > PROPERTY_SEARCH_THRESHOLD && (
+          <div className="relative w-48">
+            <Search className="pointer-events-none absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" />
+            <Input
+              className="h-7 pl-7 text-xs"
+              placeholder="Filter properties…"
+              value={query}
+              onChange={(event) => setQuery(event.target.value)}
+              aria-label="Filter properties"
+            />
+          </div>
+        )}
+      </div>
+      {regularRows.length === 0 ? (
+        <p className="text-sm text-muted-foreground">No properties.</p>
+      ) : visible.length === 0 ? (
+        <p className="text-sm text-muted-foreground">No properties match &ldquo;{query}&rdquo;.</p>
+      ) : (
+        <PropertyRowTable rows={visible} />
+      )}
+      {internalRows.length > 0 && (
+        <Collapsible>
+          <CollapsibleTrigger asChild>
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              className="w-fit text-muted-foreground"
+            >
+              <ChevronRight data-icon="inline-start" />
+              {internalRows.length} internal {pluralize("property", internalRows.length)}
+            </Button>
+          </CollapsibleTrigger>
+          <CollapsibleContent>
+            <PropertyRowTable rows={internalRows} className="mt-2" />
+          </CollapsibleContent>
+        </Collapsible>
+      )}
     </section>
   );
 }
 
-function PropertyValue({ value }: { value: PulumiValue }) {
+function PropertyRowTable({ rows, className }: { rows: MergedPropertyRow[]; className?: string }) {
+  return (
+    <div className={cn("overflow-hidden rounded-lg border bg-card", className)}>
+      {rows.map((row, index) => (
+        <div
+          key={row.key}
+          className="grid min-w-0 gap-2 p-3 text-sm sm:grid-cols-[minmax(0,10rem)_minmax(0,1fr)] sm:gap-4"
+        >
+          <div className="flex min-w-0 flex-wrap items-center gap-1.5">
+            <span className="truncate font-medium" title={row.key}>{row.key}</span>
+            <PropertySourceBadge row={row} />
+          </div>
+          <div className="min-w-0"><PropertyValueCell value={row.value} /></div>
+          {index < rows.length - 1 && <Separator className="sm:col-span-2" />}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function PropertySourceBadge({ row }: { row: MergedPropertyRow }) {
+  if (row.source === "output") {
+    return (
+      <Badge variant="secondary" className="shrink-0 text-[10px]">
+        output
+      </Badge>
+    );
+  }
+  if (row.source === "input") {
+    return (
+      <Badge variant="outline" className="shrink-0 text-[10px]">
+        input
+      </Badge>
+    );
+  }
+  if (row.differs) {
+    return (
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <Badge variant="warning" className="shrink-0 text-[10px]">
+            differs from input
+          </Badge>
+        </TooltipTrigger>
+        <TooltipContent className="max-w-sm">
+          Configured as{" "}
+          <code className="font-mono">
+            {serializeOutput(maskSecrets(row.inputValue ?? null) as PulumiValue)}
+          </code>
+        </TooltipContent>
+      </Tooltip>
+    );
+  }
+  return null;
+}
+
+function PropertyValueCell({ value }: { value: PulumiValue }) {
   if (isPulumiSecret(value)) return <SecretBadge />;
   if (value !== null && typeof value === "object") {
+    const masked = maskSecrets(value) as PulumiValue;
     return (
-      <pre className="max-h-56 w-full overflow-auto whitespace-pre rounded-md border bg-muted/30 p-3 font-mono text-xs leading-relaxed">
-        <code>{JSON.stringify(maskSecrets(value), null, 2)}</code>
-      </pre>
+      <div className="flex min-w-0 items-start gap-1">
+        <pre className="scroll-thin max-h-56 min-w-0 flex-1 overflow-auto whitespace-pre rounded-md border bg-muted/30 p-3 font-mono text-xs leading-relaxed">
+          <code>{JSON.stringify(masked, null, 2)}</code>
+        </pre>
+        <CopyButton value={serializeOutput(masked)} label="Copy value" className="size-6 [&_svg]:size-3.5" />
+      </div>
     );
   }
   const rendered = value === null ? "null" : String(value);
   if (rendered.length > 80 || rendered.includes("\n")) {
     return (
-      <pre className="max-h-32 w-full overflow-auto whitespace-pre-wrap break-words rounded-md border bg-muted/30 p-3 font-mono text-xs leading-relaxed">
-        <code>{rendered}</code>
-      </pre>
+      <div className="flex min-w-0 items-start gap-1">
+        <pre className="scroll-thin max-h-32 min-w-0 flex-1 overflow-auto whitespace-pre-wrap break-words rounded-md border bg-muted/30 p-3 font-mono text-xs leading-relaxed">
+          <code>{rendered}</code>
+        </pre>
+        <CopyButton value={rendered} label="Copy value" className="size-6 [&_svg]:size-3.5" />
+      </div>
     );
   }
-  return <code className="block truncate font-mono text-xs" title={rendered}>{rendered}</code>;
+  return <CopyableId value={rendered} buttonClassName="size-6 [&_svg]:size-3.5" />;
 }
 
 function StackDetailSkeleton() {
@@ -1388,6 +1517,109 @@ export function stackOutputs(resources: PulumiResource[]): Record<string, Pulumi
 
 export function serializeOutput(value: PulumiValue): string {
   return value !== null && typeof value === "object" ? JSON.stringify(value) : String(value);
+}
+
+export type PropertySource = "both" | "input" | "output";
+
+export interface MergedPropertyRow {
+  key: string;
+  value: PulumiValue;
+  source: PropertySource;
+  differs: boolean;
+  inputValue?: PulumiValue;
+  outputValue?: PulumiValue;
+}
+
+// Fixed lookup order for keys every resource-shaped API (AWS, GCP, Azure,
+// Kubernetes, ...) tends to surface first. Anything not in this list falls
+// back to alphabetical, so the same resource always renders its properties
+// in the same order.
+const PROPERTY_PRIORITY = [
+  "id",
+  "arn",
+  "name",
+  "displayname",
+  "hostname",
+  "endpoint",
+  "url",
+  "domainname",
+  "bucket",
+  "region",
+  "zone",
+  "status",
+  "state",
+];
+
+export function propertyPriorityRank(key: string): number {
+  // Double-underscore keys (__internal, __pulumi_raw_state_*, ...) are
+  // provider/engine bookkeeping, not resource state a user asked for. They
+  // sort dead last regardless of where they'd otherwise fall alphabetically,
+  // instead of floating to the top the way "_" does in ASCII/collator order.
+  if (key.startsWith("__")) return PROPERTY_PRIORITY.length + 1;
+  const rank = PROPERTY_PRIORITY.indexOf(key.toLowerCase());
+  return rank === -1 ? PROPERTY_PRIORITY.length : rank;
+}
+
+// Providers routinely round-trip a passthrough value (e.g. a `keepers` map)
+// through their own schema, coercing an authored number/boolean to its
+// string form without any semantic change (2 -> "2"). A byte-exact compare
+// would flag every one of those as "differs from input", drowning out the
+// rare case that's actually worth a look. Compare structurally but treat
+// same-representation primitives of different JS types as equal.
+export function propertyValuesEquivalent(a: PulumiValue, b: PulumiValue): boolean {
+  if (a === b) return true;
+  if (Array.isArray(a) && Array.isArray(b)) {
+    return a.length === b.length && a.every((value, index) => propertyValuesEquivalent(value, b[index]));
+  }
+  if (Array.isArray(a) || Array.isArray(b)) return false;
+  if (a !== null && b !== null && typeof a === "object" && typeof b === "object") {
+    const aKeys = Object.keys(a);
+    const bKeys = Object.keys(b);
+    return (
+      aKeys.length === bKeys.length &&
+      aKeys.every((key) => Object.prototype.hasOwnProperty.call(b, key) && propertyValuesEquivalent(a[key], b[key]))
+    );
+  }
+  if (a === null || b === null || typeof a === "object" || typeof b === "object") return false;
+  return String(a) === String(b);
+}
+
+// Pulumi's convention copies every input into the resource's outputs plus
+// whatever the provider computes, so inputs and outputs are two overlapping
+// views of the same state rather than independent lists. Merging them here
+// (instead of rendering "Inputs" and "Outputs" as separate sections) removes
+// that duplication and surfaces only the cases worth a second look: values
+// the provider computed (source: "output"), values the provider never
+// echoed back (source: "input"), and values where the deployed output
+// disagrees with what was configured (differs: true).
+export function buildPropertyRows(
+  inputs: Record<string, PulumiValue> | undefined,
+  outputs: Record<string, PulumiValue> | undefined,
+): MergedPropertyRow[] {
+  const inputEntries = inputs ?? {};
+  const outputEntries = outputs ?? {};
+  const keys = new Set([...Object.keys(inputEntries), ...Object.keys(outputEntries)]);
+
+  const rows = Array.from(keys).map((key): MergedPropertyRow => {
+    const hasInput = Object.prototype.hasOwnProperty.call(inputEntries, key);
+    const hasOutput = Object.prototype.hasOwnProperty.call(outputEntries, key);
+    const inputValue = inputEntries[key];
+    const outputValue = outputEntries[key];
+    const source: PropertySource = hasInput && hasOutput ? "both" : hasOutput ? "output" : "input";
+    return {
+      key,
+      value: hasOutput ? outputValue : inputValue,
+      source,
+      differs: source === "both" && !propertyValuesEquivalent(inputValue, outputValue),
+      inputValue: hasInput ? inputValue : undefined,
+      outputValue: hasOutput ? outputValue : undefined,
+    };
+  });
+
+  return rows.sort((a, b) => {
+    const rankDiff = propertyPriorityRank(a.key) - propertyPriorityRank(b.key);
+    return rankDiff !== 0 ? rankDiff : RESOURCE_COLLATOR.compare(a.key, b.key);
+  });
 }
 
 function resourceProvider(resource: PulumiResource) {
