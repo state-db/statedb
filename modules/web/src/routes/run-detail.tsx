@@ -39,6 +39,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { api, NotFoundError, type RunDetail, type RunEvent } from "@/lib/api";
+import { jsonDiffLines as computeJsonDiffLines, type JsonDiffLine } from "@/lib/json-diff";
 import { cn } from "@/lib/utils";
 
 type RunLocator = { version: number } | { previewId: string };
@@ -55,7 +56,7 @@ type ResourceDisplayRow = ResourceChange & {
   seconds?: number;
   diffs: string[];
 };
-type PropertyChange = { path: string; kind: string; oldValue: unknown; newValue: unknown };
+type PropertyChange = { path: string; kind: string; oldValue: unknown; newValue: unknown; internal: boolean };
 
 export function RunDetailPage({
   org,
@@ -426,19 +427,31 @@ function SummaryLogLine({ event, preview }: { event: RunEvent; preview: boolean 
 
 function RunChanges({ events, collapseReplacements, live, preview }: { events: RunEvent[]; collapseReplacements: boolean; live: boolean; preview: boolean }) {
   const [showUnchanged, setShowUnchanged] = useState(false);
+  const [showInternal, setShowInternal] = useState(false);
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
   const changes = useMemo(() => resourceChanges(events, collapseReplacements), [events, collapseReplacements]);
   const visible = showUnchanged ? changes : changes.filter((change) => change.op !== "same");
+  const rows = useMemo(() => visible.map((change) => ({ change, allProperties: resourcePropertyChanges(change) })), [visible]);
+  const internalCount = useMemo(() => rows.reduce((sum, row) => sum + row.allProperties.filter((p) => p.internal).length, 0), [rows]);
   return (
     <div className="flex flex-col gap-3">
-      <div className="flex items-center gap-2"><Checkbox id="show-unchanged" checked={showUnchanged} onCheckedChange={(value) => setShowUnchanged(value === true)} /><Label htmlFor="show-unchanged">Show unchanged</Label></div>
+      <div className="flex items-center gap-4">
+        <div className="flex items-center gap-2"><Checkbox id="show-unchanged" checked={showUnchanged} onCheckedChange={(value) => setShowUnchanged(value === true)} /><Label htmlFor="show-unchanged">Show unchanged</Label></div>
+        {internalCount > 0 && (
+          <div className="flex items-center gap-2">
+            <Checkbox id="show-internal" checked={showInternal} onCheckedChange={(value) => setShowInternal(value === true)} />
+            <Label htmlFor="show-internal">Show internal properties ({internalCount})</Label>
+          </div>
+        )}
+      </div>
       <div className="rounded-lg border bg-card">
         <Table>
           <TableHeader><TableRow><TableHead>Operation</TableHead><TableHead>Type</TableHead><TableHead>Name</TableHead><TableHead><span className="sr-only">Toggle diff</span></TableHead></TableRow></TableHeader>
           <TableBody>
-            {visible.length === 0 ? <TableRow><TableCell colSpan={4} className="h-24 text-center text-muted-foreground">No resource changes recorded.</TableCell></TableRow> : visible.map((change) => {
+            {rows.length === 0 ? <TableRow><TableCell colSpan={4} className="h-24 text-center text-muted-foreground">No resource changes recorded.</TableCell></TableRow> : rows.map(({ change, allProperties }) => {
               const key = `${change.sequence}-${change.name}`;
-              const properties = resourcePropertyChanges(change);
+              const properties = allProperties.filter((p) => showInternal || !p.internal);
+              const hiddenInternal = allProperties.length - properties.length;
               const lineCount = jsonDiffLines(properties).length;
               const autoExpanded = properties.length > 0 && properties.length <= 6 && lineCount <= 12;
               const open = expanded[key] ?? autoExpanded;
@@ -470,7 +483,7 @@ function RunChanges({ events, collapseReplacements, live, preview }: { events: R
                   {open && (
                     <TableRow>
                       <TableCell colSpan={4} className="p-0">
-                        <InlineJsonDiff properties={properties} />
+                        <InlineJsonDiff properties={properties} hiddenInternal={hiddenInternal} />
                       </TableCell>
                     </TableRow>
                   )}
@@ -514,25 +527,40 @@ function resourcePropertyChanges(change: ResourceChange) {
   return propertyChanges(isRecord(envelope.metadata) ? envelope.metadata : envelope);
 }
 
-function InlineJsonDiff({ properties }: { properties: PropertyChange[] }) {
+function InlineJsonDiff({ properties, hiddenInternal }: { properties: PropertyChange[]; hiddenInternal: number }) {
   if (properties.length === 0) {
+    if (hiddenInternal > 0) {
+      return (
+        <div className="p-4">
+          <Alert>
+            <CircleAlert />
+            <AlertTitle>Only internal properties changed</AlertTitle>
+            <AlertDescription>
+              {hiddenInternal} internal {hiddenInternal === 1 ? "property is" : "properties are"} hidden. Enable &ldquo;Show internal properties&rdquo; above to view {hiddenInternal === 1 ? "it" : "them"}.
+            </AlertDescription>
+          </Alert>
+        </div>
+      );
+    }
     return <div className="p-4"><Alert><CircleAlert /><AlertTitle>No property-level diff</AlertTitle><AlertDescription>Pulumi recorded the resource operation without changed property details.</AlertDescription></Alert></div>;
   }
   return (
-    <ScrollArea className="max-h-[30rem] border-y bg-muted/30">
-      <pre className="min-w-max py-3 font-mono text-xs leading-5">
+    <ScrollArea className="max-h-[30rem] border-y bg-muted/20">
+      <pre className="min-w-max py-2 font-mono text-xs leading-5">
         {jsonDiffLines(properties).map((line, index) => (
           <span
             className={cn(
-              "grid grid-cols-[2rem_minmax(0,1fr)] whitespace-pre px-4",
-              line.kind === "delete" && "bg-destructive/10 text-destructive",
-              line.kind === "add" && "bg-primary/5 text-foreground",
-              line.kind === "context" && "mt-2 text-muted-foreground first:mt-0",
+              "grid grid-cols-[1.25rem_minmax(0,1fr)] whitespace-pre px-3",
+              line.kind === "delete" && "text-destructive",
+              line.kind === "add" && "text-success",
+              line.kind === "update" && "text-warning",
+              (line.kind === "same" || line.kind === "fold") && "text-muted-foreground",
+              line.kind === "fold" && "italic",
             )}
-            key={`${index}-${line.text}`}
+            key={`${index}-${line.depth}-${line.text}`}
           >
-            <span className="select-none" aria-hidden="true">{line.kind === "delete" ? "−" : line.kind === "add" ? "+" : ""}</span>
-            <span>{line.text}</span>
+            <span className="select-none" aria-hidden="true">{line.kind === "delete" ? "−" : line.kind === "add" ? "+" : line.kind === "update" ? "~" : ""}</span>
+            <span style={{ paddingLeft: `${line.depth * 0.875}rem` }}>{line.text}</span>
           </span>
         ))}
       </pre>
@@ -818,32 +846,22 @@ export function propertyChanges(metadata: Record<string, unknown>): PropertyChan
       kind: asText(diff.diffKind, inferDiffKind(readPropertyPath(oldValues, path), readPropertyPath(newInputs, path))),
       oldValue: readPropertyPath(oldValues, path),
       newValue: readPropertyPath(newInputs, path),
+      internal: isInternalPath(path),
     };
   });
 }
 
-type JsonDiffLine = { kind: "context" | "delete" | "add"; text: string };
-
-export function jsonDiffLines(properties: PropertyChange[]): JsonDiffLine[] {
-  const lines: JsonDiffLine[] = [];
-  for (const property of properties) {
-    lines.push({ kind: "context", text: property.path });
-    if (property.oldValue !== undefined) {
-      lines.push(...jsonValueLines("delete", maskPulumiSecrets(property.oldValue)));
-    }
-    if (property.newValue !== undefined) {
-      lines.push(...jsonValueLines("add", maskPulumiSecrets(property.newValue)));
-    }
-  }
-  return lines;
+// Pulumi's engine/providers mark bookkeeping fields with a leading "__" (e.g. "__internal").
+function isInternalPath(path: string): boolean {
+  return path.split(/[.[]/).some((segment) => segment.startsWith("__"));
 }
 
-function jsonValueLines(
-  kind: "delete" | "add",
-  value: unknown,
-): JsonDiffLine[] {
-  const serialized = JSON.stringify(value, null, 2) ?? "null";
-  return serialized.split("\n").map((text) => ({ kind, text }));
+export function jsonDiffLines(properties: PropertyChange[]): JsonDiffLine[] {
+  return computeJsonDiffLines(properties.map((property) => ({
+    path: property.path,
+    oldValue: maskPulumiSecrets(property.oldValue),
+    newValue: maskPulumiSecrets(property.newValue),
+  })));
 }
 
 export function stackOutputsFromEvents(events: RunEvent[]): Record<string, unknown> {

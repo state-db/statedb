@@ -5,7 +5,6 @@ import {
   changeSummary,
   formatEventLine,
   formatRunDuration,
-  jsonDiffLines,
   maskConfig,
   propertyChanges,
   resourceChanges,
@@ -138,7 +137,7 @@ describe("run detail presentation", () => {
       detailedDiff: { versioning: { diffKind: "update", inputDiff: true } },
     };
     expect(propertyChanges(metadata)).toEqual([
-      { path: "versioning", kind: "update", oldValue: false, newValue: true },
+      { path: "versioning", kind: "update", oldValue: false, newValue: true, internal: false },
     ]);
     expect(stackOutputsFromEvents([{
       sequence: 9,
@@ -161,16 +160,17 @@ describe("run detail presentation", () => {
     }])).toEqual({ token: "[unknown]", nested: { report: "[unknown]" }, plain: "kept" });
   });
 
-  test("formats property changes as an inline JSON diff", () => {
-    expect(jsonDiffLines([
-      { path: "length", kind: "update", oldValue: 24, newValue: 32 },
-      { path: "overrideSpecial", kind: "delete", oldValue: "_%", newValue: undefined },
-    ])).toEqual([
-      { kind: "context", text: "length" },
-      { kind: "delete", text: "24" },
-      { kind: "add", text: "32" },
-      { kind: "context", text: "overrideSpecial" },
-      { kind: "delete", text: '"_%"' },
+  test("flags Pulumi's dunder-prefixed bookkeeping paths as internal", () => {
+    const metadata = {
+      op: "create",
+      urn: "urn:pulumi:prod::app::pulumi:providers:tls::tls-provider",
+      type: "pulumi:providers:tls",
+      old: {},
+      new: { inputs: { __internal: {}, version: "5.4.0" } },
+    };
+    expect(propertyChanges(metadata).map((p) => ({ path: p.path, internal: p.internal }))).toEqual([
+      { path: "__internal", internal: true },
+      { path: "version", internal: false },
     ]);
   });
 
