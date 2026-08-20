@@ -261,6 +261,21 @@ export interface Workspace {
   lock: WorkspaceLock | null;
 }
 
+export interface WorkspacePage {
+  items: Workspace[];
+  page: number;
+  pageSize: number;
+  total: number;
+}
+
+export interface WorkspaceOverview {
+  stacks: number;
+  projects: number;
+  resources: number;
+  failed: number;
+  running: number;
+}
+
 export type PulumiValue = null | boolean | number | string | PulumiValue[] | {
   [key: string]: PulumiValue;
 };
@@ -441,13 +456,26 @@ export const api = {
     },
   },
   workspaces: {
-    list: (filters?: { org?: string; project?: string }) => {
-      const search = new URLSearchParams();
-      if (filters?.org) search.set("org", filters.org);
-      if (filters?.project) search.set("project", filters.project);
-      const encoded = search.toString();
+    list: (filters?: {
+      org?: string;
+      project?: string;
+      search?: string;
+      status?: "running" | "failed";
+      page?: number;
+    }) => {
+      const params = new URLSearchParams();
+      if (filters?.org) params.set("org", filters.org);
+      if (filters?.project) params.set("project", filters.project);
+      if (filters?.search) params.set("search", filters.search);
+      if (filters?.status) params.set("status", filters.status);
+      if (filters?.page) params.set("page", String(filters.page));
+      const encoded = params.toString();
       const query = encoded ? `?${encoded}` : "";
-      return request<Workspace[]>(`/workspaces${query}`);
+      return request<WorkspacePage>(`/workspaces${query}`);
+    },
+    summary: (org?: string) => {
+      const query = org ? `?org=${encodeURIComponent(org)}` : "";
+      return request<WorkspaceOverview>(`/workspaces/summary${query}`);
     },
     get: (org: string, project: string, stack: string) =>
       request<StackDetail>(

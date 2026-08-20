@@ -1,7 +1,6 @@
 package app.statedb.consoleapi.workspace;
 
 import app.statedb.consoleapi.auth.SessionPrincipal;
-import app.statedb.persistence.auth.AuthenticatedPrincipal;
 import app.statedb.persistence.authz.CurrentPrincipal;
 import app.statedb.persistence.stack.AssembledDeployment;
 import app.statedb.persistence.stack.Stack;
@@ -31,6 +30,8 @@ import java.util.UUID;
 @SessionPrincipal
 public class WorkspacesResource {
 
+  private static final int PAGE_SIZE = 50;
+
   @Inject CurrentPrincipal currentPrincipal;
 
   @Inject WorkspaceListFinder workspaceListFinder;
@@ -41,17 +42,60 @@ public class WorkspacesResource {
 
   @GET
   @Produces(MediaType.APPLICATION_JSON)
-  public List<WorkspaceResponse> list(
-      @QueryParam("org") String org, @QueryParam("project") String project) {
-    AuthenticatedPrincipal principal = currentPrincipal.get();
-    // The finder's predicate mirrors the Cedar read policies (role floor + visibility + shares),
-    // so the console lists exactly the stacks the principal could open.
-    List<WorkspaceSummary> summaries =
-        workspaceListFinder.findVisibleToUser(principal.userId(), org, project);
-    if ((org != null || project != null) && summaries.isEmpty()) {
+  public WorkspaceListResponse list(
+      @QueryParam("org") String org,
+      @QueryParam("project") String project,
+      @QueryParam("search") String search,
+      @QueryParam("status") String status,
+      @QueryParam("page") Integer requestedPage) {
+    UUID userId = currentPrincipal.get().userId();
+
+    if (project != null) {
+      List<WorkspaceSummary> summaries =
+          workspaceListFinder.findVisibleToUser(userId, org, project);
+      if (summaries.isEmpty()) {
+        throw new NotFoundException();
+      }
+      List<WorkspaceResponse> items =
+          summaries.stream().map(WorkspacesResource::toResponse).toList();
+      return new WorkspaceListResponse(items, 1, items.size(), items.size());
+    }
+
+    int page = requestedPage == null ? 1 : Math.max(1, requestedPage);
+    String statusFilter = normalizeStatus(status);
+    WorkspaceListFinder.PagedWorkspaces paged =
+        workspaceListFinder.findVisibleToUserPaged(
+            userId, org, search, statusFilter, page, PAGE_SIZE);
+    if (org != null && search == null && statusFilter == null && paged.total() == 0) {
       throw new NotFoundException();
     }
-    return summaries.stream().map(WorkspacesResource::toResponse).toList();
+    List<WorkspaceResponse> items =
+        paged.items().stream().map(WorkspacesResource::toResponse).toList();
+    return new WorkspaceListResponse(items, paged.page(), PAGE_SIZE, paged.total());
+  }
+
+  @GET
+  @Path("/summary")
+  @Produces(MediaType.APPLICATION_JSON)
+  public WorkspaceSummaryResponse summary(@QueryParam("org") String org) {
+    WorkspaceListFinder.WorkspaceOverview overview =
+        workspaceListFinder.overview(currentPrincipal.get().userId(), org);
+    return new WorkspaceSummaryResponse(
+        overview.stacks(),
+        overview.projects(),
+        overview.resources(),
+        overview.failed(),
+        overview.running());
+  }
+
+  private static String normalizeStatus(String status) {
+    if (status == null || status.isBlank() || "all".equals(status)) {
+      return null;
+    }
+    if (!status.equals("running") && !status.equals("failed")) {
+      throw new BadRequestException("invalid status");
+    }
+    return status;
   }
 
   @GET
@@ -230,6 +274,12 @@ public class WorkspacesResource {
 
   public record UpdateHistoryResponse(
       List<UpdateHistoryRow> updates, int page, int pageSize, long total) {}
+
+  public record WorkspaceListResponse(
+      List<WorkspaceResponse> items, int page, int pageSize, long total) {}
+
+  public record WorkspaceSummaryResponse(
+      long stacks, long projects, long resources, long failed, long running) {}
 
   public record UpdateHistoryRow(
       UUID id,

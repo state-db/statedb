@@ -1,10 +1,22 @@
 package app.statedb.persistence.stack;
 
 import app.statedb.persistence.identity.OrgMember;
+import app.statedb.persistence.identity.Organization;
+import app.statedb.persistence.lock.StackLock;
 import app.statedb.persistence.policy.PolicyGrant;
-import io.quarkus.panache.common.Parameters;
+import app.statedb.persistence.update.StackUpdate;
 import jakarta.enterprise.context.ApplicationScoped;
+import jakarta.inject.Inject;
+import jakarta.persistence.EntityManager;
+import jakarta.persistence.criteria.CriteriaBuilder;
+import jakarta.persistence.criteria.CriteriaQuery;
+import jakarta.persistence.criteria.Join;
+import jakarta.persistence.criteria.Predicate;
+import jakarta.persistence.criteria.Root;
+import jakarta.persistence.criteria.Subquery;
+import java.time.Instant;
 import java.util.List;
+import java.util.Locale;
 import java.util.UUID;
 
 /**
@@ -25,68 +37,76 @@ import java.util.UUID;
 @ApplicationScoped
 public class StackListFinder {
 
-  private static final String READABLE_BY_USER =
-      "(exists (select 1 from OrgMember m where m.userId = :me and m.orgId = s.orgId"
-          + "         and m.role in :fullReadRoles) "
-          + " or (s.visibility = 'internal'"
-          + "     and exists (select 1 from OrgMember m where m.userId = :me and m.orgId = s.orgId"
-          + "                 and m.role in :internalReadRoles)) "
-          + " or (exists (select 1 from PolicyGrant g where g.principalUserId = :me"
-          + "             and g.resourceStackId = s.id and g.templateId in :readTemplates)"
-          + "     and exists (select 1 from OrgMember m where m.userId = :me and m.orgId = s.orgId"
-          + "                 and m.role in :humanRoles))) ";
+  private static final List<OrgMember.Role> FULL_READ_ROLES =
+      List.of(OrgMember.Role.owner, OrgMember.Role.service);
+  private static final List<OrgMember.Role> INTERNAL_READ_ROLES =
+      List.of(OrgMember.Role.member, OrgMember.Role.viewer);
+  private static final List<OrgMember.Role> HUMAN_ROLES =
+      List.of(
+          OrgMember.Role.owner, OrgMember.Role.member, OrgMember.Role.viewer, OrgMember.Role.guest);
+
+  @Inject EntityManager em;
 
   public List<StackSummary> findVisibleToUser(UUID userId, String projectFilter) {
-    return find(userId, null, null, projectFilter);
+    return list(new StackListRequest(userId, null, null, projectFilter, null, null, Instant.now()));
   }
 
   public List<StackSummary> findVisibleToUser(
       UUID userId, String orgNameFilter, String projectFilter) {
-    return find(userId, null, orgNameFilter, projectFilter);
+    return list(
+        new StackListRequest(
+            userId, null, orgNameFilter, projectFilter, null, null, Instant.now()));
   }
 
   // Single-org credentials (service-account tokens) additionally clamp to the token's org.
   public List<StackSummary> findVisibleToUserInOrg(UUID userId, UUID orgId, String projectFilter) {
-    return find(userId, orgId, null, projectFilter);
+    return list(
+        new StackListRequest(userId, orgId, null, projectFilter, null, null, Instant.now()));
   }
 
-  private List<StackSummary> find(
-      UUID userId, UUID orgId, String orgNameFilter, String projectFilter) {
-    String hql =
-        "from Stack s "
-            + "join fetch s.project p "
-            + "join fetch p.organization o "
-            + "join fetch s.workspace w "
-            + "where "
-            + (orgId != null ? "s.orgId = :org and " : "")
-            + (orgNameFilter != null ? "o.name = :orgName and " : "")
-            + (projectFilter != null ? "p.name = :project and " : "")
-            + READABLE_BY_USER
-            + "order by o.name, p.name, s.name";
+  public PagedStacks findVisibleToUserPaged(
+      UUID userId, String orgNameFilter, String search, String status, int page, int pageSize) {
+    CriteriaBuilder cb = em.getCriteriaBuilder();
+    StackListRequest request =
+        new StackListRequest(userId, null, orgNameFilter, null, search, status, Instant.now());
 
-    Parameters params =
-        Parameters.with("me", userId)
-            .and("fullReadRoles", List.of(OrgMember.Role.owner, OrgMember.Role.service))
-            .and("internalReadRoles", List.of(OrgMember.Role.member, OrgMember.Role.viewer))
-            .and(
-                "humanRoles",
-                List.of(
-                    OrgMember.Role.owner,
-                    OrgMember.Role.member,
-                    OrgMember.Role.viewer,
-                    OrgMember.Role.guest))
-            .and("readTemplates", PolicyGrant.STACK_READ_TEMPLATE_IDS);
-    if (orgId != null) {
-      params = params.and("org", orgId);
-    }
-    if (orgNameFilter != null) {
-      params = params.and("orgName", orgNameFilter);
-    }
-    if (projectFilter != null) {
-      params = params.and("project", projectFilter);
-    }
+    CriteriaQuery<Long> countQuery = cb.createQuery(Long.class);
+    StackCriteria count = StackCriteria.from(countQuery);
+    countQuery.select(cb.count(count.stack()));
+    countQuery.where(predicates(cb, countQuery, count, request));
+    long total = em.createQuery(countQuery).getSingleResult();
 
-    return Stack.<Stack>find(hql, params).list().stream()
+    int safePageSize = Math.max(1, pageSize);
+    int effectivePage = clampPage(page, safePageSize, total);
+
+    List<StackSummary> items = list(request, (effectivePage - 1) * safePageSize, safePageSize);
+    return new PagedStacks(items, total, effectivePage);
+  }
+
+  private List<StackSummary> list(StackListRequest request) {
+    return list(request, null, null);
+  }
+
+  private List<StackSummary> list(
+      StackListRequest request, Integer firstResult, Integer maxResults) {
+    CriteriaBuilder cb = em.getCriteriaBuilder();
+    CriteriaQuery<Stack> listQuery = cb.createQuery(Stack.class);
+    StackCriteria list = StackCriteria.from(listQuery);
+    list.stack().fetch("project").fetch("organization");
+    list.stack().fetch("workspace");
+    listQuery.select(list.stack());
+    listQuery.where(predicates(cb, listQuery, list, request));
+    listQuery.orderBy(
+        cb.asc(list.organization().get("name")),
+        cb.asc(list.project().get("name")),
+        cb.asc(list.stack().get("name")));
+
+    var query = em.createQuery(listQuery);
+    if (firstResult != null && maxResults != null) {
+      query.setFirstResult(firstResult);
+      query.setMaxResults(maxResults);
+    }
+    return query.getResultList().stream()
         .map(
             s ->
                 new StackSummary(
@@ -101,5 +121,140 @@ public class StackListFinder {
                     null,
                     null))
         .toList();
+  }
+
+  private static Predicate[] predicates(
+      CriteriaBuilder cb,
+      CriteriaQuery<?> query,
+      StackCriteria criteria,
+      StackListRequest request) {
+    List<Predicate> predicates = new java.util.ArrayList<>();
+    if (request.orgId() != null) {
+      predicates.add(cb.equal(criteria.stack().get("orgId"), request.orgId()));
+    }
+    if (request.orgName() != null) {
+      predicates.add(cb.equal(criteria.organization().get("name"), request.orgName()));
+    }
+    if (request.project() != null) {
+      predicates.add(cb.equal(criteria.project().get("name"), request.project()));
+    }
+    if (request.search() != null && !request.search().isBlank()) {
+      String term = "%" + request.search().toLowerCase(Locale.ROOT) + "%";
+      predicates.add(
+          cb.or(
+              cb.like(cb.lower(criteria.stack().get("name")), term),
+              cb.like(cb.lower(criteria.project().get("name")), term),
+              cb.like(cb.lower(criteria.organization().get("name")), term)));
+    }
+    if ("running".equals(request.status())) {
+      predicates.add(
+          cb.or(
+              hasLiveLock(cb, query, criteria.stack(), request.now()),
+              latestUpdateHasStatus(cb, query, criteria.stack(), StackUpdate.Status.IN_PROGRESS)));
+    } else if ("failed".equals(request.status())) {
+      predicates.add(latestUpdateHasStatus(cb, query, criteria.stack(), StackUpdate.Status.FAILED));
+    }
+    predicates.add(readableByUser(cb, query, criteria.stack(), request.userId()));
+    return predicates.toArray(Predicate[]::new);
+  }
+
+  private static Predicate readableByUser(
+      CriteriaBuilder cb, CriteriaQuery<?> query, Root<Stack> stack, UUID userId) {
+    return cb.or(
+        hasOrgRole(cb, query, stack, userId, FULL_READ_ROLES),
+        cb.and(
+            cb.equal(stack.get("visibility"), Stack.VISIBILITY_INTERNAL),
+            hasOrgRole(cb, query, stack, userId, INTERNAL_READ_ROLES)),
+        cb.and(
+            hasStackReadGrant(cb, query, stack, userId),
+            hasOrgRole(cb, query, stack, userId, HUMAN_ROLES)));
+  }
+
+  private static Predicate hasOrgRole(
+      CriteriaBuilder cb,
+      CriteriaQuery<?> query,
+      Root<Stack> stack,
+      UUID userId,
+      List<OrgMember.Role> roles) {
+    Subquery<Integer> subquery = query.subquery(Integer.class);
+    Root<OrgMember> member = subquery.from(OrgMember.class);
+    subquery.select(cb.literal(1));
+    subquery.where(
+        cb.equal(member.get("userId"), userId),
+        cb.equal(member.get("orgId"), stack.get("orgId")),
+        member.get("role").in(roles));
+    return cb.exists(subquery);
+  }
+
+  private static Predicate hasStackReadGrant(
+      CriteriaBuilder cb, CriteriaQuery<?> query, Root<Stack> stack, UUID userId) {
+    Subquery<Integer> subquery = query.subquery(Integer.class);
+    Root<PolicyGrant> grant = subquery.from(PolicyGrant.class);
+    subquery.select(cb.literal(1));
+    subquery.where(
+        cb.equal(grant.get("principalUserId"), userId),
+        cb.equal(grant.get("resourceStackId"), stack.get("id")),
+        grant.get("templateId").in(PolicyGrant.STACK_READ_TEMPLATE_IDS));
+    return cb.exists(subquery);
+  }
+
+  private static Predicate hasLiveLock(
+      CriteriaBuilder cb, CriteriaQuery<?> query, Root<Stack> stack, Instant now) {
+    Subquery<Integer> subquery = query.subquery(Integer.class);
+    Root<StackLock> lock = subquery.from(StackLock.class);
+    subquery.select(cb.literal(1));
+    subquery.where(
+        cb.equal(lock.get("stackId"), stack.get("id")), cb.greaterThan(lock.get("expiresAt"), now));
+    return cb.exists(subquery);
+  }
+
+  private static Predicate latestUpdateHasStatus(
+      CriteriaBuilder cb, CriteriaQuery<?> query, Root<Stack> stack, StackUpdate.Status status) {
+    Subquery<Integer> subquery = query.subquery(Integer.class);
+    Root<StackUpdate> update = subquery.from(StackUpdate.class);
+    subquery.select(cb.literal(1));
+    subquery.where(
+        cb.equal(update.get("stackId"), stack.get("id")),
+        cb.equal(update.get("status"), status),
+        cb.equal(update.get("startedAt"), latestUpdateStartedAt(cb, query, stack)));
+    return cb.exists(subquery);
+  }
+
+  private static Subquery<Instant> latestUpdateStartedAt(
+      CriteriaBuilder cb, CriteriaQuery<?> query, Root<Stack> stack) {
+    Subquery<Instant> subquery = query.subquery(Instant.class);
+    Root<StackUpdate> update = subquery.from(StackUpdate.class);
+    subquery.select(cb.greatest(update.<Instant>get("startedAt")));
+    subquery.where(cb.equal(update.get("stackId"), stack.get("id")));
+    return subquery;
+  }
+
+  private static int clampPage(int page, int pageSize, long total) {
+    if (total == 0) {
+      return 1;
+    }
+    long lastPage = ((total - 1) / pageSize) + 1;
+    return (int) Math.min(Math.max(1, page), Math.min(lastPage, Integer.MAX_VALUE));
+  }
+
+  public record PagedStacks(List<StackSummary> items, long total, int page) {}
+
+  private record StackListRequest(
+      UUID userId,
+      UUID orgId,
+      String orgName,
+      String project,
+      String search,
+      String status,
+      Instant now) {}
+
+  private record StackCriteria(
+      Root<Stack> stack, Join<Stack, Project> project, Join<Project, Organization> organization) {
+    private static StackCriteria from(CriteriaQuery<?> query) {
+      Root<Stack> stack = query.from(Stack.class);
+      Join<Stack, Project> project = stack.join("project");
+      Join<Project, Organization> organization = project.join("organization");
+      return new StackCriteria(stack, project, organization);
+    }
   }
 }

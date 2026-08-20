@@ -1,4 +1,4 @@
-import { useQuery } from "@tanstack/react-query";
+import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
 import { FolderX, Search, Users } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
@@ -11,40 +11,65 @@ import {
   compareWorkspace,
   hasMultipleKinds,
   matchesSearch,
+  Pagination,
   StacksTable,
   StacksTableSkeleton,
+  useDebouncedValue,
+  useScopedPage,
 } from "@/routes/home";
 import { useUnauthorizedRedirect } from "@/hooks/useUnauthorizedRedirect";
 import { useShell } from "@/components/shell/AppShell";
-import { api, NotFoundError, UnauthorizedError } from "@/lib/api";
+import {
+  api,
+  NotFoundError,
+  UnauthorizedError,
+  type Workspace,
+  type WorkspaceOverview,
+} from "@/lib/api";
 import { canManageOrganizationMembers } from "@/routes/org-members";
+
+const EMPTY_OVERVIEW: WorkspaceOverview = {
+  stacks: 0,
+  projects: 0,
+  resources: 0,
+  failed: 0,
+  running: 0,
+};
 
 export function OrgStacksPage({ org }: { org: string }) {
   const { user, setSelectedOrg } = useShell();
-  const [search, setSearch] = useState("");
-  const query = useQuery({
-    queryKey: ["workspaces", { org }],
-    queryFn: () => api.workspaces.list({ org }),
+  const [searchInput, setSearchInput] = useState("");
+  const search = useDebouncedValue(searchInput, 300);
+  const scopeKey = `${org}|${search}`;
+  const [page, setPage] = useScopedPage(scopeKey);
+
+  const listQuery = useQuery({
+    queryKey: ["workspaces", { org, search, page }],
+    queryFn: () => api.workspaces.list({ org, search: search || undefined, page }),
     retry: (failureCount, error) =>
       !(error instanceof UnauthorizedError || error instanceof NotFoundError) &&
       failureCount < 2,
+    placeholderData: keepPreviousData,
     refetchInterval: (result) =>
-      result.state.data?.some((row) => row.lastUpdate?.status === "in-progress")
+      result.state.data?.items.some((row) => row.lastUpdate?.status === "in-progress")
         ? 3_000
         : false,
   });
 
-  const unauthorized = useUnauthorizedRedirect(query.error);
-  const rows = query.data ?? [];
-  const visibleRows = useMemo(
-    () => rows.filter((row) => matchesSearch(row, search)).sort(compareWorkspace),
-    [rows, search],
-  );
+  const summaryQuery = useQuery({
+    queryKey: ["workspaces", "summary", org],
+    queryFn: () => api.workspaces.summary(org),
+    retry: (failureCount, error) =>
+      !(error instanceof UnauthorizedError) && failureCount < 2,
+    refetchInterval: (result) => (result.state.data?.running ? 5_000 : 15_000),
+  });
+
+  const unauthorized = useUnauthorizedRedirect(listQuery.error ?? summaryQuery.error);
 
   useEffect(() => setSelectedOrg(org), [org]);
 
   if (unauthorized) return null;
-  if (query.error instanceof NotFoundError) {
+  if (listQuery.error instanceof NotFoundError && summaryQuery.data?.stacks === 0) {
     return (
       <EmptyState
         icon={FolderX}
@@ -58,45 +83,57 @@ export function OrgStacksPage({ org }: { org: string }) {
       />
     );
   }
-  if (query.error) {
+  if (summaryQuery.error) {
     return (
       <ErrorAlert
         title="Could not load stacks"
-        error={query.error}
-        onRetry={() => void query.refetch()}
+        error={summaryQuery.error}
+        onRetry={() => void summaryQuery.refetch()}
       />
     );
   }
+  if (listQuery.error && !(listQuery.error instanceof NotFoundError)) {
+    return (
+      <ErrorAlert
+        title="Could not load stacks"
+        error={listQuery.error}
+        onRetry={() => void listQuery.refetch()}
+      />
+    );
+  }
+
+  const overview = summaryQuery.data ?? EMPTY_OVERVIEW;
+  const result = listQuery.data;
+  const rows = result?.items ?? [];
 
   return (
     <div className="flex flex-col gap-4">
       <OrgHeader
         org={org}
-        rows={rows}
-        search={search}
-        onSearchChange={setSearch}
+        overview={overview}
+        search={searchInput}
+        onSearchChange={setSearchInput}
         showManageMembers={canManageOrganizationMembers(user, org)}
       />
-      {query.isLoading ? (
+      {listQuery.isLoading || summaryQuery.isLoading ? (
         <StacksTableSkeleton />
-      ) : rows.length === 0 ? (
+      ) : overview.stacks === 0 ? (
         <EmptyState
           icon={FolderX}
           title="No stacks in this organization"
           description="Stacks appear here after they are created with the CLI."
         />
-      ) : visibleRows.length === 0 ? (
+      ) : rows.length === 0 ? (
         <EmptyState
           icon={Search}
           title="No stacks match"
           description="Try a different stack or project name."
         />
       ) : (
-        <StacksTable
-          rows={visibleRows}
-          grouped
-          showKind={hasMultipleKinds(rows)}
-        />
+        <StacksTable rows={rows} grouped showKind={hasMultipleKinds(rows)} />
+      )}
+      {result && result.total > result.pageSize && (
+        <Pagination page={result.page} pageSize={result.pageSize} total={result.total} onPageChange={setPage} />
       )}
     </div>
   );
@@ -117,14 +154,14 @@ export function ProjectStacksPage({
       !(error instanceof UnauthorizedError || error instanceof NotFoundError) &&
       failureCount < 2,
     refetchInterval: (result) =>
-      result.state.data?.some((row) => row.lastUpdate?.status === "in-progress")
+      result.state.data?.items.some((row) => row.lastUpdate?.status === "in-progress")
         ? 3_000
         : false,
   });
 
   const unauthorized = useUnauthorizedRedirect(query.error);
 
-  const rows = query.data ?? [];
+  const rows = query.data?.items ?? [];
   const visibleRows = useMemo(
     () => rows.filter((row) => matchesSearch(row, search)).sort(compareWorkspace),
     [rows, search],
@@ -189,7 +226,7 @@ function ScopedHeader({
   onSearchChange,
 }: {
   project: string;
-  rows: Awaited<ReturnType<typeof api.workspaces.list>>;
+  rows: Workspace[];
   search: string;
   onSearchChange: (value: string) => void;
 }) {
@@ -206,7 +243,7 @@ function ScopedHeader({
         </p>
       </div>
       <div className="relative w-full sm:max-w-sm">
-        <Search className="pointer-events-none absolute left-2.5 top-2.5 text-muted-foreground" />
+        <Search className="pointer-events-none absolute left-2.5 top-2.5 size-4 text-muted-foreground" />
         <Input
           value={search}
           onChange={(event) => onSearchChange(event.target.value)}
@@ -220,24 +257,23 @@ function ScopedHeader({
 
 function OrgHeader({
   org,
-  rows,
+  overview,
   search,
   onSearchChange,
   showManageMembers,
 }: {
   org: string;
-  rows: Awaited<ReturnType<typeof api.workspaces.list>>;
+  overview: WorkspaceOverview;
   search: string;
   onSearchChange: (value: string) => void;
   showManageMembers: boolean;
 }) {
-  const projects = new Set(rows.map((row) => row.project)).size;
   return (
     <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
       <div className="flex flex-col gap-1">
         <h1 className="text-2xl font-semibold tracking-tight">{org}</h1>
         <p className="text-sm text-muted-foreground">
-          {`${projects} ${pluralize("project", projects)} · ${rows.length} ${pluralize("stack", rows.length)}`}
+          {`${overview.projects} ${pluralize("project", overview.projects)} · ${overview.stacks} ${pluralize("stack", overview.stacks)}`}
         </p>
       </div>
       <div className="flex w-full items-center gap-2 sm:w-auto">
@@ -250,7 +286,7 @@ function OrgHeader({
           </Button>
         )}
         <div className="relative min-w-0 flex-1 sm:w-80">
-          <Search className="pointer-events-none absolute left-2.5 top-2.5 text-muted-foreground" />
+          <Search className="pointer-events-none absolute left-2.5 top-2.5 size-4 text-muted-foreground" />
           <Input
             value={search}
             onChange={(event) => onSearchChange(event.target.value)}

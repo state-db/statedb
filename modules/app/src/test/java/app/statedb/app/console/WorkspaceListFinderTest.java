@@ -127,6 +127,81 @@ class WorkspaceListFinderTest {
     assertEquals(List.of(), finder.findVisibleToUser(user.id, "workspace-hidden", null));
   }
 
+  @Test
+  @TestTransaction
+  void paginatesSearchesAndFiltersByStatus() {
+    Organization org = org("workspace-page-org", "Workspace Page Org");
+    User user = user("workspace-page-user");
+    membership(org, user);
+
+    Stack alpha = stack(org, "svc", "alpha");
+    Stack beta = stack(org, "svc", "beta");
+    Stack gamma = stack(org, "svc", "gamma");
+    update(
+        alpha,
+        StackUpdate.Kind.UPDATE,
+        StackUpdate.Status.SUCCEEDED,
+        1,
+        Instant.parse("2026-07-17T10:00:00Z"),
+        user);
+    update(
+        beta,
+        StackUpdate.Kind.UPDATE,
+        StackUpdate.Status.FAILED,
+        1,
+        Instant.parse("2026-07-17T10:00:00Z"),
+        user);
+    update(
+        gamma,
+        StackUpdate.Kind.UPDATE,
+        StackUpdate.Status.IN_PROGRESS,
+        1,
+        Instant.parse("2026-07-17T10:00:00Z"),
+        user);
+    em.flush();
+    em.clear();
+
+    WorkspaceListFinder.PagedWorkspaces page1 =
+        finder.findVisibleToUserPaged(user.id, org.name, null, null, 1, 2);
+    assertEquals(3, page1.total());
+    assertEquals(
+        List.of("alpha", "beta"), page1.items().stream().map(WorkspaceSummary::stackName).toList());
+
+    WorkspaceListFinder.PagedWorkspaces page2 =
+        finder.findVisibleToUserPaged(user.id, org.name, null, null, 2, 2);
+    assertEquals(3, page2.total());
+    assertEquals(2, page2.page());
+    assertEquals(
+        List.of("gamma"), page2.items().stream().map(WorkspaceSummary::stackName).toList());
+
+    WorkspaceListFinder.PagedWorkspaces lastPage =
+        finder.findVisibleToUserPaged(user.id, org.name, null, null, 99, 2);
+    assertEquals(2, lastPage.page());
+    assertEquals(
+        List.of("gamma"), lastPage.items().stream().map(WorkspaceSummary::stackName).toList());
+
+    WorkspaceListFinder.PagedWorkspaces failedOnly =
+        finder.findVisibleToUserPaged(user.id, org.name, null, "failed", 1, 50);
+    assertEquals(
+        List.of("beta"), failedOnly.items().stream().map(WorkspaceSummary::stackName).toList());
+
+    WorkspaceListFinder.PagedWorkspaces runningOnly =
+        finder.findVisibleToUserPaged(user.id, org.name, null, "running", 1, 50);
+    assertEquals(
+        List.of("gamma"), runningOnly.items().stream().map(WorkspaceSummary::stackName).toList());
+
+    WorkspaceListFinder.PagedWorkspaces searched =
+        finder.findVisibleToUserPaged(user.id, org.name, "bet", null, 1, 50);
+    assertEquals(
+        List.of("beta"), searched.items().stream().map(WorkspaceSummary::stackName).toList());
+
+    WorkspaceListFinder.WorkspaceOverview overview = finder.overview(user.id, org.name);
+    assertEquals(3, overview.stacks());
+    assertEquals(1, overview.projects());
+    assertEquals(1, overview.failed());
+    assertEquals(1, overview.running());
+  }
+
   private static Organization org(String name, String displayName) {
     Organization org = new Organization();
     org.name = name;

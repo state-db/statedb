@@ -1,7 +1,7 @@
 import { Link } from "@tanstack/react-router";
-import { useQuery } from "@tanstack/react-query";
-import { Copy, ExternalLink, Search, Terminal } from "lucide-react";
-import { useMemo, useState } from "react";
+import { keepPreviousData, useQuery } from "@tanstack/react-query";
+import { ChevronLeft, ChevronRight, Copy, ExternalLink, Search, Terminal } from "lucide-react";
+import { useEffect, useState } from "react";
 import { toast } from "sonner";
 
 import { EmptyState } from "@/components/console/EmptyState";
@@ -35,54 +35,77 @@ import {
 } from "@/components/ui/tooltip";
 import { useUnauthorizedRedirect } from "@/hooks/useUnauthorizedRedirect";
 import { cn } from "@/lib/utils";
-import { api, type Workspace } from "@/lib/api";
+import { api, NotFoundError, type Workspace, type WorkspaceOverview } from "@/lib/api";
 
 type StackFilter = "all" | "running" | "failed";
 
+const EMPTY_OVERVIEW: WorkspaceOverview = {
+  stacks: 0,
+  projects: 0,
+  resources: 0,
+  failed: 0,
+  running: 0,
+};
+
+export function useDebouncedValue<T>(value: T, delayMs: number): T {
+  const [debounced, setDebounced] = useState(value);
+  useEffect(() => {
+    const id = window.setTimeout(() => setDebounced(value), delayMs);
+    return () => window.clearTimeout(id);
+  }, [value, delayMs]);
+  return debounced;
+}
+
+export function useScopedPage(scopeKey: string) {
+  const [state, setState] = useState({ scopeKey, page: 1 });
+  const page = state.scopeKey === scopeKey ? state.page : 1;
+  const setPage = (nextPage: number) => setState({ scopeKey, page: nextPage });
+  return [page, setPage] as const;
+}
+
 export function HomePage() {
   const { selectedOrg } = useShell();
-  const [search, setSearch] = useState("");
+  const [searchInput, setSearchInput] = useState("");
+  const search = useDebouncedValue(searchInput, 300);
   const [filter, setFilter] = useState<StackFilter>("all");
-  const query = useQuery({
-    queryKey: ["workspaces"],
-    queryFn: () => api.workspaces.list(),
-    refetchInterval: (result) => {
-      const rows = result.state.data ?? [];
-      if (rows.length === 0) {
-        return 10_000;
-      }
-      return rows.some((row) => row.lastUpdate?.status === "in-progress")
+  const scopeKey = `${selectedOrg ?? ""}|${filter}|${search}`;
+  const [page, setPage] = useScopedPage(scopeKey);
+
+  const listQuery = useQuery({
+    queryKey: ["workspaces", { org: selectedOrg, search, filter, page }],
+    queryFn: () =>
+      api.workspaces.list({
+        org: selectedOrg ?? undefined,
+        search: search || undefined,
+        status: filter === "all" ? undefined : filter,
+        page,
+      }),
+    placeholderData: keepPreviousData,
+    refetchInterval: (result) =>
+      result.state.data?.items.some((row) => row.lastUpdate?.status === "in-progress")
         ? 3_000
-        : false;
-    },
+        : false,
   });
 
-  const rows = query.data ?? [];
-  const scopedRows = useMemo(
-    () => rows.filter((row) => !selectedOrg || row.org === selectedOrg),
-    [rows, selectedOrg],
-  );
-  const visibleRows = useMemo(
-    () =>
-      scopedRows
-        .filter((row) => matchesFilter(row, filter))
-        .filter((row) => matchesSearch(row, search))
-        .sort(compareWorkspace),
-    [scopedRows, filter, search],
-  );
-  const unauthorized = useUnauthorizedRedirect(query.error);
+  const summaryQuery = useQuery({
+    queryKey: ["workspaces", "summary", selectedOrg],
+    queryFn: () => api.workspaces.summary(selectedOrg ?? undefined),
+    refetchInterval: (result) => (result.state.data?.running ? 5_000 : 15_000),
+  });
+
+  const unauthorized = useUnauthorizedRedirect(listQuery.error ?? summaryQuery.error);
 
   if (unauthorized) {
     return null;
   }
 
-  if (query.isLoading) {
+  if (listQuery.isLoading || summaryQuery.isLoading) {
     return (
       <div className="flex flex-col gap-4">
         <StacksHeader
-          rows={scopedRows}
-          search={search}
-          onSearchChange={setSearch}
+          overview={EMPTY_OVERVIEW}
+          search={searchInput}
+          onSearchChange={setSearchInput}
           filter={filter}
           onFilterChange={setFilter}
         />
@@ -91,69 +114,131 @@ export function HomePage() {
     );
   }
 
-  if (query.error) {
+  if (summaryQuery.error) {
     return (
       <ErrorAlert
         title="Could not load stacks"
-        error={query.error}
-        onRetry={() => void query.refetch()}
+        error={summaryQuery.error}
+        onRetry={() => void summaryQuery.refetch()}
       />
     );
   }
 
-  if (rows.length === 0) {
+  const overview = summaryQuery.data ?? EMPTY_OVERVIEW;
+
+  if (overview.stacks === 0) {
     return <FirstRunOnboarding />;
   }
+
+  if (listQuery.error && !(listQuery.error instanceof NotFoundError)) {
+    return (
+      <ErrorAlert
+        title="Could not load stacks"
+        error={listQuery.error}
+        onRetry={() => void listQuery.refetch()}
+      />
+    );
+  }
+
+  const result = listQuery.data;
+  const rows = result?.items ?? [];
 
   return (
     <div className="flex flex-col gap-4">
       <StacksHeader
-        rows={scopedRows}
-        search={search}
-        onSearchChange={setSearch}
+        overview={overview}
+        search={searchInput}
+        onSearchChange={setSearchInput}
         filter={filter}
         onFilterChange={setFilter}
       />
-      {visibleRows.length === 0 ? (
+      {rows.length === 0 ? (
         <EmptyState
           icon={Search}
           title="No stacks match"
           description="Try a different search or status filter."
         />
       ) : (
-        <StacksTable rows={visibleRows} grouped showKind={hasMultipleKinds(rows)} />
+        <StacksTable rows={rows} grouped showKind={hasMultipleKinds(rows)} />
+      )}
+      {result && result.total > result.pageSize && (
+        <Pagination page={result.page} pageSize={result.pageSize} total={result.total} onPageChange={setPage} />
       )}
     </div>
   );
 }
 
+export function Pagination({
+  page,
+  pageSize,
+  total,
+  onPageChange,
+}: {
+  page: number;
+  pageSize: number;
+  total: number;
+  onPageChange: (page: number) => void;
+}) {
+  const start = (page - 1) * pageSize + 1;
+  const end = Math.min(page * pageSize, total);
+  const lastPage = Math.ceil(total / pageSize);
+  return (
+    <div className="flex items-center justify-between gap-3">
+      <p className="text-sm text-muted-foreground">
+        {start}–{end} of {total.toLocaleString()}
+      </p>
+      <div className="flex items-center gap-2">
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          disabled={page <= 1}
+          onClick={() => onPageChange(page - 1)}
+        >
+          <ChevronLeft data-icon="inline-start" />
+          Previous
+        </Button>
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          disabled={page >= lastPage}
+          onClick={() => onPageChange(page + 1)}
+        >
+          Next
+          <ChevronRight data-icon="inline-end" />
+        </Button>
+      </div>
+    </div>
+  );
+}
+
 function StacksHeader({
-  rows,
+  overview,
   search,
   onSearchChange,
   filter,
   onFilterChange,
 }: {
-  rows: Workspace[];
+  overview: WorkspaceOverview;
   search: string;
   onSearchChange: (value: string) => void;
   filter: StackFilter;
   onFilterChange: (value: StackFilter) => void;
 }) {
-  const summary = summarizeStacks(rows);
   return (
     <div className="flex flex-col gap-4">
       <div className="flex flex-col gap-1">
         <h1 className="text-2xl font-semibold tracking-tight">Stacks</h1>
         <p className="text-sm text-muted-foreground">
-          {summary.projects} {pluralize("project", summary.projects)} · {summary.stacks}{" "}
-          {pluralize("stack", summary.stacks)} · {summary.resources.toLocaleString()}{" "}
-          {pluralize("resource", summary.resources)}
+          {overview.projects} {pluralize("project", overview.projects)} · {overview.stacks}{" "}
+          {pluralize("stack", overview.stacks)} · {overview.resources.toLocaleString()}{" "}
+          {pluralize("resource", overview.resources)}
         </p>
       </div>
 
       <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-        <FilterChips rows={rows} filter={filter} onFilterChange={onFilterChange} />
+        <FilterChips overview={overview} filter={filter} onFilterChange={onFilterChange} />
         <div className="relative w-full lg:max-w-sm">
           <Search className="pointer-events-none absolute left-2.5 top-2.5 size-4 text-muted-foreground" />
           <Input
@@ -169,15 +254,14 @@ function StacksHeader({
 }
 
 function FilterChips({
-  rows,
+  overview,
   filter,
   onFilterChange,
 }: {
-  rows: Workspace[];
+  overview: WorkspaceOverview;
   filter: StackFilter;
   onFilterChange: (value: StackFilter) => void;
 }) {
-  const summary = summarizeStacks(rows);
   return (
     <div className="flex flex-wrap gap-2" role="group" aria-label="Stack status filter">
       <FilterChip
@@ -185,22 +269,22 @@ function FilterChips({
         tone="info"
         onClick={() => onFilterChange("all")}
       >
-        All <span className="font-mono font-semibold">{summary.stacks}</span>
+        All <span className="font-mono font-semibold">{overview.stacks}</span>
       </FilterChip>
       <FilterChip
         active={filter === "running"}
         tone="info"
-        pulse={summary.active > 0}
+        pulse={overview.running > 0}
         onClick={() => onFilterChange("running")}
       >
-        Running <span className="font-mono font-semibold">{summary.active}</span>
+        Running <span className="font-mono font-semibold">{overview.running}</span>
       </FilterChip>
       <FilterChip
         active={filter === "failed"}
         tone="destructive"
         onClick={() => onFilterChange("failed")}
       >
-        Failed <span className="font-mono font-semibold">{summary.failed}</span>
+        Failed <span className="font-mono font-semibold">{overview.failed}</span>
       </FilterChip>
     </div>
   );

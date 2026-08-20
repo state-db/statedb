@@ -37,7 +37,35 @@ public class WorkspaceListFinder {
   }
 
   public List<WorkspaceSummary> findVisibleToUser(UUID userId, String org, String project) {
-    List<StackSummary> stacks = stackListFinder.findVisibleToUser(userId, org, project);
+    return assemble(stackListFinder.findVisibleToUser(userId, org, project));
+  }
+
+  public PagedWorkspaces findVisibleToUserPaged(
+      UUID userId, String org, String search, String status, int page, int pageSize) {
+    StackListFinder.PagedStacks paged =
+        stackListFinder.findVisibleToUserPaged(userId, org, search, status, page, pageSize);
+    return new PagedWorkspaces(assemble(paged.items()), paged.total(), paged.page());
+  }
+
+  public WorkspaceOverview overview(UUID userId, String org) {
+    List<WorkspaceSummary> all = findVisibleToUser(userId, org, null);
+    long projects = all.stream().map(w -> w.orgName() + "/" + w.projectName()).distinct().count();
+    long resources =
+        all.stream().mapToLong(w -> w.resourceCount() == null ? 0L : w.resourceCount()).sum();
+    long failed =
+        all.stream()
+            .filter(w -> w.lastUpdate() != null && "failed".equals(w.lastUpdate().status()))
+            .count();
+    long running = all.stream().filter(WorkspaceListFinder::isActive).count();
+    return new WorkspaceOverview(all.size(), projects, resources, failed, running);
+  }
+
+  private static boolean isActive(WorkspaceSummary w) {
+    return w.lock() != null
+        || (w.lastUpdate() != null && "in-progress".equals(w.lastUpdate().status()));
+  }
+
+  private List<WorkspaceSummary> assemble(List<StackSummary> stacks) {
     if (stacks.isEmpty()) {
       return List.of();
     }
@@ -63,6 +91,11 @@ public class WorkspaceListFinder {
                     locks.get(s.stackId())))
         .toList();
   }
+
+  public record PagedWorkspaces(List<WorkspaceSummary> items, long total, int page) {}
+
+  public record WorkspaceOverview(
+      long stacks, long projects, long resources, long failed, long running) {}
 
   private Map<UUID, WorkspaceSummary.LastUpdate> latestUpdates(List<UUID> stackIds) {
     // Compute the latest timestamp once per visible stack, then load only those update rows.
