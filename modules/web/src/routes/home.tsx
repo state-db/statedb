@@ -1,14 +1,6 @@
 import { Link } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
-import {
-  Activity,
-  AlertTriangle,
-  Boxes,
-  Copy,
-  ExternalLink,
-  Search,
-  Terminal,
-} from "lucide-react";
+import { Copy, ExternalLink, Search, Terminal } from "lucide-react";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
 
@@ -36,13 +28,13 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import {
   Tooltip,
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { useUnauthorizedRedirect } from "@/hooks/useUnauthorizedRedirect";
+import { cn } from "@/lib/utils";
 import { api, type Workspace } from "@/lib/api";
 
 type StackFilter = "all" | "running" | "failed";
@@ -155,50 +147,15 @@ function StacksHeader({
         <h1 className="text-2xl font-semibold tracking-tight">Stacks</h1>
         <p className="text-sm text-muted-foreground">
           {summary.projects} {pluralize("project", summary.projects)} · {summary.stacks}{" "}
-          {pluralize("stack", summary.stacks)}
+          {pluralize("stack", summary.stacks)} · {summary.resources.toLocaleString()}{" "}
+          {pluralize("resource", summary.resources)}
         </p>
       </div>
 
-      <div className="grid gap-3 md:grid-cols-3">
-        <OverviewStat
-          icon={Boxes}
-          label="Resources"
-          value={summary.resources.toLocaleString()}
-          detail="resources in latest state"
-        />
-        <OverviewStat
-          icon={AlertTriangle}
-          label="Failed"
-          value={summary.failed.toLocaleString()}
-          detail="failed updates"
-          tone={summary.failed > 0 ? "warning" : "muted"}
-        />
-        <OverviewStat
-          icon={Activity}
-          label="Running"
-          value={summary.active.toLocaleString()}
-          detail="active updates"
-          tone={summary.active > 0 ? "info" : "muted"}
-        />
-      </div>
-
       <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-        <ToggleGroup
-          type="single"
-          variant="outline"
-          value={filter}
-          onValueChange={(value) => {
-            if (isStackFilter(value)) onFilterChange(value);
-          }}
-          aria-label="Stack status filter"
-          className="justify-start flex-wrap"
-        >
-          <ToggleGroupItem value="all">All</ToggleGroupItem>
-          <ToggleGroupItem value="running">Running</ToggleGroupItem>
-          <ToggleGroupItem value="failed">Failed</ToggleGroupItem>
-        </ToggleGroup>
+        <FilterChips rows={rows} filter={filter} onFilterChange={onFilterChange} />
         <div className="relative w-full lg:max-w-sm">
-          <Search className="pointer-events-none absolute left-2.5 top-2.5 text-muted-foreground" />
+          <Search className="pointer-events-none absolute left-2.5 top-2.5 size-4 text-muted-foreground" />
           <Input
             value={search}
             onChange={(event) => onSearchChange(event.target.value)}
@@ -211,34 +168,74 @@ function StacksHeader({
   );
 }
 
-function OverviewStat({
-  icon: Icon,
-  label,
-  value,
-  detail,
-  tone = "default",
+function FilterChips({
+  rows,
+  filter,
+  onFilterChange,
 }: {
-  icon: React.ComponentType<React.SVGProps<SVGSVGElement>>;
-  label: string;
-  value: string;
-  detail: string;
-  tone?: "default" | "info" | "warning" | "muted";
+  rows: Workspace[];
+  filter: StackFilter;
+  onFilterChange: (value: StackFilter) => void;
+}) {
+  const summary = summarizeStacks(rows);
+  return (
+    <div className="flex flex-wrap gap-2" role="group" aria-label="Stack status filter">
+      <FilterChip
+        active={filter === "all"}
+        tone="info"
+        onClick={() => onFilterChange("all")}
+      >
+        All <span className="font-mono font-semibold">{summary.stacks}</span>
+      </FilterChip>
+      <FilterChip
+        active={filter === "running"}
+        tone="info"
+        pulse={summary.active > 0}
+        onClick={() => onFilterChange("running")}
+      >
+        Running <span className="font-mono font-semibold">{summary.active}</span>
+      </FilterChip>
+      <FilterChip
+        active={filter === "failed"}
+        tone="destructive"
+        onClick={() => onFilterChange("failed")}
+      >
+        Failed <span className="font-mono font-semibold">{summary.failed}</span>
+      </FilterChip>
+    </div>
+  );
+}
+
+function FilterChip({
+  active,
+  tone,
+  pulse,
+  onClick,
+  children,
+}: {
+  active: boolean;
+  tone: "info" | "destructive";
+  pulse?: boolean;
+  onClick: () => void;
+  children: React.ReactNode;
 }) {
   return (
-    <Card className="rounded-lg shadow-none">
-      <CardHeader className="flex flex-row items-center justify-between gap-3 pb-2">
-        <CardDescription>{label}</CardDescription>
-        <div className="flex size-8 items-center justify-center rounded-md bg-muted text-muted-foreground">
-          <Icon />
-        </div>
-      </CardHeader>
-      <CardContent className="flex items-end justify-between gap-3">
-        <CardTitle className="font-mono text-2xl">{value}</CardTitle>
-        <Badge variant={tone === "warning" ? "warning" : tone === "info" ? "info" : "muted"}>
-          {detail}
-        </Badge>
-      </CardContent>
-    </Card>
+    <button
+      type="button"
+      aria-pressed={active}
+      onClick={onClick}
+      className={cn(
+        "inline-flex items-center gap-2 rounded-full border px-3.5 py-1.5 text-sm font-medium transition-colors",
+        active
+          ? tone === "destructive"
+            ? "border-transparent bg-destructive/10 text-destructive"
+            : "border-transparent bg-info/10 text-info"
+          : "border-border bg-card text-foreground hover:bg-muted",
+      )}
+    >
+      {pulse && <span className="size-1.5 rounded-full bg-current animate-pulse" />}
+      {children}
+    </button>
   );
 }
 
@@ -659,10 +656,6 @@ export function summarizeStacks(rows: Workspace[]) {
     failed: rows.filter(isFailedUpdate).length,
     active: rows.filter(isActiveUpdate).length,
   };
-}
-
-function isStackFilter(value: string): value is StackFilter {
-  return ["all", "running", "failed"].includes(value);
 }
 
 function pluralize(noun: string, count: number) {
