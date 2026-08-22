@@ -1,6 +1,6 @@
 // Static analysis for the console SPA, complementing `tsc --noEmit`: React
 // Hook dependency and call-order violations, and mishandled promises.
-// Run with `make analyze-web`.
+// Enforced by `./dev quick` and `./dev check`.
 import js from "@eslint/js";
 import globals from "globals";
 import reactHooks from "eslint-plugin-react-hooks";

@@ -68,7 +68,7 @@
                 </plugin>
                 <!--
                   Third-party attribution for the shipped server. Not bound to a
-                  lifecycle phase; `make notices` runs license:add-third-party on
+                  lifecycle phase; `./dev notices` runs license:add-third-party on
                   the app module and folds the result into THIRD-PARTY-NOTICES.txt.
                   licenseMerges collapses the many spellings of the same license
                   so the generated listing groups correctly.
@@ -83,7 +83,7 @@
                         <failOnMissing>false</failOnMissing>
                         <sortArtifactByName>true</sortArtifactByName>
                         <!-- Resolves relative to the module the goal runs on;
-                             `make notices` runs it on app only. -->
+                             `./dev notices` runs it on app only. -->
                         <overrideUrl>file:${project.basedir}/../third-party-license-overrides.properties</overrideUrl>
                         <licenseMerges>
                             <licenseMerge>Apache License 2.0|Apache-2.0|Apache 2.0|Apache 2|Apache License, Version 2.0|The Apache License, Version 2.0|The Apache Software License, Version 2.0|Apache Software License 2.0|Apache Software License, version 2.0|ASL 2.0|Apache License v2.0|Apache License version 2.0|Apache License Version 2.0</licenseMerge>
@@ -106,8 +106,8 @@
             <!--
               SpotBugs with the find-sec-bugs plugin: bytecode analysis for
               correctness bugs plus injection, path traversal and weak crypto.
-              `mvn verify` fails on any finding; `make analyze-java` runs it
-              without the test phase. Suppressions go in spotbugs-exclude.xml.
+              `mvn verify` fails on any finding, so both `./dev check` and CI
+              enforce it. Suppressions go in spotbugs-exclude.xml.
             -->
             <plugin>
                 <groupId>com.github.spotbugs</groupId>
@@ -141,7 +141,8 @@
             <!--
               Spotless runs on every module (Java, pom.xml, YAML, Markdown).
               `mvn verify` calls `spotless:check` and fails on any unformatted
-              file. `make format` runs `spotless:apply` to fix in place.
+              file. The `spotless:apply` goal provides a focused formatting pass
+              through the pinned development toolchain.
               Files outside modules/ (design/*.md, root README) rely on
               .editorconfig only — Spotless's project basedir is modules/.
             -->

@@ -5,8 +5,8 @@
  * dependencies) through node_modules, and prints one plain-text section per
  * name@version with its declared license id and the verbatim text of any
  * LICENSE/LICENCE/COPYING/NOTICE files in the package. Output is sorted and
- * timestamp-free so `make notices-check` can diff it against the committed
- * THIRD-PARTY-NOTICES.txt. Run via `make notices` (bun, from modules/web).
+ * timestamp-free so `./dev check` can compare it with the committed
+ * THIRD-PARTY-NOTICES.txt. Regenerate via `./dev notices`.
  */
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";

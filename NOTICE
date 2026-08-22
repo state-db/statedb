@@ -22,7 +22,7 @@ License 2.0. A copy of that license is included at third_party/pulumi/LICENSE
 
 Attributions for the open-source components distributed with the state-db
 server and web console are listed in THIRD-PARTY-NOTICES.txt (regenerate with
-`make notices`). A running server serves the same file at
+`./dev notices`). A running server serves the same file at
 /THIRD-PARTY-NOTICES.txt.
 
 Pulumi is a trademark of Pulumi Corporation. state-db is an independent project

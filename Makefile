@@ -1,21 +1,12 @@
+# Verification and notices live behind ./dev; image and release operations live in bin/.
+# Keep Make for workflows that compose scanners or delegate to tool/workbench Makefiles.
 .PHONY: \
-	FORCE \
-	app-dev app-build app-image app-test app-clean \
-	release release-gate \
-	web-dev \
-	format format-check \
-	analyze analyze-java analyze-web analyze-semgrep analyze-deps \
-	notices notices-check sbom \
+	analyze analyze-semgrep analyze-deps \
 	pulumi-extract pulumi-compare pulumi-discover pulumi-api-test \
 	$(PULUMI_RECORDER_TARGETS) \
 	pulumi-verify-build pulumi-verify-test \
 	pulumi-workbench soak \
 	pulumi-compat-sweep
-
-PINNED := ./dev --
-MODULES_POM  := modules/pom.xml
-
-APP_IMAGE ?= state-db:dev
 
 PULUMI_SCOPE         ?= $(CURDIR)/tools/pulumi/api-extract/scopes/state-backend.yaml
 PULUMI_SNAPSHOTS_DIR ?= $(CURDIR)/api-snapshots/pulumi
@@ -32,85 +23,24 @@ PULUMI_RECORDER_TARGETS := \
 	pulumi-recorder-verify \
 	pulumi-recorder-discover
 
-app-dev:
-	$(PINNED) modules/mvnw -f $(MODULES_POM) -pl app -am quarkus:dev
-
-app-build:
-	$(PINNED) modules/mvnw -f $(MODULES_POM) -pl app -am package -DskipTests
-
-# Host Docker is intentional here; the Maven/Bun toolchains run inside Docker build stages.
-app-image:
-	./bin/build-native-app-image '$(APP_IMAGE)'
-
-app-test:
-	$(PINNED) modules/mvnw -f $(MODULES_POM) test
-
-app-clean:
-	$(PINNED) modules/mvnw -f $(MODULES_POM) clean
-
-web-dev:
-	$(PINNED) bash -lc 'cd modules/web && bun install --frozen-lockfile && bun dev.ts'
-
-# Release scripts build, run, push, and sign containers from a maintainer's host.
-release-gate:
-ifndef IMAGE
-	$(error IMAGE is required, e.g. make release-gate IMAGE=$(APP_IMAGE))
-endif
-	./bin/release-gate $(IMAGE) $(if $(PREVIOUS),--previous $(PREVIOUS))
-
-release:
-	./bin/release $(ARGS)
-
-format:
-	$(PINNED) modules/mvnw -f $(MODULES_POM) spotless:apply
-	$(PINNED) gofmt -w tools
-
-format-check:
-	$(PINNED) modules/mvnw -f $(MODULES_POM) spotless:check
-	@unformatted=$$($(PINNED) gofmt -l tools); \
-	if [ -n "$$unformatted" ]; then \
-		echo "gofmt: the following files need formatting:"; \
-		echo "$$unformatted"; \
-		exit 1; \
-	fi
-
 analyze:
-	@rc=0; \
-	for t in analyze-java analyze-web; do \
-		echo "==> $$t"; \
-		$(MAKE) $$t || rc=1; \
-	done; \
-	for t in analyze-semgrep analyze-deps; do \
+	./dev check
+	@for t in analyze-semgrep analyze-deps; do \
 		echo "==> $$t (report only)"; \
 		$(MAKE) $$t || true; \
-	done; \
-	exit $$rc
+	done
 
-analyze-java:
-	$(PINNED) modules/mvnw -f $(MODULES_POM) compile spotbugs:check
-
-analyze-web:
-	$(PINNED) bash -lc 'cd modules/web && bun install --frozen-lockfile && bun run lint && bun run typecheck'
-
-# These use maintained scanner images instead of adding rarely used tools to the local toolchain.
+# These use maintained scanner images instead of adding rarely used tools to the pinned toolchain.
 analyze-semgrep:
 	docker run --rm -v "$(CURDIR):/src:ro" -w /src $(SEMGREP_IMAGE) \
 		semgrep scan $(SEMGREP_RULES) \
 		--oss-only --metrics=off --error \
 		--exclude=node_modules --exclude=dist --exclude=target
 
+# OSV findings are a triage report: transitive fixes may require a platform upgrade.
 analyze-deps:
 	docker run --rm -v "$(CURDIR):/src:ro" -w /src $(OSV_IMAGE) \
 		scan source -r /src
-
-notices:
-	./dev notices
-
-notices-check:
-	./dev check
-
-sbom:
-	./bin/generate-java-sbom
 
 pulumi-workbench:
 ifndef cmd
@@ -173,5 +103,3 @@ pulumi-verify-test:
 
 pulumi-compat-sweep:
 	tools/pulumi/compat/sweep.sh $(if $(TO),--to $(TO)) $(SWEEP_ARGS)
-
-FORCE:
