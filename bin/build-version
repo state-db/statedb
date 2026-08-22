@@ -2,7 +2,7 @@
 # Derives this commit's build identity. Read-only: git plus the .version file, nothing else.
 #
 #   bin/build-version           0.1.0-dev.17+g4976296
-#   bin/build-version --env     BUILD_VERSION=... BUILD_COMMIT=... SOURCE_DATE_EPOCH=...
+#   bin/build-version --values  version, commit, and epoch on separate lines
 #
 # .version holds the *next* release, so dev builds sort before it: 0.1.0-dev.17 < 0.1.0.
 set -euo pipefail
@@ -40,13 +40,11 @@ case "${1:-}" in
 "")
   echo "$version"
   ;;
---env)
-  echo "BUILD_VERSION=${version}"
-  echo "BUILD_COMMIT=${commit}"
-  echo "SOURCE_DATE_EPOCH=${epoch}"
+--values)
+  printf '%s\n%s\n%s\n' "$version" "$commit" "$epoch"
   ;;
 *)
-  echo "usage: build-version [--env]" >&2
+  echo "usage: build-version [--values]" >&2
   exit 2
   ;;
 esac

@@ -128,7 +128,6 @@ step "Building the native release candidate"
 
 bin/generate-java-sbom artifacts
 
-eval "$(bin/build-version --env)"
 candidate="state-db:$version"
 bin/build-native-app-image "$candidate"
 note "built $candidate for the gate"

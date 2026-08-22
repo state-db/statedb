@@ -9,7 +9,12 @@ docker buildx version >/dev/null 2>&1 || {
   exit 1
 }
 
-eval "$(./bin/build-version --env)"
+{
+  IFS= read -r BUILD_VERSION
+  IFS= read -r BUILD_COMMIT
+  IFS= read -r SOURCE_DATE_EPOCH
+} < <(./bin/build-version --values)
+readonly BUILD_VERSION BUILD_COMMIT SOURCE_DATE_EPOCH
 
 docker buildx build --load \
   -f modules/app/src/main/docker/Dockerfile.native \

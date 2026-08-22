@@ -91,6 +91,13 @@ Rules for agents:
 - If `./dev doctor` reports that mise or Lima is absent, stop and report the
   prerequisite. Do not fall back to unsandboxed host execution.
 
+`STATEDB_ISOLATED=1` and `./dev`'s `__guest-bootstrap` / `__isolated-task`
+modes are private implementation details. `./dev` sets the marker only after
+entering the credential-free Lima guest; the GitHub-only `ci-protocol` path sets
+it for its ephemeral runner. Agents must never set or forward the marker, invoke
+the private modes, or call their task functions directly to bypass the public
+`./dev <intent>` interface.
+
 ### Interactive main-checkout workbench
 
 When the user asks to start, restart, or inspect the live application in the

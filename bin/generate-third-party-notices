@@ -23,10 +23,14 @@ cd "$REPO_ROOT"
   exit 1
 }
 
-CHECK=0
-if [[ "${1:-}" == "--check" ]]; then
-  CHECK=1
-fi
+case $#:${1:-} in
+0:) CHECK=0 ;;
+1:--check) CHECK=1 ;;
+*)
+  echo "usage: generate-third-party-notices [--check]" >&2
+  exit 2
+  ;;
+esac
 
 CEDAR_VERSION=$(sed -n 's:.*<cedar-java.version>\([^<]*\)</cedar-java.version>.*:\1:p' modules/pom.xml)
 grep -q "\`v${CEDAR_VERSION}\` tag" third_party/cedar-java/README.md || {

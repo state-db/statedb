@@ -77,7 +77,7 @@ The authoritative check runs the comprehensive suite on the mise-pinned Temurin 
 (`-Pnative-agent-tests`). At `verify`, `bin/check-native-metadata-drift` merges the agent output,
 canonicalizes it, keeps `com.cedarpolicy.*` observations plus exact production resources, and diffs
 against `modules/app/src/test/native-image-agent-reviewed/reachability-metadata.json`. Any addition
-or removal fails the build. `./bin/verify-native-metadata-contract` runs it locally; the
+or removal fails the build. `./dev native-contract` runs it locally; the
 `native-image-contract` skill reviews a workspace diff for the same risks earlier.
 
 - The authorization tests are the traced workload: they reach all 21 Cedar types in 3:37, where the

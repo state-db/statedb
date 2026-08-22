@@ -29,7 +29,7 @@ Review the changed code only; do not inventory the whole repository.
 ## Verification
 
 ```sh
-./bin/verify-native-metadata-contract
+./dev native-contract
 ```
 
 When drift fails, inspect

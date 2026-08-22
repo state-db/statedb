@@ -30,6 +30,7 @@ workbench/soak/.build/
 workbench/soak/artifacts/
 
 # Local scratch space for build logs and throwaway working files
+/artifacts/
 .scratch/
 .cache/
 design/pulumi-state-testing-roadmap.md

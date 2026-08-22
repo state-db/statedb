@@ -47,6 +47,7 @@ function proxyOidc(req: Request): Promise<Response> {
 }
 
 const server = Bun.serve({
+  hostname: "127.0.0.1",
   port: PORT,
 
   routes: {

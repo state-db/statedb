@@ -67,7 +67,8 @@ echo "==> console will be at http://localhost:$CONSOLE_PORT — sign in as admin
 
 if [[ -n "${STATEDB_IMAGE:-}" ]]; then
   echo "==> $STATEDB_IMAGE on :8080 (foreground — Ctrl-C stops this and the console; infra stays up)"
-  docker run --rm --name state-db-workbench-app -p 8080:8080 -p 9000:9000 \
+  docker run --rm --name state-db-workbench-app \
+    -p 127.0.0.1:8080:8080 -p 127.0.0.1:9000:9000 \
     -e STATEDB_JDBC_URL="jdbc:postgresql://host.docker.internal:$DB_PORT/$DB_NAME" \
     -e STATEDB_DB_USER="$DB_USER" -e STATEDB_DB_PASSWORD="$DB_PASSWORD" \
     -e STATEDB_BOOTSTRAP_ORG_NAME="$ORG" -e STATEDB_BOOTSTRAP_ORG_DISPLAY_NAME="Acme Workbench" \
@@ -81,6 +82,8 @@ if [[ -n "${STATEDB_IMAGE:-}" ]]; then
 fi
 
 echo "==> Quarkus dev mode on :8080 (foreground — Ctrl-C stops this and the console; infra stays up)"
+QUARKUS_HTTP_HOST=127.0.0.1 \
+QUARKUS_MANAGEMENT_HOST=127.0.0.1 \
 QUARKUS_DATASOURCE_DEVSERVICES_ENABLED=false \
 QUARKUS_DATASOURCE_JDBC_URL="jdbc:postgresql://localhost:$DB_PORT/$DB_NAME" \
 QUARKUS_DATASOURCE_USERNAME="$DB_USER" QUARKUS_DATASOURCE_PASSWORD="$DB_PASSWORD" \

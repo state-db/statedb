@@ -8,17 +8,18 @@ set -euo pipefail
 
 cd "$(dirname "$0")/.."
 
-readonly NET=state-db-gate
-readonly PG=state-db-gate-pg
-readonly APP=state-db-gate-app
-readonly FOLLOWER=state-db-gate-app-follower
-readonly CLI=state-db-gate-pulumi
-readonly IDP=state-db-gate-idp
-readonly IDP_IMAGE=state-db-gate-idp:local
+readonly GATE_ID=$$-$RANDOM
+readonly NET=state-db-gate-$GATE_ID
+readonly PG=state-db-gate-pg-$GATE_ID
+readonly APP=state-db-gate-app-$GATE_ID
+readonly FOLLOWER=state-db-gate-app-follower-$GATE_ID
+readonly CLI=state-db-gate-pulumi-$GATE_ID
+readonly IDP=state-db-gate-idp-$GATE_ID
+readonly IDP_IMAGE=state-db-gate-idp:$GATE_ID
 
-readonly PG_IMAGE=postgres:17-alpine
+readonly PG_IMAGE=postgres:17-alpine@sha256:18cfe3ef5e6815560c98237d6216d1e5119702fb0f3894c8785dd58b8bbe5d73
 readonly CURL_IMAGE=curlimages/curl@sha256:463eaf6072688fe96ac64fa623fe73e1dbe25d8ad6c34404a669ad3ce1f104b6
-readonly PULUMI_IMAGE=${PULUMI_IMAGE:-pulumi/pulumi:3.234.0}
+readonly PULUMI_IMAGE=${PULUMI_IMAGE:-pulumi/pulumi:3.234.0@sha256:5fab0c70cd50a19d0fa7c59cfbc9751d946e27418b2f3e1e4b3735ce1252818b}
 
 readonly DB_USER=gate
 readonly DB_PASSWORD=gate
@@ -75,6 +76,7 @@ fail() {
 cleanup() {
   docker rm -f "$APP" "$FOLLOWER" "$PG" "$CLI" "$IDP" >/dev/null 2>&1 || true
   docker network rm "$NET" >/dev/null 2>&1 || true
+  docker image rm -f "$IDP_IMAGE" >/dev/null 2>&1 || true
 }
 trap cleanup EXIT
 
@@ -271,30 +273,25 @@ console_results=$(
   printf '\n'
   curl -sfS -b /tmp/j "http://$GATE_APP:8080/api/user" >/dev/null
   curl -sfS -b /tmp/j "http://$GATE_APP:8080/api/workspaces" >/dev/null
+  curl -sfS -b /tmp/j "http://$GATE_APP:8080/api/admin/compaction-jobs" >/dev/null
   curl -sfS "http://$GATE_APP:8080/" | grep -qi '<!doctype html>'
   echo 'OIDC: forcing compaction' >&2
   curl -sfS -b /tmp/j -X POST \
     "http://$GATE_APP:8080/api/admin/stacks/$GATE_ORG/native-gate/native-authz-check/compact" >/dev/null
-  completed=false
-  jobs='[]'
-  for _ in $(seq 1 30); do
-    jobs=$(curl -sfS -b /tmp/j "http://$GATE_APP:8080/api/admin/compaction-jobs")
-    if printf '%s' "$jobs" \
-      | grep -q '"project":"native-gate".*"stack":"native-authz-check".*"status":"completed"'; then
-      completed=true
-      break
-    fi
-    sleep 1
-  done
-  if ! $completed; then
-    echo "forced compaction did not complete: $jobs" >&2
-  fi
-  $completed
 EOF
 ) || {
   docker logs "$APP" 2>&1 | tail -150 >&2
   fail "native OIDC login, authenticated projections, or SPA delivery failed"
 }
+compaction_status=
+for _ in $(seq 1 30); do
+  compaction_status=$(psql_gate -tA -c 'SELECT status FROM compaction_jobs ORDER BY created_at DESC LIMIT 1')
+  [[ $compaction_status == completed ]] && break
+  [[ $compaction_status != failed ]] || break
+  sleep 1
+done
+[[ $compaction_status == completed ]] || fail "forced compaction ended with status ${compaction_status:-missing}"
+
 version_json=$(printf '%s\n' "$console_results" | head -n 1)
 echo "$version_json"
 case "$version_json" in
