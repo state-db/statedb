@@ -88,6 +88,13 @@ infra-up:
 		DB_IMAGE=$(DB_IMAGE) DB_VOLUME=$(DB_VOLUME) DB_PORT=$(DB_PORT) DB_NAME=$(DB_NAME) DB_USER=$(DB_USER) DB_PASSWORD=$(DB_PASSWORD) \
 		IDP_UPSTREAM_PORT=$(IDP_UPSTREAM_PORT); \
 	mkdir -p "$$DOCKER_CONFIG"; \
+	postgres_state="$$(docker inspect -f '{{.State.Running}} {{if .State.Health}}{{.State.Health.Status}}{{end}}' $(DB_CONTAINER) 2>/dev/null || true)"; \
+	idp_running="$$(docker inspect -f '{{.State.Running}}' state-db-workbench-idp 2>/dev/null || true)"; \
+	if [ "$$postgres_state" = "true healthy" ] && [ "$$idp_running" = "true" ] \
+		&& curl -fsS http://localhost:$(IDP_UPSTREAM_PORT)/default/.well-known/openid-configuration >/dev/null 2>&1; then \
+		echo "Workbench infrastructure is already ready (Postgres :$(DB_PORT), mock IdP :$(IDP_UPSTREAM_PORT))"; \
+		exit 0; \
+	fi; \
 	docker volume create $(DB_VOLUME) >/dev/null; \
 	docker compose -f "$$(git rev-parse --show-toplevel)/workbench/pulumi/compose.yml" up -d --wait --build; \
 	for i in $$(seq 1 30); do curl -fsS http://localhost:$(IDP_UPSTREAM_PORT)/default/.well-known/openid-configuration >/dev/null && exit 0; sleep 1; done; \

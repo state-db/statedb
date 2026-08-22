@@ -94,6 +94,25 @@ Rules for agents:
 The dev container is an optional interactive editor adapter. It may invoke
 `./dev` but is not the execution policy for agents or CI.
 
+### Interactive main-checkout workbench
+
+When the user asks to start, restart, or inspect the live application in the
+main checkout, use this foreground command in a managed terminal session:
+
+```
+make pulumi-workbench cmd=app-dev
+```
+
+This is the deliberate host-native exception to the verification rules above.
+The target owns the whole lifecycle: Docker runs Postgres and the mock IdP,
+while mise-pinned Bun and Java run the console and Quarkus on the host. Use
+`make pulumi-workbench cmd=app-stop` to clear a stale run.
+
+Do not launch `bun dev.ts`, Maven, Quarkus, or `dev-host.sh` directly. Do not
+detach them with `nohup` or recreate the target's environment variables by
+hand. If the target fails, diagnose and fix that target instead of bypassing
+it; otherwise processes escape its cleanup and may use unpinned host tools.
+
 ### Legacy interactive dev-container worktrees
 
 The following lifecycle exists only for humans who deliberately choose the

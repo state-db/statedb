@@ -38,13 +38,10 @@ other target (`fixtures-up`, `churn-*`, `scale-*`, `preview`/`up`) just needs
 Needs `mise` (`mise trust && mise install`, once) for `cmd=app-dev`'s Java/Bun
 toolchain, and `pulumi`/`docker` on `PATH`.
 
-Under the hood, `cmd=app`/`cmd=app-dev` run `workbench/pulumi/dev-host.sh`
-directly if you'd rather skip Make:
-
-```bash
-STATEDB_IMAGE=state-db:workbench ./workbench/pulumi/dev-host.sh   # built image
-./workbench/pulumi/dev-host.sh                                    # hot reload
-```
+The Make targets are the supported entry points. They stop stale processes,
+reuse healthy infrastructure, and run Java and Bun through the versions pinned
+by mise. `workbench/pulumi/dev-host.sh` is their internal supervisor; do not
+start Bun or Quarkus separately.
 
 Override with env vars: `ORG`, `CONSOLE_PORT` (5173), `IDP_UPSTREAM_PORT`
 (58081), `DB_PORT` (55432), `STATEDB_IMAGE` (default `state-db:workbench`).

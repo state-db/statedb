@@ -5,13 +5,9 @@
 # up — tear it down separately if needed:
 #   docker compose -f workbench/pulumi/compose.yml down
 #
-# Runs a built image by default (set STATEDB_IMAGE). Unset it to run Quarkus
-# dev mode (hot reload) instead:
-#   STATEDB_IMAGE=state-db:workbench ./workbench/pulumi/dev-host.sh   # built image
-#   ./workbench/pulumi/dev-host.sh                                    # dev mode
-#
-# Normally launched via `make pulumi-workbench cmd=app` / `cmd=app-dev`,
-# which build the image and set STATEDB_IMAGE for you.
+# Internal supervisor for `make pulumi-workbench cmd=app` / `cmd=app-dev`.
+# The Make targets own stale-process cleanup and select built-image or Quarkus
+# dev mode; invoke them instead of running this script directly.
 set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
@@ -42,9 +38,10 @@ EOF
 done
 
 echo "==> infra: Postgres + mock IdP"
-docker volume create "$DB_VOLUME" >/dev/null
-DB_IMAGE="$DB_IMAGE" DB_VOLUME="$DB_VOLUME" DB_PORT="$DB_PORT" DB_NAME="$DB_NAME" DB_USER="$DB_USER" DB_PASSWORD="$DB_PASSWORD" \
-  docker compose -f workbench/pulumi/compose.yml up -d --wait --build
+make -C workbench/pulumi infra-up \
+  DB_IMAGE="$DB_IMAGE" DB_VOLUME="$DB_VOLUME" DB_PORT="$DB_PORT" \
+  DB_NAME="$DB_NAME" DB_USER="$DB_USER" DB_PASSWORD="$DB_PASSWORD" \
+  IDP_UPSTREAM_PORT="$IDP_UPSTREAM_PORT"
 
 echo "==> seeding workbench users (background)"
 DB_CONTAINER=state-db-workbench-postgres DB_USER="$DB_USER" DB_NAME="$DB_NAME" ORG="$ORG" \
@@ -54,7 +51,7 @@ DB_CONTAINER=state-db-workbench-postgres DB_USER="$DB_USER" DB_NAME="$DB_NAME" O
 SEED_PID=$!
 
 echo "==> bun console on :$CONSOLE_PORT (background)"
-(cd modules/web && mise exec -- bun install >/dev/null &&
+(cd modules/web && mise exec -- bun install --frozen-lockfile >/dev/null &&
   exec env PORT="$CONSOLE_PORT" OIDC_PROXY_TARGET="http://localhost:$IDP_UPSTREAM_PORT" \
     mise exec -- bun dev.ts) &
 CONSOLE_PID=$!
