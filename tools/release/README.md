@@ -1,23 +1,10 @@
 # Release coordinator
 
-`bin/release` launches this TypeScript module with the mise-pinned Bun runtime. The public command
-remains:
+`bin/release` runs the release coordinator with the mise-pinned Bun runtime:
 
 ```text
 bin/release [--version X.Y.Z] [--dry-run | --rehearse]
 ```
-
-The implementation is split by responsibility:
-
-- `release.ts` owns release policy and phase ordering. Its interface is `runRelease(options,
-  environment)`.
-- `system.ts` adapts that policy to Git, GitHub CLI, Docker Buildx, Cosign, and the filesystem.
-- `main.ts` parses the command line and renders terminal errors.
-- `release.test.ts` supplies in-memory adapters, so policy and failure behavior are tested without
-  contacting GitHub or a registry.
-
-The important rule is that `release.ts` speaks in release operations—find CI evidence, inspect an
-image, publish a tag—not shell command strings. Command spelling stays inside `system.ts`.
 
 ## Phase order
 
@@ -30,8 +17,7 @@ image, publish a tag—not shell command strings. Command spelling stays inside 
 7. Roll the changelog and `.version` forward and push `main`.
 
 Before the Git tag is published, failures remove the temporary local tag. After it is published,
-failures become `RecoveryRequired` errors that identify the last completed phase and preserve the
-tag for manual reconciliation.
+failures identify the last completed phase and preserve the tag for manual reconciliation.
 
 ## Verification
 

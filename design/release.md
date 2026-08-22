@@ -203,10 +203,8 @@ Primary command:
 bin/release [--version X.Y.Z] [--dry-run | --rehearse]
 ```
 
-`bin/release` is a stable launcher for the mise-pinned Bun runtime. The release state machine lives
-in `tools/release/` as a TypeScript module. Its small `runRelease(options, environment)` interface
-hides Git, GitHub, registry, image-gate, signing, and changelog orchestration behind test adapters;
-unit tests exercise publication ordering and failure recovery without external writes.
+`bin/release` runs the release coordinator in `tools/release/release.ts` with the mise-pinned Bun
+runtime.
 
 Modes:
 
