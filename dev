@@ -61,6 +61,10 @@ go_verify() {
   done
 }
 
+release_tooling_verify() {
+  ./bin/verify-release-tooling
+}
+
 run_isolated_task() {
   require_isolated
   local task=${1:?internal task is required}
@@ -72,6 +76,7 @@ run_isolated_task() {
     "$MVNW" -f modules/pom.xml spotless:check
     web_verify
     go_verify
+    release_tooling_verify
     ;;
   check)
     [[ $# -eq 0 ]] || fail "internal check task takes no arguments"
@@ -79,6 +84,7 @@ run_isolated_task() {
     web_verify
     ./bin/generate-third-party-notices --check
     go_verify
+    release_tooling_verify
     ;;
   notices)
     [[ $# -eq 0 ]] || fail "internal notices task takes no arguments"

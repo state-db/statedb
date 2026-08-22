@@ -14,8 +14,8 @@ The project does not publish Maven artifacts. The Maven reactor remains at
 ## Release Authority
 
 Releases are cut from a maintainer machine with Docker, `gh`, and `cosign` installed.
-GitHub Actions verifies commits but does not publish images and does not hold registry publishing
-credentials.
+GitHub Actions verifies commits and publishes commit-addressed architecture candidates to the
+candidates package. It cannot publish release tags and does not hold release-signing credentials.
 
 This is an operating rule for the current solo-maintainer project. If release ownership changes,
 this section should be revisited.
@@ -155,10 +155,16 @@ The release commit must satisfy:
 
 `--rehearse` reports these checks instead of enforcing them. A real release enforces them.
 
-`native.yml` is `workflow_dispatch` only. Dispatch it against the release ref and let it finish
-before running `bin/release`; that run both satisfies gate 1 and publishes the per-architecture
-candidates the release manifest is assembled from. Ordinary pushes and pull requests consume no
-GitHub Actions minutes.
+`native.yml` is `workflow_dispatch` only. Dispatch it against the release commit with the version
+that `bin/release` will publish, then let it finish:
+
+```text
+gh workflow run native.yml --ref main -f version=0.2.0
+```
+
+The workflow embeds and gates that version in both architectures. Its successful run satisfies
+gate 1 and publishes the per-architecture candidates used by the release manifest. Ordinary pushes
+and pull requests consume no GitHub Actions minutes.
 
 ### Gate 2: Candidate Image
 
@@ -173,6 +179,9 @@ GitHub Actions minutes.
 6. a real Pulumi `up`, `refresh`, `export`, `destroy`, and stack removal;
 7. database-outage readiness degradation and recovery without process restart;
 8. SIGTERM completion within the shutdown grace period.
+
+For release candidates, the gate also requires `/api/version` to report both the exact source
+commit and the requested final release version.
 
 The Pulumi test project is:
 
@@ -196,8 +205,10 @@ bin/release [--version X.Y.Z] [--dry-run | --rehearse]
 
 Modes:
 
-- `--dry-run`: runs preflight, CI checks, local tag creation, image build, and image gate; skips
-  publish, sign, tag push, GitHub Release creation, and changelog push.
+- `--dry-run`: runs preflight, CI checks, local tag creation, image build, and image gate. It
+  downloads the successful CI run's evidence and verifies that both digest-pinned architecture
+  candidates still exist, but skips candidate-manifest creation, publish, sign, tag push, GitHub
+  Release creation, and changelog push.
 - `--rehearse`: implies `--dry-run`; reports releasability checks that are expected to fail on a
   work-in-progress tree.
 
@@ -216,18 +227,21 @@ Modes:
 4. Verify `bin/build-version` resolves to `X.Y.Z`.
 5. Build a loadable single-arch candidate image.
 6. Run `bin/release-gate` against the candidate.
-7. Assemble a manifest in the candidates package from CI-gated `:<sha>-amd64` and
-   `:<sha>-arm64` images, pull it, and repeat the release gate.
-8. Copy the gated manifest to `X.Y.Z`, `X.Y`, and `latest`, then sign its digest with `cosign`.
-9. Push the Git tag.
-10. Create the GitHub Release from the changelog section.
+7. Download the successful workflow run's candidate digests, native build evidence, and scanned
+   Java SBOM. Assemble the manifest from digest references rather than mutable candidate tags,
+   pull it, and repeat the release gate while checking both commit and release version.
+8. Recheck that HEAD, the worktree, and `origin/main` are unchanged, then atomically push the Git
+   tag while asserting the expected `main` value.
+9. Copy the gated manifest to `X.Y.Z`, `X.Y`, and `latest`, then sign its digest with `cosign`.
+10. Create the GitHub Release from the changelog section and CI-produced evidence.
 11. Move `CHANGELOG.md`'s `## Unreleased` section under the release heading.
 12. Bump `.version` to the next minor.
 13. Commit and push the changelog/version bump to `main`.
 
-If a failure happens before the tag is pushed, the local tag is removed. After the tag is pushed,
-the release is considered published; failures while rolling `.version` must be fixed manually
-before more changes merge to `main`.
+If a failure happens before the tag is pushed, the local tag is removed. The script refuses to
+overwrite an existing `X.Y.Z` image tag with a different digest. After the Git tag is pushed, the
+release is considered published; failures while publishing artifacts or rolling `.version` must be
+fixed manually before more changes merge to `main`.
 
 ## Changelog
 

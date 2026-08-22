@@ -1,0 +1,39 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+cd "$(dirname "$0")/.."
+
+bash -n bin/build-native-app-image bin/release bin/release-gate
+
+# The credential-free verification workspace intentionally omits .git. Create only the metadata
+# this fixture needs; the workspace itself is disposable and this check runs after the other tiers.
+if ! git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+  git init --quiet
+  git config user.name release-tooling-test
+  git config user.email release-tooling-test@invalid
+  git add .version
+  git commit --quiet -m fixture
+fi
+
+# Keep this focused test host-independent: the image builder should forward an explicit release
+# identity to Docker without needing a daemon or compiling the application.
+docker() {
+  printf 'docker'
+  printf ' <%s>' "$@"
+  printf '\n'
+}
+export -f docker
+
+build_output=$(bin/build-native-app-image state-db:release-test --version 1.2.3)
+printf '%s\n' "$build_output" | grep -F -- '<--build-arg> <BUILD_VERSION=1.2.3>' >/dev/null
+
+if bin/build-native-app-image state-db:release-test --version 01.2.3 >/dev/null 2>&1; then
+  echo "verify-release-tooling: image builder accepted an invalid release version" >&2
+  exit 1
+fi
+if bin/release-gate state-db:release-test --expect-version 01.2.3 >/dev/null 2>&1; then
+  echo "verify-release-tooling: release gate accepted an invalid expected version" >&2
+  exit 1
+fi
+
+echo "release tooling checks passed"

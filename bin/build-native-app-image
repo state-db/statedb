@@ -3,7 +3,31 @@ set -euo pipefail
 
 cd "$(dirname "$0")/.."
 
-image=${1:-state-db:native-dev}
+image=state-db:native-dev
+requested_version=
+
+if [[ $# -gt 0 && $1 != --* ]]; then
+  image=$1
+  shift
+fi
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+  --version)
+    requested_version=${2:?--version needs X.Y.Z}
+    shift 2
+    ;;
+  *)
+    echo "usage: build-native-app-image [image] [--version X.Y.Z]" >&2
+    exit 2
+    ;;
+  esac
+done
+
+if [[ -n $requested_version && ! $requested_version =~ ^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]]; then
+  echo "error: build version '$requested_version' is not X.Y.Z" >&2
+  exit 2
+fi
+
 docker buildx version >/dev/null 2>&1 || {
   echo "error: Docker Buildx is required for native image builds" >&2
   exit 1
@@ -14,6 +38,7 @@ docker buildx version >/dev/null 2>&1 || {
   IFS= read -r BUILD_COMMIT
   IFS= read -r SOURCE_DATE_EPOCH
 } < <(./bin/build-version --values)
+[[ -z $requested_version ]] || BUILD_VERSION=$requested_version
 readonly BUILD_VERSION BUILD_COMMIT SOURCE_DATE_EPOCH
 
 docker buildx build --load \

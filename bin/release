@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #   bin/release --rehearse    # exercise the whole flow on a work-in-progress tree
-#   bin/release --dry-run     # everything except the five irreversible steps
+#   bin/release --dry-run     # verify locally without publishing
 #   bin/release               # for real
 #   bin/release --version 0.2.0
 set -euo pipefail
@@ -57,6 +57,26 @@ require() {
   printf '\033[33m    [rehearsal] would have failed: %s\033[0m\n' "$1"
 }
 
+version_gt() {
+  local lhs=$1 rhs=$2
+  local lhs_major lhs_minor lhs_patch rhs_major rhs_minor rhs_patch
+  IFS=. read -r lhs_major lhs_minor lhs_patch <<<"$lhs"
+  IFS=. read -r rhs_major rhs_minor rhs_patch <<<"$rhs"
+  lhs_major=$((10#$lhs_major)); lhs_minor=$((10#$lhs_minor)); lhs_patch=$((10#$lhs_patch))
+  rhs_major=$((10#$rhs_major)); rhs_minor=$((10#$rhs_minor)); rhs_patch=$((10#$rhs_patch))
+  ((lhs_major > rhs_major)) ||
+    ((lhs_major == rhs_major && lhs_minor > rhs_minor)) ||
+    ((lhs_major == rhs_major && lhs_minor == rhs_minor && lhs_patch > rhs_patch))
+}
+
+ensure_release_source_unchanged() {
+  [[ $(git rev-parse HEAD) == "$commit_full" ]] || fail "HEAD changed while release verification was running"
+  [[ -z $(git status --porcelain) ]] || fail "working tree changed while release verification was running"
+  git fetch --quiet origin main || fail "could not refresh origin/main before publication"
+  [[ $(git rev-parse origin/main) == "$commit_full" ]] ||
+    fail "origin/main changed while release verification was running"
+}
+
 step "Preflight"
 
 for tool in docker git gh cosign; do
@@ -71,12 +91,30 @@ git fetch --quiet origin main || require "could not fetch origin"
 [[ $(git rev-parse HEAD) == $(git rev-parse origin/main) ]] || require "HEAD is not origin/main"
 
 [[ -n $version ]] || version=$(tr -d '[:space:]' <.version)
-[[ $version =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || fail "version '$version' is not X.Y.Z"
+[[ $version =~ ^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]] ||
+  fail "version '$version' is not X.Y.Z"
 
 readonly tag="v$version"
 readonly minor=${version%.*}
 git rev-parse -q --verify "refs/tags/$tag" >/dev/null && fail "$tag already exists locally"
 [[ -z $(git ls-remote --tags origin "refs/tags/$tag") ]] || fail "$tag already exists on origin"
+
+remote_tags=$(git ls-remote --tags --refs origin 'v*') || {
+  require "could not list release tags on origin"
+  remote_tags=
+}
+latest_remote_version=
+while read -r _ ref; do
+  candidate_version=${ref#refs/tags/v}
+  [[ $candidate_version =~ ^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]] || continue
+  if [[ -z $latest_remote_version ]] || version_gt "$candidate_version" "$latest_remote_version"; then
+    latest_remote_version=$candidate_version
+  fi
+done <<<"$remote_tags"
+if [[ -n $latest_remote_version ]]; then
+  version_gt "$version" "$latest_remote_version" ||
+    fail "version $version must be newer than the latest release, $latest_remote_version"
+fi
 
 commit_full=$(git rev-parse HEAD)
 commit=${commit_full:0:7}
@@ -96,17 +134,33 @@ else
   require "local CI has not signed off on $commit (run: ./dev signoff)"
 fi
 
-# native.yml is dispatched against a ref, so look it up on the branch being released.
-release_branch=$(git rev-parse --abbrev-ref HEAD)
-native_conclusion=$(gh run list --workflow native.yml --branch "$release_branch" --limit 20 \
-  --json headSha,conclusion --jq "map(select(.headSha == \"$commit_full\")) | .[0].conclusion" 2>/dev/null || true)
+# Query once so the conclusion, run ID, candidate digests, and release evidence all come from the
+# same workflow run.
+native_run=$(gh run list --workflow native.yml --commit "$commit_full" --limit 1 \
+  --json databaseId,conclusion --jq '.[0] | [.conclusion, .databaseId] | @tsv' 2>/dev/null || true)
+native_conclusion=
+native_run_id=
+if [[ -n $native_run ]]; then
+  IFS=$'\t' read -r native_conclusion native_run_id <<<"$native_run"
+fi
 if [[ $native_conclusion == success ]]; then
   note "release build green: Pulumi compatibility plus native amd64 and arm64"
 else
   require "native.yml has not succeeded on $commit (got: ${native_conclusion:-no run})"
 fi
-native_run_id=$(gh run list --workflow native.yml --branch "$release_branch" --limit 20 \
-  --json databaseId,headSha --jq "map(select(.headSha == \"$commit_full\")) | .[0].databaseId" 2>/dev/null || true)
+
+evidence_dir=artifacts/native-release-evidence
+java_sbom=artifacts/ci-java-sbom/state-db-java.cdx.json
+candidate_evidence=false
+if [[ $native_conclusion == success ]]; then
+  rm -rf "$evidence_dir" artifacts/ci-java-sbom
+  mkdir -p "$evidence_dir/amd64" "$evidence_dir/arm64" artifacts/ci-java-sbom
+  gh run download "$native_run_id" -n native-build-amd64 -D "$evidence_dir/amd64"
+  gh run download "$native_run_id" -n native-build-arm64 -D "$evidence_dir/arm64"
+  gh run download "$native_run_id" -n java-sbom -D artifacts/ci-java-sbom
+  [[ -s $java_sbom ]] || fail "native.yml did not produce the scanned Java SBOM"
+  candidate_evidence=true
+fi
 
 step "Tagging locally"
 
@@ -126,16 +180,15 @@ fi
 
 step "Building the native release candidate"
 
-bin/generate-java-sbom artifacts
-
 candidate="state-db:$version"
-bin/build-native-app-image "$candidate"
+bin/build-native-app-image "$candidate" --version "$version"
 note "built $candidate for the gate"
 
 step "Gate: what this image does when it runs"
 
-gate_args=("$candidate" --expect-commit "$commit")
-previous_tag=$(git tag --list 'v[0-9]*' --sort=-v:refname | sed -n 2p)
+gate_args=("$candidate" --expect-commit "$commit" --expect-version "$version")
+previous_tag=
+[[ -z $latest_remote_version ]] || previous_tag="v$latest_remote_version"
 if [[ -n $previous_tag ]]; then
   gate_args+=(--previous "$REGISTRY:${previous_tag#v}")
   note "upgrading from $previous_tag"
@@ -144,18 +197,31 @@ bin/release-gate "${gate_args[@]}"
 
 step "Assembling the immutable multi-architecture manifest"
 
-arch_candidates=(
-  "$CANDIDATE_REGISTRY:$commit_full-amd64"
-  "$CANDIDATE_REGISTRY:$commit_full-arm64"
-)
 candidate_manifest="$CANDIDATE_REGISTRY:$commit_full"
-if ! would "assemble and gate $candidate_manifest from the two gated CI architecture candidates"; then
+arch_candidates=()
+if $candidate_evidence; then
+  for arch in amd64 arm64; do
+    digest_file="$evidence_dir/$arch/native-candidate-$arch.digest"
+    [[ -s $digest_file ]] || fail "native.yml evidence is missing $digest_file"
+    candidate_digest=$(tr -d '[:space:]' <"$digest_file")
+    [[ $candidate_digest =~ ^sha256:[0-9a-f]{64}$ ]] || fail "invalid $arch candidate digest: $candidate_digest"
+    arch_candidates+=("$CANDIDATE_REGISTRY@$candidate_digest")
+  done
   for ref in "${arch_candidates[@]}"; do
     docker buildx imagetools inspect "$ref" >/dev/null || fail "missing gated CI candidate $ref"
   done
+fi
+
+if $rehearse && ! $candidate_evidence; then
+  note "[rehearsal] final manifest inspection skipped without a successful native.yml run"
+elif $dry_run; then
+  would "assemble and gate $candidate_manifest from the two digest-pinned CI candidates"
+  note "CI candidate digests exist; final manifest creation and gate require a candidate-registry write"
+else
+  ensure_release_source_unchanged
   docker buildx imagetools create -t "$candidate_manifest" "${arch_candidates[@]}"
   docker pull "$candidate_manifest"
-  published_gate_args=("$candidate_manifest" --expect-commit "$commit")
+  published_gate_args=("$candidate_manifest" --expect-commit "$commit" --expect-version "$version")
   if [[ -n $previous_tag ]]; then
     published_gate_args+=(--previous "$REGISTRY:${previous_tag#v}")
   fi
@@ -163,34 +229,38 @@ if ! would "assemble and gate $candidate_manifest from the two gated CI architec
 fi
 
 digest=""
-if ! would "sign the gated immutable digest and move the floating tags"; then
+if ! $dry_run; then
+  ensure_release_source_unchanged
   digest=$(docker buildx imagetools inspect "$candidate_manifest" --format '{{json .Manifest.Digest}}' | tr -d '"')
   [[ -n $digest ]] || fail "could not resolve the digest of $REGISTRY:$version"
   note "digest $digest"
-  docker buildx imagetools create -t "$REGISTRY:$version" "$candidate_manifest"
+
+  existing_digest=$(docker buildx imagetools inspect "$REGISTRY:$version" \
+    --format '{{json .Manifest.Digest}}' 2>/dev/null | tr -d '"' || true)
+  if [[ -n $existing_digest && $existing_digest != "$digest" ]]; then
+    fail "$REGISTRY:$version already points at a different digest, $existing_digest"
+  fi
+
+  step "Tagging the release"
+  # Including the expected main value in the atomic push closes the race between the final fetch
+  # and tag publication: if main advanced, neither ref is updated.
+  git push --atomic origin "$tag" "$commit_full:refs/heads/main"
+  # From here, deleting only the local tag would make retries harder to reason about.
+  trap - EXIT
+
+  step "Publishing the signed image and GitHub Release"
+  if [[ -z $existing_digest ]]; then
+    docker buildx imagetools create -t "$REGISTRY:$version" "$candidate_manifest"
+  fi
   cosign sign --yes "$REGISTRY@$digest"
   docker buildx imagetools create -t "$REGISTRY:$minor" -t "$REGISTRY:latest" "$REGISTRY@$digest"
   note "signed native $digest; moved $minor and latest"
-fi
 
-step "Tagging the release"
-if ! would "git push origin $tag"; then
-  git push origin "$tag"
-  # From here, deleting only the local tag would make retries harder to reason about.
-  trap - EXIT
-fi
-if ! would "gh release create $tag with Java/container SBOMs and native build metadata"; then
-  [[ -n $native_run_id ]] || fail "could not identify native.yml run for release evidence"
-  rm -rf artifacts/native-release-evidence
-  mkdir -p artifacts/native-release-evidence
-  gh run download "$native_run_id" -n native-build-amd64 \
-    -D artifacts/native-release-evidence/amd64
-  gh run download "$native_run_id" -n native-build-arm64 \
-    -D artifacts/native-release-evidence/arm64
   printf '%s\n' "$notes" | gh release create "$tag" \
     --title "$version" --notes-file - --verify-tag \
-    artifacts/state-db-java.cdx.json \
-    artifacts/native-release-evidence/amd64/* artifacts/native-release-evidence/arm64/*
+    "$java_sbom" "$evidence_dir"/amd64/* "$evidence_dir"/arm64/*
+else
+  would "push $tag, publish and sign the gated digest, and create the GitHub Release"
 fi
 
 step "Rolling the changelog and .version"
@@ -209,13 +279,18 @@ if ! would "roll $CHANGELOG, set .version to $next, push to main"; then
 
   git add "$CHANGELOG" .version
   git commit -m "Release $version"
-  git push origin main || fail "release $version published, but the .version bump did not land — bump it by hand before merging anything"
+  git push origin main ||
+    fail "release $version published, but the .version bump did not land — bump it by hand before merging anything"
 fi
 
 trap - EXIT
 if $dry_run; then
   cleanup_tag
-  printf '\n\033[33mdry run complete: %s was verified but nothing was published\033[0m\n' "$version"
+  if $candidate_evidence; then
+    printf '\n\033[33mdry run complete: %s local image and CI candidate digests verified; nothing was published\033[0m\n' "$version"
+  else
+    printf '\n\033[33mrehearsal complete: %s local image verified; CI candidate verification was unavailable\033[0m\n' "$version"
+  fi
 else
   printf '\n\033[32mreleased %s\033[0m\n' "$version"
   note "next release will be $next"

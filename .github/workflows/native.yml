@@ -11,6 +11,11 @@ concurrency:
 # `bin/release` requires this workflow to succeed on the exact release commit.
 on:
   workflow_dispatch:
+    inputs:
+      version:
+        description: Release version to embed in the gated candidates (X.Y.Z)
+        required: true
+        type: string
 
 jobs:
   cli-battle-tests:
@@ -91,14 +96,17 @@ jobs:
         env:
           NATIVE_IMAGE_XMX: 6g
           NATIVE_IMAGE_PARALLELISM: 2
-        run: bin/build-native-app-image state-db:native-ci
+          RELEASE_VERSION: ${{ inputs.version }}
+        run: bin/build-native-app-image state-db:native-ci --version "$RELEASE_VERSION"
 
       - name: Generate dependency-level Java SBOM
         if: matrix.arch == 'amd64'
         run: bin/generate-java-sbom artifacts
 
       - name: Run image, authorization, migration, and Pulumi contracts
-        run: bin/release-gate state-db:native-ci
+        env:
+          RELEASE_VERSION: ${{ inputs.version }}
+        run: bin/release-gate state-db:native-ci --expect-version "$RELEASE_VERSION"
 
       - name: Scan the gated image
         env:
@@ -130,6 +138,9 @@ jobs:
         run: |
           docker tag state-db:native-ci "$CANDIDATE"
           docker push "$CANDIDATE"
+          digest=$(docker buildx imagetools inspect "$CANDIDATE" --format '{{json .Manifest.Digest}}' | tr -d '"')
+          case "$digest" in sha256:*) ;; *) echo "invalid candidate digest: $digest" >&2; exit 1 ;; esac
+          printf '%s\n' "$digest" > native-candidate-${{ matrix.arch }}.digest
 
       - name: Capture native build metadata
         if: always()
@@ -146,6 +157,7 @@ jobs:
             native-image-${{ matrix.arch }}.json
             native-history-${{ matrix.arch }}.txt
             native-container-${{ matrix.arch }}.cdx.json
+            native-candidate-${{ matrix.arch }}.digest
           retention-days: 14
 
       - name: Upload Java SBOM
