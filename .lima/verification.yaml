@@ -31,8 +31,8 @@ provision:
           ct state established,related accept
           ip daddr 192.168.5.2 udp dport 53 accept
           ip daddr 192.168.5.2 tcp dport 53 accept
-          oifname "eth0" ip daddr { 10.0.0.0/8, 100.64.0.0/10, 169.254.0.0/16, 172.16.0.0/12, 192.168.0.0/16 } reject
-          oifname "eth0" ip6 daddr { fc00::/7, fe80::/10 } reject
+          ip daddr { 10.0.0.0/8, 100.64.0.0/10, 169.254.0.0/16, 172.16.0.0/12, 192.168.0.0/16 } reject
+          ip6 daddr { fc00::/7, fe80::/10 } reject
         }
       }
       EOF
@@ -43,7 +43,7 @@ provision:
       ln -sf /usr/share/docker.io/contrib/dockerd-rootless.sh /usr/local/bin/dockerd-rootless.sh
       ln -sf /usr/share/docker.io/contrib/dockerd-rootless-setuptool.sh \
         /usr/local/bin/dockerd-rootless-setuptool.sh
-      touch /etc/state-db-verification-vm-v2
+      touch /etc/state-db-verification-vm
       rm -f /etc/sudoers.d/90-cloud-init-users
   - mode: user
     script: |
@@ -59,7 +59,7 @@ probes:
       command -v docker >/dev/null
       pgrep rootlesskit >/dev/null
       DOCKER_HOST=unix:///run/user/{{.UID}}/docker.sock docker info >/dev/null
-      test -f /etc/state-db-verification-vm-v2
+      test -f /etc/state-db-verification-vm
       ! sudo -n true
       systemctl is-active --quiet nftables
 

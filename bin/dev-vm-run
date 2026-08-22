@@ -35,7 +35,7 @@ fi
   { echo "dev-vm-run: pinned mise binary reports the wrong version" >&2; exit 1; }
 
 export PATH="$HOME/.local/bin:$PATH"
-mise trust "$WORKSPACE/mise.toml"
+mise trust --yes "$WORKSPACE/mise.toml"
 mise install --yes
 
 case "$TASK" in

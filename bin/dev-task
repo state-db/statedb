@@ -43,7 +43,7 @@ check)
     exit 1
   }
   java_verify
-  (cd modules/web && bun run lint)
+  web_verify
   ./bin/generate-third-party-notices --check
   go_verify
   ;;
