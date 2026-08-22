@@ -1,0 +1,13 @@
+{
+  "compilerOptions": {
+    "lib": ["ESNext"],
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "noEmit": true,
+    "strict": true,
+    "target": "ESNext",
+    "typeRoots": ["../../modules/web/node_modules"],
+    "types": ["bun-types"]
+  },
+  "include": ["*.ts"]
+}

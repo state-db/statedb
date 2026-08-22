@@ -4,6 +4,8 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 
 bash -n bin/build-native-app-image bin/release bin/release-gate
+bun test tools/release
+(cd modules/web && bunx tsc -p ../../tools/release/tsconfig.json)
 
 # The credential-free verification workspace intentionally omits .git. Create only the metadata
 # this fixture needs; the workspace itself is disposable and this check runs after the other tiers.
