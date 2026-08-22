@@ -590,7 +590,7 @@ RETURNING id, expires_at;</code></pre>
     <p style="margin:7px 0"><b style="color:var(--acc)">3 · Trace one export.</b> Step <code>StackAssembler.assemble()</code> → <code>JournalReplayer.add()</code> for that stack; confirm it matches <code>pulumi stack export</code>.</p>
     <p style="margin:7px 0"><b style="color:var(--acc)">4 · Read the tests.</b> <code>JournalAppenderTest</code>, <code>StackAssemblerTest</code>, and the <code>Recorded*ReplayTest</code> fixtures replay captured real journals — the best executable spec.</p>
   </div>
-  <div class="callout key"><span class="lbl">Build &amp; test — dev container only</span> Never call <code>mvn</code> on the host:<br><code>./bin/in-container mvn -f modules/pom.xml -pl persistence -am test</code></div>
+  <div class="callout key"><span class="lbl">Build &amp; test</span> Use the pinned local toolchain for a focused human run:<br><code>./dev -- modules/mvnw -f modules/pom.xml -pl persistence -am test</code><br>Use <code>./dev check</code> for the authoritative gate.</div>
 
   <!-- ============================================================ -->
   <h2 id="glossary"><span class="ix">12</span> Glossary</h2>

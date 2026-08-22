@@ -18,10 +18,10 @@ bootstrap slice; the slices below extend it).
 Read these before writing any code. They are repo-wide rules restated here
 because violating them is the most likely failure mode.
 
-1. **All build/test/run goes through the dev container.** Never run `mvn`,
-   `java`, `tofu`, or `psql` on the host. Every command in this doc is shown in
-   its runnable form: `./bin/in-container mvn -f modules/pom.xml ...`. If the
-   wrapper says no container is running, stop and ask the user to start it.
+1. **All authoritative build/test verification goes through `./dev`.** Use
+   `./dev quick` while iterating and `./dev check` for the final gate. Focused
+   commands shown as `./dev -- ...` are an explicit human-local escape hatch,
+   not an agent verification path.
 2. **Never put slice numbers in source code.** No "Slice 31.3" in Javadoc,
    comments, commit messages, or test names. Describe the behavior instead
    ("lock verification on state writes"), not the planning artifact.
@@ -566,7 +566,7 @@ two annotations.
 
 **Manual verification**
 ```
-./bin/in-container mvn -f modules/pom.xml -pl app -am quarkus:dev
+./dev -- modules/mvnw -f modules/pom.xml -pl app -am quarkus:dev
 curl -X LOCK http://localhost:8080/tofu/o/p/w   # expect 501, not 405
 ```
 
@@ -580,7 +580,7 @@ entity round-trip persists and reads back; cascade delete from `workspaces`
 removes extension row, states, and lock; `UNIQUE (project_id, name)` and the
 name-grammar CHECK reject bad rows.
 
-**Manual verification.** `./bin/in-container mvn -f modules/pom.xml -pl persistence -am test`
+**Manual verification.** `./dev -- modules/mvnw -f modules/pom.xml -pl persistence -am test`
 
 ### Slice 31.2 · Auth filter + workspace resolution + Cedar actions
 
@@ -631,7 +631,7 @@ block.
 
 **Tests.** The module *is* the test.
 
-**Manual verification.** `./bin/in-container mvn -f modules/pom.xml -pl tofu-cli-smoke -am verify`
+**Manual verification.** `./dev -- modules/mvnw -f modules/pom.xml -pl tofu-cli-smoke -am verify`
 (or the module's documented invocation — match how `pulumi-cli-smoke` runs).
 
 ### Slice 31.6 · Console drilldown

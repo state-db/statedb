@@ -5,9 +5,9 @@ Landing page and documentation for statedb. Astro + Starlight, fully static.
 ## Develop
 
 ```
-./bin/in-container bash -lc 'cd site && bun install'
-./bin/in-container bash -lc 'cd site && bun run dev'
-./bin/in-container bash -lc 'cd site && bun run build'   # output in site/dist/
+./dev -- bash -lc 'cd site && bun install'
+./dev -- bash -lc 'cd site && bun run dev'
+./dev -- bash -lc 'cd site && bun run build'   # output in site/dist/
 ```
 
 ## Deploy (Cloudflare Pages)

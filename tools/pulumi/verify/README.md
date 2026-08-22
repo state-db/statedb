@@ -27,8 +27,8 @@ per assertion. Java tests build this image themselves via Testcontainers, so
 The pinned `github.com/pulumi/pulumi/sdk/v3` version in `go.mod` should track
 the Pulumi CLI version pinned in `tools/pulumi/recorder/Dockerfile`.
 
-Like `tools/pulumi/recorder`, this tool manages its own execution environment
-(host Go + Docker) and is not routed through `./bin/in-container`.
+Like `tools/pulumi/recorder`, this tool manages its own host Go and Docker
+execution environment.
 
 ## Normalization note
 

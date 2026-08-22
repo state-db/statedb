@@ -4,13 +4,12 @@ Runs the real state-db container image under continuous Pulumi load for days at 
 the failures short tests cannot: heap and GC drift, off-heap/RSS creep, JDBC pool exhaustion,
 unbounded history growth, stranded state locks, and crashes or OOM kills.
 
-Compose runs from the **host**, so a multi-day run survives a dev container rebuild. Only the
-image build needs that container, so the sequence is: build, stop the dev container, start the
-soak. Left running it is a ~4GB co-tenant on the same VM as the 2GB app under test.
+Compose runs from the **host**, so the purpose-built stack owns the entire multi-day lifecycle.
+The application image is built through its pinned container build, and no interactive development
+process needs to remain alive during the run.
 
 ```bash
-make soak cmd=build     # needs the dev container (Maven + bun)
-# stop the dev container here
+make soak cmd=build     # build the application and load-driver images
 make soak cmd=up        # build images and start the run (48h by default)
 make soak cmd=status    # heap, pool and container state at a glance
 make soak cmd=logs      # follow the driver, sampler and app
@@ -73,10 +72,9 @@ docker exec state-db-soak-app jcmd 1 VM.native_memory summary
 
 ## Design notes
 
-**No bind mounts.** The dev container drives the host Docker daemon, so a relative bind mount would
-be resolved by the daemon against the host filesystem, where the container's `/workspaces` path
-does not exist. Config reaches containers through build contexts, which the CLI streams; results
-come back out of named volumes via `docker cp`.
+**No bind mounts.** Config is packaged into images through build contexts, and results come back
+out of named volumes via `docker cp`. This keeps the run independent of checkout paths and allows
+the source tree to change without mutating a running experiment.
 
 **The sampler shares the app's PID namespace.** That is what lets it read the JVM's true resident
 set from `/proc/1/status` without handing a container the Docker socket.

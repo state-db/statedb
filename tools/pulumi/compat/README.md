@@ -97,5 +97,5 @@ small; the `--skip-record` form is cheap enough to run more often. The manual
 release build exercises the pinned versions before publishing — the sweep is
 what tells you when to *move* the pins.
 
-Like the recorder and verifier, this is a host tool (Go + Docker + python3) and
-is deliberately not routed through `./bin/in-container`.
+Like the recorder and verifier, this is a host tool that manages its own Go,
+Docker, and Python execution environment.

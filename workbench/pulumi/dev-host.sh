@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Host-native workbench app — no dev container. One command: brings up infra,
+# Host-native workbench app. One command: brings up infra,
 # seeds workbench users, runs the app (foreground) and the bun console
 # (background) together. Ctrl-C stops both; infra (Postgres + mock IdP) stays
 # up — tear it down separately if needed:

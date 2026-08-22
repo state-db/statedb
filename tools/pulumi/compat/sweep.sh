@@ -25,8 +25,8 @@
 #   ./sweep.sh --to vX --publish    # also copy snapshot/comparison/report into
 #                                   # api-snapshots/pulumi/ (adoption record)
 #
-# Like the recorder and verifier, this is a host tool (Go + Docker + python3);
-# it is deliberately not routed through ./bin/in-container.
+# Like the recorder and verifier, this host tool manages its own Go, Docker,
+# and Python execution environment.
 set -euo pipefail
 
 HERE="$(cd "$(dirname "$0")" && pwd)"

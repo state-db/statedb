@@ -91,9 +91,6 @@ Rules for agents:
 - If `./dev doctor` reports that mise or Lima is absent, stop and report the
   prerequisite. Do not fall back to unsandboxed host execution.
 
-The dev container is an optional interactive editor adapter. It may invoke
-`./dev` but is not the execution policy for agents or CI.
-
 ### Interactive main-checkout workbench
 
 When the user asks to start, restart, or inspect the live application in the
@@ -113,103 +110,24 @@ detach them with `nohup` or recreate the target's environment variables by
 hand. If the target fails, diagnose and fix that target instead of bypassing
 it; otherwise processes escape its cleanup and may use unpinned host tools.
 
-### Legacy interactive dev-container worktrees
-
-The following lifecycle exists only for humans who deliberately choose the
-legacy full-workbench dev-container experience. Agents do not need or start it.
-
-Use the lifecycle scripts from a linked Codex worktree:
-
-```
-./bin/worktree-dev-up
-./bin/worktree-dev-down
-```
-
-`worktree-dev-up` creates/discovers a dev container labelled for the current
-worktree, starts the shared workbench Postgres and mock IdP, creates a database
-named for the worktree, and starts Bun and Quarkus against that database. It
-also gives the worktree's OIDC provider a unique name. This database isolation
-is required: never point a worktree at the main `statedb` database or bootstrap
-the main `mock` provider, because bootstrap reconciliation would overwrite the
-main checkout's issuer and callback URL.
-
-The worktree console uses `127.0.0.1` while main uses `localhost`. Keep this
-hostname separation even though both resolve to loopback: browser cookies do
-not include ports, so using `localhost` for both consoles lets OIDC state and
-session cookies from one checkout interfere with the other.
-
-`worktree-dev-down` stops the worktree processes, drops only its isolated
-database, and removes only its labelled dev container. It deliberately leaves
-the shared Postgres volume/container, mock IdP, and cached devcontainer image in
-place. Run it when the worktree is finished so containers, processes, and test
-data do not accumulate.
-
-Each Codex worktree needs its own dev container. Never run worktree code in a
-container whose `devcontainer.local_folder` label points at the main checkout
-or another worktree. Stop/remove another worktree's container only when the
-user has said that worktree is finished.
-
-When the default ports are already owned by another checkout, publish the two
-application ports with `1` prepended:
-
-- container `8080` -> host `18080`
-- container `5173` -> host `15173`
-- do **not** prepend `1` to `55432` (`155432` is not a valid TCP port). Reuse
-  the shared workbench Postgres on `55432`, or choose another valid free port.
-
-The scripts automate the following setup. If diagnosing them, note that the
-devcontainer CLI has no `--publish` option. To create those mappings while
-keeping `./bin/in-container` able to discover the container:
-
-1. Temporarily add `--publish=18080:8080` and `--publish=15173:5173` to
-   `runArgs` in the standard `.devcontainer/devcontainer.json`.
-2. Run `devcontainer up --workspace-folder <absolute-worktree-path>`.
-3. Immediately revert only those temporary config lines. The running container
-   retains its port mappings and its label still references the standard config
-   path. Confirm the config has no diff before feature work.
-4. Verify with `docker port <container-id>` and run all project commands through
-   `./bin/in-container` as usual.
-
-Do not start from an alternate config pathname: `devcontainer exec` includes
-the config path in container discovery, so a container labelled with a temporary
-config can be invisible to `./bin/in-container` even though it is running.
-
-Git worktrees may contain a `.git` file whose `gitdir` is an absolute host path.
-If that path is not mounted into the container, in-container `git rev-parse`
-fails and workbench Make targets that use it resolve paths incorrectly. Prefer
-starting the container with the Git common directory bind-mounted at the same
-absolute path (or use `--mount-git-worktree-common-dir` when the worktree was
-created with relative paths). Read-only Git commands may instead run on the
-host, but that does not fix Make targets that call Git inside the container.
-
-For the full workbench on the prefixed console port, the browser-visible OIDC
-issuer is `http://127.0.0.1:15173/default`. Quarkus must be able to reach that
-same issuer from inside the container; a container-local forward from `15173`
-to Bun on `5173` (for example with `socat`) keeps discovery and browser redirects
-on one issuer. Open the console at `http://127.0.0.1:15173`; the backend is at
-`http://localhost:18080`.
-
 Deliberate exception: `tools/pulumi/api-extract` (pure-Go host tool),
 `tools/pulumi/recorder` (builds and runs its own docker image),
 `workbench/soak` (drives its own Compose stack), and the `analyze-semgrep` /
 `analyze-deps` Make targets (run the upstream Semgrep and osv-scanner images
-against a read-only bind mount of the tree) are not routed through the
-gateway — they manage their own execution environments.
+against a read-only bind mount of the tree) manage their own execution
+environments rather than running through the verification VM.
 
 Native image and release tooling (`bin/build-native-app-image`, `bin/release-gate`,
 `bin/generate-java-sbom`, and `bin/release`) is also host-Docker tooling. Mandrel
 compilation and all runtime checks happen inside pinned containers; do not run a
 host JDK or Maven for these commands.
 
-Semgrep and osv-scanner are deliberately not devcontainer features: adding them
-would force a container rebuild on every contributor for two tools that are
-only invoked from `make analyze`, and both publish maintained images. The other
-two analysis passes (`analyze-java`, `analyze-web`) do route through
-`./bin/in-container` as usual.
+Semgrep and osv-scanner use their maintained images instead of becoming local
+toolchain prerequisites. The Java and web analysis passes use the mise-pinned
+toolchain through the root Make targets.
 
-`workbench/soak` runs Compose from the host so the dev container can be stopped
-for the duration of a run: it is a ~4GB co-tenant on the same Docker VM as the
-2GB app under test. Build the image first, then stop it, then `make soak cmd=up`.
+`workbench/soak` runs Compose from the host so a multi-day run is owned by its
+purpose-built stack rather than an interactive development process.
 
 ## Project: state-db
 

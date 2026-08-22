@@ -92,7 +92,7 @@ analyze-java:
 analyze-web:
 	$(PINNED) bash -lc 'cd modules/web && bun install --frozen-lockfile && bun run lint && bun run typecheck'
 
-# These use maintained scanner images instead of adding rarely used tools to the dev container.
+# These use maintained scanner images instead of adding rarely used tools to the local toolchain.
 analyze-semgrep:
 	docker run --rm -v "$(CURDIR):/src:ro" -w /src $(SEMGREP_IMAGE) \
 		semgrep scan $(SEMGREP_RULES) \

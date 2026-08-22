@@ -2,11 +2,11 @@
 
 Companion to `storage-options-analysis.md`. Tasks are ordered by
 dependency; T1–T3 are independent of each other, T4–T7 depend as noted. Each is
-sized for one sitting. All build/test commands go through `./bin/in-container`;
+sized for one sitting. Authoritative verification goes through `./dev`;
 all soak-DB verification goes through
 `docker exec state-db-soak-postgres psql -U statedb -d statedb -c "..."`.
-Read `AGENTS.md` in full before starting any task — dev-container-only
-execution, Flyway owns the schema, Panache-first ORM idioms, and the
+Read `AGENTS.md` in full before starting any task — its execution rules,
+Flyway-owned schema, Panache-first ORM idioms, and the
 compaction/update mutual-exclusion invariant are all binding.
 
 ---
@@ -30,7 +30,7 @@ already provide identical indexes. New Flyway migration only; no Java changes.
   an index scan on the UNIQUE-constraint indexes.
 
 **How to verify:**
-- `./bin/in-container mvn -f modules/pom.xml test`
+- `./dev -- modules/mvnw -f modules/pom.xml test`
 - Against a dev database (not the soak DB — it must stay unmigrated evidence):
   `EXPLAIN SELECT * FROM journal_entries WHERE stack_id = '...' AND sequence_id > 0 ORDER BY sequence_id;`
   and the equivalent for `update_events`.
@@ -63,7 +63,7 @@ on `StackAssembler`'s streaming path. Flyway migration only.
   journal row, and export of a stack with mixed pglz/lz4 rows succeeds.
 
 **How to verify:**
-- `./bin/in-container mvn -f modules/pom.xml test`
+- `./dev -- modules/mvnw -f modules/pom.xml test`
 - Dev DB: insert via a normal update flow, then
   `SELECT pg_column_compression(payload), count(*) FROM journal_entries GROUP BY 1;`
 - Beware the gotcha from the brief: `INSERT ... SELECT` of an existing datum
@@ -124,7 +124,7 @@ assembles anything). Policy rationale and latency math: options analysis §O3.
 
 **How to verify:**
 - Focused tests:
-  `./bin/in-container mvn -f modules/pom.xml -pl persistence -am -Dtest='Compaction*' -Dsurefire.failIfNoSpecifiedTests=false test`
+  `./dev -- modules/mvnw -f modules/pom.xml -pl persistence -am -Dtest='Compaction*' -Dsurefire.failIfNoSpecifiedTests=false test`
 - Integration: drive N updates + compactions, then assert via Panache
   (`Snapshot.count("stackId", ...)`) the retained count and that
   `stack_state.base_snapshot_id` still resolves.
@@ -214,7 +214,7 @@ baseline, so measure before/after against one codec.
   accepted, no savings there.
 
 **How to verify:**
-- `./bin/in-container mvn -f modules/pom.xml -pl persistence -am -Dtest='*Journal*,*Assembler*' -Dsurefire.failIfNoSpecifiedTests=false test`
+- `./dev -- modules/mvnw -f modules/pom.xml -pl persistence -am -Dtest='*Journal*,*Assembler*' -Dsurefire.failIfNoSpecifiedTests=false test`
 - Candidate-bytes query for a before/after measurement on any dev dataset
   (terminal updates only — without the status filter this overcounts by
   including in-flight work that is never eligible):
@@ -287,7 +287,7 @@ should anticipate T6 reusing the pattern.
   `tools/pulumi/recorder/fixtures/` are realistic input).
 
 **How to verify:**
-- `./bin/in-container mvn -f modules/pom.xml -pl persistence,console-api -am -Dtest='*Event*,*Runs*' -Dsurefire.failIfNoSpecifiedTests=false test`
+- `./dev -- modules/mvnw -f modules/pom.xml -pl persistence,console-api -am -Dtest='*Event*,*Runs*' -Dsurefire.failIfNoSpecifiedTests=false test`
 - Smoke: console run-detail page for an archived run through the workbench
   stack; then a fresh soak run and compare the storage report's
   bytes-per-resource-per-update against the ~4.2 KB event baseline.

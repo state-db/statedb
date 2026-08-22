@@ -6,7 +6,7 @@ agent_java=${2:?usage: prepare-native-metadata-test-run <build-directory> <agent
 
 [[ -x $agent_java ]] || {
   echo "error: native-agent test JVM is missing at $agent_java" >&2
-  echo "run bin/prepare-native-agent-jvm inside the dev container first" >&2
+  echo "run ./dev native-contract to prepare and verify the native-agent JVM" >&2
   exit 2
 }
 

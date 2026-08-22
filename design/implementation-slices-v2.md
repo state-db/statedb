@@ -24,7 +24,7 @@ Conventions for every slice below:
 - **Tests** — what is added to the automated suite. Required if the slice
   changes wire shape or DB state.
 - **Manual verification** — one command (or short sequence) a reviewer can run
-  inside the dev container to convince themselves the slice works.
+  through the pinned local toolchain to convince themselves the slice works.
 
 If a slice adds or changes a Pulumi-protocol endpoint, it must add a
 fixture-driven contract test in the same PR.
@@ -74,7 +74,7 @@ a cosmetic one.
 **Manual verification**
 
 ```
-./bin/in-container mvn -f modules/pom.xml -pl app -am test
+./dev -- modules/mvnw -f modules/pom.xml -pl app -am test
 # In dev: connect to the dev-services DB and check pg_dump shows V002 applied.
 ```
 
@@ -138,7 +138,7 @@ STATEDB_BOOTSTRAP_ORG_DISPLAY_NAME='Acme Inc' \
 STATEDB_BOOTSTRAP_ADMIN_EMAIL=ops@acme.example \
 STATEDB_BOOTSTRAP_ADMIN_DISPLAY_NAME='Acme Ops' \
 STATEDB_BOOTSTRAP_ADMIN_TOKEN_HASH=$(printf %s "$TOKEN" | shasum -a 256 | cut -d' ' -f1) \
-./bin/in-container mvn -f modules/pom.xml -pl app -am quarkus:dev
+./dev -- modules/mvnw -f modules/pom.xml -pl app -am quarkus:dev
 # psql: SELECT (SELECT count(*) FROM organizations), (SELECT count(*) FROM users), (SELECT count(*) FROM org_members), (SELECT count(*) FROM api_tokens); expect 1,1,1,1.
 ```
 
@@ -171,7 +171,7 @@ STATEDB_BOOTSTRAP_ADMIN_TOKEN_HASH=$(printf %s "$TOKEN" | shasum -a 256 | cut -d
 **Manual verification**
 
 ```
-./bin/in-container mvn -f modules/pom.xml -pl app -am quarkus:dev
+./dev -- modules/mvnw -f modules/pom.xml -pl app -am quarkus:dev
 # In another shell, with bootstrap env set as in Slice 4.5:
 curl -i -H 'Authorization: token <bootstrap-token>' http://localhost:8080/pulumi/api/user
 # Expect 200 with email/githubLogin/name/organizations.
@@ -306,7 +306,7 @@ pulumi stack ls
 **Manual verification**
 
 ```
-./bin/in-container mvn -f modules/pom.xml -pl app -am -Dtest='*ContractTest' test
+./dev -- modules/mvnw -f modules/pom.xml -pl app -am -Dtest='*ContractTest' test
 ```
 
 ---
@@ -906,7 +906,7 @@ The cap in `LICENSE` (Free Edition Use Limit, ten active stacks per deployment) 
 **Manual verification**
 
 ```
-./bin/in-container mvn -f modules/pom.xml license:check
+./dev -- modules/mvnw -f modules/pom.xml license:check
 ```
 
 ---
@@ -986,7 +986,7 @@ for i in $(seq 1 11); do pulumi stack init test-$i; done
 **Manual verification**
 
 ```
-./bin/in-container mvn -f modules/pom.xml package
+./dev -- modules/mvnw -f modules/pom.xml package
 # Confirm THIRD-PARTY-NOTICES.txt is present in the built JAR.
 ```
 
@@ -1000,6 +1000,6 @@ For every slice:
 2. Repository / service / domain logic.
 3. JAX-RS resource + filter wiring.
 4. Tests — at minimum one happy path and one failure path.
-5. A `Manual verification` line in the PR description that the reviewer can paste into the dev container.
+5. A `Manual verification` line in the PR description that the reviewer can paste into a shell.
 
 When a slice changes wire shape, the contract harness must be the thing that catches a regression — not someone running `pulumi up` by hand.

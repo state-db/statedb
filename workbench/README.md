@@ -5,7 +5,7 @@ None of this is exercised by `./dev check` or CI — it's for interactive use.
 
 - **[`pulumi/`](pulumi/README.md)** — the day-to-day dev workbench: Postgres +
   mock IdP + the app (built image by default, or hot-reload dev mode), all
-  host-native via `pulumi/dev-host.sh` — no dev container. Plus a
+  host-native via `pulumi/dev-host.sh`. Plus a
   fixture-estate generator, churn runs, and a high-cardinality scale simulator
   (`pulumi/providers/statedbsim`). Owns most of the interesting logic here.
 - **[`soak/`](soak/README.md)** — a separate, long-running endurance harness

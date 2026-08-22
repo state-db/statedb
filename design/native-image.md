@@ -72,8 +72,8 @@ metadata-affecting and runs the full contract in the same change.
 
 ## Drift check
 
-CI runs the comprehensive suite on the dev-container JDK, then re-runs `app.statedb.app.auth.*Test`
-in a Surefire fork of the digest-pinned Mandrel builder's JVM with the tracing agent attached
+The authoritative check runs the comprehensive suite on the mise-pinned Temurin JDK, then re-runs
+`app.statedb.app.auth.*Test` in a Surefire fork of the digest-pinned Mandrel builder's JVM with the tracing agent attached
 (`-Pnative-agent-tests`). At `verify`, `bin/check-native-metadata-drift` merges the agent output,
 canonicalizes it, keeps `com.cedarpolicy.*` observations plus exact production resources, and diffs
 against `modules/app/src/test/native-image-agent-reviewed/reachability-metadata.json`. Any addition

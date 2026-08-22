@@ -39,5 +39,5 @@ A removal usually means a call path stopped reaching Cedar, not that the metadat
 unnecessary. Never copy raw agent output into `src/main/resources` and never enable automatic
 agent-output application.
 
-Run Java and Maven commands only through `./bin/in-container`. Do not commit, push, or open a pull
-request unless explicitly requested.
+Use `./dev native-contract` for focused verification and `./dev check` for the final gate. Do not
+commit, push, or open a pull request unless explicitly requested.

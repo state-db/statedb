@@ -28,9 +28,18 @@ This offers the strongest reproducibility or graph model. It also introduces a s
 
 ### 3. Repository-owned workspace kernel with a credential-free VM (recommended)
 
-Expose one repository command (`./dev`) backed by pinned tools and a task DAG. Copy Git-visible source into a persistent Lima VM created with no host mounts. Run Java, Bun, Go, Maven plugins, and Testcontainers there with a guest-only home and rootless Docker daemon. The VM preserves caches between iterative runs but receives no host credential directories, SSH agent, GitHub token, cloud configuration, or host Docker socket. A guest firewall blocks new connections to Lima's host gateway, and repository code has no sudo access with which to remove it. Commit signoff starts from a freshly created VM rather than trusting persistent guest state. Keep the dev container as optional human editor tooling rather than verification policy.
+Expose one repository command (`./dev`) backed by pinned tools and a task DAG. Copy Git-visible source into a persistent Lima VM created with no host mounts. Run Java, Bun, Go, Maven plugins, and Testcontainers there with a guest-only home and rootless Docker daemon. The VM preserves caches between iterative runs but receives no host credential directories, SSH agent, GitHub token, cloud configuration, or host Docker socket. A guest firewall blocks new connections to Lima's host gateway, and repository code has no sudo access with which to remove it. Commit signoff starts from a freshly created VM rather than trusting persistent guest state.
 
 This design has the deepest interface: callers name intent while tool installation, Maven reactor flags, caches, service topology, worktree isolation, and platform differences stay hidden behind one module.
+
+## Final decision
+
+The repository initially retained the dev container as an optional editor adapter. Once `./dev`
+owned verification and the host-native workbench owned interactive development, that adapter had
+no unique supported responsibility. Its separately pinned toolchain drifted, Docker socket access
+provided no security boundary, and its linked-worktree lifecycle added substantial operational
+complexity. The dev-container definition and lifecycle were therefore removed; purpose-specific
+containers remain where the container is the product or a real test dependency.
 
 ## Sources
 

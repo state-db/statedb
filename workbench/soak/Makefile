@@ -3,10 +3,9 @@
 REPO_ROOT    := ../..
 COMPOSE_DIR  := workbench/soak
 
-## Compose runs on the host. The containers are host-level siblings either way, so this is not
-## about isolation: it keeps a multi-day run from being orphaned by a dev container rebuild, and
-## lets that container be stopped for the duration — it is a ~4GB co-tenant on the same VM as the
-## 2GB app under test. Only the image build still needs it (`mvn package` runs bun).
+## Compose runs on the host so the purpose-built stack owns the whole multi-day lifecycle. The app
+## image is built through its pinned container build; no interactive development process needs to
+## remain alive for the run.
 
 APP_IMAGE ?= state-db:dev
 ORG       ?= soak

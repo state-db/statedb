@@ -2,7 +2,7 @@
 
 Run the real Pulumi CLI against a local state-db backend and inspect what
 lands in Postgres. Not hermetic — edit `Pulumi.yaml`, run the CLI, check the
-DB, repeat. No dev container — everything here runs straight on your host.
+DB, repeat. Everything here runs through the host-native workbench lifecycle.
 
 ## Quick reference
 

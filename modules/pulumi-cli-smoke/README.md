@@ -6,7 +6,7 @@ a Docker container, in two tiers. Keep normal development on the fast app tests.
 **Smoke** — per-command sanity against the real CLI:
 
 ```bash
-./bin/in-container mvn -f modules/pom.xml -pl pulumi-cli-smoke -am verify -DskipPulumiCliSmoke=false
+./dev -- modules/mvnw -f modules/pom.xml -pl pulumi-cli-smoke -am verify -DskipPulumiCliSmoke=false
 ```
 
 **Faults** — adversarial fault-injection scenarios (CLI killed mid-update,
@@ -17,19 +17,23 @@ own `snapshot.VerifyIntegrity`. Results are written to
 `target/state-safety-report.md` — the published State Safety Report:
 
 ```bash
-./bin/in-container mvn -f modules/pom.xml -pl pulumi-cli-smoke -am verify -DskipPulumiCliFaults=false
+./dev -- modules/mvnw -f modules/pom.xml -pl pulumi-cli-smoke -am verify -DskipPulumiCliFaults=false
 ```
 
 The Pulumi CLI version under test is pinned by the pom's `pulumi.cli.image`
 property; the nightly CI matrix overrides it per version:
 
 ```bash
-./bin/in-container mvn ... -Dpulumi.cli.image=pulumi/pulumi:3.242.0
+./dev -- modules/mvnw ... -Dpulumi.cli.image=pulumi/pulumi:3.242.0
 ```
 
-The dev container uses Docker-outside-of-Docker, so Testcontainers can start the
-Pulumi sibling container while still honoring the repo rule that project commands
-run through `./bin/in-container`.
+These focused commands are the explicit human-local path and require Docker.
+The authoritative smoke and fault gate runs both tiers inside the credential-free
+verification VM:
+
+```bash
+./dev protocol
+```
 
 ## Layout
 

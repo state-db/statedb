@@ -10,9 +10,8 @@
 #    `pulumi login` browser flow; the workbench make targets need a non-interactive credential, so
 #    it is seeded directly as a service-account token.
 #
-# Idempotent. Runs inside the dev container (docker CLI talks to the host daemon, same as the other
-# workbench db targets). Values come from fixed workbench config (no quotes), so they are
-# interpolated straight into the SQL.
+# Idempotent. Runs from the host and talks to the workbench Postgres container through Docker.
+# Values come from fixed workbench config (no quotes), so they are interpolated straight into SQL.
 set -eu
 
 : "${DB_CONTAINER:?}" "${DB_USER:?}" "${DB_NAME:?}" "${ORG:?}" "${OIDC_ISSUER:?}" "${ADMIN_SUB:?}" "${TOKEN_HASH:?}"

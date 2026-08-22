@@ -10,22 +10,27 @@ docker-compose evaluation bundle are planned; until then, run from source.
 
 ## Prerequisites
 
-- Docker (the build and the dev database run in containers)
+- Docker (the dev database and supporting services run in containers)
+- mise (installs the pinned Java, Bun, and Go toolchains)
 - A Postgres 15+ instance for production use
 
 ## Run from source
 
-Clone the repository and start the service in dev mode, which brings up an
-ephemeral Postgres automatically:
+Clone the repository, install the pinned toolchain, and start the local
+workbench in hot-reload mode. The workbench starts Postgres and the mock
+identity provider through Docker, then runs the backend and console:
 
 ```sh
 git clone https://github.com/state-db/statedb.git
 cd statedb
-devcontainer up --workspace-folder .
-./bin/in-container mvn -f modules/pom.xml -pl app -am quarkus:dev
+brew install mise
+mise trust mise.toml
+mise install
+make pulumi-workbench cmd=app-dev
 ```
 
-The backend and console are now listening on `http://localhost:8080`.
+The backend listens on `http://localhost:8080`; the console is at
+`http://localhost:5173`.
 
 ## Point your CLI at it
 
@@ -41,7 +46,7 @@ pulumi new aws-typescript
 pulumi up
 ```
 
-Open `http://localhost:8080` in a browser to see the stack, its resources, and
+Open `http://localhost:5173` in a browser to see the stack, its resources, and
 its first update in the console.
 
 ## Next steps

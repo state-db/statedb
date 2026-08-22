@@ -1,7 +1,7 @@
 /**
  * Regenerates the landing page's test wall from the compatibility suite.
  *
- *   ./bin/in-container bash -lc 'cd /workspaces/statedb/site && bun run generate:test-wall'
+ *   ./dev -- bash -lc 'cd site && bun run generate:test-wall'
  *
  * Every chip on the wall is a real name with a real source path, so the wall
  * can only ever show what the suite actually contains. Re-run after adding or

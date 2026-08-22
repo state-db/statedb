@@ -244,8 +244,8 @@
                          reachability. They exercise every Cedar call path, which is the reachability
                          Quarkus cannot derive at build time; everything else in the suite resolves to
                          entities and REST payloads that augmentation already registers. The default
-                         Surefire execution above still runs the comprehensive suite on the ordinary
-                         dev-container JDK. -->
+                         Surefire execution above still runs the comprehensive suite on the
+                         mise-pinned Temurin JDK. -->
                     <plugin>
                         <groupId>org.apache.maven.plugins</groupId>
                         <artifactId>maven-surefire-plugin</artifactId>
