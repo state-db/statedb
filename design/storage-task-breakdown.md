@@ -5,7 +5,7 @@ dependency; T1–T3 are independent of each other, T4–T7 depend as noted. Each
 sized for one sitting. All build/test commands go through `./bin/in-container`;
 all soak-DB verification goes through
 `docker exec state-db-soak-postgres psql -U statedb -d statedb -c "..."`.
-Read `CLAUDE.md` in full before starting any task — dev-container-only
+Read `AGENTS.md` in full before starting any task — dev-container-only
 execution, Flyway owns the schema, Panache-first ORM idioms, and the
 compaction/update mutual-exclusion invariant are all binding.
 

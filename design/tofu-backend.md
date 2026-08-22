@@ -25,7 +25,7 @@ because violating them is the most likely failure mode.
 2. **Never put slice numbers in source code.** No "Slice 31.3" in Javadoc,
    comments, commit messages, or test names. Describe the behavior instead
    ("lock verification on state writes"), not the planning artifact.
-3. **ORM idioms are a hard rule** (see CLAUDE.md § ORM idioms). Default to
+3. **ORM idioms are a hard rule** (see AGENTS.md § ORM idioms). Default to
    Panache entities and static finders. `EntityManager` + native SQL is allowed
    only for the specific escape hatches this doc calls out (the lock upsert),
    and each use needs a Javadoc line naming the reason.

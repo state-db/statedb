@@ -48,7 +48,7 @@ import org.junit.jupiter.params.provider.MethodSource;
  * gzipped bodies in fixture order against our handler. We verify all rows landed and the wire
  * sequenceIDs round-trip into the right server {@code sequence_id} window.
  *
- * <p>The recorder ran with {@code --parallel=1} (see {@code tools/pulumi/recorder/CLAUDE.md}) so
+ * <p>The recorder ran with {@code --parallel=1} (see {@code tools/pulumi/recorder/AGENTS.md}) so
  * these fixtures arrive with contiguous, in-order wire IDs — a useful sanity check on the
  * non-parallel path. Out-of-order parallel arrival is covered separately in {@link
  * JournalAppenderTest}.

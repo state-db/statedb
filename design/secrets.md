@@ -79,7 +79,7 @@ CREATE TABLE service_secrets_keyset (
 
 ### Bootstrap seeding
 
-The row is seeded by `BootstrapProvisioner`, not by Flyway. Flyway migrations should be deterministic across environments and reproducible from a snapshot; generating random key material inside a migration violates both. The bootstrap path uses the existing `AdvisoryLock#runExclusive` pattern documented in `CLAUDE.md`:
+The row is seeded by `BootstrapProvisioner`, not by Flyway. Flyway migrations should be deterministic across environments and reproducible from a snapshot; generating random key material inside a migration violates both. The bootstrap path uses the existing `AdvisoryLock#runExclusive` pattern documented in `AGENTS.md`:
 
 1. Bootstrap acquires `AdvisoryLock.SECRETS_KEYSET_BOOTSTRAP_LOCK`.
 2. Inside the lock, the provisioner checks for the singleton row. If absent, it calls `KeysetHandle.generateNew(PredefinedAeadParameters.AES256_GCM)`, serializes the handle, and inserts the bytes as a bind parameter:
