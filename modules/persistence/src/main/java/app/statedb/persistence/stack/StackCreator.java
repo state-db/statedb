@@ -2,6 +2,7 @@ package app.statedb.persistence.stack;
 
 import app.statedb.persistence.AdvisoryLock;
 import app.statedb.persistence.NameGrammar;
+import app.statedb.persistence.PersistenceExceptions;
 import app.statedb.persistence.entitlement.EffectiveEntitlement;
 import app.statedb.persistence.entitlement.Entitlements;
 import jakarta.enterprise.context.ApplicationScoped;
@@ -10,7 +11,6 @@ import jakarta.persistence.PersistenceException;
 import jakarta.transaction.Transactional;
 import java.util.Map;
 import java.util.UUID;
-import org.hibernate.exception.ConstraintViolationException;
 
 /**
  * Creates a stack — and the project + workspace + stack_state rows that go with it — in one
@@ -56,7 +56,7 @@ public class StackCreator {
     try {
       stack.persistAndFlush();
     } catch (PersistenceException e) {
-      if (isUniqueViolation(e)) {
+      if (PersistenceExceptions.isUniqueViolation(e)) {
         throw new StackAlreadyExistsException(orgName, projectName, stackName);
       }
       throw e;
@@ -69,14 +69,5 @@ public class StackCreator {
 
     return new StackRef(
         stack.id, workspace.id, orgId, orgName, projectName, stackName, 0, null, stack.visibility);
-  }
-
-  private static boolean isUniqueViolation(Throwable t) {
-    for (Throwable c = t; c != null; c = c.getCause()) {
-      if (c instanceof ConstraintViolationException) {
-        return true;
-      }
-    }
-    return false;
   }
 }

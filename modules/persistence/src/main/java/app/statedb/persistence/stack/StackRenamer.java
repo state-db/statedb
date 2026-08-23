@@ -1,6 +1,7 @@
 package app.statedb.persistence.stack;
 
 import app.statedb.persistence.NameGrammar;
+import app.statedb.persistence.PersistenceExceptions;
 import app.statedb.persistence.lock.StackLockedException;
 import app.statedb.persistence.update.StackUpdate;
 import com.fasterxml.jackson.databind.node.ObjectNode;
@@ -13,7 +14,6 @@ import java.time.Instant;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.UUID;
-import org.hibernate.exception.ConstraintViolationException;
 
 /**
  * Moves a stack to a new name and/or project — {@code pulumi stack rename}. The Pulumi cloud
@@ -100,7 +100,7 @@ public class StackRenamer {
     try {
       stack.persistAndFlush();
     } catch (PersistenceException e) {
-      if (isUniqueViolation(e)) {
+      if (PersistenceExceptions.isUniqueViolation(e)) {
         throw new StackAlreadyExistsException(ref.orgName(), targetProject, targetName);
       }
       throw e;
@@ -179,14 +179,5 @@ public class StackRenamer {
 
   private static boolean isBlank(String value) {
     return value == null || value.isBlank();
-  }
-
-  private static boolean isUniqueViolation(Throwable t) {
-    for (Throwable c = t; c != null; c = c.getCause()) {
-      if (c instanceof ConstraintViolationException) {
-        return true;
-      }
-    }
-    return false;
   }
 }

@@ -38,6 +38,7 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
+import org.hibernate.exception.ConstraintViolationException;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -158,6 +159,31 @@ class JournalAppenderTest {
                       .longValue();
               assertEquals(1L, pending);
             });
+  }
+
+  @Test
+  void crossStackUpdateIdIsNotReportedAsASequenceConflict() {
+    UUID otherStackId =
+        QuarkusTransaction.requiringNew()
+            .call(
+                () -> {
+                  Organization org = Organization.find("name", ORG_NAME).singleResult();
+                  return stackCreator.create(org.id, ORG_NAME, "proj", "other", Map.of()).stackId();
+                });
+
+    RuntimeException thrown =
+        assertThrows(
+            RuntimeException.class,
+            () -> appender.append(otherStackId, updateId, leaseId, List.of(entry(1, 1, 1L, "{}"))));
+    assertFalse(thrown instanceof JournalSequenceConflictException);
+    String sqlState = null;
+    for (Throwable cause = thrown; cause != null; cause = cause.getCause()) {
+      if (cause instanceof ConstraintViolationException cve && cve.getSQLException() != null) {
+        sqlState = cve.getSQLException().getSQLState();
+        break;
+      }
+    }
+    assertEquals("23503", sqlState);
   }
 
   @Test

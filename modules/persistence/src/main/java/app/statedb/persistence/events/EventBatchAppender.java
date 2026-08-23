@@ -1,5 +1,6 @@
 package app.statedb.persistence.events;
 
+import app.statedb.persistence.PersistenceExceptions;
 import app.statedb.persistence.RequestValidationException;
 import app.statedb.persistence.lock.LeaseRevalidator;
 import com.fasterxml.jackson.databind.JsonNode;
@@ -10,7 +11,6 @@ import jakarta.persistence.PersistenceException;
 import jakarta.transaction.Transactional;
 import java.util.List;
 import java.util.UUID;
-import org.hibernate.exception.ConstraintViolationException;
 
 /**
  * Appends a batch of decoded Pulumi engine events. Events are observability data, not state — they
@@ -68,22 +68,10 @@ public class EventBatchAppender {
     try {
       em.flush();
     } catch (PersistenceException ex) {
-      if (isUniqueViolation(ex)) {
+      if (PersistenceExceptions.isUniqueViolation(ex)) {
         throw new EventSequenceConflictException(updateId, ex);
       }
       throw ex;
     }
-  }
-
-  private static boolean isUniqueViolation(Throwable t) {
-    for (Throwable c = t; c != null; c = c.getCause()) {
-      if (c instanceof ConstraintViolationException cve) {
-        // Distinguish unique violation (→ 409 sequence conflict) from FK violation (cross-stack
-        // smuggling — should propagate as 500, since the lease filter must have already prevented
-        // it from reaching here). Postgres SQLSTATE 23505 = unique_violation.
-        return cve.getSQLException() != null && "23505".equals(cve.getSQLException().getSQLState());
-      }
-    }
-    return false;
   }
 }
