@@ -1,25 +1,26 @@
 package app.statedb.consoleapi.user;
 
+import app.statedb.consoleapi.auth.SessionPrincipal;
+import app.statedb.persistence.auth.AuthenticatedPrincipal;
+import app.statedb.persistence.authz.CurrentPrincipal;
 import app.statedb.persistence.identity.AdminAllowList;
 import app.statedb.persistence.identity.OrgMember;
 import app.statedb.persistence.identity.OrgMembershipFinder;
 import app.statedb.persistence.identity.User;
-import io.quarkus.security.identity.SecurityIdentity;
 import jakarta.inject.Inject;
 import jakarta.ws.rs.GET;
-import jakarta.ws.rs.NotAuthorizedException;
 import jakarta.ws.rs.Path;
 import jakarta.ws.rs.Produces;
 import jakarta.ws.rs.core.MediaType;
 import java.util.List;
 import java.util.UUID;
-import org.eclipse.microprofile.jwt.JsonWebToken;
 
 /** Returns the user represented by the authenticated OIDC session. */
 @Path("/api/user")
+@SessionPrincipal
 public class CurrentUserResource {
 
-  @Inject SecurityIdentity identity;
+  @Inject CurrentPrincipal currentPrincipal;
 
   @Inject AdminAllowList adminAllowList;
 
@@ -28,15 +29,8 @@ public class CurrentUserResource {
   @GET
   @Produces(MediaType.APPLICATION_JSON)
   public UserResponse get() {
-    if (!(identity.getPrincipal() instanceof JsonWebToken jwt)) {
-      throw new NotAuthorizedException("OIDC");
-    }
-
-    User user =
-        User.<User>find("iss = ?1 and sub = ?2", jwt.getIssuer(), jwt.getSubject())
-            .firstResultOptional()
-            .filter(candidate -> candidate.deactivatedAt == null)
-            .orElseThrow(() -> new NotAuthorizedException("OIDC"));
+    AuthenticatedPrincipal principal = currentPrincipal.get();
+    User user = User.findById(principal.userId());
     List<OrganizationResponse> organizations =
         orgMembershipFinder.forUser(user.id).stream()
             .map(
@@ -49,7 +43,7 @@ public class CurrentUserResource {
         user.id,
         user.email,
         user.displayName,
-        adminAllowList.isAdmin(jwt.getIssuer(), jwt.getSubject()),
+        adminAllowList.isAdmin(principal.iss(), principal.sub()),
         organizations);
   }
 

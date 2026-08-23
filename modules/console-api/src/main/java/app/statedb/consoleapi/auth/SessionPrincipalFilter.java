@@ -2,6 +2,7 @@ package app.statedb.consoleapi.auth;
 
 import app.statedb.persistence.auth.AuthenticatedPrincipal;
 import app.statedb.persistence.authz.CurrentPrincipal;
+import app.statedb.persistence.identity.LiveUserFinder;
 import app.statedb.persistence.identity.User;
 import io.quarkus.security.identity.SecurityIdentity;
 import io.smallrye.common.annotation.Blocking;
@@ -34,15 +35,16 @@ public class SessionPrincipalFilter implements ContainerRequestFilter {
 
   @Inject CurrentPrincipal currentPrincipal;
 
+  @Inject LiveUserFinder liveUserFinder;
+
   @Override
   public void filter(ContainerRequestContext ctx) {
     if (!(identity.getPrincipal() instanceof JsonWebToken jwt)) {
       ctx.abortWith(Response.status(Response.Status.UNAUTHORIZED).build());
       return;
     }
-    User user =
-        User.<User>find("iss = ?1 and sub = ?2", jwt.getIssuer(), jwt.getSubject()).firstResult();
-    if (user == null || user.deactivatedAt != null) {
+    User user = liveUserFinder.findBySubject(jwt.getIssuer(), jwt.getSubject()).orElse(null);
+    if (user == null) {
       ctx.abortWith(Response.status(Response.Status.UNAUTHORIZED).build());
       return;
     }
