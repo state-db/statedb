@@ -1,6 +1,7 @@
 package app.statedb.app.update;
 
 import static io.restassured.RestAssured.given;
+import static org.hamcrest.Matchers.equalTo;
 
 import app.statedb.persistence.auth.ApiToken;
 import app.statedb.persistence.identity.OrgMember;
@@ -149,7 +150,9 @@ class CompleteUpdateContractTest {
         .when()
         .post(completePath(updateId))
         .then()
-        .statusCode(409);
+        .statusCode(409)
+        .body("code", equalTo(409))
+        .body("message", equalTo("update lease is no longer valid"));
   }
 
   @Test

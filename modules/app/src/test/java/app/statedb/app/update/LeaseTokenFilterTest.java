@@ -1,6 +1,7 @@
 package app.statedb.app.update;
 
 import static io.restassured.RestAssured.given;
+import static org.hamcrest.Matchers.equalTo;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
 import app.statedb.persistence.auth.ApiToken;
@@ -135,7 +136,9 @@ class LeaseTokenFilterTest {
         .when()
         .delete("/pulumi/api/stacks/" + ORG + "/" + PROJECT + "/" + STACK + "/update/" + updateId)
         .then()
-        .statusCode(409);
+        .statusCode(409)
+        .body("code", equalTo(409))
+        .body("message", equalTo("update lease is no longer valid"));
   }
 
   @Test

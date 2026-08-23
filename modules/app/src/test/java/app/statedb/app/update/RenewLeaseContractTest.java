@@ -156,7 +156,9 @@ class RenewLeaseContractTest {
                 + updateId
                 + "/renew_lease")
         .then()
-        .statusCode(409);
+        .statusCode(409)
+        .body("code", equalTo(409))
+        .body("message", equalTo("update lease is no longer valid"));
   }
 
   @Test

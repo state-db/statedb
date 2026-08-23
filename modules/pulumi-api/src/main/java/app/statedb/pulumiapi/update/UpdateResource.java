@@ -21,6 +21,7 @@ import app.statedb.persistence.update.StackUpdateCompleter;
 import app.statedb.persistence.update.StackUpdateStarter;
 import app.statedb.persistence.update.StartUpdateRequest;
 import app.statedb.persistence.update.StartedUpdate;
+import app.statedb.pulumiapi.auth.LeaseConflictResponse;
 import app.statedb.pulumiapi.auth.LeaseContextHolder;
 import app.statedb.pulumiapi.update.events.EventBatchRequest;
 import app.statedb.pulumiapi.update.journal.JournalPatchRequest;
@@ -234,7 +235,7 @@ public class UpdateResource {
     LeaseContext ctx = leaseHolder.get();
     UUID pathUpdateId = parseUpdateIdOr404(updateID, org, project, stack);
     if (ctx == null || !pathUpdateId.equals(ctx.updateId())) {
-      return Response.status(Response.Status.CONFLICT).build();
+      return LeaseConflictResponse.response();
     }
 
     // Vert.x's auto-decompression silently produces a null body for malformed gzip — without this
@@ -266,7 +267,7 @@ public class UpdateResource {
     LeaseContext ctx = leaseHolder.get();
     UUID pathUpdateId = parseUpdateIdOr404(updateID, org, project, stack);
     if (ctx == null || !pathUpdateId.equals(ctx.updateId())) {
-      return Response.status(Response.Status.CONFLICT).build();
+      return LeaseConflictResponse.response();
     }
 
     // Vert.x auto-decompresses gzip request bodies. A malformed gzip envelope yields a null body
@@ -324,7 +325,7 @@ public class UpdateResource {
     LeaseContext ctx = leaseHolder.get();
     UUID pathUpdateId = parseUpdateIdOr404(updateID, org, project, stack);
     if (ctx == null || !pathUpdateId.equals(ctx.updateId())) {
-      return Response.status(Response.Status.CONFLICT).build();
+      return LeaseConflictResponse.response();
     }
 
     if (body == null || body.status == null || body.status.isBlank()) {
@@ -356,7 +357,7 @@ public class UpdateResource {
     LeaseContext ctx = leaseHolder.get();
     UUID pathUpdateId = parseUpdateIdOr404(updateID, org, project, stack);
     if (ctx == null || !pathUpdateId.equals(ctx.updateId())) {
-      return Response.status(Response.Status.CONFLICT).build();
+      return LeaseConflictResponse.response();
     }
     lockCanceller.gracefulCancel(ctx.leaseId(), ctx.stackId(), ctx.updateId());
     return Response.noContent().build();

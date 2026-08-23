@@ -91,6 +91,6 @@ public class LeaseTokenFilter implements ContainerRequestFilter {
   }
 
   private static Response conflict() {
-    return Response.status(Response.Status.CONFLICT).build();
+    return LeaseConflictResponse.response();
   }
 }
