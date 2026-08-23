@@ -4,6 +4,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import app.statedb.pulumiapi.update.LeaseResource;
 import app.statedb.pulumiapi.update.UpdateResource;
 import jakarta.ws.rs.DELETE;
 import jakarta.ws.rs.GET;
@@ -25,6 +26,10 @@ class TokenAuthFilterPredicateTest {
       Set.of(
           new Route("POST", "/update/{updateID}"),
           new Route("GET", "/update/{updateID}"),
+          new Route("POST", "/update/{updateID}/cancel"));
+
+  private static final Set<Route> LEASE_RESOURCE_ROUTES =
+      Set.of(
           new Route("POST", "/update/{updateID}/renew_lease"),
           new Route("PATCH", "/update/{updateID}/journalentries"),
           new Route("POST", "/update/{updateID}/events/batch"),
@@ -32,8 +37,7 @@ class TokenAuthFilterPredicateTest {
           new Route("PATCH", "/update/{updateID}/checkpointdelta"),
           new Route("PATCH", "/update/{updateID}/checkpointverbatim"),
           new Route("POST", "/update/{updateID}/complete"),
-          new Route("DELETE", "/update/{updateID}"),
-          new Route("POST", "/update/{updateID}/cancel"));
+          new Route("DELETE", "/update/{updateID}"));
 
   @Test
   void everyPulumiApiPathIsGatedByDefault() {
@@ -76,8 +80,22 @@ class TokenAuthFilterPredicateTest {
   }
 
   @Test
-  void leaseRouteMatcherCoversEveryUpdateResourceRoute() {
-    assertEquals(UPDATE_RESOURCE_ROUTES, updateResourceRoutes());
+  void updateRoutesStayPartitionedByAuthenticationScheme() {
+    assertEquals(UPDATE_RESOURCE_ROUTES, resourceRoutes(UpdateResource.class));
+    assertEquals(LEASE_RESOURCE_ROUTES, resourceRoutes(LeaseResource.class));
+
+    String root = "/pulumi/api/stacks/o/p/s";
+    String updateId = "00000000-0000-0000-0000-000000000000";
+    for (Route route : UPDATE_RESOURCE_ROUTES) {
+      assertTrue(
+          TokenAuthFilter.requiresAuth(
+              route.method(), root + route.path().replace("{updateID}", updateId)));
+    }
+    for (Route route : LEASE_RESOURCE_ROUTES) {
+      assertFalse(
+          TokenAuthFilter.requiresAuth(
+              route.method(), root + route.path().replace("{updateID}", updateId)));
+    }
   }
 
   @Test
@@ -90,9 +108,9 @@ class TokenAuthFilterPredicateTest {
     assertTrue(TokenAuthFilter.requiresAuth("GET", basePath + "/checkpoint"));
   }
 
-  private static Set<Route> updateResourceRoutes() {
+  private static Set<Route> resourceRoutes(Class<?> resourceClass) {
     Set<Route> routes = new HashSet<>();
-    for (Method method : UpdateResource.class.getDeclaredMethods()) {
+    for (Method method : resourceClass.getDeclaredMethods()) {
       Path path = method.getAnnotation(Path.class);
       if (path == null || !path.value().contains("/update/{updateID}")) {
         continue;

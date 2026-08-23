@@ -200,6 +200,21 @@ class LeaseTokenFilterTest {
   }
 
   @Test
+  void malformedPathUpdateIdReturns409() {
+    String updateId = startPreview(STACK);
+    String token = acquireLock(STACK, updateId);
+
+    given()
+        .header("Authorization", "update-token " + token)
+        .when()
+        .delete("/pulumi/api/stacks/" + ORG + "/" + PROJECT + "/" + STACK + "/update/not-a-uuid")
+        .then()
+        .statusCode(409)
+        .body("code", equalTo(409))
+        .body("message", equalTo("update lease is no longer valid"));
+  }
+
+  @Test
   void cancelHappyPathReturns204AndRemovesLock() {
     String updateId = startPreview(STACK);
     String token = acquireLock(STACK, updateId);
