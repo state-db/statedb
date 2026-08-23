@@ -173,6 +173,20 @@ class StackCreateContractTest {
   }
 
   @Test
+  void missingStackNameReturnsPulumiError() {
+    given()
+        .header("Authorization", "token " + RAW_TOKEN)
+        .contentType("application/json")
+        .body(Map.of("tags", Map.of()))
+        .when()
+        .post("/pulumi/api/stacks/" + ORG_NAME + "/" + PROJECT)
+        .then()
+        .statusCode(400)
+        .body("code", equalTo(400))
+        .body("message", equalTo("stackName is required"));
+  }
+
+  @Test
   void projectNameOutsideGrammarReturns400() {
     // '~' is URL-safe (reaches the handler as a path segment) but outside the name grammar.
     Map<String, Object> body = Map.of("stackName", "dev", "tags", Map.of());

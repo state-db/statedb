@@ -1,5 +1,6 @@
 package app.statedb.pulumiapi.secrets;
 
+import app.statedb.persistence.RequestValidationException;
 import app.statedb.persistence.authz.Authorize;
 import app.statedb.persistence.authz.AuthorizedResource;
 import app.statedb.persistence.authz.StackEntityLoader;
@@ -14,7 +15,6 @@ import jakarta.ws.rs.PathParam;
 import jakarta.ws.rs.Produces;
 import jakarta.ws.rs.WebApplicationException;
 import jakarta.ws.rs.core.MediaType;
-import jakarta.ws.rs.core.Response;
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 import java.security.GeneralSecurityException;
@@ -52,7 +52,7 @@ public class SecretsResource {
       EncryptRequest request) {
     byte[] aad = aad();
     if (request == null || request.plaintext() == null) {
-      throw badRequest("plaintext is required");
+      throw new RequestValidationException("plaintext is required");
     }
     try {
       byte[] ciphertext =
@@ -75,7 +75,7 @@ public class SecretsResource {
       DecryptRequest request) {
     byte[] aad = aad();
     if (request == null || request.ciphertext() == null) {
-      throw badRequest("ciphertext is required");
+      throw new RequestValidationException("ciphertext is required");
     }
     String plaintext = decryptOne(request.ciphertext(), aad);
     return new DecryptResponse(plaintext);
@@ -93,13 +93,13 @@ public class SecretsResource {
     byte[] aad = aad();
     List<String> ciphertexts = request == null ? null : request.ciphertexts();
     if (ciphertexts == null) {
-      throw badRequest("ciphertexts is required");
+      throw new RequestValidationException("ciphertexts is required");
     }
     // LinkedHashMap preserves insertion order; identical inputs collapse to one entry.
     Map<String, String> out = new LinkedHashMap<>();
     for (String ct : ciphertexts) {
       if (ct == null) {
-        throw badRequest("invalid ciphertext");
+        throw new RequestValidationException("invalid ciphertext");
       }
       if (out.containsKey(ct)) {
         continue;
@@ -114,14 +114,14 @@ public class SecretsResource {
     try {
       ciphertext = Base64.getDecoder().decode(b64);
     } catch (IllegalArgumentException e) {
-      throw badRequest("invalid ciphertext");
+      throw new RequestValidationException("invalid ciphertext");
     }
     try {
       byte[] plaintext = secretsAead.aead().decrypt(ciphertext, aad);
       return new String(plaintext, StandardCharsets.UTF_8);
     } catch (GeneralSecurityException e) {
       // Generic 400 regardless of which check failed (truncation, tag, unknown key id, AAD).
-      throw badRequest("invalid ciphertext");
+      throw new RequestValidationException("invalid ciphertext");
     }
   }
 
@@ -138,14 +138,6 @@ public class SecretsResource {
     buf.putLong(id.getMostSignificantBits());
     buf.putLong(id.getLeastSignificantBits());
     return buf.array();
-  }
-
-  private static WebApplicationException badRequest(String message) {
-    return new WebApplicationException(
-        Response.status(400)
-            .type(MediaType.APPLICATION_JSON)
-            .entity(Map.of("code", 400, "message", message))
-            .build());
   }
 
   public record EncryptRequest(@JsonProperty("plaintext") String plaintext) {}

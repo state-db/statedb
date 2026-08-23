@@ -1,5 +1,6 @@
 package app.statedb.pulumiapi.stack;
 
+import app.statedb.persistence.RequestValidationException;
 import app.statedb.persistence.authz.Authorize;
 import app.statedb.persistence.authz.AuthorizedResource;
 import app.statedb.persistence.authz.OrgEntityLoader;
@@ -13,9 +14,7 @@ import jakarta.ws.rs.POST;
 import jakarta.ws.rs.Path;
 import jakarta.ws.rs.PathParam;
 import jakarta.ws.rs.Produces;
-import jakarta.ws.rs.WebApplicationException;
 import jakarta.ws.rs.core.MediaType;
-import jakarta.ws.rs.core.Response;
 import java.util.Map;
 
 @Path("/pulumi/api/stacks/{org}/{project}")
@@ -32,7 +31,7 @@ public class StacksResource {
   public StackDto create(
       @PathParam("org") String org, @PathParam("project") String project, CreateStackRequest body) {
     if (body == null || body.stackName == null || body.stackName.isBlank()) {
-      throw new WebApplicationException(Response.Status.BAD_REQUEST);
+      throw new RequestValidationException("stackName is required");
     }
 
     Organization targetOrg = authorized.subject(Organization.class);
