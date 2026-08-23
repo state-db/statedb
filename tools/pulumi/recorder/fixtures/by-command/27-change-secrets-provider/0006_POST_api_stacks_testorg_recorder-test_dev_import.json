@@ -1,0 +1,37 @@
+{
+  "seq": 405,
+  "command": "27-change-secrets-provider",
+  "cmd_seq": 6,
+  "method": "POST",
+  "path": "/api/stacks/testorg/recorder-test/dev/import",
+  "headers": {
+    "Accept": "application/vnd.pulumi+9",
+    "Accept-Encoding": "gzip",
+    "Authorization": "REDACTED",
+    "Content-Encoding": "gzip",
+    "Content-Length": "208",
+    "Content-Type": "application/json",
+    "User-Agent": "pulumi-cli/1 ([cli-version]; linux; cmd=stack-change-secrets-provider)"
+  },
+  "body": {
+    "deployment": {
+      "manifest": {
+        "magic": "4ae265b5e36f43e09c7ff61ff9e23e82843496e0c1ad370c8f62bd2c5f0f4369",
+        "time": "1970-01-01T00:00:00Z",
+        "version": "v3.242.0"
+      },
+      "metadata": {},
+      "secrets_providers": {
+        "state": {
+          "salt": "[salt]"
+        },
+        "type": "passphrase"
+      }
+    },
+    "version": 3
+  },
+  "body_b64": "H4sIAAAAAAAA/0yOQWrDMBRE7zJrJ3xLimzrHF21lPIjf7WC2BaSMASjuxeHLgoD8zbDmwOzpMf2XGStcAcWXmOQ8sff0cPBsCh7u99E22C00OSHEGwfwiRKy6hGo81khXzPsx7Ij8Gq+6z8LVAw2k7oUOMicOingS7UX6h/I3KvvKPDLrnEbYXDrq/KqCuhdVik8syV4Y7WoYjPUstXytseZ8nlfFgqV3kBPyocPs7+PMf1mU5h4lLST+YiaO2fSLffAAAA//85TFwP+QAAAA==",
+  "body_gzip": true,
+  "status_code": 200,
+  "response": {}
+}

@@ -1,5 +1,5 @@
 {
-  "seq": 394,
+  "seq": 401,
   "command": "27-change-secrets-provider",
   "cmd_seq": 1,
   "method": "GET",
@@ -9,7 +9,7 @@
     "Accept-Encoding": "gzip",
     "Authorization": "REDACTED",
     "Content-Type": "application/json",
-    "User-Agent": "pulumi-cli/1 (v3.242.0; linux; cmd=stack-change-secrets-provider)"
+    "User-Agent": "pulumi-cli/1 ([cli-version]; linux; cmd=stack-change-secrets-provider)"
   },
   "status_code": 200,
   "response": {

@@ -1,5 +1,5 @@
 {
-  "seq": 275,
+  "seq": 282,
   "command": "12-up",
   "cmd_seq": 19,
   "method": "PATCH",
@@ -9,101 +9,31 @@
     "Accept-Encoding": "gzip",
     "Authorization": "REDACTED",
     "Content-Encoding": "gzip",
-    "Content-Length": "325",
+    "Content-Length": "218",
     "Content-Type": "application/json",
-    "User-Agent": "pulumi-cli/1 (v3.242.0; linux; cmd=up)"
+    "User-Agent": "pulumi-cli/1 ([cli-version]; linux; cmd=up)"
   },
   "body": {
     "entries": [
       {
-        "kind": 0,
-        "operation": {
-          "resource": {
-            "custom": true,
-            "inputs": {
-              "length": 2,
-              "separator": "-"
-            },
-            "parent": "urn:pulumi:dev::recorder-test::pulumi:pulumi:Stack::recorder-test-dev",
-            "propertyDependencies": {
-              "length": [],
-              "separator": []
-            },
-            "provider": "urn:pulumi:dev::recorder-test::pulumi:providers:random::default::[resource-id]",
-            "sourcePosition": "[source-position]",
-            "stackTrace": [
-              {
-                "sourcePosition": "[source-position]"
-              },
-              {
-                "sourcePosition": "[source-position]"
-              },
-              {
-                "sourcePosition": "[source-position]"
-              },
-              {
-                "sourcePosition": "[source-position]"
-              },
-              {
-                "sourcePosition": "[source-position]"
-              },
-              {
-                "sourcePosition": "[source-position]"
-              },
-              {
-                "sourcePosition": "[source-position]"
-              },
-              {
-                "sourcePosition": "[source-position]"
-              },
-              {
-                "sourcePosition": "[source-position]"
-              },
-              {
-                "sourcePosition": "[source-position]"
-              },
-              {
-                "sourcePosition": "[source-position]"
-              },
-              {
-                "sourcePosition": "[source-position]"
-              },
-              {
-                "sourcePosition": "[source-position]"
-              },
-              {
-                "sourcePosition": "[source-position]"
-              },
-              {
-                "sourcePosition": "[source-position]"
-              },
-              {
-                "sourcePosition": "[source-position]"
-              },
-              {
-                "sourcePosition": "[source-position]"
-              },
-              {
-                "sourcePosition": "[source-position]"
-              },
-              {
-                "sourcePosition": "[source-position]"
-              }
-            ],
-            "type": "random:index/randomPet:RandomPet",
-            "urn": "urn:pulumi:dev::recorder-test::random:index/randomPet:RandomPet::pet"
-          },
-          "type": "creating"
-        },
-        "operationID": 3,
+        "kind": 1,
+        "operationID": 2,
         "removeNew": null,
         "removeOld": null,
-        "sequenceID": 6,
+        "sequenceID": 5,
+        "state": {
+          "created": "1970-01-01T00:00:00Z",
+          "custom": true,
+          "id": "[resource-id]",
+          "modified": "1970-01-01T00:00:00Z",
+          "type": "pulumi:providers:random",
+          "urn": "urn:pulumi:dev::recorder-test::pulumi:providers:random::default"
+        },
         "version": 1
       }
     ]
   },
-  "body_b64": "H4sIAAAAAAAA/+xUPY/bMAz9L5xl9AvowDlLlzZouxkeBOs1FWJLKkW5DQz/90KOfYe7JVkPyGTy8T3rkQA5E4KKRyZuZzr74IjfG4oJYtXHQDyTIMciPWrcl6xxJFYpMORDKporPiCc9DfxR0MZyYrVKMTU0GIoWUFQYioSOJWhjJ4dJmZBH8VBGkVW3kvb54fa/vyK0zhMZChJ9aeXAxKCQ+hX/88m2u6Fi7ZbVs3kHeR+G5sgs9jg4sjs8MuWQZnbfSKNdx0ZuibHmP11ZNRu5bRBK6n281NsnWM736NZzIP2oL1ZWmdILwnEtC2QDw7/3l2TI5S/7xGZupO3N/PWf5gTtF6c7d1eYNWHU4WeLtqXA/EnQ4IxTviKv8ShDMMOfBvcDmT8KQg9quCzoQmS114/LN3yPwAA//+5ebh1NwUAAA==",
+  "body_b64": "H4sIAAAAAAAA/3yMMUvEQBCF/8urN5AIIk5tY6ONlccVIfsOFrM7cXY2IiH/XSJe6cEwxcf3vQ0sbokVctrwkUqEDAG60EZPWp6fIHcBxqwrX/gFKW2er+B1jldQ+dlYJh7BfUD10QnZMBlHZ4RgeHzou37o+uGt7+X33hEwteqaIW6NAekwT8aqzSZ2KZ4RkDWmS7o14t8LIVja3HKSxXRNkVbFxhI1I6BZgRxf/pzIVcQ4qUVa56wu8k8uEnkZ2+zYA1ZaTVogw37efwIAAP//T/wyLD4BAAA=",
   "body_gzip": true,
   "status_code": 200,
   "response": {}

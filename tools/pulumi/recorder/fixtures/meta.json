@@ -1,5 +1,7 @@
 {
   "org": "testorg",
   "project": "recorder-test",
-  "stack": "dev"
+  "stack": "dev",
+  "cli_version": "v3.259.0",
+  "random_provider_version": "4.20.0"
 }

@@ -1,5 +1,5 @@
 {
-  "seq": 391,
+  "seq": 396,
   "command": "26-destroy",
   "cmd_seq": 43,
   "method": "PATCH",
@@ -9,23 +9,23 @@
     "Accept-Encoding": "gzip",
     "Authorization": "REDACTED",
     "Content-Encoding": "gzip",
-    "Content-Length": "111",
+    "Content-Length": "114",
     "Content-Type": "application/json",
-    "User-Agent": "pulumi-cli/1 (v3.242.0; linux; cmd=destroy)"
+    "User-Agent": "pulumi-cli/1 ([cli-version]; linux; cmd=destroy)"
   },
   "body": {
     "entries": [
       {
         "kind": 1,
-        "operationID": 7,
+        "operationID": 6,
         "removeNew": null,
-        "removeOld": 1,
-        "sequenceID": 15,
+        "removeOld": 0,
+        "sequenceID": 13,
         "version": 1
       }
     ]
   },
-  "body_b64": "H4sIAAAAAAAA/6pWSs0rKcpMLVayiq5Wys7MS1GyMtRRyi9ILUosyczP83RRsjLXUSpKzc0vS/VLLVeyyivNyYEJ+OdAlBenFpam5iWnglQbmuoolaUWFWfm5ylZGdbG1gICAAD//woS1CVjAAAA",
+  "body_b64": "H4sIAAAAAAAA/zTKIQ4CQQwF0Lt8XcGEBFGNwcABCIKwXzQMLXR2FzGZuxPE2pfXQZ/T2KDXjqf5BC2CeDPvs4WfjtCDIPmKlWd+ob7UusGlTtCdoPGz0B/877IXrMxm4dAybuMXAAD//5gULNdjAAAA",
   "body_gzip": true,
   "status_code": 200,
   "response": {}

@@ -1,5 +1,5 @@
 {
-  "seq": 416,
+  "seq": 423,
   "command": "31-stack-init-for-cancel",
   "cmd_seq": 4,
   "method": "POST",
@@ -10,7 +10,7 @@
     "Authorization": "REDACTED",
     "Content-Length": "272",
     "Content-Type": "application/json",
-    "User-Agent": "pulumi-cli/1 (v3.242.0; linux; cmd=stack-init)"
+    "User-Agent": "pulumi-cli/1 ([cli-version]; linux; cmd=stack-new)"
   },
   "body": {
     "stackName": "dev",

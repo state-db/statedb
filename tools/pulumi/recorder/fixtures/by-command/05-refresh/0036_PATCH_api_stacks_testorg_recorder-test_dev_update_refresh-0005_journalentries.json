@@ -1,0 +1,145 @@
+{
+  "seq": 95,
+  "command": "05-refresh",
+  "cmd_seq": 36,
+  "method": "PATCH",
+  "path": "/api/stacks/testorg/recorder-test/dev/update/refresh-0005/journalentries",
+  "headers": {
+    "Accept": "application/vnd.pulumi+9",
+    "Accept-Encoding": "gzip",
+    "Authorization": "REDACTED",
+    "Content-Encoding": "gzip",
+    "Content-Length": "595",
+    "Content-Type": "application/json",
+    "User-Agent": "pulumi-cli/1 ([cli-version]; linux; cmd=refresh)"
+  },
+  "body": {
+    "entries": [
+      {
+        "isRefresh": true,
+        "kind": 3,
+        "operationID": 4,
+        "removeNew": null,
+        "removeOld": 3,
+        "sequenceID": 9,
+        "state": {
+          "created": "1970-01-01T00:00:00Z",
+          "custom": true,
+          "dependencies": [
+            "urn:pulumi:dev::recorder-test::random:index/randomPet:RandomPet::pet"
+          ],
+          "id": "[resource-id]",
+          "inputs": {
+            "length": 8,
+            "special": false,
+            "upper": false
+          },
+          "modified": "1970-01-01T00:00:00Z",
+          "outputs": {
+            "__meta": "{\"schema_version\":\"2\"}",
+            "__pulumi_raw_state_delta": {
+              "obj": {
+                "ps": {
+                  "keepers": {
+                    "4dabf18193072939515e22adb298388d": "1b47061264138c4ac30d75fd1eb44270",
+                    "ciphertext": "[secret]"
+                  },
+                  "overrideSpecial": {
+                    "4dabf18193072939515e22adb298388d": "1b47061264138c4ac30d75fd1eb44270",
+                    "ciphertext": "[secret]"
+                  }
+                }
+              }
+            },
+            "id": "[resource-id]",
+            "length": 8,
+            "lower": true,
+            "minLower": 0,
+            "minNumeric": 0,
+            "minSpecial": 0,
+            "minUpper": 0,
+            "number": true,
+            "numeric": true,
+            "result": "[result]",
+            "special": false,
+            "upper": false
+          },
+          "parent": "urn:pulumi:dev::recorder-test::pulumi:pulumi:Stack::recorder-test-dev",
+          "propertyDependencies": {
+            "length": [],
+            "special": [],
+            "upper": []
+          },
+          "provider": "urn:pulumi:dev::recorder-test::pulumi:providers:random::default::[resource-id]",
+          "sourcePosition": "[source-position]",
+          "stackTrace": [
+            {
+              "sourcePosition": "[source-position]"
+            },
+            {
+              "sourcePosition": "[source-position]"
+            },
+            {
+              "sourcePosition": "[source-position]"
+            },
+            {
+              "sourcePosition": "[source-position]"
+            },
+            {
+              "sourcePosition": "[source-position]"
+            },
+            {
+              "sourcePosition": "[source-position]"
+            },
+            {
+              "sourcePosition": "[source-position]"
+            },
+            {
+              "sourcePosition": "[source-position]"
+            },
+            {
+              "sourcePosition": "[source-position]"
+            },
+            {
+              "sourcePosition": "[source-position]"
+            },
+            {
+              "sourcePosition": "[source-position]"
+            },
+            {
+              "sourcePosition": "[source-position]"
+            },
+            {
+              "sourcePosition": "[source-position]"
+            },
+            {
+              "sourcePosition": "[source-position]"
+            },
+            {
+              "sourcePosition": "[source-position]"
+            },
+            {
+              "sourcePosition": "[source-position]"
+            },
+            {
+              "sourcePosition": "[source-position]"
+            },
+            {
+              "sourcePosition": "[source-position]"
+            },
+            {
+              "sourcePosition": "[source-position]"
+            }
+          ],
+          "type": "random:index/randomString:RandomString",
+          "urn": "urn:pulumi:dev::recorder-test::random:index/randomString:RandomString::word"
+        },
+        "version": 1
+      }
+    ]
+  },
+  "body_b64": "H4sIAAAAAAAA/+xVT08bPxD9LnN29NtNAknmzOUnVRQBvTSJVo49IS67tju2E1C0373y7gYoaguXHiohrbR+9pvx8/yxj0A2sqEAuDyCCde0ZQo7wMiJBNwbqwEnApwnltE4+/8F4FQAU+P2dEkHQJvq+jTxue7pgb4nsooyeyEgRBkJ8AiKSUbSgFAuZsWoKEdFeVsU2H1fQYBKIbrmtL0mT1aTVb1ASGzRpzo1BjXtEZmUY008ihQiIkurXYPGanr4rwdXFPH6aYSeIqwFmKxgyRRcYkUjo9cgwFifYsgqa7J3cQc4FxA8KSNrwK2sAwlI3hMPqBXQOG225k8Hcime3FZVQ1ECwnEFQe2okdWeOBhnV4ArGK+gBQFV1Z+wYnmousBVmupsdwS3+ZZ/vnN3T+SJu+FUy822nJeLSTEbLyaLs/KMxmOpN+PFfDKfd/I201lxXo7Pp+VkrqZSTQo9O9vqkjbT6XhW5NgbvyOO9BBzdAIppriGVoDbE7PRdHMKxl/esW3b3+ToRWZqd8iZ6AulMfZTj4sOXKaG2KgTfBLewy99EgsBNjWbZy/2ZNVDppDqOKhIdcwC3qgHL5lsNnmjUoel4XcTpbp/xRlp2oMAz7nz4uPFT53wXKLL9QtNGQyCluu2M94bneF79QwG4dRKqGkrUx0RX2eiB1cumHwrdOnrl/0w1ZHywW5ZKuqul3fYtOKD9kH7Z2lrAfHREyD84i26iWzs3fAc9QBE7sy3+/N93hAPjnW+sYd3BbBs1+2PAAAA//9qMJrW5AcAAA==",
+  "body_gzip": true,
+  "status_code": 200,
+  "response": {}
+}

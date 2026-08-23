@@ -1,0 +1,31 @@
+{
+  "seq": 370,
+  "command": "26-destroy",
+  "cmd_seq": 17,
+  "method": "POST",
+  "path": "/api/stacks/testorg/recorder-test/dev/update/destroy-0015",
+  "headers": {
+    "Accept": "application/vnd.pulumi+9",
+    "Accept-Encoding": "gzip",
+    "Authorization": "REDACTED",
+    "Content-Length": "273",
+    "Content-Type": "application/json",
+    "User-Agent": "pulumi-cli/1 ([cli-version]; linux; cmd=destroy)"
+  },
+  "body": {
+    "journalVersion": 1,
+    "tags": {
+      "pulumi:description": "Minimal Pulumi project for API recording. Uses the `random` provider so `pulumi up`/`destroy` exercise the journal/checkpoint write paths with real resource state.",
+      "pulumi:project": "recorder-test",
+      "pulumi:runtime": "yaml"
+    }
+  },
+  "body_b64": "eyJqb3VybmFsVmVyc2lvbiI6MSwidGFncyI6eyJwdWx1bWk6ZGVzY3JpcHRpb24iOiJNaW5pbWFsIFB1bHVtaSBwcm9qZWN0IGZvciBBUEkgcmVjb3JkaW5nLiBVc2VzIHRoZSBgcmFuZG9tYCBwcm92aWRlciBzbyBgcHVsdW1pIHVwYC9gZGVzdHJveWAgZXhlcmNpc2UgdGhlIGpvdXJuYWwvY2hlY2twb2ludCB3cml0ZSBwYXRocyB3aXRoIHJlYWwgcmVzb3VyY2Ugc3RhdGUuIiwicHVsdW1pOnByb2plY3QiOiJyZWNvcmRlci10ZXN0IiwicHVsdW1pOnJ1bnRpbWUiOiJ5YW1sIn19",
+  "status_code": 200,
+  "response": {
+    "journalVersion": 1,
+    "token": "lease-0015",
+    "tokenExpiration": 4102444800,
+    "version": 1
+  }
+}

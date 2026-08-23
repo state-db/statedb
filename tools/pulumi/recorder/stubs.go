@@ -11,6 +11,12 @@ import (
 var opCounter int64
 
 const stableTokenExpirationUnix = 4102444800 // 2100-01-01T00:00:00Z
+
+// pulumiVersion and pulumiManifestMagic are a paired constant: the CLI
+// recomputes the manifest magic over the echoed version (and normalized time),
+// so changing one without the other trips the CLI's snapshot integrity check.
+// The echoed value never appears in fixtures — normalization masks it to
+// [cli-version] at capture time — so it does not need to track the pin.
 const pulumiVersion = "v3.242.0"
 const pulumiManifestMagic = "4ae265b5e36f43e09c7ff61ff9e23e82843496e0c1ad370c8f62bd2c5f0f4369"
 

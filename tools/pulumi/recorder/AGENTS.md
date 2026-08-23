@@ -18,21 +18,43 @@ active-stub approach where we return synthetic responses locally.
 
 ## Running it
 
-```bash
-cd tools/pulumi/recorder
-./run.sh          # docker build + full capture session → updates fixtures + catalog
-```
-
-After a fresh clone, regenerate only the catalog (no Docker required):
+From repo root (preferred):
 
 ```bash
-go run ./catalog -fixtures fixtures -out ../../api-snapshots/pulumi/catalog.md
+make pulumi-recorder-discover   # docker build + full capture → replaces fixtures + catalog
 ```
 
-To capture with a *different* CLI version without touching the committed
-fixtures/catalog, don't call run.sh directly — use the compat sweep
-(`make pulumi-compat-sweep TO=v3.NNN.0`, see `tools/pulumi/compat/`), which
-redirects output to a scratch dir and diffs against the committed baseline.
+Equivalent targets from `tools/pulumi/recorder/`: `make run`, `make run-no-build`,
+`make catalog`, `make verify`, `make clean-fixtures` (also reachable from repo
+root as `pulumi-recorder-*`). The host-side entry point is `run.sh`, which accepts
+`PULUMI_VERSION`, `FIXTURES_DIR`, and `SNAPSHOTS_DIR` overrides; non-default CLI
+versions build their own image tag (`pulumi-recorder:<version>`) so cached layers
+coexist.
+
+Regenerate only the catalog after a fresh clone (no Docker required):
+
+```bash
+cd tools/pulumi/recorder && make catalog
+```
+
+### Using the recorder against a new Pulumi CLI version
+
+The workflow is owned by `tools/pulumi/compat/README.md`; in short:
+
+1. Run the compat sweep: `make pulumi-compat-sweep TO=v3.NNN.0`. It captures
+   with the target CLI into a scratch dir, diffs against the committed baseline,
+   and writes a report. Committed fixtures/catalog are never touched.
+2. Review the report (endpoint diff, call-sequence diff, per-call body/response
+   diffs) and fix stubs/state-db if the protocol moved.
+3. Adopt: bump `ARG PULUMI_VERSION` in the Dockerfile **and**
+   `github.com/pulumi/pulumi/sdk/v3` in `tools/pulumi/verify/go.mod` in lockstep,
+   re-record (`make pulumi-recorder-discover`), update the release matrix in
+   `.github/workflows/native.yml`, run replay/smoke tiers, and re-run the sweep
+   with `--publish`.
+
+Do not point trial captures at the committed fixtures dir directly. Each capture
+records the exact CLI version it ran under in `fixtures/meta.json`
+(`cli_version`), alongside org/project/stack and the random provider version.
 
 ---
 
@@ -66,7 +88,10 @@ recorder/
 `pulumi` invocation. The server switches its output directory to
 `fixtures/by-command/03-preview/` and resets the per-command sequence counter.
 Fixtures get a per-command sequence number (for ordering within the command) and
-a global sequence number (field `seq`, for cross-command ordering).
+a global sequence number (field `seq`, for cross-command ordering). Labels must
+be unique across a session — a reused label is rejected with 409, so copy-paste
+slips fail fast instead of silently merging two commands' traffic. The entrypoint
+waits for `GET /meta/health` before driving any command.
 
 ### Seeding state no command can produce
 
@@ -141,6 +166,15 @@ Other discoveries:
   decompressed payload is JSON, it also appears in `body` for inspection. Volatile
   JSON fields such as event/resource timestamps, generated provider IDs, and random
   outputs are normalized to keep fixture diffs stable.
+- CLI version strings are masked to `[cli-version]` at capture time — in the
+  `User-Agent` header and in `version` / `pulumi.version` values — so a pin bump
+  only diffs fixtures whose calls actually changed. The `cmd=` token in the
+  User-Agent is kept (it is real signal: the CLI renames command tokens), and
+  the exact version lives in `fixtures/meta.json`.
+- Recorder-owned container variables must not be named `PULUMI_*`: the CLI
+  enumerates every `PULUMI_`-prefixed variable into the update request body, so
+  such a name would plant recorder plumbing in the fixtures
+  (`STATEDB_RECORDER_RANDOM_PROVIDER_VERSION` is named that way for this reason).
 - `DELETE /api/stacks/{org}/{project}/{stack}?force=false` — the `force` query param
   matters; passing `force=true` skips the "has resources" guard.
 
@@ -157,7 +191,11 @@ run pulumi stack rename neworg/recorder-test/staging
 
 Pick the next number in sequence. The signal must come before the `run` call.
 
-### 2. Run `./run.sh`
+### 2. Run the capture
+
+```bash
+make pulumi-recorder-discover   # from repo root, or `make run` from this dir
+```
 
 The new command will fail at whichever endpoint the stub doesn't handle yet.
 The last fixture in `fixtures/by-command/09-stack-rename/` shows what the CLI
@@ -186,7 +224,7 @@ Add a helper at the bottom of `stubs.go`.
 ### 4. Verify compile + re-run
 
 ```bash
-go build ./... && ./run.sh
+make verify && make pulumi-recorder-discover   # or: go build ./... && make run
 ```
 
 Repeat steps 2–4 until the command completes. The iteration is fast after the
@@ -208,12 +246,14 @@ git add tools/pulumi/recorder/entrypoint.sh
 
 Commands not yet captured (add these as state-db matures):
 
-- `pulumi stack rename` — exercises `POST .../rename`
 - `pulumi config set` / `get` — exercises `PUT .../config` and encrypt/decrypt
-- `pulumi stack tag set` — exercises `PATCH .../tags`
 - A slower `pulumi up` / `destroy` — may show `renew_lease`
 - `pulumi stack import` — exercises `POST .../import`
 - `pulumi whoami` — may hit additional `/api/user` sub-paths
+
+Already captured: login, stack init/select/unselect/rm/rename, up/preview/
+refresh/destroy, cancel, export/graph/output/history, tags, and
+change-secrets-provider (see the numbered commands in `entrypoint.sh`).
 
 When adding providers to `testproject/Pulumi.yaml`, pin the corresponding
 `pulumi plugin install` version in the Dockerfile before recording.
@@ -225,14 +265,10 @@ When adding providers to `testproject/Pulumi.yaml`, pin the corresponding
 The catalog is a derived artifact — regenerate it any time fixtures change:
 
 ```bash
-cd tools/pulumi/recorder
-go run ./catalog \
-  -fixtures fixtures \
-  -out ../../api-snapshots/pulumi/catalog.md \
-  -org testorg \
-  -project recorder-test \
-  -stack dev
+cd tools/pulumi/recorder && make catalog
 ```
+
+(equivalent to `go run ./catalog -fixtures fixtures -out ../../api-snapshots/pulumi/catalog.md -org testorg -project recorder-test -stack dev`).
 
 The catalog deduplicates by `METHOD + normalized-path`, prefers 2xx examples,
 and detects binary bodies (gzip checkpoint/events payloads).

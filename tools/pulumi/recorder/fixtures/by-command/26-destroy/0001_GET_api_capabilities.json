@@ -1,5 +1,5 @@
 {
-  "seq": 349,
+  "seq": 354,
   "command": "26-destroy",
   "cmd_seq": 1,
   "method": "GET",
@@ -9,7 +9,7 @@
     "Accept-Encoding": "gzip",
     "Authorization": "REDACTED",
     "Content-Type": "application/json",
-    "User-Agent": "pulumi-cli/1 (v3.242.0; linux; cmd=destroy)"
+    "User-Agent": "pulumi-cli/1 ([cli-version]; linux; cmd=destroy)"
   },
   "status_code": 200,
   "response": {

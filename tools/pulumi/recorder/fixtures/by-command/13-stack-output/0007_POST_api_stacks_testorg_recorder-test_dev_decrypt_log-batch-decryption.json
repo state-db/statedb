@@ -1,5 +1,5 @@
 {
-  "seq": 303,
+  "seq": 311,
   "command": "13-stack-output",
   "cmd_seq": 7,
   "method": "POST",
@@ -10,7 +10,7 @@
     "Authorization": "REDACTED",
     "Content-Length": "37",
     "Content-Type": "application/json",
-    "User-Agent": "pulumi-cli/1 (v3.242.0; linux; cmd=stack-output)"
+    "User-Agent": "pulumi-cli/1 ([cli-version]; linux; cmd=stack-output)"
   },
   "body": {
     "commandName": "pulumi stack output"

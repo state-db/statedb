@@ -1,5 +1,5 @@
 {
-  "seq": 318,
+  "seq": 326,
   "command": "16-stack-tag-set",
   "cmd_seq": 4,
   "method": "PATCH",
@@ -10,7 +10,7 @@
     "Authorization": "REDACTED",
     "Content-Length": "262",
     "Content-Type": "application/json",
-    "User-Agent": "pulumi-cli/1 (v3.242.0; linux; cmd=stack-tag-set)"
+    "User-Agent": "pulumi-cli/1 ([cli-version]; linux; cmd=stack-tag-set)"
   },
   "body": {
     "env": "recorder",

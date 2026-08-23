@@ -60,9 +60,9 @@ class ContractReplayTest {
         "18-stack-tag-get",
         "19-stack-tag-rm",
         "20-stack-select",
-        "21-stack-unselect",
         "22-stack-graph",
-        // 23-stack-drift recorded no HTTP exchanges (the command never reached the backend).
+        // 21-stack-unselect recorded no HTTP exchanges (the command stopped touching the
+        // backend in newer CLIs). 23-stack-drift likewise never reached the backend.
         // 24-stack-schedule / 25-stack-webhook recorded the stub faking support with 200s;
         // state-db deliberately 501s those surfaces (UnsupportedFeatureContractTest,
         // UnsupportedFeatureSmokeIT).

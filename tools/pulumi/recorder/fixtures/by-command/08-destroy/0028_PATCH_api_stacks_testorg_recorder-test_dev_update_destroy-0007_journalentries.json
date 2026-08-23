@@ -1,0 +1,32 @@
+{
+  "seq": 144,
+  "command": "08-destroy",
+  "cmd_seq": 28,
+  "method": "PATCH",
+  "path": "/api/stacks/testorg/recorder-test/dev/update/destroy-0007/journalentries",
+  "headers": {
+    "Accept": "application/vnd.pulumi+9",
+    "Accept-Encoding": "gzip",
+    "Authorization": "REDACTED",
+    "Content-Encoding": "gzip",
+    "Content-Length": "113",
+    "Content-Type": "application/json",
+    "User-Agent": "pulumi-cli/1 ([cli-version]; linux; cmd=destroy)"
+  },
+  "body": {
+    "entries": [
+      {
+        "kind": 1,
+        "operationID": 2,
+        "removeNew": null,
+        "removeOld": 5,
+        "sequenceID": 5,
+        "version": 1
+      }
+    ]
+  },
+  "body_b64": "H4sIAAAAAAAA/zTKIQ7CQBAF0Lt8PaYkNaMxGDgAQRD6xYRlBmbbRWz27gRR+/I66GsaK/Ta8TRfoJMg3sz7auGnI/QgSL6i8cwv1LdSdriUBToLKj8b/cH/ngWNWS0cOo3b+AUAAP//I3BFCmIAAAA=",
+  "body_gzip": true,
+  "status_code": 200,
+  "response": {}
+}

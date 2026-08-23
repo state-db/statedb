@@ -1,5 +1,5 @@
 {
-  "seq": 325,
+  "seq": 333,
   "command": "19-stack-tag-rm",
   "cmd_seq": 1,
   "method": "GET",
@@ -9,7 +9,7 @@
     "Accept-Encoding": "gzip",
     "Authorization": "REDACTED",
     "Content-Type": "application/json",
-    "User-Agent": "pulumi-cli/1 (v3.242.0; linux; cmd=stack-tag-rm)"
+    "User-Agent": "pulumi-cli/1 ([cli-version]; linux; cmd=stack-tag-remove)"
   },
   "status_code": 200,
   "response": {

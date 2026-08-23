@@ -1,0 +1,32 @@
+{
+  "seq": 88,
+  "command": "05-refresh",
+  "cmd_seq": 29,
+  "method": "PATCH",
+  "path": "/api/stacks/testorg/recorder-test/dev/update/refresh-0005/journalentries",
+  "headers": {
+    "Accept": "application/vnd.pulumi+9",
+    "Accept-Encoding": "gzip",
+    "Authorization": "REDACTED",
+    "Content-Encoding": "gzip",
+    "Content-Length": "111",
+    "Content-Type": "application/json",
+    "User-Agent": "pulumi-cli/1 ([cli-version]; linux; cmd=refresh)"
+  },
+  "body": {
+    "entries": [
+      {
+        "kind": 0,
+        "operationID": 3,
+        "removeNew": null,
+        "removeOld": null,
+        "sequenceID": 6,
+        "version": 1
+      }
+    ]
+  },
+  "body_b64": "H4sIAAAAAAAA/6pWSs0rKcpMLVayiq5Wys7MS1GyMtBRyi9ILUosyczP83RRsjLWUSpKzc0vS/VLLVeyyivNyYEJ+OekwASKUwtLU/OSU0EazHSUylKLijPz85SsDGtjawEBAAD//6/LF5NlAAAA",
+  "body_gzip": true,
+  "status_code": 200,
+  "response": {}
+}

@@ -71,7 +71,7 @@ echo "==> sweep: baseline $BASELINE → target $TO"
 
 # --- 1. pin audit ------------------------------------------------------------
 
-VERIFY_SDK="$(sed -n 's|^require github.com/pulumi/pulumi/sdk/v3 v||p' "$VERIFY_DIR/go.mod" | tr -d ' ')"
+VERIFY_SDK="$(sed -n 's|^[[:space:]]*github.com/pulumi/pulumi/sdk/v3 v||p' "$VERIFY_DIR/go.mod" | head -1 | tr -d ' ')"
 RELEASE_VERSIONS="$(grep -o 'pulumi/pulumi:[0-9][0-9.]*' "$RELEASE_YML" | cut -d: -f2 | sort -u | paste -sd ', ' -)"
 
 pin_status() { [[ "$1" == "$2" ]] && echo "OK" || echo "**MISMATCH**"; }

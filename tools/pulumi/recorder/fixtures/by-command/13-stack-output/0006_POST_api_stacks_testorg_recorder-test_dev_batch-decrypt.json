@@ -1,5 +1,5 @@
 {
-  "seq": 302,
+  "seq": 310,
   "command": "13-stack-output",
   "cmd_seq": 6,
   "method": "POST",
@@ -11,7 +11,7 @@
     "Content-Encoding": "gzip",
     "Content-Length": "52",
     "Content-Type": "application/json",
-    "User-Agent": "pulumi-cli/1 (v3.242.0; linux; cmd=stack-output)"
+    "User-Agent": "pulumi-cli/1 ([cli-version]; linux; cmd=stack-output)"
   },
   "body": {
     "ciphertexts": [

@@ -28,8 +28,8 @@ jobs:
         include:
           - pulumi-version: 3.234.0
             pulumi-image: pulumi/pulumi:3.234.0@sha256:5fab0c70cd50a19d0fa7c59cfbc9751d946e27418b2f3e1e4b3735ce1252818b
-          - pulumi-version: 3.242.0
-            pulumi-image: pulumi/pulumi:3.242.0@sha256:2fa09dde376d733f9a6954538f38b18064679ae4d84a460ee2b5514a9e4caba5
+          - pulumi-version: 3.259.0
+            pulumi-image: pulumi/pulumi:3.259.0@sha256:b126893e303fd974fdecde0dc5c1202bdaf71d0717f905edf1e1f71b64d8abc8
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:

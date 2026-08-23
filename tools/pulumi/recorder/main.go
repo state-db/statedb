@@ -25,6 +25,8 @@ var (
 )
 
 var uuidRe = regexp.MustCompile(`[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}`)
+var cliVersionRe = regexp.MustCompile(`v3\.\d+\.\d+`)
+var exactCliVersionRe = regexp.MustCompile(`^v3\.\d+\.\d+$`)
 
 type server struct {
 	rt        *router
@@ -32,6 +34,7 @@ type server struct {
 	mu        sync.Mutex
 	cmdName   string
 	cmdSeq    int64
+	seenCmds  map[string]bool
 }
 
 type fixture struct {
@@ -57,7 +60,7 @@ func main() {
 		log.Fatalf("creating fixture dir: %v", err)
 	}
 
-	s := &server{rt: newRouter()}
+	s := &server{rt: newRouter(), seenCmds: make(map[string]bool)}
 	http.HandleFunc("/", s.handle)
 
 	addr := fmt.Sprintf(":%d", *port)
@@ -106,6 +109,11 @@ func (s *server) handle(w http.ResponseWriter, r *http.Request) {
 	for k, v := range r.Header {
 		if strings.EqualFold(k, "authorization") {
 			headers[k] = "REDACTED"
+		} else if strings.EqualFold(k, "user-agent") {
+			// The cmd= token is meaningful signal (it renames when the CLI
+			// renames commands); the CLI version is churn that would dirty
+			// every fixture on a pin bump. meta.json records the version.
+			headers[k] = cliVersionRe.ReplaceAllString(strings.Join(v, ", "), "[cli-version]")
 		} else {
 			headers[k] = strings.Join(v, ", ")
 		}
@@ -164,6 +172,11 @@ func (s *server) handle(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *server) handleMeta(w http.ResponseWriter, r *http.Request) {
+	// Readiness probe used by entrypoint.sh instead of a fixed sleep.
+	if r.URL.Path == "/meta/health" && r.Method == http.MethodGet {
+		w.WriteHeader(http.StatusOK)
+		return
+	}
 	if r.Method != "POST" {
 		http.NotFound(w, r)
 		return
@@ -186,6 +199,12 @@ func (s *server) handleMetaCommand(w http.ResponseWriter, r *http.Request) {
 	r.Body.Close()
 
 	s.mu.Lock()
+	if s.seenCmds[req.Command] {
+		s.mu.Unlock()
+		http.Error(w, "command label already used: "+req.Command, http.StatusConflict)
+		return
+	}
+	s.seenCmds[req.Command] = true
 	s.cmdName = req.Command
 	s.cmdSeq = 0
 	s.mu.Unlock()
@@ -324,6 +343,18 @@ func normalizeFixtureString(key, value string) string {
 	value = strings.ReplaceAll(
 		value, "::00000000-0000-0000-0000-000000000000", "::[resource-id]")
 	switch key {
+	case "pulumi.version":
+		// The CLI stamps its own version into the update environment, which is
+		// pure version-bump churn; the exact version lives in meta.json.
+		//
+		// Deliberately request-side only. Manifest `version` values come back
+		// from the stub as a fixed constant (paired with the manifest magic),
+		// so they never churn — and recorded responses are the contract
+		// ContractReplayTest asserts state-db against, where a placeholder
+		// would be unmatchable.
+		if exactCliVersionRe.MatchString(value) {
+			return "[cli-version]"
+		}
 	case "b64Std":
 		if value != "" {
 			return "[b64-std]"

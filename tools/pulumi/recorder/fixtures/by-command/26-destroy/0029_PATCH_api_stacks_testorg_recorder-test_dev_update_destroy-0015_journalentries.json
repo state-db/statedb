@@ -1,5 +1,5 @@
 {
-  "seq": 377,
+  "seq": 382,
   "command": "26-destroy",
   "cmd_seq": 29,
   "method": "PATCH",
@@ -9,126 +9,23 @@
     "Accept-Encoding": "gzip",
     "Authorization": "REDACTED",
     "Content-Encoding": "gzip",
-    "Content-Length": "510",
+    "Content-Length": "113",
     "Content-Type": "application/json",
-    "User-Agent": "pulumi-cli/1 (v3.242.0; linux; cmd=destroy)"
+    "User-Agent": "pulumi-cli/1 ([cli-version]; linux; cmd=destroy)"
   },
   "body": {
     "entries": [
       {
-        "kind": 0,
-        "operation": {
-          "resource": {
-            "created": "1970-01-01T00:00:00Z",
-            "custom": true,
-            "dependencies": [
-              "urn:pulumi:dev::recorder-test::random:index/randomString:RandomString::word"
-            ],
-            "id": "[resource-id]",
-            "inputs": {
-              "max": 42,
-              "min": 42,
-              "seed": "recorder-pin"
-            },
-            "modified": "1970-01-01T00:00:00Z",
-            "outputs": {
-              "__pulumi_raw_state_delta": {
-                "obj": {
-                  "ps": {
-                    "keepers": {
-                      "4dabf18193072939515e22adb298388d": "1b47061264138c4ac30d75fd1eb44270",
-                      "ciphertext": "[secret]"
-                    }
-                  }
-                }
-              },
-              "id": "[resource-id]",
-              "max": 42,
-              "min": 42,
-              "result": 42,
-              "seed": "recorder-pin"
-            },
-            "parent": "urn:pulumi:dev::recorder-test::pulumi:pulumi:Stack::recorder-test-dev",
-            "propertyDependencies": {
-              "max": [],
-              "min": [],
-              "seed": []
-            },
-            "provider": "urn:pulumi:dev::recorder-test::pulumi:providers:random::default::[resource-id]",
-            "sourcePosition": "[source-position]",
-            "stackTrace": [
-              {
-                "sourcePosition": "[source-position]"
-              },
-              {
-                "sourcePosition": "[source-position]"
-              },
-              {
-                "sourcePosition": "[source-position]"
-              },
-              {
-                "sourcePosition": "[source-position]"
-              },
-              {
-                "sourcePosition": "[source-position]"
-              },
-              {
-                "sourcePosition": "[source-position]"
-              },
-              {
-                "sourcePosition": "[source-position]"
-              },
-              {
-                "sourcePosition": "[source-position]"
-              },
-              {
-                "sourcePosition": "[source-position]"
-              },
-              {
-                "sourcePosition": "[source-position]"
-              },
-              {
-                "sourcePosition": "[source-position]"
-              },
-              {
-                "sourcePosition": "[source-position]"
-              },
-              {
-                "sourcePosition": "[source-position]"
-              },
-              {
-                "sourcePosition": "[source-position]"
-              },
-              {
-                "sourcePosition": "[source-position]"
-              },
-              {
-                "sourcePosition": "[source-position]"
-              },
-              {
-                "sourcePosition": "[source-position]"
-              },
-              {
-                "sourcePosition": "[source-position]"
-              },
-              {
-                "sourcePosition": "[source-position]"
-              }
-            ],
-            "type": "random:index/randomInteger:RandomInteger",
-            "urn": "urn:pulumi:dev::recorder-test::random:index/randomInteger:RandomInteger::pin"
-          },
-          "type": "deleting"
-        },
-        "operationID": 3,
+        "kind": 1,
+        "operationID": 2,
         "removeNew": null,
-        "removeOld": null,
-        "sequenceID": 6,
+        "removeOld": 5,
+        "sequenceID": 5,
         "version": 1
       }
     ]
   },
-  "body_b64": "H4sIAAAAAAAA/+xVzW7bMAx+F54VzH9tEp176WUb1p5mGIFiMZ1WW9IoKkkR+N0H2U6xtVib64ACBkRSH8WPFEWfAC2TwQCyPsGjsRpkJsB5JMXGWZAnIAwuUotJbgkVowYJ+XqZLbJ8keX3WSbH7zsIaGNg14NkiihAo0er0bZTBIhkpY9d7I3UuJeSsHWkkRaMgaUkZbXrpbEaj58m5Y7J2Af57U9FHhxpaASYRKQ+81sY3YAAY33kkMj26giyKgT0xk5CwJH7c1hvLAwCeqfNzryVlot8PnWzmTLYkDpsAivGjcaOVdpz259p8SPwEdEjjWKl1XaXr/J1mS2Ldbm+yq+wKJTeFutVuVqNgbfVMrvOi+sqL1dtpdoy08urnc5xW1XFMku1Nf4HEuORU9oBW0JuYBiG4R+leF0AwhA7frMYXhHaFOGdy5q35uWOVfv4ArPQuAcBnlI78dPNX80wX0/dzOySMDGqm2F02huNdDmP2SGcu0hq3KnYsZQvyzIpX10wU4tDPW/72TSCUkL3pFLf16dLfAbxAfuA/bewRgA/eUwT4fUYvrWMD0jzHJ41EOltvv9CLz1PynkEzTw0dsjGPiTT8x/p9gZkmQZZ7/b4GQ8gbey6s+FLp8+GgL8i2haTw7WAPVIYc8+HZvgdAAD//xmbvEb3BgAA",
+  "body_b64": "H4sIAAAAAAAA/zTKIQ7CQBAF0Lt8PaYkNaMxGDgAQRD6xYRlBmbbRWz27gRR+/I66GsaK/Ta8TRfoJMg3sz7auGnI/QgSL6i8cwv1LdSdriUBToLKj8b/cH/ngWNWS0cOo3b+AUAAP//I3BFCmIAAAA=",
   "body_gzip": true,
   "status_code": 200,
   "response": {}

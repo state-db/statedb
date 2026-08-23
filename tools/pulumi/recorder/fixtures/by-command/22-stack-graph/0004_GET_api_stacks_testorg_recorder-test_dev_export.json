@@ -1,5 +1,5 @@
 {
-  "seq": 338,
+  "seq": 343,
   "command": "22-stack-graph",
   "cmd_seq": 4,
   "method": "GET",
@@ -9,7 +9,7 @@
     "Accept-Encoding": "gzip",
     "Authorization": "REDACTED",
     "Content-Type": "application/json",
-    "User-Agent": "pulumi-cli/1 (v3.242.0; linux; cmd=stack-graph)"
+    "User-Agent": "pulumi-cli/1 ([cli-version]; linux; cmd=stack-graph)"
   },
   "status_code": 200,
   "response": {

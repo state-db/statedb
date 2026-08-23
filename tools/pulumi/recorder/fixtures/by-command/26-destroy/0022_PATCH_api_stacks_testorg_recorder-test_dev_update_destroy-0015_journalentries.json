@@ -1,5 +1,5 @@
 {
-  "seq": 370,
+  "seq": 375,
   "command": "26-destroy",
   "cmd_seq": 22,
   "method": "PATCH",
@@ -9,23 +9,32 @@
     "Accept-Encoding": "gzip",
     "Authorization": "REDACTED",
     "Content-Encoding": "gzip",
-    "Content-Length": "111",
+    "Content-Length": "191",
     "Content-Type": "application/json",
-    "User-Agent": "pulumi-cli/1 (v3.242.0; linux; cmd=destroy)"
+    "User-Agent": "pulumi-cli/1 ([cli-version]; linux; cmd=destroy)"
   },
   "body": {
     "entries": [
       {
-        "kind": 1,
-        "operationID": 1,
+        "kind": 6,
+        "operationID": 0,
         "removeNew": null,
-        "removeOld": 6,
-        "sequenceID": 3,
+        "removeOld": null,
+        "secretsProvider": {
+          "state": {
+            "owner": "testorg",
+            "project": "recorder-test",
+            "stack": "dev",
+            "url": "http://localhost:8080"
+          },
+          "type": "service"
+        },
+        "sequenceID": 1,
         "version": 1
       }
     ]
   },
-  "body_b64": "H4sIAAAAAAAA/6pWSs0rKcpMLVayiq5Wys7MS1GyMtRRyi9ILUosyczP83QB84tSc/PLUv1Sy5Ws8kpzcmAC/jkpSlZmOkrFqYWlqXnJqSDVxjpKZalFxZn5eUpWhrWxtYAAAAD//2UGoUtiAAAA",
+  "body_b64": "H4sIAAAAAAAA/zTOMUsEMRQE4P8ydeT2GjlebWOj9mKxJIMXL+atL29zyLL//Uix3fANA7OB1S2zQT433HJNkOcAXWizZ62vL5ApwPirnW+8Q+paygHvJR3QGI3ePkx7TjTIhuazcwS91yFwNlf7RsBi+sPoEBijWqI9jRJhjOINgsSOgNUKBFf3RU6nonEuV20ul+kyYQ/w/4UQNFrPkUMa/1bWyPH7HNBpLWuFnPev/REAAP//NeQG9ewAAAA=",
   "body_gzip": true,
   "status_code": 200,
   "response": {}

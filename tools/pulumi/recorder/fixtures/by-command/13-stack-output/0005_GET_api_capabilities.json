@@ -1,5 +1,5 @@
 {
-  "seq": 301,
+  "seq": 309,
   "command": "13-stack-output",
   "cmd_seq": 5,
   "method": "GET",
@@ -9,7 +9,7 @@
     "Accept-Encoding": "gzip",
     "Authorization": "REDACTED",
     "Content-Type": "application/json",
-    "User-Agent": "pulumi-cli/1 (v3.242.0; linux; cmd=stack-output)"
+    "User-Agent": "pulumi-cli/1 ([cli-version]; linux; cmd=stack-output)"
   },
   "status_code": 200,
   "response": {

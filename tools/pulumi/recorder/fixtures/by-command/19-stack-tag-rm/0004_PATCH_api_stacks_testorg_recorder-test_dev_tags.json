@@ -1,5 +1,5 @@
 {
-  "seq": 328,
+  "seq": 336,
   "command": "19-stack-tag-rm",
   "cmd_seq": 4,
   "method": "PATCH",
@@ -10,7 +10,7 @@
     "Authorization": "REDACTED",
     "Content-Length": "245",
     "Content-Type": "application/json",
-    "User-Agent": "pulumi-cli/1 (v3.242.0; linux; cmd=stack-tag-rm)"
+    "User-Agent": "pulumi-cli/1 ([cli-version]; linux; cmd=stack-tag-remove)"
   },
   "body": {
     "pulumi:description": "Minimal Pulumi project for API recording. Uses the `random` provider so `pulumi up`/`destroy` exercise the journal/checkpoint write paths with real resource state.",

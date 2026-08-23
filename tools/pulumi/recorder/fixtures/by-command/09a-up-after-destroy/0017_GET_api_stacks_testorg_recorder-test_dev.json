@@ -1,0 +1,27 @@
+{
+  "seq": 183,
+  "command": "09a-up-after-destroy",
+  "cmd_seq": 17,
+  "method": "GET",
+  "path": "/api/stacks/testorg/recorder-test/dev",
+  "headers": {
+    "Accept": "application/vnd.pulumi+9",
+    "Accept-Encoding": "gzip",
+    "Authorization": "REDACTED",
+    "Content-Type": "application/json",
+    "User-Agent": "pulumi-cli/1 ([cli-version]; linux; cmd=up)"
+  },
+  "status_code": 200,
+  "response": {
+    "activeUpdate": "",
+    "currentOperation": null,
+    "orgName": "testorg",
+    "projectName": "recorder-test",
+    "stackName": "dev",
+    "tags": {
+      "pulumi:description": "Minimal Pulumi project for API recording. Uses the `random` provider so `pulumi up`/`destroy` exercise the journal/checkpoint write paths with real resource state.",
+      "pulumi:project": "recorder-test",
+      "pulumi:runtime": "yaml"
+    }
+  }
+}

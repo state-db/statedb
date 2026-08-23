@@ -1,5 +1,5 @@
 {
-  "seq": 373,
+  "seq": 378,
   "command": "26-destroy",
   "cmd_seq": 25,
   "method": "POST",
@@ -10,7 +10,7 @@
     "Authorization": "REDACTED",
     "Content-Length": "24",
     "Content-Type": "application/json",
-    "User-Agent": "pulumi-cli/1 (v3.242.0; linux; cmd=destroy)"
+    "User-Agent": "pulumi-cli/1 ([cli-version]; linux; cmd=destroy)"
   },
   "body": {
     "plaintext": "[secret]"

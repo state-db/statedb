@@ -9,11 +9,11 @@ instead, so the diff shows protocol changes rather than version-string churn:
 - global `seq` (shifts wholesale when any command gains/loses a call)
 - `body_b64` (byte-identical information to `body`, unreadable in a diff)
 - `Content-Length` header
-- CLI version strings (`v3.NNN.N`) wherever they appear (User-Agent,
-  deployment manifest `version`)
 - deployment manifest `magic` (hash over version-dependent input)
-- `salt` / `sourcePosition` (also masked capture-side now; masked here too so
-  diffs against baselines recorded before that stay clean)
+- CLI version strings (`v3.NNN.N`) wherever they appear, plus `salt` /
+  `sourcePosition` (all masked capture-side now — the recorder writes
+  `[cli-version]` into the User-Agent and `pulumi.version` — but masked here
+  too so diffs against baselines recorded before that stay clean)
 
 The report has two levels:
 

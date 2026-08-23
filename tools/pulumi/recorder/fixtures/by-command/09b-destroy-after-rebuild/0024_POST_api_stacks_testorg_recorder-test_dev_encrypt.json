@@ -1,5 +1,5 @@
 {
-  "seq": 227,
+  "seq": 233,
   "command": "09b-destroy-after-rebuild",
   "cmd_seq": 24,
   "method": "POST",
@@ -10,7 +10,7 @@
     "Authorization": "REDACTED",
     "Content-Length": "24",
     "Content-Type": "application/json",
-    "User-Agent": "pulumi-cli/1 (v3.242.0; linux; cmd=destroy)"
+    "User-Agent": "pulumi-cli/1 ([cli-version]; linux; cmd=destroy)"
   },
   "body": {
     "plaintext": "[secret]"

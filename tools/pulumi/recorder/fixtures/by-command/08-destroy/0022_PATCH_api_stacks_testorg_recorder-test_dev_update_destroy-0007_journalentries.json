@@ -1,5 +1,5 @@
 {
-  "seq": 134,
+  "seq": 138,
   "command": "08-destroy",
   "cmd_seq": 22,
   "method": "PATCH",
@@ -9,23 +9,151 @@
     "Accept-Encoding": "gzip",
     "Authorization": "REDACTED",
     "Content-Encoding": "gzip",
-    "Content-Length": "111",
+    "Content-Length": "588",
     "Content-Type": "application/json",
-    "User-Agent": "pulumi-cli/1 (v3.242.0; linux; cmd=destroy)"
+    "User-Agent": "pulumi-cli/1 ([cli-version]; linux; cmd=destroy)"
   },
   "body": {
     "entries": [
       {
-        "kind": 1,
+        "kind": 6,
+        "operationID": 0,
+        "removeNew": null,
+        "removeOld": null,
+        "secretsProvider": {
+          "state": {
+            "owner": "testorg",
+            "project": "recorder-test",
+            "stack": "dev",
+            "url": "http://localhost:8080"
+          },
+          "type": "service"
+        },
+        "sequenceID": 1,
+        "version": 1
+      },
+      {
+        "kind": 0,
+        "operation": {
+          "resource": {
+            "created": "1970-01-01T00:00:00Z",
+            "custom": true,
+            "dependencies": [
+              "urn:pulumi:dev::recorder-test::random:index/randomPassword:RandomPassword::password"
+            ],
+            "id": "[resource-id]",
+            "inputs": {
+              "byteLength": 6,
+              "keepers": {
+                "project": "recorder-test",
+                "purpose": "api-shape"
+              },
+              "prefix": "rec-"
+            },
+            "modified": "1970-01-01T00:00:00Z",
+            "outputs": {
+              "__pulumi_raw_state_delta": {
+                "obj": {
+                  "ps": {
+                    "keepers": {
+                      "map": {}
+                    }
+                  }
+                }
+              },
+              "b64Std": "[b64-std]",
+              "b64Url": "[b64-url]",
+              "byteLength": 6,
+              "dec": "[decimal-id]",
+              "hex": "[hex]",
+              "id": "[resource-id]",
+              "keepers": {
+                "project": "recorder-test",
+                "purpose": "api-shape"
+              },
+              "prefix": "rec-"
+            },
+            "parent": "urn:pulumi:dev::recorder-test::pulumi:pulumi:Stack::recorder-test-dev",
+            "propertyDependencies": {
+              "byteLength": [],
+              "keepers": [],
+              "prefix": []
+            },
+            "provider": "urn:pulumi:dev::recorder-test::pulumi:providers:random::default::[resource-id]",
+            "sourcePosition": "[source-position]",
+            "stackTrace": [
+              {
+                "sourcePosition": "[source-position]"
+              },
+              {
+                "sourcePosition": "[source-position]"
+              },
+              {
+                "sourcePosition": "[source-position]"
+              },
+              {
+                "sourcePosition": "[source-position]"
+              },
+              {
+                "sourcePosition": "[source-position]"
+              },
+              {
+                "sourcePosition": "[source-position]"
+              },
+              {
+                "sourcePosition": "[source-position]"
+              },
+              {
+                "sourcePosition": "[source-position]"
+              },
+              {
+                "sourcePosition": "[source-position]"
+              },
+              {
+                "sourcePosition": "[source-position]"
+              },
+              {
+                "sourcePosition": "[source-position]"
+              },
+              {
+                "sourcePosition": "[source-position]"
+              },
+              {
+                "sourcePosition": "[source-position]"
+              },
+              {
+                "sourcePosition": "[source-position]"
+              },
+              {
+                "sourcePosition": "[source-position]"
+              },
+              {
+                "sourcePosition": "[source-position]"
+              },
+              {
+                "sourcePosition": "[source-position]"
+              },
+              {
+                "sourcePosition": "[source-position]"
+              },
+              {
+                "sourcePosition": "[source-position]"
+              }
+            ],
+            "type": "random:index/randomId:RandomId",
+            "urn": "urn:pulumi:dev::recorder-test::random:index/randomId:RandomId::token"
+          },
+          "type": "deleting"
+        },
         "operationID": 1,
         "removeNew": null,
-        "removeOld": 6,
-        "sequenceID": 3,
+        "removeOld": null,
+        "sequenceID": 2,
         "version": 1
       }
     ]
   },
-  "body_b64": "H4sIAAAAAAAA/6pWSs0rKcpMLVayiq5Wys7MS1GyMtRRyi9ILUosyczP83QB84tSc/PLUv1Sy5Ws8kpzcmAC/jkpSlZmOkrFqYWlqXnJqSDVxjpKZalFxZn5eUpWhrWxtYAAAAD//2UGoUtiAAAA",
+  "body_b64": "H4sIAAAAAAAA/+xVQW/bOgz+LzzbqPNQ5PXx3EuBh61Yu8sMI1AstlFjSxpFJS2C/PdBsr3FRdf2sMuABgFsfaSM7/tEigcgK2woANYH2BqrAZcFOE+sxDh7dQlYFcDUux19oj2gjV03AZ87PQGBWiYJ1+x2RhMDHiCIEkovbm8TAkJBHN9DAZ7dA7UCCEytY01cpiAUaVO7BQRNOyggcgcIGxGPZ2eda1W3cUHworqo4FiAPHkChEC8My0lJND3SLalxHtRwI44GGcBF8dikledyEvsmIKL3GamLZMS0oCw+O/fqqwWZbW4rSrM/29QQBuDuB5QOFIBmjxZTbYdDITIFn3sYm9Q0w5xJg6RldWuR2M1PZ4Ni2sVwt6xxi/zJfrxDZoCTCJUTzxLoxsowFgfJSTS6yeh/8neyyaf3ZbIE+fI7232kb0LyTzlTRk2ymf7PNOdeRzyywT0Tps785ojLspEZLUaxK9Y7Vf59FeaOlG5BtYPmVFOPKHYKw94OKZfAevl+Y1ksevleRkkC10vz7/mMshg5C6Dc82a2pSgqTW96kaHNpSU1Bt6zH69ZOIf9corJps+8EYZjKHxcZMK/llOOVS/51So8nQ5K7P5gdfNiYq0mGjVTeY4teN7SY0bwlSsqOlOxU4Qn3s3LK5dMEMnQT2G/Qg1UzvfskrtVR/esyc16kfaR9pfmtb8nEov3PZX0z1/pfNws2/35etfQRS3JXsyCzV1JMbeJ2g2xRfvm+K/xuc/s/HZHH8EAAD//18QZiIrCAAA",
   "body_gzip": true,
   "status_code": 200,
   "response": {}

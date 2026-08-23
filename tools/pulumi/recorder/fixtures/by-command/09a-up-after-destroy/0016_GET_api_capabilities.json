@@ -1,0 +1,23 @@
+{
+  "seq": 182,
+  "command": "09a-up-after-destroy",
+  "cmd_seq": 16,
+  "method": "GET",
+  "path": "/api/capabilities",
+  "headers": {
+    "Accept": "application/vnd.pulumi+9",
+    "Accept-Encoding": "gzip",
+    "Authorization": "REDACTED",
+    "Content-Type": "application/json",
+    "User-Agent": "pulumi-cli/1 ([cli-version]; linux; cmd=up)"
+  },
+  "status_code": 200,
+  "response": {
+    "capabilities": [
+      {
+        "name": "delta-checkpoint-updates",
+        "version": 1
+      }
+    ]
+  }
+}

@@ -1,5 +1,5 @@
 {
-  "seq": 181,
+  "seq": 186,
   "command": "09a-up-after-destroy",
   "cmd_seq": 20,
   "method": "PATCH",
@@ -9,31 +9,31 @@
     "Accept-Encoding": "gzip",
     "Authorization": "REDACTED",
     "Content-Encoding": "gzip",
-    "Content-Length": "218",
+    "Content-Length": "190",
     "Content-Type": "application/json",
-    "User-Agent": "pulumi-cli/1 (v3.242.0; linux; cmd=up)"
+    "User-Agent": "pulumi-cli/1 ([cli-version]; linux; cmd=up)"
   },
   "body": {
     "entries": [
       {
-        "kind": 1,
+        "kind": 0,
+        "operation": {
+          "resource": {
+            "custom": true,
+            "type": "pulumi:providers:random",
+            "urn": "urn:pulumi:dev::recorder-test::pulumi:providers:random::default"
+          },
+          "type": "creating"
+        },
         "operationID": 2,
         "removeNew": null,
         "removeOld": null,
-        "sequenceID": 5,
-        "state": {
-          "created": "1970-01-01T00:00:00Z",
-          "custom": true,
-          "id": "[resource-id]",
-          "modified": "1970-01-01T00:00:00Z",
-          "type": "pulumi:providers:random",
-          "urn": "urn:pulumi:dev::recorder-test::pulumi:providers:random::default"
-        },
+        "sequenceID": 4,
         "version": 1
       }
     ]
   },
-  "body_b64": "H4sIAAAAAAAA/3yMMUvEQBCF/8urN5AIIk5tY6ONlccVIfsOFrM7cXY2IiH/XSJe6cEwxcf3vQ0sbokVctrwkUqEDAG60EZPWp6fIHcBxqwrX/gFKW2er+B1jldQ+dlYJh7BfUD10QnZMBlHZ4RgeHzou37o+uGt7+X33hEwteqaIW6NAekwT8aqzSZ2KZ4RkDWmS7o14t8LIVja3HKSxXRNkVbFxhI1I6BZgRxf/pzIVcQ4qUVa56wu8k8uEnkZ2+zYA1ZaTVogw37efwIAAP//T/wyLD4BAAA=",
+  "body_b64": "H4sIAAAAAAAA/3SPsUoGMRCE32XqCCpWU9vY6AOIxZGMEswl5yZ7Ise9u5z4X/c3y/KxHzuzQXVYVgdfN3zmmsDbgLbIppFbBTeYenOLOvbofbQZHOYKGD+LQCxefM5crK05yTptqqnNCHCr4DH5f5O0kqbYLMluhvogr+hk0vvkZWA/P0XTNHL9ONCZ8ekRvA8wzW3Vs77B6qVcwEtJF9D15apRh/AQsMr6X8W7/W3/DQAA///ONANPCQEAAA==",
   "body_gzip": true,
   "status_code": 200,
   "response": {}

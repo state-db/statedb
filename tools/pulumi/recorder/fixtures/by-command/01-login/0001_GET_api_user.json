@@ -9,7 +9,7 @@
     "Accept-Encoding": "gzip",
     "Authorization": "REDACTED",
     "Content-Type": "application/json",
-    "User-Agent": "pulumi-cli/1 (v3.242.0; linux; cmd=login)"
+    "User-Agent": "pulumi-cli/1 ([cli-version]; linux; cmd=login)"
   },
   "status_code": 200,
   "response": {

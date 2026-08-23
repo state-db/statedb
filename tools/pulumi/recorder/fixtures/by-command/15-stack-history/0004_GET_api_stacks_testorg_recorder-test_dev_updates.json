@@ -1,5 +1,5 @@
 {
-  "seq": 314,
+  "seq": 322,
   "command": "15-stack-history",
   "cmd_seq": 4,
   "method": "GET",
@@ -10,7 +10,7 @@
     "Accept-Encoding": "gzip",
     "Authorization": "REDACTED",
     "Content-Type": "application/json",
-    "User-Agent": "pulumi-cli/1 (v3.242.0; linux; cmd=stack-history)"
+    "User-Agent": "pulumi-cli/1 ([cli-version]; linux; cmd=stack-history)"
   },
   "status_code": 200,
   "response": {

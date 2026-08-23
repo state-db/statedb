@@ -7,6 +7,13 @@ set -euo pipefail
 PORT=8080
 FIXTURE_DIR=${FIXTURE_DIR:-/fixtures}
 
+# Recording identity — the single source for every place these values appear
+# (stack refs below, meta.json, and the catalog generator flags).
+ORG=testorg
+PROJECT=recorder-test
+STACK=dev
+STACK_REF="${ORG}/${PROJECT}/${STACK}"
+
 export PULUMI_HOME=/tmp/pulumi-home
 export PULUMI_ACCESS_TOKEN=test-token
 export PULUMI_BACKEND_URL="http://localhost:${PORT}"
@@ -22,7 +29,21 @@ echo "==> starting recorder on :${PORT}"
 RECORDER_PID=$!
 trap 'kill "$RECORDER_PID" 2>/dev/null || true' EXIT
 
-sleep 0.5
+# Wait for the recorder to accept requests instead of a fixed sleep.
+ready=0
+for _ in $(seq 1 100); do
+  if curl -sf "http://localhost:${PORT}/meta/health" > /dev/null; then
+    ready=1
+    break
+  fi
+  sleep 0.1
+done
+if [[ "$ready" -ne 1 ]]; then
+  echo "recorder did not become ready on :${PORT}" >&2
+  exit 1
+fi
+
+CLI_VERSION="$(pulumi version)"
 
 # Signal the recorder that a new command is starting.
 # Fixtures for this command land in fixtures/by-command/{label}/.
@@ -140,8 +161,9 @@ try pulumi stack tag rm env
 signal "20-stack-select"
 run pulumi stack select dev
 
-signal "21-stack-unselect"
-try sh -c 'pulumi stack unselect && pulumi stack select dev'
+# `pulumi stack unselect` stopped issuing backend calls in newer CLIs (it now
+# runs entirely against local workspace state), so there is nothing left to
+# record for it.
 
 signal "22-stack-graph"
 run pulumi stack graph /tmp/graph.dot
@@ -179,7 +201,7 @@ run pulumi stack init dev
 # `pulumi cancel` needs an update already in flight, and no pulumi command leaves one
 # behind — every update the CLI starts runs to completion. Seed it through the recorder's
 # admin endpoint so the fabricated state is never recorded as CLI traffic.
-seed_active_update "testorg/recorder-test/dev"
+seed_active_update "$STACK_REF"
 
 signal "32-cancel"
 run pulumi cancel --yes
@@ -191,12 +213,15 @@ echo ""
 echo "==> all commands completed"
 echo "==> $(find "$FIXTURE_DIR/by-command" -name '*.json' 2>/dev/null | wc -l | tr -d ' ') fixtures written"
 
-# Write meta so the catalog generator knows what concrete values were used.
+# Write meta so the catalog generator and fixture diffs know what concrete
+# values — including which CLI version — produced this capture.
 cat > "$FIXTURE_DIR/meta.json" <<EOF
 {
-  "org": "testorg",
-  "project": "recorder-test",
-  "stack": "dev"
+  "org": "${ORG}",
+  "project": "${PROJECT}",
+  "stack": "${STACK}",
+  "cli_version": "${CLI_VERSION}",
+  "random_provider_version": "${STATEDB_RECORDER_RANDOM_PROVIDER_VERSION:-unknown}"
 }
 EOF
 
@@ -204,6 +229,6 @@ echo "==> generating catalog"
 /recorder/catalog \
   -fixtures "$FIXTURE_DIR" \
   -out /snapshots/catalog.md \
-  -org testorg \
-  -project recorder-test \
-  -stack dev
+  -org "$ORG" \
+  -project "$PROJECT" \
+  -stack "$STACK"

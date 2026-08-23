@@ -1,0 +1,130 @@
+{
+  "seq": 91,
+  "command": "05-refresh",
+  "cmd_seq": 32,
+  "method": "PATCH",
+  "path": "/api/stacks/testorg/recorder-test/dev/update/refresh-0005/journalentries",
+  "headers": {
+    "Accept": "application/vnd.pulumi+9",
+    "Accept-Encoding": "gzip",
+    "Authorization": "REDACTED",
+    "Content-Encoding": "gzip",
+    "Content-Length": "475",
+    "Content-Type": "application/json",
+    "User-Agent": "pulumi-cli/1 ([cli-version]; linux; cmd=refresh)"
+  },
+  "body": {
+    "entries": [
+      {
+        "isRefresh": true,
+        "kind": 3,
+        "operationID": 3,
+        "removeNew": null,
+        "removeOld": 2,
+        "sequenceID": 7,
+        "state": {
+          "created": "1970-01-01T00:00:00Z",
+          "custom": true,
+          "id": "[resource-id]",
+          "inputs": {
+            "length": 2,
+            "separator": "-"
+          },
+          "modified": "1970-01-01T00:00:00Z",
+          "outputs": {
+            "__pulumi_raw_state_delta": {
+              "obj": {
+                "ps": {
+                  "keepers": {
+                    "4dabf18193072939515e22adb298388d": "1b47061264138c4ac30d75fd1eb44270",
+                    "ciphertext": "[secret]"
+                  },
+                  "prefix": {
+                    "4dabf18193072939515e22adb298388d": "1b47061264138c4ac30d75fd1eb44270",
+                    "ciphertext": "[secret]"
+                  }
+                }
+              }
+            },
+            "id": "[resource-id]",
+            "length": 2,
+            "separator": "-"
+          },
+          "parent": "urn:pulumi:dev::recorder-test::pulumi:pulumi:Stack::recorder-test-dev",
+          "propertyDependencies": {
+            "length": [],
+            "separator": []
+          },
+          "provider": "urn:pulumi:dev::recorder-test::pulumi:providers:random::default::[resource-id]",
+          "sourcePosition": "[source-position]",
+          "stackTrace": [
+            {
+              "sourcePosition": "[source-position]"
+            },
+            {
+              "sourcePosition": "[source-position]"
+            },
+            {
+              "sourcePosition": "[source-position]"
+            },
+            {
+              "sourcePosition": "[source-position]"
+            },
+            {
+              "sourcePosition": "[source-position]"
+            },
+            {
+              "sourcePosition": "[source-position]"
+            },
+            {
+              "sourcePosition": "[source-position]"
+            },
+            {
+              "sourcePosition": "[source-position]"
+            },
+            {
+              "sourcePosition": "[source-position]"
+            },
+            {
+              "sourcePosition": "[source-position]"
+            },
+            {
+              "sourcePosition": "[source-position]"
+            },
+            {
+              "sourcePosition": "[source-position]"
+            },
+            {
+              "sourcePosition": "[source-position]"
+            },
+            {
+              "sourcePosition": "[source-position]"
+            },
+            {
+              "sourcePosition": "[source-position]"
+            },
+            {
+              "sourcePosition": "[source-position]"
+            },
+            {
+              "sourcePosition": "[source-position]"
+            },
+            {
+              "sourcePosition": "[source-position]"
+            },
+            {
+              "sourcePosition": "[source-position]"
+            }
+          ],
+          "type": "random:index/randomPet:RandomPet",
+          "urn": "urn:pulumi:dev::recorder-test::random:index/randomPet:RandomPet::pet"
+        },
+        "version": 1
+      }
+    ]
+  },
+  "body_b64": "H4sIAAAAAAAA/+xUT2/bPgz9Ljzb+Plf60TnXn6Xreh6WmAEivW8aHEkjZLTFIG/+yAlwbACa3vZYUABAxLFJ5LvmdSJYAJreBKrE2n/gIHhtyQCT8hop40iUWdkHVgGbc3/d8lm7O0Bn/BEwkzjeD34PCoSVUYePyaYHhHdZuSDDCBxop4hAxQJKpdtkRdlXpSPRSHS95Uy6icf7P6aXkfkiuHtxD1yrTrKSBs3BR+jjTDfwvaS0EmWwTIJymnOaG+VHvRrqewUroHWazeN016vWT6tU7FrhTHI6LOb73FxCbgDHDhtGyU3Q7kol3XRVst6eVPeoKqk2lTLRb1YpMSbpi1uy+q2KetF38i+LlR7M6gSm6ap2iLy1W4LDjiGyNSjZ4Qu1u8Ygz7+9UTzPP9B5tfEdZJhYqCJjThLJxQOQjB6ywqcB/ggrq7L8iXIfvcCkyscKLKNDRae7+BgFEyfOvLXH151v1Wx6pJC9qAV+P1lXC54wdIouxdCYZDTGIR4Sf5s3FuvY88nxc5udzlKoMjnkWWPNDzvuDNnH7AP2D8L6zIKzw4k6DJA2igc/zsb9wji4bqjLM7k25P5VhwhHEJ8cQ5gn+oq527+GQAA//9n1s8PtQYAAA==",
+  "body_gzip": true,
+  "status_code": 200,
+  "response": {}
+}

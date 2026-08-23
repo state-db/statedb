@@ -1,5 +1,5 @@
 {
-  "seq": 411,
+  "seq": 418,
   "command": "30-stack-rm",
   "cmd_seq": 3,
   "method": "GET",
@@ -9,7 +9,7 @@
     "Accept-Encoding": "gzip",
     "Authorization": "REDACTED",
     "Content-Type": "application/json",
-    "User-Agent": "pulumi-cli/1 (v3.242.0; linux; cmd=stack-rm)"
+    "User-Agent": "pulumi-cli/1 ([cli-version]; linux; cmd=stack-remove)"
   },
   "status_code": 200,
   "response": {

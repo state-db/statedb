@@ -10,7 +10,11 @@ RUN go build -o /recorder/recorder . && \
 # ---- runtime image ----
 FROM debian:bookworm-slim
 
-ARG PULUMI_VERSION=3.242.0
+# Baseline CLI pin. Do not bump this alone: tools/pulumi/verify/go.mod
+# (github.com/pulumi/pulumi/sdk/v3) must move in lockstep, and
+# .github/workflows/native.yml pins the same version. The compat sweep's pin
+# audit (tools/pulumi/compat/sweep.sh) enforces all three.
+ARG PULUMI_VERSION=3.259.0
 ARG RANDOM_PROVIDER_VERSION=4.20.0
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
@@ -23,6 +27,11 @@ RUN curl -fsSL https://get.pulumi.com | sh -s -- --version "${PULUMI_VERSION}"
 ENV PATH="/root/.pulumi/bin:${PATH}"
 
 RUN pulumi plugin install resource random "${RANDOM_PROVIDER_VERSION}"
+
+# Surfaced to entrypoint.sh for meta.json provenance. Deliberately NOT named
+# PULUMI_*: the CLI enumerates every PULUMI_-prefixed variable into the update
+# request body, so such a name would plant recorder plumbing in the fixtures.
+ENV STATEDB_RECORDER_RANDOM_PROVIDER_VERSION=${RANDOM_PROVIDER_VERSION}
 
 COPY --from=builder /recorder/recorder /recorder/recorder
 COPY --from=builder /recorder/catalog /recorder/catalog

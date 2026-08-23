@@ -1,5 +1,5 @@
 {
-  "seq": 110,
+  "seq": 114,
   "command": "07-stack-export",
   "cmd_seq": 2,
   "method": "GET",
@@ -9,7 +9,7 @@
     "Accept-Encoding": "gzip",
     "Authorization": "REDACTED",
     "Content-Type": "application/json",
-    "User-Agent": "pulumi-cli/1 (v3.242.0; linux; cmd=stack-export)"
+    "User-Agent": "pulumi-cli/1 ([cli-version]; linux; cmd=stack-export)"
   },
   "status_code": 200,
   "response": {

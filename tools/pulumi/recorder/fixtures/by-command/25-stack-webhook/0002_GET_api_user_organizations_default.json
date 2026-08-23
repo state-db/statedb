@@ -1,5 +1,5 @@
 {
-  "seq": 346,
+  "seq": 351,
   "command": "25-stack-webhook",
   "cmd_seq": 2,
   "method": "GET",
@@ -9,7 +9,7 @@
     "Accept-Encoding": "gzip",
     "Authorization": "REDACTED",
     "Content-Type": "application/json",
-    "User-Agent": "pulumi-cli/1 (v3.242.0; linux; cmd=stack-webhook-list)"
+    "User-Agent": "pulumi-cli/1 ([cli-version]; linux; cmd=stack-webhook-list)"
   },
   "status_code": 200,
   "response": {

@@ -56,7 +56,9 @@ result against the committed baseline.
 - The recorder uses fixed test values: org `testorg`, project `recorder-test`, stack `dev`.
 - The Dockerfile pins the Pulumi CLI and provider versions used for capture.
 - Resource operations run with `--parallel 1` so event ordering is deterministic.
-- `meta.json` stores the recording org, project, and stack values.
+- `meta.json` stores the recording org, project, and stack values plus the exact
+  Pulumi CLI version (`cli_version`) and random provider version used for the
+  capture.
 - Volatile fixture values such as timestamps, generated IDs, and random outputs are
   normalized so repeated captures produce reviewable diffs.
 - Command boundaries are explicit (`/meta/command`), so call ordering is stable across runs.

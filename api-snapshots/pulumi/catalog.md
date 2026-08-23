@@ -11,17 +11,17 @@
 | # | Method | Path | Calls | Commands |
 |---|--------|------|-------|----------|
 | 1 | `GET` | `/api/user` | 1 | login |
-| 2 | `GET` | `/api/capabilities` | 57 | stack-init, up, preview, refresh, stack-ls, stack-export, destroy, stack-export-after-destroy, up-after-destroy, destroy-after-rebuild, stack-rm, stack-init, up, stack-output, stack-get, stack-history, stack-tag-set, stack-tag-ls, stack-tag-get, stack-tag-rm, stack-select, stack-unselect, stack-graph, stack-schedule, stack-webhook, destroy, change-secrets-provider, stack-rename, stack-ls, stack-rm, stack-init-for-cancel, cancel, stack-rm-after-cancel |
-| 3 | `GET` | `/api/user/organizations/default` | 33 | stack-init, up, preview, refresh, stack-ls, stack-export, destroy, stack-export-after-destroy, up-after-destroy, destroy-after-rebuild, stack-rm, stack-init, up, stack-output, stack-get, stack-history, stack-tag-set, stack-tag-ls, stack-tag-get, stack-tag-rm, stack-select, stack-unselect, stack-graph, stack-schedule, stack-webhook, destroy, change-secrets-provider, stack-rename, stack-ls, stack-rm, stack-init-for-cancel, cancel, stack-rm-after-cancel |
-| 4 | `GET` | `/api/stacks/{org}/{project}/{stack}` | 48 | stack-init, up, preview, refresh, stack-ls, stack-export, destroy, stack-export-after-destroy, up-after-destroy, destroy-after-rebuild, stack-rm, stack-init, up, stack-output, stack-get, stack-history, stack-tag-set, stack-tag-ls, stack-tag-get, stack-tag-rm, stack-select, stack-unselect, stack-graph, stack-schedule, stack-webhook, destroy, change-secrets-provider, stack-rename, stack-init-for-cancel, cancel, stack-rm-after-cancel |
+| 2 | `GET` | `/api/capabilities` | 56 | stack-init, up, preview, refresh, stack-ls, stack-export, destroy, stack-export-after-destroy, up-after-destroy, destroy-after-rebuild, stack-rm, stack-init, up, stack-output, stack-get, stack-history, stack-tag-set, stack-tag-ls, stack-tag-get, stack-tag-rm, stack-select, stack-graph, stack-schedule, stack-webhook, destroy, change-secrets-provider, stack-rename, stack-ls, stack-rm, stack-init-for-cancel, cancel, stack-rm-after-cancel |
+| 3 | `GET` | `/api/user/organizations/default` | 32 | stack-init, up, preview, refresh, stack-ls, stack-export, destroy, stack-export-after-destroy, up-after-destroy, destroy-after-rebuild, stack-rm, stack-init, up, stack-output, stack-get, stack-history, stack-tag-set, stack-tag-ls, stack-tag-get, stack-tag-rm, stack-select, stack-graph, stack-schedule, stack-webhook, destroy, change-secrets-provider, stack-rename, stack-ls, stack-rm, stack-init-for-cancel, cancel, stack-rm-after-cancel |
+| 4 | `GET` | `/api/stacks/{org}/{project}/{stack}` | 47 | stack-init, up, preview, refresh, stack-ls, stack-export, destroy, stack-export-after-destroy, up-after-destroy, destroy-after-rebuild, stack-rm, stack-init, up, stack-output, stack-get, stack-history, stack-tag-set, stack-tag-ls, stack-tag-get, stack-tag-rm, stack-select, stack-graph, stack-schedule, stack-webhook, destroy, change-secrets-provider, stack-rename, stack-init-for-cancel, cancel, stack-rm-after-cancel |
 | 5 | `POST` | `/api/stacks/{org}/{project}` | 3 | stack-init, stack-init, stack-init-for-cancel |
-| 6 | `POST` | `/api/stacks/{org}/{project}/{stack}/update` | 6 | up, up-after-destroy, up |
-| 7 | `POST` | `/api/stacks/{org}/{project}/{stack}/update/{updateID}` | 15 | up, preview, refresh, destroy, up-after-destroy, destroy-after-rebuild, up, destroy |
-| 8 | `GET` | `/api/stacks/{org}/{project}/{stack}/export` | 25 | up, preview, refresh, stack-export, destroy, stack-export-after-destroy, up-after-destroy, destroy-after-rebuild, up, stack-output, stack-get, stack-graph, destroy, change-secrets-provider |
-| 9 | `POST` | `/api/stacks/{org}/{project}/{stack}/update/{updateID}/events/batch` | 15 | up, preview, refresh, destroy, up-after-destroy, destroy-after-rebuild, up, destroy |
-| 10 | `POST` | `/api/stacks/{org}/{project}/{stack}/update/{updateID}/complete` | 15 | up, preview, refresh, destroy, up-after-destroy, destroy-after-rebuild, up, destroy |
-| 11 | `PATCH` | `/api/stacks/{org}/{project}/{stack}/update/{updateID}/journalentries` | 102 | up, refresh, destroy, up-after-destroy, destroy-after-rebuild, up, destroy |
-| 12 | `POST` | `/api/stacks/{org}/{project}/{stack}/encrypt` | 63 | up, refresh, destroy, up-after-destroy, destroy-after-rebuild, up, destroy |
+| 6 | `POST` | `/api/stacks/{org}/{project}/{stack}/encrypt` | 71 | up, preview, refresh, destroy, up-after-destroy, destroy-after-rebuild, up, destroy |
+| 7 | `POST` | `/api/stacks/{org}/{project}/{stack}/update` | 6 | up, up-after-destroy, up |
+| 8 | `POST` | `/api/stacks/{org}/{project}/{stack}/update/{updateID}` | 15 | up, preview, refresh, destroy, up-after-destroy, destroy-after-rebuild, up, destroy |
+| 9 | `GET` | `/api/stacks/{org}/{project}/{stack}/export` | 25 | up, preview, refresh, stack-export, destroy, stack-export-after-destroy, up-after-destroy, destroy-after-rebuild, up, stack-output, stack-get, stack-graph, destroy, change-secrets-provider |
+| 10 | `POST` | `/api/stacks/{org}/{project}/{stack}/update/{updateID}/events/batch` | 15 | up, preview, refresh, destroy, up-after-destroy, destroy-after-rebuild, up, destroy |
+| 11 | `POST` | `/api/stacks/{org}/{project}/{stack}/update/{updateID}/complete` | 15 | up, preview, refresh, destroy, up-after-destroy, destroy-after-rebuild, up, destroy |
+| 12 | `PATCH` | `/api/stacks/{org}/{project}/{stack}/update/{updateID}/journalentries` | 104 | up, refresh, destroy, up-after-destroy, destroy-after-rebuild, up, destroy |
 | 13 | `POST` | `/api/stacks/{org}/{project}/{stack}/preview` | 1 | preview |
 | 14 | `POST` | `/api/stacks/{org}/{project}/{stack}/batch-decrypt` | 16 | preview, refresh, destroy, destroy-after-rebuild, stack-output, stack-get, stack-graph, destroy |
 | 15 | `POST` | `/api/stacks/{org}/{project}/{stack}/refresh` | 2 | refresh |
@@ -66,6 +66,7 @@ GET /api/capabilities
 GET /api/user/organizations/default
 GET /api/stacks/{org}/{project}/{stack}
 GET /api/capabilities
+POST /api/stacks/{org}/{project}/{stack}/encrypt
 POST /api/stacks/{org}/{project}/{stack}/update
 POST /api/stacks/{org}/{project}/{stack}/update/{updateID}
 GET /api/stacks/{org}/{project}/{stack}/export
@@ -111,6 +112,7 @@ GET /api/capabilities
 GET /api/user/organizations/default
 GET /api/stacks/{org}/{project}/{stack}
 GET /api/capabilities
+POST /api/stacks/{org}/{project}/{stack}/encrypt
 POST /api/stacks/{org}/{project}/{stack}/preview
 POST /api/stacks/{org}/{project}/{stack}/update/{updateID}
 GET /api/stacks/{org}/{project}/{stack}/export
@@ -128,6 +130,7 @@ GET /api/capabilities
 GET /api/user/organizations/default
 GET /api/stacks/{org}/{project}/{stack}
 GET /api/capabilities
+POST /api/stacks/{org}/{project}/{stack}/encrypt
 GET /api/stacks/{org}/{project}/{stack}/export
 GET /api/capabilities
 POST /api/stacks/{org}/{project}/{stack}/batch-decrypt
@@ -145,6 +148,7 @@ GET /api/stacks/{org}/{project}/{stack}/export
 GET /api/capabilities
 POST /api/stacks/{org}/{project}/{stack}/batch-decrypt
 GET /api/stacks/{org}/{project}/{stack}
+PATCH /api/stacks/{org}/{project}/{stack}/update/{updateID}/journalentries
 PATCH /api/stacks/{org}/{project}/{stack}/update/{updateID}/journalentries
 POST /api/stacks/{org}/{project}/{stack}/encrypt
 PATCH /api/stacks/{org}/{project}/{stack}/update/{updateID}/journalentries
@@ -200,6 +204,7 @@ GET /api/stacks/{org}/{project}/{stack}
 GET /api/stacks/{org}/{project}/{stack}/export
 GET /api/capabilities
 POST /api/stacks/{org}/{project}/{stack}/batch-decrypt
+POST /api/stacks/{org}/{project}/{stack}/encrypt
 POST /api/stacks/{org}/{project}/{stack}/destroy
 POST /api/stacks/{org}/{project}/{stack}/update/{updateID}
 GET /api/stacks/{org}/{project}/{stack}/export
@@ -232,9 +237,9 @@ POST /api/stacks/{org}/{project}/{stack}/encrypt
 POST /api/stacks/{org}/{project}/{stack}/encrypt
 PATCH /api/stacks/{org}/{project}/{stack}/update/{updateID}/journalentries
 PATCH /api/stacks/{org}/{project}/{stack}/update/{updateID}/journalentries
+PATCH /api/stacks/{org}/{project}/{stack}/update/{updateID}/journalentries
+PATCH /api/stacks/{org}/{project}/{stack}/update/{updateID}/journalentries
 POST /api/stacks/{org}/{project}/{stack}/encrypt
-PATCH /api/stacks/{org}/{project}/{stack}/update/{updateID}/journalentries
-PATCH /api/stacks/{org}/{project}/{stack}/update/{updateID}/journalentries
 PATCH /api/stacks/{org}/{project}/{stack}/update/{updateID}/journalentries
 PATCH /api/stacks/{org}/{project}/{stack}/update/{updateID}/journalentries
 POST /api/stacks/{org}/{project}/{stack}/update/{updateID}/events/batch
@@ -257,6 +262,7 @@ GET /api/capabilities
 GET /api/user/organizations/default
 GET /api/stacks/{org}/{project}/{stack}
 GET /api/capabilities
+POST /api/stacks/{org}/{project}/{stack}/encrypt
 POST /api/stacks/{org}/{project}/{stack}/update
 POST /api/stacks/{org}/{project}/{stack}/update/{updateID}
 GET /api/stacks/{org}/{project}/{stack}/export
@@ -306,6 +312,7 @@ GET /api/stacks/{org}/{project}/{stack}
 GET /api/stacks/{org}/{project}/{stack}/export
 GET /api/capabilities
 POST /api/stacks/{org}/{project}/{stack}/batch-decrypt
+POST /api/stacks/{org}/{project}/{stack}/encrypt
 POST /api/stacks/{org}/{project}/{stack}/destroy
 POST /api/stacks/{org}/{project}/{stack}/update/{updateID}
 GET /api/stacks/{org}/{project}/{stack}/export
@@ -338,9 +345,9 @@ POST /api/stacks/{org}/{project}/{stack}/encrypt
 POST /api/stacks/{org}/{project}/{stack}/encrypt
 PATCH /api/stacks/{org}/{project}/{stack}/update/{updateID}/journalentries
 PATCH /api/stacks/{org}/{project}/{stack}/update/{updateID}/journalentries
-PATCH /api/stacks/{org}/{project}/{stack}/update/{updateID}/journalentries
-PATCH /api/stacks/{org}/{project}/{stack}/update/{updateID}/journalentries
 POST /api/stacks/{org}/{project}/{stack}/encrypt
+PATCH /api/stacks/{org}/{project}/{stack}/update/{updateID}/journalentries
+PATCH /api/stacks/{org}/{project}/{stack}/update/{updateID}/journalentries
 PATCH /api/stacks/{org}/{project}/{stack}/update/{updateID}/journalentries
 PATCH /api/stacks/{org}/{project}/{stack}/update/{updateID}/journalentries
 POST /api/stacks/{org}/{project}/{stack}/update/{updateID}/events/batch
@@ -372,6 +379,7 @@ GET /api/capabilities
 GET /api/user/organizations/default
 GET /api/stacks/{org}/{project}/{stack}
 GET /api/capabilities
+POST /api/stacks/{org}/{project}/{stack}/encrypt
 POST /api/stacks/{org}/{project}/{stack}/update
 POST /api/stacks/{org}/{project}/{stack}/update/{updateID}
 GET /api/stacks/{org}/{project}/{stack}/export
@@ -485,14 +493,6 @@ GET /api/user/organizations/default
 GET /api/stacks/{org}/{project}/{stack}
 ```
 
-### `stack-unselect`
-
-```
-GET /api/capabilities
-GET /api/user/organizations/default
-GET /api/stacks/{org}/{project}/{stack}
-```
-
 ### `stack-graph`
 
 ```
@@ -536,6 +536,7 @@ GET /api/stacks/{org}/{project}/{stack}
 GET /api/stacks/{org}/{project}/{stack}/export
 GET /api/capabilities
 POST /api/stacks/{org}/{project}/{stack}/batch-decrypt
+POST /api/stacks/{org}/{project}/{stack}/encrypt
 POST /api/stacks/{org}/{project}/{stack}/destroy
 POST /api/stacks/{org}/{project}/{stack}/update/{updateID}
 GET /api/stacks/{org}/{project}/{stack}/export
@@ -550,6 +551,7 @@ GET /api/stacks/{org}/{project}/{stack}/export
 GET /api/capabilities
 POST /api/stacks/{org}/{project}/{stack}/batch-decrypt
 GET /api/stacks/{org}/{project}/{stack}
+PATCH /api/stacks/{org}/{project}/{stack}/update/{updateID}/journalentries
 PATCH /api/stacks/{org}/{project}/{stack}/update/{updateID}/journalentries
 PATCH /api/stacks/{org}/{project}/{stack}/update/{updateID}/journalentries
 POST /api/stacks/{org}/{project}/{stack}/encrypt
@@ -584,8 +586,8 @@ GET /api/capabilities
 GET /api/user/organizations/default
 GET /api/stacks/{org}/{project}/{stack}
 GET /api/stacks/{org}/{project}/{stack}/export
-POST /api/stacks/{org}/{project}/{stack}/import
 GET /api/capabilities
+POST /api/stacks/{org}/{project}/{stack}/import
 GET /api/stacks/{org}/{project}/{stack}/update
 ```
 
@@ -672,7 +674,7 @@ DELETE /api/stacks/{org}/{project}/{stack}?force=false
 
 ### 2. `GET /api/capabilities`
 
-**Calls:** 57 &nbsp;·&nbsp; **Commands:** `02-stack-init` `03-up` `04-preview` `05-refresh` `06-stack-ls` `07-stack-export` `08-destroy` `09-stack-export-after-destroy` `09a-up-after-destroy` `09b-destroy-after-rebuild` `10-stack-rm` `11-stack-init` `12-up` `13-stack-output` `14-stack-get` `15-stack-history` `16-stack-tag-set` `17-stack-tag-ls` `18-stack-tag-get` `19-stack-tag-rm` `20-stack-select` `21-stack-unselect` `22-stack-graph` `24-stack-schedule` `25-stack-webhook` `26-destroy` `27-change-secrets-provider` `28-stack-rename` `29-stack-ls` `30-stack-rm` `31-stack-init-for-cancel` `32-cancel` `33-stack-rm-after-cancel`
+**Calls:** 56 &nbsp;·&nbsp; **Commands:** `02-stack-init` `03-up` `04-preview` `05-refresh` `06-stack-ls` `07-stack-export` `08-destroy` `09-stack-export-after-destroy` `09a-up-after-destroy` `09b-destroy-after-rebuild` `10-stack-rm` `11-stack-init` `12-up` `13-stack-output` `14-stack-get` `15-stack-history` `16-stack-tag-set` `17-stack-tag-ls` `18-stack-tag-get` `19-stack-tag-rm` `20-stack-select` `22-stack-graph` `24-stack-schedule` `25-stack-webhook` `26-destroy` `27-change-secrets-provider` `28-stack-rename` `29-stack-ls` `30-stack-rm` `31-stack-init-for-cancel` `32-cancel` `33-stack-rm-after-cancel`
 
 **Response** (`200`):
 
@@ -691,7 +693,7 @@ DELETE /api/stacks/{org}/{project}/{stack}?force=false
 
 ### 3. `GET /api/user/organizations/default`
 
-**Calls:** 33 &nbsp;·&nbsp; **Commands:** `02-stack-init` `03-up` `04-preview` `05-refresh` `06-stack-ls` `07-stack-export` `08-destroy` `09-stack-export-after-destroy` `09a-up-after-destroy` `09b-destroy-after-rebuild` `10-stack-rm` `11-stack-init` `12-up` `13-stack-output` `14-stack-get` `15-stack-history` `16-stack-tag-set` `17-stack-tag-ls` `18-stack-tag-get` `19-stack-tag-rm` `20-stack-select` `21-stack-unselect` `22-stack-graph` `24-stack-schedule` `25-stack-webhook` `26-destroy` `27-change-secrets-provider` `28-stack-rename` `29-stack-ls` `30-stack-rm` `31-stack-init-for-cancel` `32-cancel` `33-stack-rm-after-cancel`
+**Calls:** 32 &nbsp;·&nbsp; **Commands:** `02-stack-init` `03-up` `04-preview` `05-refresh` `06-stack-ls` `07-stack-export` `08-destroy` `09-stack-export-after-destroy` `09a-up-after-destroy` `09b-destroy-after-rebuild` `10-stack-rm` `11-stack-init` `12-up` `13-stack-output` `14-stack-get` `15-stack-history` `16-stack-tag-set` `17-stack-tag-ls` `18-stack-tag-get` `19-stack-tag-rm` `20-stack-select` `22-stack-graph` `24-stack-schedule` `25-stack-webhook` `26-destroy` `27-change-secrets-provider` `28-stack-rename` `29-stack-ls` `30-stack-rm` `31-stack-init-for-cancel` `32-cancel` `33-stack-rm-after-cancel`
 
 **Response** (`200`):
 
@@ -708,7 +710,7 @@ DELETE /api/stacks/{org}/{project}/{stack}?force=false
 
 ### 4. `GET /api/stacks/{org}/{project}/{stack}`
 
-**Calls:** 48 &nbsp;·&nbsp; **Commands:** `02-stack-init` `03-up` `04-preview` `05-refresh` `06-stack-ls` `07-stack-export` `08-destroy` `09-stack-export-after-destroy` `09a-up-after-destroy` `09b-destroy-after-rebuild` `10-stack-rm` `11-stack-init` `12-up` `13-stack-output` `14-stack-get` `15-stack-history` `16-stack-tag-set` `17-stack-tag-ls` `18-stack-tag-get` `19-stack-tag-rm` `20-stack-select` `21-stack-unselect` `22-stack-graph` `24-stack-schedule` `25-stack-webhook` `26-destroy` `27-change-secrets-provider` `28-stack-rename` `31-stack-init-for-cancel` `32-cancel` `33-stack-rm-after-cancel`
+**Calls:** 47 &nbsp;·&nbsp; **Commands:** `02-stack-init` `03-up` `04-preview` `05-refresh` `06-stack-ls` `07-stack-export` `08-destroy` `09-stack-export-after-destroy` `09a-up-after-destroy` `09b-destroy-after-rebuild` `10-stack-rm` `11-stack-init` `12-up` `13-stack-output` `14-stack-get` `15-stack-history` `16-stack-tag-set` `17-stack-tag-ls` `18-stack-tag-get` `19-stack-tag-rm` `20-stack-select` `22-stack-graph` `24-stack-schedule` `25-stack-webhook` `26-destroy` `27-change-secrets-provider` `28-stack-rename` `31-stack-init-for-cancel` `32-cancel` `33-stack-rm-after-cancel`
 
 **Response** (`200`):
 
@@ -767,7 +769,31 @@ _Replay request body preserved in `body_b64` (272 bytes)._
 
 ---
 
-### 6. `POST /api/stacks/{org}/{project}/{stack}/update`
+### 6. `POST /api/stacks/{org}/{project}/{stack}/encrypt`
+
+**Calls:** 71 &nbsp;·&nbsp; **Commands:** `03-up` `04-preview` `05-refresh` `08-destroy` `09a-up-after-destroy` `09b-destroy-after-rebuild` `12-up` `26-destroy`
+
+**Request body:**
+
+```json
+{
+  "plaintext": "[secret]"
+}
+```
+
+_Replay request body preserved in `body_b64` (24 bytes)._
+
+**Response** (`200`):
+
+```json
+{
+  "ciphertext": "[secret]"
+}
+```
+
+---
+
+### 7. `POST /api/stacks/{org}/{project}/{stack}/update`
 
 **Calls:** 6 &nbsp;·&nbsp; **Commands:** `03-up` `09a-up-after-destroy` `12-up`
 
@@ -791,7 +817,7 @@ _Replay request body preserved in `body_b64` (272 bytes)._
       "pulumi.flag.parallel": "set",
       "pulumi.flag.yes": "true",
       "pulumi.os": "linux",
-      "pulumi.version": "v3.242.0",
+      "pulumi.version": "[cli-version]",
       "runtime.name": "yaml",
       "stack.environments": "[]",
       "updatePlan": "false"
@@ -814,7 +840,7 @@ _Replay request body preserved in `body_b64` (272 bytes)._
 }
 ```
 
-_Replay request body preserved in `body_b64` (914 bytes)._
+_Replay request body preserved in `body_b64` (919 bytes)._
 
 **Response** (`200`):
 
@@ -827,7 +853,7 @@ _Replay request body preserved in `body_b64` (914 bytes)._
 
 ---
 
-### 7. `POST /api/stacks/{org}/{project}/{stack}/update/{updateID}`
+### 8. `POST /api/stacks/{org}/{project}/{stack}/update/{updateID}`
 
 **Calls:** 15 &nbsp;·&nbsp; **Commands:** `03-up` `04-preview` `05-refresh` `08-destroy` `09a-up-after-destroy` `09b-destroy-after-rebuild` `12-up` `26-destroy`
 
@@ -859,7 +885,7 @@ _Replay request body preserved in `body_b64` (273 bytes)._
 
 ---
 
-### 8. `GET /api/stacks/{org}/{project}/{stack}/export`
+### 9. `GET /api/stacks/{org}/{project}/{stack}/export`
 
 **Calls:** 25 &nbsp;·&nbsp; **Commands:** `03-up` `04-preview` `05-refresh` `07-stack-export` `08-destroy` `09-stack-export-after-destroy` `09a-up-after-destroy` `09b-destroy-after-rebuild` `12-up` `13-stack-output` `14-stack-get` `22-stack-graph` `26-destroy` `27-change-secrets-provider`
 
@@ -881,7 +907,7 @@ _Replay request body preserved in `body_b64` (273 bytes)._
 
 ---
 
-### 9. `POST /api/stacks/{org}/{project}/{stack}/update/{updateID}/events/batch`
+### 10. `POST /api/stacks/{org}/{project}/{stack}/update/{updateID}/events/batch`
 
 **Calls:** 15 &nbsp;·&nbsp; **Commands:** `03-up` `04-preview` `05-refresh` `08-destroy` `09a-up-after-destroy` `09b-destroy-after-rebuild` `12-up` `26-destroy`
 
@@ -1380,7 +1406,7 @@ _Replay request body preserved in `body_b64` (1046 gzip bytes)._
 
 ---
 
-### 10. `POST /api/stacks/{org}/{project}/{stack}/update/{updateID}/complete`
+### 11. `POST /api/stacks/{org}/{project}/{stack}/update/{updateID}/complete`
 
 **Calls:** 15 &nbsp;·&nbsp; **Commands:** `03-up` `04-preview` `05-refresh` `08-destroy` `09a-up-after-destroy` `09b-destroy-after-rebuild` `12-up` `26-destroy`
 
@@ -1402,9 +1428,9 @@ _Replay request body preserved in `body_b64` (22 bytes)._
 
 ---
 
-### 11. `PATCH /api/stacks/{org}/{project}/{stack}/update/{updateID}/journalentries`
+### 12. `PATCH /api/stacks/{org}/{project}/{stack}/update/{updateID}/journalentries`
 
-**Calls:** 102 &nbsp;·&nbsp; **Commands:** `03-up` `05-refresh` `08-destroy` `09a-up-after-destroy` `09b-destroy-after-rebuild` `12-up` `26-destroy`
+**Calls:** 104 &nbsp;·&nbsp; **Commands:** `03-up` `05-refresh` `08-destroy` `09a-up-after-destroy` `09b-destroy-after-rebuild` `12-up` `26-destroy`
 
 **Request body:**
 
@@ -1500,30 +1526,6 @@ _Replay request body preserved in `body_b64` (313 gzip bytes)._
 
 ---
 
-### 12. `POST /api/stacks/{org}/{project}/{stack}/encrypt`
-
-**Calls:** 63 &nbsp;·&nbsp; **Commands:** `03-up` `05-refresh` `08-destroy` `09a-up-after-destroy` `09b-destroy-after-rebuild` `12-up` `26-destroy`
-
-**Request body:**
-
-```json
-{
-  "plaintext": "[secret]"
-}
-```
-
-_Replay request body preserved in `body_b64` (24 bytes)._
-
-**Response** (`200`):
-
-```json
-{
-  "ciphertext": "[secret]"
-}
-```
-
----
-
 ### 13. `POST /api/stacks/{org}/{project}/{stack}/preview`
 
 **Calls:** 1 &nbsp;·&nbsp; **Commands:** `04-preview`
@@ -1547,7 +1549,7 @@ _Replay request body preserved in `body_b64` (24 bytes)._
       "pulumi.env.PULUMI_SKIP_UPDATE_CHECK": "true",
       "pulumi.flag.parallel": "set",
       "pulumi.os": "linux",
-      "pulumi.version": "v3.242.0",
+      "pulumi.version": "[cli-version]",
       "runtime.name": "yaml",
       "stack.environments": "[]",
       "updatePlan": "false"
@@ -1570,7 +1572,7 @@ _Replay request body preserved in `body_b64` (24 bytes)._
 }
 ```
 
-_Replay request body preserved in `body_b64` (889 bytes)._
+_Replay request body preserved in `body_b64` (894 bytes)._
 
 **Response** (`200`):
 
@@ -1643,7 +1645,7 @@ _Replay request body preserved in `body_b64` (55 gzip bytes)._
       "pulumi.flag.parallel": "set",
       "pulumi.flag.yes": "true",
       "pulumi.os": "linux",
-      "pulumi.version": "v3.242.0",
+      "pulumi.version": "[cli-version]",
       "stack.environments": "[]",
       "updatePlan": "false"
     },
@@ -1665,7 +1667,7 @@ _Replay request body preserved in `body_b64` (55 gzip bytes)._
 }
 ```
 
-_Replay request body preserved in `body_b64` (892 bytes)._
+_Replay request body preserved in `body_b64` (897 bytes)._
 
 **Response** (`200`):
 
@@ -1716,7 +1718,7 @@ _Replay request body preserved in `body_b64` (892 bytes)._
       "pulumi.flag.parallel": "set",
       "pulumi.flag.yes": "true",
       "pulumi.os": "linux",
-      "pulumi.version": "v3.242.0",
+      "pulumi.version": "[cli-version]",
       "stack.environments": "[]",
       "updatePlan": "false"
     },
@@ -1738,7 +1740,7 @@ _Replay request body preserved in `body_b64` (892 bytes)._
 }
 ```
 
-_Replay request body preserved in `body_b64` (892 bytes)._
+_Replay request body preserved in `body_b64` (897 bytes)._
 
 **Response** (`200`):
 

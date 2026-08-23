@@ -1,5 +1,5 @@
 {
-  "seq": 404,
+  "seq": 411,
   "command": "28-stack-rename",
   "cmd_seq": 4,
   "method": "POST",
@@ -10,7 +10,7 @@
     "Authorization": "REDACTED",
     "Content-Length": "50",
     "Content-Type": "application/json",
-    "User-Agent": "pulumi-cli/1 (v3.242.0; linux; cmd=stack-rename)"
+    "User-Agent": "pulumi-cli/1 ([cli-version]; linux; cmd=stack-rename)"
   },
   "body": {
     "newName": "staging",

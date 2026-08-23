@@ -1,5 +1,5 @@
 {
-  "seq": 260,
+  "seq": 267,
   "command": "12-up",
   "cmd_seq": 4,
   "method": "GET",
@@ -9,7 +9,7 @@
     "Accept-Encoding": "gzip",
     "Authorization": "REDACTED",
     "Content-Type": "application/json",
-    "User-Agent": "pulumi-cli/1 (v3.242.0; linux; cmd=up)"
+    "User-Agent": "pulumi-cli/1 ([cli-version]; linux; cmd=up)"
   },
   "status_code": 200,
   "response": {

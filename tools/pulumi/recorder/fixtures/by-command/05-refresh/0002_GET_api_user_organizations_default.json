@@ -1,5 +1,5 @@
 {
-  "seq": 59,
+  "seq": 61,
   "command": "05-refresh",
   "cmd_seq": 2,
   "method": "GET",
@@ -9,7 +9,7 @@
     "Accept-Encoding": "gzip",
     "Authorization": "REDACTED",
     "Content-Type": "application/json",
-    "User-Agent": "pulumi-cli/1 (v3.242.0; linux; cmd=refresh)"
+    "User-Agent": "pulumi-cli/1 ([cli-version]; linux; cmd=refresh)"
   },
   "status_code": 200,
   "response": {

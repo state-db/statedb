@@ -1,5 +1,5 @@
 {
-  "seq": 98,
+  "seq": 100,
   "command": "05-refresh",
   "cmd_seq": 41,
   "method": "POST",
@@ -10,7 +10,7 @@
     "Authorization": "REDACTED",
     "Content-Length": "24",
     "Content-Type": "application/json",
-    "User-Agent": "pulumi-cli/1 (v3.242.0; linux; cmd=refresh)"
+    "User-Agent": "pulumi-cli/1 ([cli-version]; linux; cmd=refresh)"
   },
   "body": {
     "plaintext": "[secret]"

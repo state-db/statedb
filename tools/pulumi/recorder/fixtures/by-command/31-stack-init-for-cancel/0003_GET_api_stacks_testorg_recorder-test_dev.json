@@ -1,5 +1,5 @@
 {
-  "seq": 415,
+  "seq": 422,
   "command": "31-stack-init-for-cancel",
   "cmd_seq": 3,
   "method": "GET",
@@ -9,7 +9,7 @@
     "Accept-Encoding": "gzip",
     "Authorization": "REDACTED",
     "Content-Type": "application/json",
-    "User-Agent": "pulumi-cli/1 (v3.242.0; linux; cmd=stack-init)"
+    "User-Agent": "pulumi-cli/1 ([cli-version]; linux; cmd=stack-new)"
   },
   "status_code": 404,
   "response": {

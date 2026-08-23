@@ -1,7 +1,0 @@
-components: {}
-info:
-    description: APIs and Definitions for the Pulumi Cloud product.
-    title: Pulumi APIs
-    version: 1.0.0
-openapi: 3.0.3
-paths: {}
