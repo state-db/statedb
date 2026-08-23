@@ -8,6 +8,7 @@ import app.statedb.persistence.auth.ApiToken;
 import app.statedb.persistence.identity.OrgMember;
 import app.statedb.persistence.identity.Organization;
 import app.statedb.persistence.identity.User;
+import app.statedb.persistence.lock.StackLockAcquirer;
 import app.statedb.persistence.stack.Project;
 import app.statedb.persistence.stack.Snapshot;
 import app.statedb.persistence.stack.Stack;
@@ -15,6 +16,7 @@ import app.statedb.persistence.stack.StackCreator;
 import app.statedb.persistence.stack.StackRef;
 import app.statedb.persistence.stack.StackState;
 import app.statedb.persistence.stack.Workspace;
+import app.statedb.persistence.update.StackUpdate;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.quarkus.narayana.jta.QuarkusTransaction;
@@ -46,6 +48,8 @@ class StackDeleteContractTest {
   @Inject EntityManager em;
 
   @Inject StackCreator stackCreator;
+
+  @Inject StackLockAcquirer stackLockAcquirer;
 
   private UUID orgId;
 
@@ -222,6 +226,63 @@ class StackDeleteContractTest {
   }
 
   @Test
+  void rejectsDeleteWhileUpdateIsActive() {
+    StackRef ref = stackCreator.create(orgId, ORG_NAME, PROJECT, "active", fixtureTags());
+    UUID updateId = seedActiveUpdate(ref.stackId());
+
+    given()
+        .header("Authorization", "token " + RAW_TOKEN)
+        .header("Accept", "application/vnd.pulumi+9")
+        .contentType("application/json")
+        .when()
+        .delete("/pulumi/api/stacks/" + ORG_NAME + "/" + PROJECT + "/active?force=false")
+        .then()
+        .statusCode(409);
+
+    QuarkusTransaction.requiringNew()
+        .run(
+            () -> {
+              assertEquals(
+                  1L, count("SELECT count(*) FROM workspaces WHERE id = ?1", ref.workspaceId()));
+              assertEquals(1L, count("SELECT count(*) FROM stacks WHERE id = ?1", ref.stackId()));
+              assertEquals(
+                  1L, count("SELECT count(*) FROM stack_state WHERE stack_id = ?1", ref.stackId()));
+              assertEquals(1L, count("SELECT count(*) FROM stack_updates WHERE id = ?1", updateId));
+              assertEquals(
+                  1L, count("SELECT count(*) FROM stack_locks WHERE stack_id = ?1", ref.stackId()));
+            });
+  }
+
+  @Test
+  void forceDeletesStackWithActiveUpdate() {
+    StackRef ref = stackCreator.create(orgId, ORG_NAME, PROJECT, "active-force", fixtureTags());
+    UUID updateId = seedActiveUpdate(ref.stackId());
+
+    given()
+        .header("Authorization", "token " + RAW_TOKEN)
+        .header("Accept", "application/vnd.pulumi+9")
+        .contentType("application/json")
+        .when()
+        .delete("/pulumi/api/stacks/" + ORG_NAME + "/" + PROJECT + "/active-force?force=true")
+        .then()
+        .statusCode(200)
+        .body("$", anEmptyMap());
+
+    QuarkusTransaction.requiringNew()
+        .run(
+            () -> {
+              assertEquals(
+                  0L, count("SELECT count(*) FROM workspaces WHERE id = ?1", ref.workspaceId()));
+              assertEquals(0L, count("SELECT count(*) FROM stacks WHERE id = ?1", ref.stackId()));
+              assertEquals(
+                  0L, count("SELECT count(*) FROM stack_state WHERE stack_id = ?1", ref.stackId()));
+              assertEquals(0L, count("SELECT count(*) FROM stack_updates WHERE id = ?1", updateId));
+              assertEquals(
+                  0L, count("SELECT count(*) FROM stack_locks WHERE stack_id = ?1", ref.stackId()));
+            });
+  }
+
+  @Test
   void missingStackReturns404() {
     given()
         .header("Authorization", "token " + RAW_TOKEN)
@@ -284,6 +345,26 @@ class StackDeleteContractTest {
               state.journalSeq = journalSeq;
               state.persistAndFlush();
             });
+  }
+
+  private UUID seedActiveUpdate(UUID stackId) {
+    UUID updateId =
+        QuarkusTransaction.requiringNew()
+            .call(
+                () -> {
+                  StackUpdate update = new StackUpdate();
+                  update.stackId = stackId;
+                  update.version = 1;
+                  update.kind = StackUpdate.Kind.UPDATE;
+                  update.status = StackUpdate.Status.IN_PROGRESS;
+                  update.startedAt = java.time.Instant.now();
+                  update.persistAndFlush();
+                  return update.id;
+                });
+    stackLockAcquirer
+        .acquire(stackId, updateId, "stack-delete-test", null, null)
+        .orElseThrow(() -> new AssertionError("expected active update lease"));
+    return updateId;
   }
 
   private static JsonNode deployment(String resourcesJson) {
