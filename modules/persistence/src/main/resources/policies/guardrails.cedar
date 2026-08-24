@@ -10,3 +10,14 @@ forbid(
   resource
 )
 when { resource.id like "statedb:stack:*/prod" };
+
+@id("SiteAdministrationRequiresAdmin")
+// Site administration remains a hard deployment-operator boundary. A future policy overlay may
+// add permits, but Cedar's deny-overrides-allow semantics prevent it from delegating these actions
+// beyond the env-controlled Role::"admin".
+forbid(
+  principal,
+  action in Action::"site:AdminAccess",
+  resource
+)
+unless { principal in Role::"admin" };

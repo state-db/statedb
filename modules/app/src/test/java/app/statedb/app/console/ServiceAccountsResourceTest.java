@@ -14,6 +14,7 @@ import io.quarkus.test.oidc.server.OidcWiremockTestResource;
 import io.restassured.http.Cookie;
 import io.restassured.response.Response;
 import java.time.Instant;
+import java.util.List;
 import java.util.Map;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -153,6 +154,21 @@ class ServiceAccountsResourceTest {
   }
 
   @Test
+  void organizationOwnerCannotUseSiteAdministrationActions() {
+    Cookie session = establishSession(OrgMember.Role.owner);
+
+    for (String path :
+        List.of(
+            "/api/admin/providers",
+            "/api/admin/orgs",
+            "/api/admin/users",
+            "/api/admin/entitlement",
+            "/api/admin/locks")) {
+      given().cookie(session.getName(), session.getValue()).when().get(path).then().statusCode(403);
+    }
+  }
+
+  @Test
   void mintRequiresOneOfTheSupportedExpiries() {
     Cookie session = establishSession(OrgMember.Role.owner);
 
@@ -208,6 +224,12 @@ class ServiceAccountsResourceTest {
         .cookie(session.getName(), session.getValue())
         .when()
         .get("/api/user")
+        .then()
+        .statusCode(401);
+    given()
+        .cookie(session.getName(), session.getValue())
+        .when()
+        .get("/api/admin/users")
         .then()
         .statusCode(401);
   }

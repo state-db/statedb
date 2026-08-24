@@ -18,6 +18,10 @@ final class CedarEntities {
     return euid("User", userId.toString());
   }
 
+  static EntityUID site() {
+    return euid("Site", ResourceName.site());
+  }
+
   static EntityUID org(String orgName) {
     return euid("Org", ResourceName.org(orgName));
   }

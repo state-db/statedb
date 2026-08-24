@@ -242,9 +242,17 @@ Actions are named IAM-style as `resource:Operation` (lowercase service prefix = 
 | `token:MintServiceAccount` | `POST /api/admin/tokens` | Admin-only |
 | `token:List` | `GET /api/tokens` | Own tokens; admin sees all |
 | `token:Revoke` | `DELETE /api/tokens/{id}` | Owner or admin |
-| `provider:Manage` | `POST/PUT/DELETE /api/admin/providers` | Admin-only |
+| `provider:Manage` | `GET/POST/PATCH/DELETE /api/admin/providers` | Admin-only |
 | `compaction:Trigger` | `POST /api/admin/stacks/{ref}/compact` | Admin-only |
 | `user:ReadOthers` | `GET /api/admin/users` | Admin-only |
+| `operations:Read` | `GET /api/admin/locks`, `GET /api/admin/compaction-jobs` | Admin-only global inventory |
+| `entitlement:Read` | `GET /api/admin/entitlement` | Admin-only deployment entitlement |
+
+The global console actions (`provider:Manage`, `org:Admin`, `user:ReadOthers`,
+`operations:Read`, and `entitlement:Read`) are members of `site:AdminAccess` and target the
+singleton `Site::"statedb:site:root"`. `SiteAdministrationRequiresAdmin` forbids that bundle unless
+the principal carries the env-derived `Role::"admin"`; because Cedar forbids override every permit,
+policy grants cannot turn site administration into a delegable capability.
 
 Pulumi-internal identity endpoints are protected by token authentication. They return only the
 identity and organization already bound to the validated token, so there is no caller-selected
@@ -254,12 +262,13 @@ The action set is **closed** for Wave 1. Adding an action requires a schema bump
 
 #### Action bundles
 
-Two schema-declared **bundle actions** group the leaf actions so a policy grants a capability in one token instead of re-listing members (the IAM `AmazonS3ReadOnlyAccess`-style pre-canned bundle):
+Three schema-declared **bundle actions** group leaf actions so a policy or guardrail can name a capability once instead of re-listing members (the IAM `AmazonS3ReadOnlyAccess`-style pre-canned bundle):
 
 | Bundle | Members |
 |--------|---------|
 | `stack:ReadOnlyAccess` | `stack:Read`, `stack:DecryptSecrets` |
 | `stack:WriteAccess` | `stack:Create`, `stack:Lock`, `stack:Delete`, `stack:EncryptSecrets` |
+| `site:AdminAccess` | `provider:Manage`, `org:Admin`, `user:ReadOthers`, `operations:Read`, `entitlement:Read` |
 | `stack:*` | both bundles above (all stack actions — the IAM `"Action": "stack:*"` wildcard) |
 
 `stack:*` is the all-of-service wildcard: the two `*Access` bundles are themselves members of it, so
@@ -306,15 +315,16 @@ Org::"statedb:org:<org_name>"
 Project::"statedb:project:<org>/<project>"
   (structural parent; carries id: String)
 
+Site::"statedb:site:root"
+  attributes:
+    id: String             (the singleton deployment targeted by global console administration)
+
 Token::"<token_id>"
   attributes:
     owner: User | ServiceAccount
     org: Org
     kind: String           ("oidc" | "service_account")
 
-Provider::"<provider_name>"
-  attributes:
-    issuer: String
 ```
 
 The user is a **global identity** (`User::<users.id>`), not an org-scoped one — a user may belong to
@@ -414,6 +424,7 @@ modules/persistence/authz/
 ├── CurrentPrincipal.java        ← request-scoped authenticated principal
 ├── EntityLoader.java            ← SPI for request target → Cedar resource entity
 ├── PrincipalRoleResolver.java   ← (principal, resourceOrg) → role; the tenancy seam
+├── SiteEntityLoader.java        ← singleton deployment for global console administration
 ├── OrgEntityLoader.java         ← loader for org-scoped collection operations
 └── StackEntityLoader.java       ← loader for stack-scoped operations
 
@@ -494,6 +505,10 @@ public StackDto getStack(@PathParam("org") String org,
 ```
 
 The `loader` resolves the request's path params to the Cedar resource entity; the action names the operation.
+
+Global console administration uses `SiteEntityLoader`, which performs no database lookup and
+always returns the singleton deployment resource. Org- and stack-scoped operations continue to use
+their domain loaders, so the Cedar request retains the most specific resource available.
 
 A CDI interceptor `@AuthorizeInterceptor`:
 

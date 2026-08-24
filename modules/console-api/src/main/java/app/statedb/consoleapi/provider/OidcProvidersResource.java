@@ -1,11 +1,10 @@
 package app.statedb.consoleapi.provider;
 
 import app.statedb.consoleapi.auth.SessionPrincipal;
-import app.statedb.persistence.identity.AdminAllowList;
+import app.statedb.persistence.authz.Authorize;
+import app.statedb.persistence.authz.SiteEntityLoader;
 import app.statedb.persistence.identity.OidcProvider;
 import com.fasterxml.jackson.annotation.JsonProperty;
-import io.quarkus.security.identity.SecurityIdentity;
-import jakarta.inject.Inject;
 import jakarta.transaction.Transactional;
 import jakarta.ws.rs.BadRequestException;
 import jakarta.ws.rs.Consumes;
@@ -29,33 +28,28 @@ import java.util.Optional;
 import java.util.UUID;
 import java.util.regex.Pattern;
 import org.eclipse.microprofile.config.inject.ConfigProperty;
-import org.eclipse.microprofile.jwt.JsonWebToken;
 
 /** Runtime OIDC provider management for platform administrators. */
 @Path("/api/admin/providers")
 @SessionPrincipal
+@Authorize(action = "provider:Manage", loader = SiteEntityLoader.class)
 @Produces(MediaType.APPLICATION_JSON)
 @Consumes(MediaType.APPLICATION_JSON)
 public class OidcProvidersResource {
 
   private static final Pattern NAME = Pattern.compile("[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?");
 
-  @Inject SecurityIdentity identity;
-  @Inject AdminAllowList adminAllowList;
-
   @ConfigProperty(name = "statedb.oidc.bootstrap.name")
   Optional<String> bootstrapName;
 
   @GET
   public List<ProviderDto> list() {
-    requireAdmin();
     return OidcProvider.<OidcProvider>list("order by name").stream().map(this::dto).toList();
   }
 
   @POST
   @Transactional
   public ProviderDto create(ProviderWrite body) {
-    requireAdmin();
     validateCreate(body);
     OidcProvider provider = new OidcProvider();
     apply(provider, body, true);
@@ -69,7 +63,6 @@ public class OidcProvidersResource {
   @Path("/{id}")
   @Transactional
   public ProviderDto update(@PathParam("id") String rawId, ProviderWrite body) {
-    requireAdmin();
     OidcProvider provider = find(rawId);
     requireMutable(provider);
     if (body == null) {
@@ -86,18 +79,10 @@ public class OidcProvidersResource {
   @Path("/{id}")
   @Transactional
   public Response delete(@PathParam("id") String rawId) {
-    requireAdmin();
     OidcProvider provider = find(rawId);
     requireMutable(provider);
     provider.delete();
     return Response.noContent().build();
-  }
-
-  private void requireAdmin() {
-    if (!(identity.getPrincipal() instanceof JsonWebToken jwt)
-        || !adminAllowList.isAdmin(jwt.getIssuer(), jwt.getSubject())) {
-      throw new ForbiddenException();
-    }
   }
 
   private OidcProvider find(String rawId) {

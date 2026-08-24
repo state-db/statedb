@@ -2,6 +2,8 @@ package app.statedb.consoleapi.user;
 
 import app.statedb.consoleapi.auth.SessionPrincipal;
 import app.statedb.persistence.auth.ApiToken;
+import app.statedb.persistence.authz.Authorize;
+import app.statedb.persistence.authz.SiteEntityLoader;
 import app.statedb.persistence.identity.AdminAllowList;
 import app.statedb.persistence.identity.OrgMember;
 import app.statedb.persistence.identity.OrgMembershipFinder;
@@ -9,9 +11,7 @@ import app.statedb.persistence.identity.ServiceAccountCreator;
 import app.statedb.persistence.identity.User;
 import io.quarkus.hibernate.orm.panache.PanacheQuery;
 import io.quarkus.panache.common.Page;
-import io.quarkus.security.identity.SecurityIdentity;
 import jakarta.inject.Inject;
-import jakarta.ws.rs.ForbiddenException;
 import jakarta.ws.rs.GET;
 import jakarta.ws.rs.Path;
 import jakarta.ws.rs.Produces;
@@ -22,7 +22,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import java.util.stream.Collectors;
-import org.eclipse.microprofile.jwt.JsonWebToken;
 
 /**
  * Site-admin support/audit view of every identity in the {@code users} table — the humans who have
@@ -33,12 +32,12 @@ import org.eclipse.microprofile.jwt.JsonWebToken;
  */
 @Path("/api/admin/users")
 @SessionPrincipal
+@Authorize(action = "user:ReadOthers", loader = SiteEntityLoader.class)
 @Produces(MediaType.APPLICATION_JSON)
 public class AdminUsersResource {
 
   private static final int PAGE_SIZE = 50;
 
-  @Inject SecurityIdentity identity;
   @Inject AdminAllowList adminAllowList;
   @Inject OrgMembershipFinder orgMembershipFinder;
 
@@ -46,7 +45,6 @@ public class AdminUsersResource {
   public AdminUsersPage list(
       @QueryParam("page") Integer requestedPage,
       @QueryParam("includeService") boolean includeService) {
-    requireAdmin();
     int page = requestedPage == null ? 1 : Math.max(1, requestedPage);
     PanacheQuery<User> query =
         includeService
@@ -107,13 +105,6 @@ public class AdminUsersResource {
     if (token == null) return "no_credential";
     if (user.deactivatedAt != null || token.revokedAt != null) return "revoked";
     return token.expiresAt.isAfter(Instant.now()) ? "active" : "expired";
-  }
-
-  private void requireAdmin() {
-    if (!(identity.getPrincipal() instanceof JsonWebToken jwt)
-        || !adminAllowList.isAdmin(jwt.getIssuer(), jwt.getSubject())) {
-      throw new ForbiddenException();
-    }
   }
 
   public record AdminUserDto(

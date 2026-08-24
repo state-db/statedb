@@ -14,6 +14,10 @@ public final class ResourceName {
 
   private ResourceName() {}
 
+  public static String site() {
+    return "statedb:site:root";
+  }
+
   public static String org(String org) {
     return "statedb:org:" + org;
   }

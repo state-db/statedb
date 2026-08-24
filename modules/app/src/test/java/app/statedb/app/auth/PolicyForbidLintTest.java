@@ -40,9 +40,10 @@ class PolicyForbidLintTest {
     assertFalse(forbids.isEmpty(), "expected at least the delete guardrail forbid");
     for (String forbid : forbids) {
       assertTrue(
-          forbid.contains("action == Action::\""),
-          "every forbid must pin a single leaf action — an unconstrained `action` would cover"
-              + " reads: "
+          forbid.contains("action == Action::\"")
+              || forbid.contains("action in Action::\"site:AdminAccess\""),
+          "every forbid must pin a leaf action or the closed site-admin bundle — an unconstrained"
+              + " `action` would cover reads: "
               + forbid);
       for (String read : READ_AFFECTING) {
         assertFalse(forbid.contains(read), "forbid targets a read action: " + forbid);

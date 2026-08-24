@@ -3,10 +3,10 @@ package app.statedb.consoleapi.operations;
 import app.statedb.consoleapi.auth.SessionPrincipal;
 import app.statedb.persistence.authz.Authorize;
 import app.statedb.persistence.authz.AuthorizedResource;
+import app.statedb.persistence.authz.SiteEntityLoader;
 import app.statedb.persistence.authz.StackEntityLoader;
 import app.statedb.persistence.entitlement.EffectiveEntitlement;
 import app.statedb.persistence.entitlement.Entitlements;
-import app.statedb.persistence.identity.AdminAllowList;
 import app.statedb.persistence.identity.ServiceAccountCreator;
 import app.statedb.persistence.lock.StackLockCanceller;
 import app.statedb.persistence.operations.ActiveLockView;
@@ -15,12 +15,10 @@ import app.statedb.persistence.operations.OperationalInventoryFinder;
 import app.statedb.persistence.stack.CompactionJobEnqueuer;
 import app.statedb.persistence.stack.Stack;
 import app.statedb.persistence.stack.StackRef;
-import io.quarkus.security.identity.SecurityIdentity;
 import jakarta.inject.Inject;
 import jakarta.transaction.Transactional;
 import jakarta.ws.rs.BadRequestException;
 import jakarta.ws.rs.DELETE;
-import jakarta.ws.rs.ForbiddenException;
 import jakarta.ws.rs.GET;
 import jakarta.ws.rs.POST;
 import jakarta.ws.rs.Path;
@@ -35,7 +33,6 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.UUID;
-import org.eclipse.microprofile.jwt.JsonWebToken;
 
 /** Site-admin visibility into live locks and the compaction work queue. */
 @Path("/api/admin")
@@ -43,8 +40,6 @@ import org.eclipse.microprofile.jwt.JsonWebToken;
 @Produces(MediaType.APPLICATION_JSON)
 public class AdminOperationsResource {
 
-  @Inject SecurityIdentity identity;
-  @Inject AdminAllowList adminAllowList;
   @Inject OperationalInventoryFinder inventory;
   @Inject AuthorizedResource authorized;
   @Inject StackLockCanceller lockCanceller;
@@ -54,8 +49,8 @@ public class AdminOperationsResource {
 
   @GET
   @Path("/entitlement")
+  @Authorize(action = "entitlement:Read", loader = SiteEntityLoader.class)
   public EntitlementDto entitlement() {
-    requireAdmin();
     EffectiveEntitlement effective = entitlements.effective();
     return new EntitlementDto(
         effective.tier().name().toLowerCase(Locale.ROOT),
@@ -68,15 +63,15 @@ public class AdminOperationsResource {
 
   @GET
   @Path("/locks")
+  @Authorize(action = "operations:Read", loader = SiteEntityLoader.class)
   public List<LockDto> locks() {
-    requireAdmin();
     return inventory.activeLocks(Instant.now()).stream().map(this::lockDto).toList();
   }
 
   @GET
   @Path("/compaction-jobs")
+  @Authorize(action = "operations:Read", loader = SiteEntityLoader.class)
   public List<CompactionJobDto> compactionJobs() {
-    requireAdmin();
     return inventory.recentCompactionJobs().stream().map(this::compactionJobDto).toList();
   }
 
@@ -161,13 +156,6 @@ public class AdminOperationsResource {
         job.createdAt(),
         job.startedAt(),
         job.completedAt());
-  }
-
-  private void requireAdmin() {
-    if (!(identity.getPrincipal() instanceof JsonWebToken jwt)
-        || !adminAllowList.isAdmin(jwt.getIssuer(), jwt.getSubject())) {
-      throw new ForbiddenException();
-    }
   }
 
   public record HolderDto(

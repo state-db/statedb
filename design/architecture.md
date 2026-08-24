@@ -85,8 +85,8 @@ state-db/
     │   ├── update/             UpdateResource, LeaseResource, EventsResource
     │   └── error/              Pulumi-specific error mapping (409 lock conflict, etc.)
     ├── console-api/            JAX-RS resources for /api/*
-    │   ├── filter/             SessionAuthFilter, AdminFilter, LocalGlassFilter
-    │   ├── auth/               OIDC login/callback, multi-provider TenantConfigResolver
+    │   ├── auth/               session/local-glass filters and OIDC login/callback
+    │   ├── provider/           OIDC provider administration
     │   ├── workspace/          WorkspacesResource (cross-kind list)
     │   ├── pulumi/             PulumiStackResource (drilldown), HistoryResource
     │   ├── token/              TokensResource (mint/list/revoke)
