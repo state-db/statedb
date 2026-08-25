@@ -8,7 +8,6 @@ import app.statedb.persistence.update.StackUpdate;
 import com.fasterxml.jackson.databind.JsonNode;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
-import jakarta.persistence.EntityManager;
 import jakarta.persistence.LockModeType;
 import jakarta.transaction.Transactional;
 import java.time.Instant;
@@ -24,7 +23,6 @@ import java.util.UUID;
 @ApplicationScoped
 public class StackImporter {
 
-  @Inject EntityManager em;
   @Inject Entitlements entitlements;
 
   @Transactional
@@ -47,15 +45,7 @@ public class StackImporter {
     StackState state =
         StackState.find("stackId", stackId).withLock(LockModeType.PESSIMISTIC_WRITE).singleResult();
 
-    int nextUpdateVersion =
-        ((Number)
-                em.createQuery(
-                        "SELECT COALESCE(MAX(u.version), 0) + 1 "
-                            + "FROM StackUpdate u WHERE u.stackId = :stackId",
-                        Number.class)
-                    .setParameter("stackId", stackId)
-                    .getSingleResult())
-            .intValue();
+    int nextUpdateVersion = StackUpdate.nextAppliedVersionForLockedStack(stackId);
     Instant now = Instant.now();
     int snapshotVersion = state.baseSnapshotVersion + 1;
 

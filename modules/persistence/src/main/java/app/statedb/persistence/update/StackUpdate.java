@@ -21,6 +21,27 @@ import org.hibernate.type.SqlTypes;
 @Table(name = "stack_updates")
 public class StackUpdate extends TimestampedEntity {
 
+  /**
+   * Returns the next 1-based applied-update version for {@code stackId}.
+   *
+   * <p>The caller must hold a write lock on the parent {@code stacks} row for the duration of its
+   * transaction. That shared lock serializes every update-version allocator for a stack. Dry-run
+   * rows carry version 0 and therefore do not advance this sequence.
+   */
+  public static int nextAppliedVersionForLockedStack(UUID stackId) {
+    // Panache entity queries do not expose scalar aggregate results; use HQL to avoid hydrating and
+    // sorting every update row merely to read the maximum version.
+    return ((Number)
+            getEntityManager()
+                .createQuery(
+                    "SELECT COALESCE(MAX(u.version), 0) + 1 "
+                        + "FROM StackUpdate u WHERE u.stackId = :stackId",
+                    Number.class)
+                .setParameter("stackId", stackId)
+                .getSingleResult())
+        .intValue();
+  }
+
   public enum Kind {
     UPDATE("update"),
     PREVIEW("preview"),

@@ -7,11 +7,14 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import app.statedb.persistence.identity.Organization;
 import app.statedb.persistence.stack.StackCreator;
+import app.statedb.persistence.stack.StackImporter;
 import app.statedb.persistence.stack.StackRef;
+import app.statedb.persistence.stack.StackRenamer;
 import app.statedb.persistence.update.StackUpdate;
 import app.statedb.persistence.update.StackUpdateStarter;
 import app.statedb.persistence.update.StartUpdateRequest;
 import app.statedb.persistence.update.StartedUpdate;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import io.quarkus.narayana.jta.QuarkusTransaction;
 import io.quarkus.test.junit.QuarkusTest;
 import jakarta.inject.Inject;
@@ -32,11 +35,15 @@ import org.junit.jupiter.api.Test;
 class StackUpdateStarterTest {
 
   private static final String ORG_NAME = "starter-org";
+  private static final ObjectMapper MAPPER = new ObjectMapper();
 
   @Inject StackCreator stackCreator;
+  @Inject StackImporter stackImporter;
+  @Inject StackRenamer stackRenamer;
   @Inject StackUpdateStarter starter;
   @Inject EntityManager em;
 
+  private StackRef stackRef;
   private UUID stackId;
 
   @BeforeEach
@@ -49,8 +56,8 @@ class StackUpdateStarterTest {
                   org.name = ORG_NAME;
                   org.displayName = "Starter Test";
                   org.persistAndFlush();
-                  StackRef ref = stackCreator.create(org.id, ORG_NAME, "proj", "dev", Map.of());
-                  return ref.stackId();
+                  stackRef = stackCreator.create(org.id, ORG_NAME, "proj", "dev", Map.of());
+                  return stackRef.stackId();
                 });
   }
 
@@ -93,6 +100,33 @@ class StackUpdateStarterTest {
     assertEquals(0, preview.version());
     assertEquals(0, dryRunPass.version());
     assertEquals(1, apply.version());
+  }
+
+  @Test
+  void startImportAndRenameShareOneAppliedVersionSequence() throws Exception {
+    StartedUpdate dryRun =
+        starter.start(stackId, StackUpdate.Kind.PREVIEW, null, null, null, req());
+    StartedUpdate apply = starter.start(stackId, StackUpdate.Kind.UPDATE, null, null, null, req());
+
+    // These operations are terminal before import/rename in the real protocol. Marking them
+    // terminal here keeps this test focused on version allocation rather than update completion.
+    QuarkusTransaction.requiringNew()
+        .run(
+            () ->
+                StackUpdate.update(
+                    "status = ?1 where id in (?2, ?3)",
+                    StackUpdate.Status.SUCCEEDED,
+                    dryRun.updateId(),
+                    apply.updateId()));
+
+    UUID importId =
+        stackImporter.importDeployment(stackId, null, null, MAPPER.readTree("{\"resources\":[]}"));
+    UUID renameId = stackRenamer.rename(stackRef, "renamed", null, null, null);
+
+    assertEquals(0, dryRun.version());
+    assertEquals(1, apply.version());
+    assertEquals(2, updateVersion(importId));
+    assertEquals(3, updateVersion(renameId));
   }
 
   @Test
@@ -181,6 +215,11 @@ class StackUpdateStarterTest {
 
   private static StartUpdateRequest req() {
     return new StartUpdateRequest(Map.of(), Map.of(), Map.of(), "desc", "yaml", "v3.234.0", "msg");
+  }
+
+  private static int updateVersion(UUID updateId) {
+    return QuarkusTransaction.requiringNew()
+        .call(() -> StackUpdate.<StackUpdate>findById(updateId).version);
   }
 
   private static String rootMessage(Throwable t) {

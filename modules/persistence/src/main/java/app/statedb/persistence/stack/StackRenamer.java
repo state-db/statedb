@@ -152,8 +152,6 @@ public class StackRenamer {
       Integer installedSnapshotVersion,
       UUID startedByUserId,
       UUID startedByApiTokenId) {
-    StackUpdate latest =
-        StackUpdate.<StackUpdate>find("stackId = ?1 order by version desc", stack.id).firstResult();
     long journalSeq = state == null ? 0L : state.journalSeq;
     Instant now = Instant.now();
 
@@ -161,7 +159,7 @@ public class StackRenamer {
     update.stackId = stack.id;
     update.kind = StackUpdate.Kind.RENAME;
     update.status = StackUpdate.Status.SUCCEEDED;
-    update.version = (latest == null ? 0 : latest.version) + 1;
+    update.version = StackUpdate.nextAppliedVersionForLockedStack(stack.id);
     update.startJournalSeq = journalSeq;
     update.endJournalSeq = journalSeq;
     // Lineage fence for historical export: the rewritten snapshot supersedes the stale-URN

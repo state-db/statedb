@@ -60,15 +60,7 @@ public class StackUpdateStarter {
     if (entitlement != null && entitlement.tier() != EffectiveEntitlement.Tier.PAID) {
       entitlements.requireUpdateAllowed(Stack.count(), kind, dryRun, entitlement);
     }
-    int version =
-        dryRun
-            ? 0
-            : ((Number)
-                    em.createNativeQuery(
-                            "SELECT COALESCE(MAX(version), 0) + 1 FROM stack_updates WHERE stack_id = ?1")
-                        .setParameter(1, stackId)
-                        .getSingleResult())
-                .intValue();
+    int version = dryRun ? 0 : StackUpdate.nextAppliedVersionForLockedStack(stackId);
 
     StackUpdate u = new StackUpdate();
     u.stackId = stackId;
