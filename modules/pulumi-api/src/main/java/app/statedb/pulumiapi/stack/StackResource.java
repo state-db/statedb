@@ -14,7 +14,7 @@ import app.statedb.persistence.stack.StackNotFoundException;
 import app.statedb.persistence.stack.StackRef;
 import app.statedb.persistence.stack.StackRenamer;
 import app.statedb.persistence.stack.StackTagWriter;
-import com.fasterxml.jackson.annotation.JsonInclude;
+import app.statedb.pulumiapi.wire.StackDto;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.databind.JsonNode;
 import jakarta.inject.Inject;
@@ -54,7 +54,7 @@ public class StackResource {
   @GET
   @Authorize(action = "stack:Read", loader = StackEntityLoader.class)
   @Produces(MediaType.APPLICATION_JSON)
-  public StackHeadDto get(
+  public StackDto get(
       @PathParam("org") String org,
       @PathParam("project") String project,
       @PathParam("stack") String stack) {
@@ -62,8 +62,13 @@ public class StackResource {
         finder
             .find(org, project, stack)
             .orElseThrow(() -> new StackNotFoundException(org, project, stack));
-    return new StackHeadDto(
-        head.activeUpdate(), head.orgName(), head.projectName(), head.stackName(), head.tags());
+    return new StackDto(
+        head.activeUpdate(),
+        null,
+        head.orgName(),
+        head.projectName(),
+        head.stackName(),
+        head.tags());
   }
 
   @DELETE
@@ -151,24 +156,6 @@ public class StackResource {
         renamer.rename(
             ref, body.newName, body.newProject, principal.userId(), principal.apiTokenId());
     return new ImportStackResponse(updateId == null ? "" : updateId.toString());
-  }
-
-  @JsonInclude(JsonInclude.Include.ALWAYS)
-  public record StackHeadDto(
-      @JsonProperty("activeUpdate") String activeUpdate,
-      @JsonProperty("currentOperation") Object currentOperation,
-      @JsonProperty("orgName") String orgName,
-      @JsonProperty("projectName") String projectName,
-      @JsonProperty("stackName") String stackName,
-      @JsonProperty("tags") Map<String, String> tags) {
-    public StackHeadDto(
-        String activeUpdate,
-        String orgName,
-        String projectName,
-        String stackName,
-        Map<String, String> tags) {
-      this(activeUpdate, null, orgName, projectName, stackName, tags);
-    }
   }
 
   public static class AppStackRenameRequest {

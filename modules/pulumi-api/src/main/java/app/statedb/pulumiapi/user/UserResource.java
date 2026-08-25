@@ -4,6 +4,7 @@ import app.statedb.persistence.auth.AuthenticatedPrincipal;
 import app.statedb.persistence.authz.CurrentPrincipal;
 import app.statedb.persistence.identity.OrgMembershipFinder;
 import app.statedb.persistence.identity.User;
+import app.statedb.pulumiapi.wire.OrganizationReference;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import jakarta.inject.Inject;
 import jakarta.ws.rs.GET;
@@ -33,13 +34,13 @@ public class UserResource {
 
   // Single-org credentials report exactly their scoped org. All-current-memberships credentials
   // report every org the actor belongs to, so the CLI can address stacks across all of them.
-  private List<OrgRef> organizations(AuthenticatedPrincipal p) {
+  private List<OrganizationReference> organizations(AuthenticatedPrincipal p) {
     Optional<String> singleOrgName = p.credentialScope().singleOrgName();
     if (singleOrgName.isPresent()) {
-      return List.of(new OrgRef(singleOrgName.get(), singleOrgName.get()));
+      return List.of(new OrganizationReference(singleOrgName.get(), singleOrgName.get()));
     }
     return orgMembershipFinder.forUser(p.userId()).stream()
-        .map(m -> new OrgRef(m.name(), m.name()))
+        .map(m -> new OrganizationReference(m.name(), m.name()))
         .toList();
   }
 
@@ -47,8 +48,5 @@ public class UserResource {
       @JsonProperty("email") String email,
       @JsonProperty("githubLogin") String githubLogin,
       @JsonProperty("name") String name,
-      @JsonProperty("organizations") List<OrgRef> organizations) {}
-
-  public record OrgRef(
-      @JsonProperty("githubLogin") String githubLogin, @JsonProperty("name") String name) {}
+      @JsonProperty("organizations") List<OrganizationReference> organizations) {}
 }

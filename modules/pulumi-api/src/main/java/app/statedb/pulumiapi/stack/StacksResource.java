@@ -6,7 +6,7 @@ import app.statedb.persistence.authz.AuthorizedResource;
 import app.statedb.persistence.authz.OrgEntityLoader;
 import app.statedb.persistence.identity.Organization;
 import app.statedb.persistence.stack.StackCreator;
-import com.fasterxml.jackson.annotation.JsonInclude;
+import app.statedb.pulumiapi.wire.StackDto;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import jakarta.inject.Inject;
 import jakarta.ws.rs.Consumes;
@@ -36,7 +36,7 @@ public class StacksResource {
 
     Organization targetOrg = authorized.subject(Organization.class);
     stackCreator.create(targetOrg.id, org, project, body.stackName, body.tags);
-    return new StackDto(org, project, body.stackName, body.tags);
+    return new StackDto("", null, org, project, body.stackName, body.tags);
   }
 
   public static class CreateStackRequest {
@@ -45,19 +45,5 @@ public class StacksResource {
 
     @JsonProperty("tags")
     public Map<String, String> tags;
-  }
-
-  @JsonInclude(JsonInclude.Include.ALWAYS)
-  public record StackDto(
-      @JsonProperty("activeUpdate") String activeUpdate,
-      @JsonProperty("currentOperation") Object currentOperation,
-      @JsonProperty("orgName") String orgName,
-      @JsonProperty("projectName") String projectName,
-      @JsonProperty("stackName") String stackName,
-      @JsonProperty("tags") Map<String, String> tags) {
-    public StackDto(
-        String orgName, String projectName, String stackName, Map<String, String> tags) {
-      this("", null, orgName, projectName, stackName, tags);
-    }
   }
 }

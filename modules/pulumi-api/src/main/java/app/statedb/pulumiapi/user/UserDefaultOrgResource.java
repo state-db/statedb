@@ -5,6 +5,7 @@ import app.statedb.persistence.authz.CurrentPrincipal;
 import app.statedb.persistence.identity.OrgMembershipFinder;
 import app.statedb.persistence.identity.OrgMembershipView;
 import app.statedb.persistence.identity.User;
+import app.statedb.pulumiapi.wire.OrganizationReference;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import jakarta.inject.Inject;
 import jakarta.ws.rs.GET;
@@ -31,22 +32,19 @@ public class UserDefaultOrgResource {
   // Single-org credential → its scoped org. All-current-memberships credential → the actor's first
   // org by name (the same ordering the console uses); with no memberships, fall back to the
   // personal namespace (the account identity `pulumi whoami` prints), matching UserResource.
-  private OrgRef defaultOrg(AuthenticatedPrincipal p) {
+  private OrganizationReference defaultOrg(AuthenticatedPrincipal p) {
     Optional<String> singleOrgName = p.credentialScope().singleOrgName();
     if (singleOrgName.isPresent()) {
-      return new OrgRef(singleOrgName.get(), singleOrgName.get());
+      return new OrganizationReference(singleOrgName.get(), singleOrgName.get());
     }
     List<OrgMembershipView> memberships = orgMembershipFinder.forUser(p.userId());
     if (!memberships.isEmpty()) {
       String name = memberships.get(0).name();
-      return new OrgRef(name, name);
+      return new OrganizationReference(name, name);
     }
     User user = User.findById(p.userId());
-    return new OrgRef(user.sub, user.sub);
+    return new OrganizationReference(user.sub, user.sub);
   }
 
-  public record DefaultOrgDto(@JsonProperty("organization") OrgRef organization) {}
-
-  public record OrgRef(
-      @JsonProperty("githubLogin") String githubLogin, @JsonProperty("name") String name) {}
+  public record DefaultOrgDto(@JsonProperty("organization") OrganizationReference organization) {}
 }
