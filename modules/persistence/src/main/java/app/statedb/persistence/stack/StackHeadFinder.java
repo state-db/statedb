@@ -4,36 +4,23 @@ import jakarta.enterprise.context.ApplicationScoped;
 import java.util.Map;
 import java.util.Optional;
 
-/**
- * Loads the {@link StackHead} for a {@code (org, project, stack)} path triple. Uses the
- * {@code @ManyToOne} navigation on {@link Stack} to keep this in idiomatic Panache; {@code join
- * fetch} collapses the chain into a single SQL statement so callers don't pay the lazy-load round
- * trips.
- */
+/** Loads stack-head metadata after a tenant-isolated {@link StackRef} has been resolved. */
 @ApplicationScoped
 public class StackHeadFinder {
 
-  public Optional<StackHead> find(String org, String project, String stack) {
-    return Stack.<Stack>find(
-            "from Stack s "
-                + "join fetch s.project p "
-                + "join fetch p.organization o "
-                + "where o.name = ?1 and p.name = ?2 and s.name = ?3",
-            org,
-            project,
-            stack)
-        .firstResultOptional()
+  public Optional<StackHead> find(StackRef ref) {
+    return Stack.<Stack>findByIdOptional(ref.stackId())
         .map(
             s ->
                 new StackHead(
-                    s.id,
-                    s.orgId,
-                    s.project.organization.name,
-                    s.project.name,
-                    s.name,
+                    ref.stackId(),
+                    ref.orgId(),
+                    ref.orgName(),
+                    ref.projectName(),
+                    ref.stackName(),
                     s.tags == null ? Map.of() : s.tags,
-                    s.version,
-                    s.activeUpdateId == null ? "" : s.activeUpdateId.toString(),
+                    ref.version(),
+                    ref.activeUpdateId() == null ? "" : ref.activeUpdateId().toString(),
                     null,
                     0));
   }

@@ -154,16 +154,19 @@ class StackHeadContractTest {
   }
 
   @Test
-  void crossOrgCollapsesTo404() {
-    // Seed a stack owned by the *other* org directly via Hibernate.
+  void sameNamesAcrossOrgsResolveOwnStackAndHideOther() {
     QuarkusTransaction.requiringNew()
         .run(
             () -> {
+              Organization org = Organization.find("name", ORG_NAME).<Organization>firstResult();
+              stackCreator.create(
+                  org.id, ORG_NAME, "shared-proj", "shared-stack", Map.of("tenant", "authorized"));
+
               Organization other =
                   Organization.find("name", OTHER_ORG_NAME).<Organization>firstResult();
               Project p = new Project();
               p.orgId = other.id;
-              p.name = "secret-proj";
+              p.name = "shared-proj";
               p.persistAndFlush();
               Workspace w = new Workspace();
               w.orgId = other.id;
@@ -172,19 +175,29 @@ class StackHeadContractTest {
               Stack s = new Stack();
               s.orgId = other.id;
               s.projectId = p.id;
-              s.name = "secret";
+              s.name = "shared-stack";
               s.workspaceId = w.id;
+              s.tags = Map.of("tenant", "hidden");
               s.persistAndFlush();
               StackState st = new StackState();
               st.stackId = s.id;
               st.persistAndFlush();
             });
 
-    // Token scoped to ORG_NAME must not see OTHER_ORG_NAME's stack — 404, not 403.
     given()
         .header("Authorization", "token " + RAW_TOKEN)
         .when()
-        .get("/pulumi/api/stacks/" + OTHER_ORG_NAME + "/secret-proj/secret")
+        .get("/pulumi/api/stacks/" + ORG_NAME + "/shared-proj/shared-stack")
+        .then()
+        .statusCode(200)
+        .body("orgName", equalTo(ORG_NAME))
+        .body("tags.tenant", equalTo("authorized"));
+
+    // The same project and stack names exist in the other org, but its metadata stays hidden.
+    given()
+        .header("Authorization", "token " + RAW_TOKEN)
+        .when()
+        .get("/pulumi/api/stacks/" + OTHER_ORG_NAME + "/shared-proj/shared-stack")
         .then()
         .statusCode(404);
   }

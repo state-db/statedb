@@ -58,10 +58,9 @@ public class StackResource {
       @PathParam("org") String org,
       @PathParam("project") String project,
       @PathParam("stack") String stack) {
+    StackRef ref = authorized.subject(StackRef.class);
     StackHead head =
-        finder
-            .find(org, project, stack)
-            .orElseThrow(() -> new StackNotFoundException(org, project, stack));
+        finder.find(ref).orElseThrow(() -> new StackNotFoundException(org, project, stack));
     return new StackDto(
         head.activeUpdate(),
         null,
