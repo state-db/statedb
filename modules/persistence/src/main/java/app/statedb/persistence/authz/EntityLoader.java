@@ -1,9 +1,6 @@
 package app.statedb.persistence.authz;
 
 import app.statedb.persistence.auth.AuthenticatedPrincipal;
-import jakarta.interceptor.InvocationContext;
-import jakarta.ws.rs.PathParam;
-import java.lang.annotation.Annotation;
 import java.util.Optional;
 
 /**
@@ -19,21 +16,7 @@ import java.util.Optional;
  */
 public interface EntityLoader<T> {
 
-  Optional<LoadedResource> load(InvocationContext ctx, AuthenticatedPrincipal principal);
+  Optional<LoadedResource> load(AuthorizationPath path, AuthenticatedPrincipal principal);
 
   RuntimeException notFound();
-
-  /** The value of the intercepted method's {@code @PathParam(name)} argument. */
-  static String pathParam(InvocationContext ctx, String name) {
-    Annotation[][] annotations = ctx.getMethod().getParameterAnnotations();
-    Object[] values = ctx.getParameters();
-    for (int i = 0; i < annotations.length; i++) {
-      for (Annotation annotation : annotations[i]) {
-        if (annotation instanceof PathParam pathParam && name.equals(pathParam.value())) {
-          return (String) values[i];
-        }
-      }
-    }
-    throw new IllegalStateException("missing @PathParam(\"" + name + "\")");
-  }
 }

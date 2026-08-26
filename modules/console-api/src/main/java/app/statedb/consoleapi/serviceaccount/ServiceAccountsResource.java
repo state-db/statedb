@@ -52,7 +52,7 @@ public class ServiceAccountsResource {
   @POST
   @Authorize(action = "serviceaccount:Create", loader = OrgEntityLoader.class)
   @Consumes(MediaType.APPLICATION_JSON)
-  public CreatedServiceAccountDto create(@PathParam("org") String org, CreateRequest body) {
+  public CreatedServiceAccountDto create(CreateRequest body) {
     if (body == null) {
       throw new RequestValidationException("request body is required");
     }
@@ -65,7 +65,7 @@ public class ServiceAccountsResource {
 
   @GET
   @Authorize(action = "serviceaccount:List", loader = OrgEntityLoader.class)
-  public List<ServiceAccountDto> list(@PathParam("org") String org) {
+  public List<ServiceAccountDto> list() {
     Organization target = authorized.subject(Organization.class);
     return finder.forOrg(target.id).stream().map(ServiceAccountDto::from).toList();
   }
@@ -73,7 +73,7 @@ public class ServiceAccountsResource {
   @DELETE
   @Path("/{id}")
   @Authorize(action = "serviceaccount:Revoke", loader = OrgEntityLoader.class)
-  public Response revoke(@PathParam("org") String org, @PathParam("id") String id) {
+  public Response revoke(@PathParam("id") String id) {
     Organization target = authorized.subject(Organization.class);
     UUID accountId = parseIdOr404(id);
     if (!revoker.revoke(target.id, accountId, currentPrincipal.get().userId())) {

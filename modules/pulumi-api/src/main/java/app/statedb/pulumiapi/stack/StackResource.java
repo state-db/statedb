@@ -25,7 +25,6 @@ import jakarta.ws.rs.GET;
 import jakarta.ws.rs.PATCH;
 import jakarta.ws.rs.POST;
 import jakarta.ws.rs.Path;
-import jakarta.ws.rs.PathParam;
 import jakarta.ws.rs.Produces;
 import jakarta.ws.rs.QueryParam;
 import jakarta.ws.rs.core.MediaType;
@@ -54,13 +53,14 @@ public class StackResource {
   @GET
   @Authorize(action = "stack:Read", loader = StackEntityLoader.class)
   @Produces(MediaType.APPLICATION_JSON)
-  public StackDto get(
-      @PathParam("org") String org,
-      @PathParam("project") String project,
-      @PathParam("stack") String stack) {
+  public StackDto get() {
     StackRef ref = authorized.subject(StackRef.class);
     StackHead head =
-        finder.find(ref).orElseThrow(() -> new StackNotFoundException(org, project, stack));
+        finder
+            .find(ref)
+            .orElseThrow(
+                () ->
+                    new StackNotFoundException(ref.orgName(), ref.projectName(), ref.stackName()));
     return new StackDto(
         head.activeUpdate(),
         null,
@@ -73,11 +73,7 @@ public class StackResource {
   @DELETE
   @Authorize(action = "stack:Delete", loader = StackEntityLoader.class)
   @Produces(MediaType.APPLICATION_JSON)
-  public Response delete(
-      @PathParam("org") String org,
-      @PathParam("project") String project,
-      @PathParam("stack") String stack,
-      @QueryParam("force") @DefaultValue("false") boolean force) {
+  public Response delete(@QueryParam("force") @DefaultValue("false") boolean force) {
     StackRef ref = authorized.subject(StackRef.class);
 
     deleter.delete(ref, force);
@@ -89,11 +85,7 @@ public class StackResource {
   @Authorize(action = "stack:Lock", loader = StackEntityLoader.class)
   @Consumes(MediaType.APPLICATION_JSON)
   @Produces(MediaType.APPLICATION_JSON)
-  public ImportStackResponse importStack(
-      @PathParam("org") String org,
-      @PathParam("project") String project,
-      @PathParam("stack") String stack,
-      ImportStackRequest body) {
+  public ImportStackResponse importStack(ImportStackRequest body) {
     StackRef ref = authorized.subject(StackRef.class);
 
     if (body == null) {
@@ -119,11 +111,7 @@ public class StackResource {
   @Authorize(action = "stack:SetTags", loader = StackEntityLoader.class)
   @Consumes(MediaType.APPLICATION_JSON)
   @Produces(MediaType.APPLICATION_JSON)
-  public Response setTags(
-      @PathParam("org") String org,
-      @PathParam("project") String project,
-      @PathParam("stack") String stack,
-      Map<String, String> tags) {
+  public Response setTags(Map<String, String> tags) {
     StackRef ref = authorized.subject(StackRef.class);
     tagWriter.replaceTags(ref.stackId(), tags);
     return Response.ok(Map.of()).build();
@@ -139,11 +127,7 @@ public class StackResource {
   @Authorize(action = "stack:Rename", loader = StackEntityLoader.class)
   @Consumes(MediaType.APPLICATION_JSON)
   @Produces(MediaType.APPLICATION_JSON)
-  public ImportStackResponse rename(
-      @PathParam("org") String org,
-      @PathParam("project") String project,
-      @PathParam("stack") String stack,
-      AppStackRenameRequest body) {
+  public ImportStackResponse rename(AppStackRenameRequest body) {
     boolean noName = body == null || body.newName == null || body.newName.isBlank();
     boolean noProject = body == null || body.newProject == null || body.newProject.isBlank();
     if (noName && noProject) {

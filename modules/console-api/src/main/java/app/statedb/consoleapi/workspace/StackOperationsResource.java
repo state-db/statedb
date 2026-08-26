@@ -9,7 +9,6 @@ import app.statedb.persistence.stack.StackRef;
 import jakarta.inject.Inject;
 import jakarta.ws.rs.DELETE;
 import jakarta.ws.rs.Path;
-import jakarta.ws.rs.PathParam;
 import jakarta.ws.rs.core.Response;
 
 /** Operational stack mutations initiated by the authenticated web console. */
@@ -23,10 +22,7 @@ public class StackOperationsResource {
   @DELETE
   @Path("/pulumi/stacks/{org}/{project}/{stack}")
   @Authorize(action = "stack:Delete", loader = StackEntityLoader.class)
-  public Response delete(
-      @PathParam("org") String org,
-      @PathParam("project") String project,
-      @PathParam("stack") String stack) {
+  public Response delete() {
     deleter.delete(authorized.subject(StackRef.class), false);
     return Response.noContent().build();
   }

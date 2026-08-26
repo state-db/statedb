@@ -29,7 +29,7 @@ public class OrganizationMembersResource {
 
   @GET
   @Authorize(action = "org:ManageMembers", loader = OrgEntityLoader.class)
-  public List<MemberDto> list(@PathParam("org") String ignored) {
+  public List<MemberDto> list() {
     Organization org = authorized.subject(Organization.class);
     return OrgMember.<OrgMember>find(
             "select m from OrgMember m join fetch m.user where m.orgId = ?1 and m.role in ?2 order by m.user.email",
@@ -44,7 +44,7 @@ public class OrganizationMembersResource {
   @GET
   @Path("/candidates")
   @Authorize(action = "org:ManageMembers", loader = OrgEntityLoader.class)
-  public List<UserDto> candidates(@PathParam("org") String ignored) {
+  public List<UserDto> candidates() {
     Organization org = authorized.subject(Organization.class);
     Set<UUID> memberIds =
         new HashSet<>(
@@ -57,7 +57,7 @@ public class OrganizationMembersResource {
 
   @POST
   @Authorize(action = "org:ManageMembers", loader = OrgEntityLoader.class)
-  public MemberDto add(@PathParam("org") String ignored, MemberWrite body) {
+  public MemberDto add(MemberWrite body) {
     requireBody(body);
     Organization org = authorized.subject(Organization.class);
     return dto(writer.add(org.id, parseUser(body.userId), parseRole(body.role)));
@@ -65,7 +65,7 @@ public class OrganizationMembersResource {
 
   @PATCH
   @Authorize(action = "org:ManageMembers", loader = OrgEntityLoader.class)
-  public MemberDto update(@PathParam("org") String ignored, MemberWrite body) {
+  public MemberDto update(MemberWrite body) {
     requireBody(body);
     Organization org = authorized.subject(Organization.class);
     return dto(writer.changeRole(org.id, parseUser(body.userId), parseRole(body.role)));
@@ -73,7 +73,7 @@ public class OrganizationMembersResource {
 
   @DELETE
   @Authorize(action = "org:ManageMembers", loader = OrgEntityLoader.class)
-  public Response remove(@PathParam("org") String ignored, @QueryParam("userId") String userId) {
+  public Response remove(@QueryParam("userId") String userId) {
     Organization org = authorized.subject(Organization.class);
     writer.remove(org.id, parseUser(userId));
     return Response.ok().build();

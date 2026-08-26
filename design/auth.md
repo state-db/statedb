@@ -499,12 +499,14 @@ We do **not** cache decisions across requests. Cedar evaluation against a few hu
 @Authorize(action = "stack:Read", loader = StackEntityLoader.class)
 @GET
 @Path("/api/pulumi/stacks/{org}/{project}/{stack}")
-public StackDto getStack(@PathParam("org") String org,
-                         @PathParam("project") String project,
-                         @PathParam("stack") String stack) { ... }
+public StackDto getStack() { ... }
 ```
 
-The `loader` resolves the request's path params to the Cedar resource entity; the action names the operation.
+The interceptor reads the path values selected by Jakarta REST from `UriInfo`, wraps them in an
+`AuthorizationPath`, and gives that value to the `loader`; endpoint methods do not need otherwise
+unused `@PathParam` arguments for authorization. The loader resolves those values to the Cedar
+resource entity, and the action names the operation. A required value that is missing or ambiguous
+fails with the endpoint, loader, and route variable in the diagnostic before the endpoint runs.
 
 Global console administration uses `SiteEntityLoader`, which performs no database lookup and
 always returns the singleton deployment resource. Org- and stack-scoped operations continue to use
@@ -513,7 +515,7 @@ their domain loaders, so the Cedar request retains the most specific resource av
 A CDI interceptor `@AuthorizeInterceptor`:
 
 1. Resolves the principal from `@CurrentPrincipal`.
-2. Resolves the resource by calling `EntityLoader<Stack>` with the parameter values pulled from path/query/body.
+2. Resolves the resource by calling `EntityLoader<Stack>` with the matched URI path values.
 3. Builds the Cedar request and calls `Authorizer.authorize`.
 4. On `Allow`, proceeds to the handler.
 5. On `Deny`, throws `ForbiddenException` (mapped to 403).
@@ -537,12 +539,16 @@ Methods on routes explicitly listed in an exemption set (`/api/auth/login/*`, `/
 
 ```java
 public interface EntityLoader<T> {
-    Class<T> resourceType();
-    Optional<EntityValue> load(Map<String, String> idParams);
+    Optional<LoadedResource> load(AuthorizationPath path, AuthenticatedPrincipal principal);
+    RuntimeException notFound();
 }
 ```
 
-One implementation per resource type, registered as a CDI bean and discovered via `Instance<EntityLoader<?>>`. The Stack loader joins `stacks → projects → organizations` and produces the Stack entity plus its parent chain.
+One implementation per resource type is registered as a CDI bean and selected from
+`Instance<EntityLoader<?>>` by the class declared on `@Authorize`. `AuthorizationPath` owns the
+route-variable vocabulary (`org`, `project`, and `stack`) and validates required values. The Stack
+loader resolves `stacks → projects → organizations` and produces the Stack entity plus its parent
+chain.
 
 Loaders take the request's principal as a parameter. The status code distinction follows the principal's visibility into the resource's org, not the resource's existence:
 
@@ -571,7 +577,9 @@ For admin principals (`principal in Role::"admin"`), the loader skips the org ga
 8. ExceptionMapper (403 / 404 / 409 mapping)
 ```
 
-The interceptor runs *after* the method is dispatched (and after request body parsing) so it can inspect bound parameters. It runs *before* `@Transactional` opens the DB tx — denied requests do not open Postgres transactions.
+The interceptor runs *after* Jakarta REST has matched the resource method, so `UriInfo` contains
+the effective class- and method-level path values, and *before* the endpoint body. It runs *before*
+`@Transactional` opens the DB tx — denied requests do not open Postgres transactions.
 
 ---
 

@@ -11,7 +11,6 @@ import com.google.crypto.tink.Aead;
 import jakarta.inject.Inject;
 import jakarta.ws.rs.POST;
 import jakarta.ws.rs.Path;
-import jakarta.ws.rs.PathParam;
 import jakarta.ws.rs.Produces;
 import jakarta.ws.rs.WebApplicationException;
 import jakarta.ws.rs.core.MediaType;
@@ -45,11 +44,7 @@ public class SecretsResource {
   @Path("encrypt")
   @Authorize(action = "stack:EncryptSecrets", loader = StackEntityLoader.class)
   @Produces(MediaType.APPLICATION_JSON)
-  public EncryptResponse encrypt(
-      @PathParam("org") String org,
-      @PathParam("project") String project,
-      @PathParam("stack") String stack,
-      EncryptRequest request) {
+  public EncryptResponse encrypt(EncryptRequest request) {
     byte[] aad = aad();
     if (request == null || request.plaintext() == null) {
       throw new RequestValidationException("plaintext is required");
@@ -68,11 +63,7 @@ public class SecretsResource {
   @Path("decrypt")
   @Authorize(action = "stack:DecryptSecrets", loader = StackEntityLoader.class)
   @Produces(MediaType.APPLICATION_JSON)
-  public DecryptResponse decrypt(
-      @PathParam("org") String org,
-      @PathParam("project") String project,
-      @PathParam("stack") String stack,
-      DecryptRequest request) {
+  public DecryptResponse decrypt(DecryptRequest request) {
     byte[] aad = aad();
     if (request == null || request.ciphertext() == null) {
       throw new RequestValidationException("ciphertext is required");
@@ -85,11 +76,7 @@ public class SecretsResource {
   @Path("batch-decrypt")
   @Authorize(action = "stack:DecryptSecrets", loader = StackEntityLoader.class)
   @Produces(MediaType.APPLICATION_JSON)
-  public BatchDecryptResponse batchDecrypt(
-      @PathParam("org") String org,
-      @PathParam("project") String project,
-      @PathParam("stack") String stack,
-      BatchDecryptRequest request) {
+  public BatchDecryptResponse batchDecrypt(BatchDecryptRequest request) {
     byte[] aad = aad();
     List<String> ciphertexts = request == null ? null : request.ciphertexts();
     if (ciphertexts == null) {

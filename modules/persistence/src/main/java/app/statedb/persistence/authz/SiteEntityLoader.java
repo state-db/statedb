@@ -5,7 +5,6 @@ import com.cedarpolicy.model.entity.Entity;
 import com.cedarpolicy.value.EntityUID;
 import com.cedarpolicy.value.PrimString;
 import jakarta.enterprise.context.ApplicationScoped;
-import jakarta.interceptor.InvocationContext;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
@@ -15,8 +14,7 @@ import java.util.Set;
 public class SiteEntityLoader implements EntityLoader<SiteRef> {
 
   @Override
-  public Optional<LoadedResource> load(
-      InvocationContext context, AuthenticatedPrincipal principal) {
+  public Optional<LoadedResource> load(AuthorizationPath path, AuthenticatedPrincipal principal) {
     EntityUID uid = CedarEntities.site();
     Entity entity = new Entity(uid, Map.of("id", new PrimString(ResourceName.site())), Set.of());
     return Optional.of(

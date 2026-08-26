@@ -9,7 +9,6 @@ import com.cedarpolicy.value.EntityUID;
 import com.cedarpolicy.value.PrimString;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
-import jakarta.interceptor.InvocationContext;
 import jakarta.ws.rs.WebApplicationException;
 import jakarta.ws.rs.core.Response;
 import java.util.Map;
@@ -25,8 +24,8 @@ public class OrgEntityLoader implements EntityLoader<Organization> {
   @Inject AdminAllowList adminAllowList;
 
   @Override
-  public Optional<LoadedResource> load(InvocationContext ctx, AuthenticatedPrincipal principal) {
-    String orgName = EntityLoader.pathParam(ctx, "org");
+  public Optional<LoadedResource> load(AuthorizationPath path, AuthenticatedPrincipal principal) {
+    String orgName = path.org();
     Organization org = findOrg(orgName);
     if (org == null) {
       return Optional.empty();

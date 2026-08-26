@@ -39,11 +39,7 @@ public class ConsoleRunsResource {
   @GET
   @Path("/updates/{version}")
   @Authorize(action = "stack:Read", loader = StackEntityLoader.class)
-  public RunResponse update(
-      @PathParam("org") String org,
-      @PathParam("project") String project,
-      @PathParam("stack") String stack,
-      @PathParam("version") int version) {
+  public RunResponse update(@PathParam("version") int version) {
     StackRef ref = authorized.subject(StackRef.class);
     return response(finder.findUpdate(ref.stackId(), version).orElseThrow(NotFoundException::new));
   }
@@ -51,11 +47,7 @@ public class ConsoleRunsResource {
   @GET
   @Path("/previews/{updateId}")
   @Authorize(action = "stack:Read", loader = StackEntityLoader.class)
-  public RunResponse preview(
-      @PathParam("org") String org,
-      @PathParam("project") String project,
-      @PathParam("stack") String stack,
-      @PathParam("updateId") String updateId) {
+  public RunResponse preview(@PathParam("updateId") String updateId) {
     StackRef ref = authorized.subject(StackRef.class);
     return response(
         finder.findPreview(ref.stackId(), parseUuid(updateId)).orElseThrow(NotFoundException::new));
@@ -65,11 +57,7 @@ public class ConsoleRunsResource {
   @Path("/updates/{updateId}/events")
   @Authorize(action = "stack:Read", loader = StackEntityLoader.class)
   public EventsResponse events(
-      @PathParam("org") String org,
-      @PathParam("project") String project,
-      @PathParam("stack") String stack,
-      @PathParam("updateId") String updateId,
-      @QueryParam("after") Integer requestedAfter) {
+      @PathParam("updateId") String updateId, @QueryParam("after") Integer requestedAfter) {
     StackRef ref = authorized.subject(StackRef.class);
     UUID id = parseUuid(updateId);
     // Scopes the run to this stack: another stack's run must 404 rather than page back empty.

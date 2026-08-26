@@ -22,7 +22,6 @@ import jakarta.ws.rs.DELETE;
 import jakarta.ws.rs.GET;
 import jakarta.ws.rs.POST;
 import jakarta.ws.rs.Path;
-import jakarta.ws.rs.PathParam;
 import jakarta.ws.rs.Produces;
 import jakarta.ws.rs.core.Context;
 import jakarta.ws.rs.core.MediaType;
@@ -78,10 +77,7 @@ public class AdminOperationsResource {
   @DELETE
   @Path("/stacks/{org}/{project}/{stack}/lock")
   @Authorize(action = "stack:Unlock", loader = StackEntityLoader.class)
-  public Response forceUnlock(
-      @PathParam("org") String org,
-      @PathParam("project") String project,
-      @PathParam("stack") String stack) {
+  public Response forceUnlock() {
     String rawLockId = uriInfo.getQueryParameters().getFirst("lockId");
     if (rawLockId == null || rawLockId.isBlank()) {
       throw new BadRequestException("lockId is required");
@@ -106,10 +102,7 @@ public class AdminOperationsResource {
   @Path("/stacks/{org}/{project}/{stack}/compact")
   @Authorize(action = "compaction:Trigger", loader = StackEntityLoader.class)
   @Transactional
-  public Response compact(
-      @PathParam("org") String org,
-      @PathParam("project") String project,
-      @PathParam("stack") String stack) {
+  public Response compact() {
     compactionJobs.enqueue(authorized.subject(StackRef.class).stackId());
     return Response.accepted().build();
   }

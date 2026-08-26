@@ -7,6 +7,7 @@ import jakarta.inject.Inject;
 import jakarta.interceptor.AroundInvoke;
 import jakarta.interceptor.Interceptor;
 import jakarta.interceptor.InvocationContext;
+import jakarta.ws.rs.core.UriInfo;
 import java.lang.reflect.Method;
 
 @Authorize(action = "", loader = NoopEntityLoader.class)
@@ -22,6 +23,8 @@ public class AuthorizeInterceptor {
 
   @Inject Instance<EntityLoader<?>> loaders;
 
+  @Inject UriInfo uriInfo;
+
   @AroundInvoke
   public Object authorize(InvocationContext ctx) throws Exception {
     Authorize authorize = binding(ctx.getMethod());
@@ -35,7 +38,9 @@ public class AuthorizeInterceptor {
           "@Authorize invoked with no authenticated principal in request scope on "
               + ctx.getMethod());
     }
-    LoadedResource loaded = loader.load(ctx, principal).orElseThrow(loader::notFound);
+    AuthorizationPath path =
+        new AuthorizationPath(uriInfo.getPathParameters(), ctx.getMethod(), authorize.loader());
+    LoadedResource loaded = loader.load(path, principal).orElseThrow(loader::notFound);
 
     AuthorizationDecision decision =
         authorizer.authorize(principal, loaded.role(), authorize.action(), loaded.cedar());

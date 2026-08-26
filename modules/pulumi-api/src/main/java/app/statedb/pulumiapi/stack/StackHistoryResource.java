@@ -13,7 +13,6 @@ import jakarta.inject.Inject;
 import jakarta.ws.rs.DefaultValue;
 import jakarta.ws.rs.GET;
 import jakarta.ws.rs.Path;
-import jakarta.ws.rs.PathParam;
 import jakarta.ws.rs.Produces;
 import jakarta.ws.rs.QueryParam;
 import jakarta.ws.rs.core.MediaType;
@@ -41,9 +40,6 @@ public class StackHistoryResource {
   @Authorize(action = "stack:Read", loader = StackEntityLoader.class)
   @Produces(MediaType.APPLICATION_JSON)
   public HistoryDto history(
-      @PathParam("org") String org,
-      @PathParam("project") String project,
-      @PathParam("stack") String stack,
       @QueryParam("page") @DefaultValue("0") int page,
       @QueryParam("pageSize") @DefaultValue("100") int pageSize) {
     // page <= 0 is the legacy "all rows" sentinel, so only pageSize needs guarding: a non-positive

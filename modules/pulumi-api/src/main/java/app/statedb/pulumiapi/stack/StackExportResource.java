@@ -29,10 +29,7 @@ public class StackExportResource {
   @GET
   @Authorize(action = "stack:Read", loader = StackEntityLoader.class)
   @Produces(MediaType.APPLICATION_JSON)
-  public ExportDto export(
-      @PathParam("org") String org,
-      @PathParam("project") String project,
-      @PathParam("stack") String stack) {
+  public ExportDto export() {
     StackRef ref = authorized.subject(StackRef.class);
     AssembledDeployment assembled = assembler.assemble(ref.stackId());
     return new ExportDto(assembled.deployment(), assembled.version(), assembled.features());
@@ -47,11 +44,7 @@ public class StackExportResource {
   @Path("/{version}")
   @Authorize(action = "stack:Read", loader = StackEntityLoader.class)
   @Produces(MediaType.APPLICATION_JSON)
-  public ExportDto exportVersion(
-      @PathParam("org") String org,
-      @PathParam("project") String project,
-      @PathParam("stack") String stack,
-      @PathParam("version") int version) {
+  public ExportDto exportVersion(@PathParam("version") int version) {
     StackRef ref = authorized.subject(StackRef.class);
     StackUpdate update =
         StackUpdate.<StackUpdate>find(

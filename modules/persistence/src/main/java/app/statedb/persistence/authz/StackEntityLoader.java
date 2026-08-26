@@ -12,7 +12,6 @@ import com.cedarpolicy.value.EntityUID;
 import com.cedarpolicy.value.PrimString;
 import jakarta.enterprise.context.RequestScoped;
 import jakarta.inject.Inject;
-import jakarta.interceptor.InvocationContext;
 import java.util.HashSet;
 import java.util.Map;
 import java.util.Optional;
@@ -32,10 +31,10 @@ public class StackEntityLoader implements EntityLoader<StackRef> {
   private String stack;
 
   @Override
-  public Optional<LoadedResource> load(InvocationContext ctx, AuthenticatedPrincipal principal) {
-    org = EntityLoader.pathParam(ctx, "org");
-    project = EntityLoader.pathParam(ctx, "project");
-    stack = EntityLoader.pathParam(ctx, "stack");
+  public Optional<LoadedResource> load(AuthorizationPath path, AuthenticatedPrincipal principal) {
+    org = path.org();
+    project = path.project();
+    stack = path.stack();
     Optional<StackRef> ref = resolver.resolve(org, project, stack);
     if (ref.isEmpty()) {
       return Optional.empty();
