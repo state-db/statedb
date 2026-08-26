@@ -1,10 +1,12 @@
 package app.statedb.consoleapi.provider;
 
 import app.statedb.consoleapi.auth.SessionPrincipal;
+import app.statedb.persistence.PersistenceExceptions;
 import app.statedb.persistence.authz.Authorize;
 import app.statedb.persistence.authz.SiteEntityLoader;
 import app.statedb.persistence.identity.OidcProvider;
 import com.fasterxml.jackson.annotation.JsonProperty;
+import jakarta.persistence.PersistenceException;
 import jakarta.transaction.Transactional;
 import jakarta.ws.rs.BadRequestException;
 import jakarta.ws.rs.Consumes;
@@ -38,6 +40,8 @@ import org.eclipse.microprofile.config.inject.ConfigProperty;
 public class OidcProvidersResource {
 
   private static final Pattern NAME = Pattern.compile("[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?");
+  private static final String NAME_CONSTRAINT = "oidc_providers_name_key";
+  private static final String CONNECTION_CONSTRAINT = "oidc_providers_issuer_url_client_id_key";
 
   @ConfigProperty(name = "statedb.oidc.bootstrap.name")
   Optional<String> bootstrapName;
@@ -55,7 +59,7 @@ public class OidcProvidersResource {
     apply(provider, body, true);
     requireRuntimeName(provider.name);
     requireUnique(provider, null);
-    provider.persistAndFlush();
+    persist(provider);
     return dto(provider);
   }
 
@@ -71,7 +75,7 @@ public class OidcProvidersResource {
     apply(provider, body, false);
     requireRuntimeName(provider.name);
     requireUnique(provider, provider.id);
-    provider.persistAndFlush();
+    persist(provider);
     return dto(provider);
   }
 
@@ -128,6 +132,24 @@ public class OidcProvidersResource {
             exceptId)
         > 0) {
       throw new BadRequestException("that issuer URL and client ID are already registered");
+    }
+  }
+
+  private void persist(OidcProvider provider) {
+    try {
+      provider.persistAndFlush();
+    } catch (PersistenceException e) {
+      if (!PersistenceExceptions.isUniqueViolation(e)) {
+        throw e;
+      }
+      String constraint = PersistenceExceptions.uniqueConstraintName(e).orElse("");
+      if (NAME_CONSTRAINT.equals(constraint)) {
+        throw new BadRequestException("a provider with that name already exists");
+      }
+      if (CONNECTION_CONSTRAINT.equals(constraint)) {
+        throw new BadRequestException("that issuer URL and client ID are already registered");
+      }
+      throw new BadRequestException("that provider conflicts with an existing provider");
     }
   }
 
