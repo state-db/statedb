@@ -58,10 +58,10 @@ echo ""
 # never happened grades as a clean pass.
 echo "Run validity"
 read -r scrape_fail uptime_max <<<"$(awk -F'\t' '
-  NR > 1 { if ($31 == "0") f++; if ($3 + 0 > u) u = $3 + 0 }
+  NR > 1 { if ($30 == "0") f++; if ($3 + 0 > u) u = $3 + 0 }
   END { printf "%d %.0f", f + 0, u + 0 }' "$SERIES")"
 
-if [[ "$(awk -F'\t' 'NR==1{print NF}' "$SERIES")" -lt 31 ]]; then
+if [[ "$(awk -F'\t' 'NR==1{print NF}' "$SERIES")" -lt 30 ]]; then
   info "series predates scrape_ok; cannot confirm the app was reachable"
 elif (( scrape_fail <= SCRAPE_FAILURES_MAX )); then
   pass "every metrics scrape succeeded"
@@ -79,7 +79,7 @@ fi
 # series that make every trend meaningless. The JVM's uptime is monotonic-clock based and does not
 # advance across a suspend, so wall time the uptime cannot account for is the signal.
 read -r gaps lost worst <<<"$(awk -F'\t' -v min="$SUSPEND_GAP_MIN_S" '
-  NR > 1 && $31 == "1" && $3 + 0 > 0 {
+  NR > 1 && $30 == "1" && $3 + 0 > 0 {
     ts = $1 + 0; up = $3 + 0;
     # A restart rewinds uptime; that is graded separately and is not a suspend.
     if (prev != "" && up - prev >= 0) {
@@ -180,7 +180,7 @@ grade_native_live_set() {
 
 echo "Memory"
 read -r live_slope live_first live_last <<<"$(awk -F'\t' '
-  NR > 1 && $29 != "" && $29 + 0 > 0 { n++; t[n] = $2; v[n] = $29 }
+  NR > 1 && $28 != "" && $28 + 0 > 0 { n++; t[n] = $2; v[n] = $28 }
   END {
     if (n < 8) { print "NA 0 0"; exit }
     start = int(n / 2); c = 0;
@@ -193,7 +193,7 @@ read -r live_slope live_first live_last <<<"$(awk -F'\t' '
 heap_range="$(awk -F'\t' '
   NR > 1 { if (lo == "" || $4 < lo) lo = $4; if ($4 > hi) hi = $4 }
   END { printf "%.1f-%.1fMB", lo / 1048576, hi / 1048576 }' "$SERIES")"
-gc_overhead_max="$(awk -F'\t' 'NR > 1 && $30 + 0 > m { m = $30 } END { printf "%.4f", m + 0 }' "$SERIES")"
+gc_overhead_max="$(awk -F'\t' 'NR > 1 && $29 + 0 > m { m = $29 } END { printf "%.4f", m + 0 }' "$SERIES")"
 
 info "heap in use ranged $heap_range; peak GC overhead ${gc_overhead_max}"
 # The GC log wins when present: on a native run the series column holds old-gen occupancy, which
@@ -288,7 +288,7 @@ echo ""
 # rows per update climbing means per-update cost scaling with history depth.
 echo "History growth (measured, not graded — no retention exists yet)"
 awk -F'\t' '
-  NR > 1 { n++; t[n] = $2; snap[n] = $21; jrn[n] = $22; ev[n] = $23; upd[n] = $24; sz[n] = $28 }
+  NR > 1 { n++; t[n] = $2; snap[n] = $21; jrn[n] = $22; ev[n] = $23; upd[n] = $24; sz[n] = $27 }
   END {
     if (n < 4) exit;
     hours = t[n] / 3600; if (hours <= 0) hours = 1;

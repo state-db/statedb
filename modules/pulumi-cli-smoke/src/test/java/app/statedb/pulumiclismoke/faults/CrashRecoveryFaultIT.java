@@ -74,7 +74,7 @@ class CrashRecoveryFaultIT extends PulumiFaultBase {
     awaitTrue(
         "up to be mid-flight (lease held, command create sleeping)",
         Duration.ofMinutes(3),
-        () -> lockExists(stackId) && pendingOperationOpen(stackId, "command:local"));
+        () -> lockExists(stackId) && journalBeginObserved(stackId, "command:local"));
 
     killCliHard();
 

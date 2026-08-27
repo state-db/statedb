@@ -114,14 +114,3 @@ FROM (
   JOIN stack_updates su ON su.id = a.update_id
 ) events_by_update
 ORDER BY started_at DESC, events DESC;
-
-\echo ''
-\echo '== pending operations =='
-SELECT
-  resource_urn,
-  resource_type,
-  operation_type,
-  begin_journal_seq,
-  created_at
-FROM pending_operations
-ORDER BY created_at;

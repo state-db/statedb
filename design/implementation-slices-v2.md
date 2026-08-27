@@ -414,7 +414,11 @@ Each slice in this phase moves one step closer to a real `pulumi up` cycle succe
 
 **Scope**
 
-- Migration `V006__journal.sql`: `journal_entries` and `pending_operations` per `db-schema.md` (numeric `kind`, BIGINT `operation_id`, replay index columns, composite FK to `stack_updates`) + `trg_journal_invalidates_cache`. `stack_updates.start_journal_seq` is already in V003 and is reused as the per-update offset; no further migration to `stack_updates` is needed.
+- Migration `V006__journal.sql` originally added `journal_entries` and a
+  `pending_operations` projection. V024 removes that unused projection;
+  ordered journal replay is the sole source of checkpoint pending operations.
+  `stack_updates.start_journal_seq` is already in V003 and is reused as the
+  per-update offset; no further migration to `stack_updates` is needed.
 - `PATCH /api/stacks/{org}/{project}/{stack}/update/{updateID}/journalentries`:
   - Lease filter has already validated; body is gzip-compressed JSON shaped as `{"entries":[AppJournalEntry...]}`. Quarkus's `enable-decompression: true` handles the gzip envelope before the handler runs.
   - A single PATCH may carry multiple entries; the first recorded `up`, `refresh`, and `destroy` batches each carry two entries.
@@ -424,8 +428,7 @@ Each slice in this phase moves one step closer to a real `pulumi up` cycle succe
     2. `SELECT journal_seq FROM stack_state WHERE stack_id = ? FOR UPDATE`. Serializes appenders cross-pod and blocks `/complete` from racing.
     3. Capture or read the per-update offset atomically: `UPDATE stack_updates SET start_journal_seq = ?1 WHERE id = ?2 AND start_journal_seq IS NULL` with `?1 = current stack_state.journal_seq`; then `SELECT start_journal_seq FROM stack_updates WHERE id = ?` to get the definitive value (whether captured just now or by an earlier PATCH).
     4. For each entry in arrival order, INSERT `journal_entries` with `sequence_id = offset + entry.sequenceID`, `wire_sequence_id = entry.sequenceID`, `kind`, `operationID`, `version`, nullable index fields, `isRefresh`, denormalized `resource_urn`, and remaining nested fields in `payload`. Insertion order need not match `sequence_id` order — `ORDER BY sequence_id` reconstructs replay order. `em.flush()` once at the end so a `UNIQUE(update_id, wire_sequence_id)` violation surfaces here and is mapped to 409.
-    5. Upsert/prune `pending_operations` for Begin/Success/Failure/RefreshSuccess entries where the wire entry supplies enough resource context. Begin: `INSERT ... ON CONFLICT (update_id, operation_id) DO NOTHING`. Terminal kinds (1/2/3): `DELETE WHERE update_id = ? AND operation_id = ?`. Out-of-order arrival (Success before Begin) is tolerated: the DELETE no-ops and the late Begin leaves a stale row that compaction sweeps for terminated updates.
-    6. `UPDATE stack_state SET journal_seq = GREATEST(journal_seq, offset + max_wire_in_batch + 1), journal_entries_since_compaction = journal_entries_since_compaction + N`. `GREATEST` because earlier PATCHes for the same update may have already advanced past this batch's max under out-of-order arrival.
+    5. `UPDATE stack_state SET journal_seq = GREATEST(journal_seq, offset + max_wire_in_batch + 1), journal_entries_since_compaction = journal_entries_since_compaction + N`. `GREATEST` because earlier PATCHes for the same update may have already advanced past this batch's max under out-of-order arrival.
   - Malformed body (null/missing `entries`, including silently-dropped gzip envelopes from Vert.x's decompressor) → 400 with `{code, message}`.
 - Return 501 for `/checkpoint`, `/checkpointdelta`, and `/checkpointverbatim` in Wave 1. The OpenAPI paths exist, but the recorder shows Pulumi v3.242.0 chooses `/journalentries` once `journalVersion: 1` is echoed by start-update. The 501 stubs are documentation in code, not a placeholder — these endpoints are permanently skipped.
 
@@ -444,7 +447,7 @@ Each slice in this phase moves one step closer to a real `pulumi up` cycle succe
 - Invalid `kind` (outside `[0,7]`) returns 400 and writes no rows.
 - Malformed gzip envelope returns 400 (not a silent 200 — Vert.x's decompressor drops the body to null on garbage input).
 - Second update on the same stack: its offset equals the first update's final `journal_seq`; `sequence_id` continues monotonically with no cross-update collision.
-- `pending_operations` lifecycle: Begin inserts the row with `begin_journal_seq = offset + wire_seq`; matching Success/Failure/RefreshSuccess removes it.
+- Pending-operation replay: unmatched Begin entries surface in the exported checkpoint; matching Success/Failure/RefreshSuccess entries clear them in journal order.
 
 **Manual verification.** Send a recorded PATCH body via curl and inspect `journal_entries`.
 

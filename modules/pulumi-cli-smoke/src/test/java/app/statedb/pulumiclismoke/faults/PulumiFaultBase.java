@@ -1,6 +1,7 @@
 package app.statedb.pulumiclismoke.faults;
 
 import app.statedb.persistence.identity.Organization;
+import app.statedb.persistence.journal.JournalEntry;
 import app.statedb.persistence.stack.Project;
 import app.statedb.persistence.stack.Stack;
 import app.statedb.pulumiclismoke.PulumiSmokeBase;
@@ -59,17 +60,24 @@ public abstract class PulumiFaultBase extends PulumiSmokeBase {
   }
 
   /**
-   * True once a Begin for the given resource type is open. Await this before killing the CLI: an
-   * early resource's pending op can open and close in milliseconds, but a {@code
-   * command:local:Command} whose create sleeps keeps its Begin open, making the kill window
-   * deterministic.
+   * True once the journal contains a Begin for the given resource type. Await this before killing
+   * the CLI: the {@code command:local:Command} create sleeps after its Begin, making the kill
+   * window deterministic.
    */
-  protected boolean pendingOperationOpen(UUID stackId, String resourceTypePrefix) {
+  protected boolean journalBeginObserved(UUID stackId, String resourceTypePrefix) {
     return QuarkusTransaction.requiringNew()
         .call(
             () ->
-                app.statedb.persistence.journal.PendingOperation.count(
-                        "stackId = ?1 and resourceType like ?2", stackId, resourceTypePrefix + "%")
-                    > 0);
+                JournalEntry.<JournalEntry>list("stackId = ?1 and kind = ?2", stackId, (short) 0)
+                    .stream()
+                    .anyMatch(
+                        entry ->
+                            entry
+                                .payload
+                                .path("operation")
+                                .path("resource")
+                                .path("type")
+                                .asText()
+                                .startsWith(resourceTypePrefix)));
   }
 }

@@ -16,7 +16,6 @@ derived control tables around them:
 | `stack_updates` | One row per Pulumi run: preview, update, refresh, destroy, etc. | History list, status, timestamps, journal bounds |
 | `journal_entries` | Append-only state journal for a run | Reconstructing `GET /export` state |
 | `update_events` | Pulumi engine event stream | UI timeline, preview/change display, diagnostics |
-| `pending_operations` | Resource operations that began but have not terminally completed | Crash recovery and `deployment.pending_operations` |
 | `stack_state` | One small mutable head row per stack | Current journal sequence, active snapshot pointer, per-stack serialization lock |
 | `snapshots` | Compacted DeploymentV3 checkpoints | Fast `/export` baseline after compaction |
 | `compaction_jobs` | Async worker queue | Multi-pod safe snapshot generation |
@@ -287,26 +286,24 @@ marker, not persisted compaction.
 
 ## Pending Operations
 
-`pending_operations` is populated from journal Begin entries only when the Begin
-payload includes enough resource context:
+During ordered journal replay, each Begin entry records its non-null
+`payload.operation` object under the update-local operation ID. Replay does not
+filter that object by resource fields or operation type; it preserves the wire
+value for Pulumi compatibility. A Begin whose payload omits `operation` does not
+surface as pending.
 
-- `operation.resource.urn`
-- `operation.resource.type`
-- `operation.type` in `creating`, `updating`, `deleting`, `reading`, `importing`
-
-Terminal journal entries for the same `(update_id, operation_id)` remove the
-row:
+Terminal journal entries for the same operation remove it from that set:
 
 - kind `1`: Success
 - kind `2`: Failure
 - kind `3`: RefreshSuccess
 
-An empty table is the healthy finished state. Rows mean an operation started but
-did not terminally complete, or a terminal entry arrived out of order and
-compaction has not swept the stale row yet.
+When replay materializes the checkpoint, any operations still in the set become
+`deployment.pending_operations`. Pending creates from a prior snapshot remain
+until the user explicitly resolves them, matching Pulumi's crash-recovery behavior.
 
-Refresh Begin entries in the workbench had payload `{}`, so they did not create
-pending operations.
+Refresh Begin entries in the workbench had payload `{}`, so they did not surface
+as pending operations.
 
 ## Update Events
 
@@ -423,13 +420,4 @@ SELECT sequence, kind, severity, payload
 FROM update_events
 WHERE update_id = :update_id
 ORDER BY sequence;
-```
-
-Crash-recovery operations:
-
-```sql
-SELECT resource_urn, resource_type, operation_type, begin_journal_seq
-FROM pending_operations
-WHERE stack_id = :stack_id
-ORDER BY created_at;
 ```

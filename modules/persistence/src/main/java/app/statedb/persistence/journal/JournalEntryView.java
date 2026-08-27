@@ -120,27 +120,6 @@ public final class JournalEntryView {
     return null;
   }
 
-  /**
-   * For kind 0 (Begin) entries: the {@code operation.type} (creating/updating/deleting/...). Used
-   * to populate {@code pending_operations.operation_type}. Returns null when missing.
-   */
-  public String operationType() {
-    JsonNode op = raw.get("operation");
-    if (op == null) return null;
-    JsonNode t = op.get("type");
-    return (t == null || t.isNull()) ? null : t.asText();
-  }
-
-  /** For kind 0 (Begin) entries: the {@code operation.resource.type}. */
-  public String resourceType() {
-    JsonNode op = raw.get("operation");
-    if (op == null) return null;
-    JsonNode res = op.get("resource");
-    if (res == null) return null;
-    JsonNode t = res.get("type");
-    return (t == null || t.isNull()) ? null : t.asText();
-  }
-
   private Long longOrNull(String field) {
     JsonNode n = raw.get(field);
     return (n == null || n.isNull()) ? null : n.asLong();

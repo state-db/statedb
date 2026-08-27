@@ -242,8 +242,8 @@ so for a **matched** Begin in a **terminal** update, the payload is provably
 never read again by any code path (`measured`: reader inventory above; the §4
 baseline confirmed 400,420 of 400,420 Begins matched, zero orphans). After an
 update reaches terminal status, null/empty the payload of its matched Begin
-rows, keeping the rows themselves (sequence continuity, `wire_sequence_id`
-idempotency shape, `pending_operations.begin_journal_seq` references).
+rows, keeping the rows themselves for sequence continuity and
+`wire_sequence_id` idempotency.
 
 Unmatched Begins must keep their payloads: for a failed/cancelled update they
 become the exported checkpoint's `pending_operations`, which Pulumi surfaces to

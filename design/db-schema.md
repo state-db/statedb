@@ -19,7 +19,7 @@ Forward compatibility for OpenTofu: the `workspaces` parent table provides type-
 | 3 | **Checkpoint as JSONB** | Resource structure varies wildly per provider; Pulumi expects exact JSON back |
 | 4 | **Separate `snapshots` + `journal_entries`** | Different access patterns: snapshots are infrequent large writes; journal entries are frequent small appends |
 | 5 | **`stack_state` pointer table** | Single source of truth for current snapshot + journal position per stack |
-| 6 | **`pending_operations` table** | Fast crash-recovery lookup without replaying full journal |
+| 6 | **Journal replay owns pending operations** | `deployment.pending_operations` is reconstructed from ordered journal entries; a separate SQL projection was write-only, could become stale, and was removed in V024 |
 | 7 | **Lock expiry + heartbeat** | Stale lock recovery when client crashes; bearer hash must match to unlock |
 | 8 | **Immutable journal entries** | Append-only matches Pulumi journaling semantics; compaction creates new snapshot |
 | 9 | **Async compaction job queue** | Compaction is slow; shouldn't block API responses; can be retried |
@@ -43,7 +43,6 @@ Forward compatibility for OpenTofu: the `workspaces` parent table provides type-
 | `stack_state` | Per-stack pointer: current snapshot + journal position + read cache |
 | `stack_updates` | One row per operation (preview/update/destroy/refresh/import) |
 | `journal_entries` | Append-only delta entries per update |
-| `pending_operations` | In-flight resource ops; pruned on complete/failure |
 | `stack_locks` | Distributed lock with expiry and heartbeat |
 | `compaction_jobs` | Background job queue for snapshot compaction |
 | `oidc_providers` | Configurable OIDC issuers; env-bootstrapped at startup, additional providers manageable via console |
@@ -343,7 +342,7 @@ CREATE TABLE stack_updates (
 
     UNIQUE (stack_id, version),
 
-    -- Composite unique key needed by the journal_entries / pending_operations cross-entity FKs below.
+    -- Composite unique key needed by child tables that also carry stack_id.
     UNIQUE (id, stack_id)
 );
 
@@ -447,34 +446,6 @@ CREATE INDEX idx_update_events_severity  ON update_events (update_id, severity)
 CREATE INDEX idx_update_events_created   ON update_events USING BRIN (created_at);
 
 -- ============================================================================
--- CRASH RECOVERY
--- ============================================================================
-
--- Tracks resource operations started but not yet completed.
--- Populated on kind=0 (Begin) entries that include operation.resource; pruned
--- on kind=1/2/3 terminal entries for the same update-local operationID.
--- Same composite FK pattern as journal_entries to prevent cross-stack mismatches.
-CREATE TABLE pending_operations (
-    id             UUID   PRIMARY KEY,
-    stack_id       UUID   NOT NULL REFERENCES stacks(id) ON DELETE CASCADE,
-    update_id      UUID   NOT NULL,
-    operation_id   BIGINT NOT NULL,
-    resource_urn   TEXT   NOT NULL,
-    resource_type  TEXT   NOT NULL,
-    operation_type TEXT   NOT NULL CHECK (operation_type IN (
-                       'creating', 'updating', 'deleting', 'reading', 'importing')),
-    begin_journal_seq BIGINT NOT NULL,
-    created_at     TIMESTAMPTZ NOT NULL DEFAULT now(),
-
-    UNIQUE (update_id, operation_id),
-
-    -- Enforces stack_id consistency.
-    FOREIGN KEY (update_id, stack_id) REFERENCES stack_updates(id, stack_id)
-);
-
-CREATE INDEX idx_pending_ops_stack ON pending_operations (stack_id);
-
--- ============================================================================
 -- LOCKING
 -- ============================================================================
 
@@ -497,7 +468,7 @@ CREATE INDEX idx_pending_ops_stack ON pending_operations (stack_id);
 -- Stale lock recovery: any acquire can steal a lock where expires_at < now().
 --
 -- Composite FK enforces stack_id consistency with the parent update (same
--- pattern as journal_entries / pending_operations / update_events). Default
+-- pattern as journal_entries / update_events). Default
 -- NO ACTION means the app must DELETE the lock before deleting its parent
 -- update — preventing silently orphaned locks.
 CREATE TABLE stack_locks (
@@ -691,7 +662,7 @@ The tables below split what the schema enforces from what application code must 
 | # | Concern | Mechanism |
 |---|---------|-----------|
 | 1 | Orphaned records | `ON DELETE CASCADE` on all child tables; `ON DELETE RESTRICT` on `stack_state.base_snapshot_id` (prevents deleting active base snapshot); `ON DELETE SET NULL` on `compaction_jobs.new_snapshot_id`; default `NO ACTION` on `stack_locks` composite FK (forces app to DELETE the lock before deleting its parent update) |
-| 2 | Cross-entity mismatch | Composite FK `(update_id, stack_id) → stack_updates(id, stack_id)` on `journal_entries`, `pending_operations`, `update_events`, and `stack_locks`; DB rejects rows whose `update_id` belongs to a different stack |
+| 2 | Cross-entity mismatch | Composite FK `(update_id, stack_id) → stack_updates(id, stack_id)` on `journal_entries`, `update_events`, and `stack_locks`; DB rejects rows whose `update_id` belongs to a different stack |
 | 6 | Duplicate singletons | `stack_state` and `stack_locks` both carry `UNIQUE (stack_id)` (the surrogate PK is the row's own `id`) |
 | 7 | Invalid status transitions | `trg_update_status_guard` rejects any UPDATE that tries to leave a terminal status or revert to `in-progress` |
 | 11 | Stale current-state reads | Reads assemble from `base_snapshot_id` + journal replay past `compacted_from_journal_seq`; no separate read cache to go stale (the old `cache_valid` cache was dropped in V014) |
@@ -741,7 +712,7 @@ The tables below split what the schema enforces from what application code must 
 2. `pulumi stack init dev` → `stacks` row inserted; `stack_state` row created; `(org, project, stack)` lookup returns the new stack
 3. `pulumi up` → full update lifecycle: preview + actual `stack_updates`, `stack_locks`, `journal_entries`, `/encrypt`; `stacks.version` increments after the actual update; compaction installs a fresh base snapshot (with `resource_count`) after completion
 4. `pulumi stack export` → reconstructs checkpoint from `stack_state` + `journal_entries`; diff against expected output
-5. `pulumi destroy` → new `stack_updates` rows; `pending_operations` cleared; `stacks.version` increments
+5. `pulumi destroy` → new `stack_updates` rows; exported `deployment.pending_operations` cleared; `stacks.version` increments
 6. `pulumi stack rm` → all rows cascade-deleted; verify nothing remains
 7. Concurrent `pulumi up` from two terminals → second returns lock conflict (409)
 8. Duplicate `POST /update` with same `client_request_id` → returns existing row, no duplicate

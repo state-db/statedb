@@ -183,13 +183,9 @@ toast table, at full WAL, on the table `StackAssembler` streams in `sequence_id`
 order. Give the sweeper a per-tick row cap and its own short transactions, as
 `CompactionWorker` does — a single 400k-row `UPDATE` is not acceptable.
 
-**Do not use the `pending_operations` table as the "unmatched?" index.** It has
-no production reader today, and `JournalAppender` silently skips Begins whose
-`operation_type`/`resource_urn`/`resource_type` are missing or outside
-`VALID_OPERATION_TYPES` — so it under-reports unmatched Begins whose payloads
-are still load-bearing. (Its stale-row comment is also out of date:
-`CompactionWorker` never sweeps that table.) The self-join on `journal_entries`
-is the only correct predicate.
+**Do not add a separate "unmatched?" index.** The self-join on
+`journal_entries` is the only correct predicate and keeps journal replay as the
+single source of truth.
 
 **Depends on:** nothing, but coordinate with T6 (stripping shrinks archive
 inputs). Sequence after T2 if both land: lz4 changes the `pg_column_size`

@@ -42,9 +42,6 @@ import org.hibernate.exception.ConstraintViolationException;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.junit.jupiter.params.ParameterizedTest;
-import org.junit.jupiter.params.provider.CsvSource;
-import org.junit.jupiter.params.provider.ValueSource;
 
 @QuarkusTest
 class JournalAppenderTest {
@@ -148,16 +145,6 @@ class JournalAppenderTest {
                               .getSingleResult())
                       .longValue();
               assertEquals(4L, stateSeq);
-
-              // pending_operations: Begins persist, Success terminates op 1.
-              long pending =
-                  ((Number)
-                          em.createNativeQuery(
-                                  "SELECT count(*) FROM pending_operations WHERE update_id = ?1")
-                              .setParameter(1, updateId)
-                              .getSingleResult())
-                      .longValue();
-              assertEquals(1L, pending);
             });
   }
 
@@ -450,91 +437,10 @@ class JournalAppenderTest {
         () -> appender.append(stackId, updateId, leaseId, List.of(entry(0, 0, 1L, "{}"))));
   }
 
-  @ParameterizedTest
-  @ValueSource(strings = {"creating", "updating", "deleting", "reading", "importing"})
-  void beginPersistsAllPendingOperationTypes(String opType) {
-    appender.append(
-        stackId,
-        updateId,
-        leaseId,
-        List.of(
-            entry(
-                1,
-                0,
-                42L,
-                "{\"operation\":{\"resource\":{\"urn\":\"urn:r\",\"type\":\"aws:s3:Bucket\"},\"type\":\""
-                    + opType
-                    + "\"}}")));
-
-    QuarkusTransaction.requiringNew()
-        .run(
-            () -> {
-              Object[] row =
-                  (Object[])
-                      em.createNativeQuery(
-                              "SELECT resource_urn, resource_type, operation_type, begin_journal_seq "
-                                  + "FROM pending_operations "
-                                  + "WHERE update_id = ?1 AND operation_id = ?2")
-                          .setParameter(1, updateId)
-                          .setParameter(2, 42L)
-                          .getSingleResult();
-              assertEquals("urn:r", row[0]);
-              assertEquals("aws:s3:Bucket", row[1]);
-              assertEquals(opType, row[2]);
-              assertEquals(1L, ((Number) row[3]).longValue());
-
-              long count =
-                  ((Number)
-                          em.createNativeQuery(
-                                  "SELECT count(*) FROM pending_operations WHERE update_id = ?1")
-                              .setParameter(1, updateId)
-                              .getSingleResult())
-                      .longValue();
-              assertEquals(1L, count);
-            });
-  }
-
-  @ParameterizedTest
-  @CsvSource({"1, Success", "2, Failure", "3, RefreshSuccess"})
-  void terminalEntriesPrunePendingOpsTable(int terminalKind, String terminalLabel) {
-    appender.append(
-        stackId,
-        updateId,
-        leaseId,
-        List.of(
-            entry(
-                1,
-                0,
-                42L,
-                "{\"operation\":{\"resource\":{\"urn\":\"urn:r\",\"type\":\"aws:s3:Bucket\"},\"type\":\"creating\"}}")));
-
-    appender.append(
-        stackId,
-        updateId,
-        leaseId,
-        List.of(entry(2, terminalKind, 42L, terminalPayload(terminalKind))));
-
-    QuarkusTransaction.requiringNew()
-        .run(
-            () -> {
-              long pending =
-                  ((Number)
-                          em.createNativeQuery(
-                                  "SELECT count(*) FROM pending_operations WHERE update_id = ?1")
-                              .setParameter(1, updateId)
-                              .getSingleResult())
-                      .longValue();
-              assertEquals(0L, pending);
-            });
-  }
-
   @Test
-  void successBeforeBeginRaceLeavesStaleTableRow() {
-    // Reproduces the wire-arrival race called out by JournalAppender.append's pending-ops loop:
-    // batch 1 carries a terminal (Success) for op 42, batch 2 carries the late Begin for op 42 at
-    // an earlier wire seq. The Success's DELETE no-ops (row didn't exist); the Begin's INSERT
-    // succeeds, leaving a row in pending_operations. Replay-by-sequence_id still produces an empty
-    // assembled pending_operations array, so pending_operations is not authoritative in this race.
+  void successBeforeBeginArrivalStillReplaysInSequenceOrder() {
+    // Batch 1 carries a terminal Success for op 42; batch 2 carries its Begin with an earlier wire
+    // sequence. Arrival order must not affect the reconstructed deployment.
     appender.append(
         stackId,
         updateId,
@@ -552,27 +458,12 @@ class JournalAppenderTest {
                 "{\"operation\":{\"resource\":{\"urn\":\"urn:x\",\"type\":\"t:x\"},"
                     + "\"type\":\"creating\"}}")));
 
-    QuarkusTransaction.requiringNew()
-        .run(
-            () -> {
-              long pending =
-                  ((Number)
-                          em.createNativeQuery(
-                                  "SELECT count(*) FROM pending_operations WHERE update_id = ?1")
-                              .setParameter(1, updateId)
-                              .getSingleResult())
-                      .longValue();
-              assertEquals(1L, pending);
-            });
-
     AssembledDeployment assembled = assemble(stackId);
     assertFalse(assembled.deployment().has("pending_operations"));
   }
 
   @Test
-  void invalidOperationTypeSkipsPendingOpsButPersistsJournalRow() {
-    // operation_type "bogus" is not in the CHECK set — pending_operations is silently skipped,
-    // but the journal_entries row still lands.
+  void unknownOperationTypeIsPersistedAndReplayed() {
     appender.append(
         stackId,
         updateId,
@@ -587,23 +478,20 @@ class JournalAppenderTest {
     QuarkusTransaction.requiringNew()
         .run(
             () -> {
-              long je =
+              long count =
                   ((Number)
                           em.createNativeQuery(
                                   "SELECT count(*) FROM journal_entries WHERE update_id = ?1")
                               .setParameter(1, updateId)
                               .getSingleResult())
                       .longValue();
-              long pending =
-                  ((Number)
-                          em.createNativeQuery(
-                                  "SELECT count(*) FROM pending_operations WHERE update_id = ?1")
-                              .setParameter(1, updateId)
-                              .getSingleResult())
-                      .longValue();
-              assertEquals(1L, je);
-              assertEquals(0L, pending);
+              assertEquals(1L, count);
             });
+
+    JsonNode pending = assemble(stackId).deployment().required("pending_operations");
+    assertEquals(1, pending.size());
+    assertEquals("bogus", pending.get(0).required("type").asText());
+    assertEquals("urn:r", pending.get(0).required("resource").required("urn").asText());
   }
 
   @Test
@@ -863,11 +751,6 @@ class JournalAppenderTest {
     AssembledDeployment assembled = assembler.assemble(targetStackId);
     PulumiDeploymentAssert.assertIntegrityPasses(assembled.deployment());
     return assembled;
-  }
-
-  private static String terminalPayload(int terminalKind) {
-    // Payload shape does not matter here: table pruning only needs kind + operationID.
-    return terminalKind == 1 ? "{\"state\":{\"urn\":\"urn:r\"}}" : "{}";
   }
 
   private static JsonNode entry(long wireSeq, int kind, Long operationId, String payloadJson) {

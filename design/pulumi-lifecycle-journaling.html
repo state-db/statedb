@@ -450,7 +450,7 @@ RETURNING id, expires_at;</code></pre>
 
   <details>
     <summary><span class="chev">▶</span><span class="k">0</span><span class="name">Begin</span><span class="hint">an operation starts</span></summary>
-    <div class="det-body"><p>Records an in-flight op in <code>incompleteOps</code>. If the payload carries full resource context (<code>urn</code>, <code>type</code>, a valid <code>operation.type</code>) it also writes a <code>pending_operations</code> row. If the op never resolves, it surfaces in <code>deployment.pendingOperations</code> — that's the crash-recovery hook.</p></div>
+    <div class="det-body"><p>Records an in-flight op in <code>incompleteOps</code>. If the op never resolves, ordered journal replay surfaces it in <code>deployment.pendingOperations</code> — that's the crash-recovery hook.</p></div>
   </details>
   <details>
     <summary><span class="chev">▶</span><span class="k">1</span><span class="name">Success</span><span class="hint">the workhorse — a resource is now live</span></summary>
@@ -573,7 +573,7 @@ RETURNING id, expires_at;</code></pre>
     </div>
   </div>
   <div class="card"><h4>Entities — schema owned by Flyway, Hibernate never touches DDL</h4>
-    <span class="pill">StackUpdate</span><span class="pill">JournalEntry</span><span class="pill">StackState</span><span class="pill">Snapshot</span><span class="pill">StackLock</span><span class="pill">PendingOperation</span><span class="pill">UpdateEvent</span><span class="pill">CompactionJob</span>
+    <span class="pill">StackUpdate</span><span class="pill">JournalEntry</span><span class="pill">StackState</span><span class="pill">Snapshot</span><span class="pill">StackLock</span><span class="pill">UpdateEvent</span><span class="pill">CompactionJob</span>
   </div>
   <div class="card"><h4>Docs that go deeper</h4>
     <p style="font-size:13.5px;margin:4px 0"><span class="fileref">design/pulumi-state-lifecycle.md</span> — the operational story, with real workbench data.</p>

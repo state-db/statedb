@@ -15,9 +15,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
-import java.util.Set;
 import java.util.UUID;
-import org.hibernate.id.uuid.UuidVersion7Strategy;
 
 /**
  * Appends a batch of Pulumi journal entries.
@@ -54,17 +52,6 @@ public class JournalAppender {
 
   // Kinds 0..7 per design/db-schema.md §Journal Entry Payload Structures (pinned to Pulumi
   // v3.242.0).
-  private static final short KIND_BEGIN = 0;
-  private static final short KIND_SUCCESS = 1;
-  private static final short KIND_FAILURE = 2;
-  private static final short KIND_REFRESH_SUCCESS = 3;
-
-  // Mirrors the CHECK constraint on pending_operations.operation_type — we silently skip Begin
-  // entries with an operation_type outside this set rather than crashing the whole PATCH, since
-  // the surrounding journal_entries row is still valid for replay.
-  private static final Set<String> VALID_OPERATION_TYPES =
-      Set.of("creating", "updating", "deleting", "reading", "importing");
-
   @Inject EntityManager em;
 
   @Inject LeaseRevalidator leaseRevalidator;
@@ -175,47 +162,7 @@ public class JournalAppender {
       throw e;
     }
 
-    // 6/7. Pending-operations maintenance. Order doesn't matter — a Success that arrives before
-    //      its Begin will simply no-op the DELETE, and the late Begin will then leave a stale row
-    //      that compaction will sweep for terminated updates.
-    for (JournalEntryView v : viewsToInsert) {
-      short kind = v.kind();
-      Long opId = v.operationId();
-      if (kind == KIND_BEGIN && opId != null) {
-        String urn = v.resourceUrn();
-        String resType = v.resourceType();
-        String opType = v.operationType();
-        if (urn != null
-            && resType != null
-            && opType != null
-            && VALID_OPERATION_TYPES.contains(opType)) {
-          em.createNativeQuery(
-                  "INSERT INTO pending_operations "
-                      + "(id, stack_id, update_id, operation_id, resource_urn, resource_type, "
-                      + " operation_type, begin_journal_seq) "
-                      + "VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8) "
-                      + "ON CONFLICT (update_id, operation_id) DO NOTHING")
-              .setParameter(1, UuidVersion7Strategy.INSTANCE.generateUuid(null))
-              .setParameter(2, stackId)
-              .setParameter(3, updateId)
-              .setParameter(4, opId)
-              .setParameter(5, urn)
-              .setParameter(6, resType)
-              .setParameter(7, opType)
-              .setParameter(8, offset + v.sequenceId())
-              .executeUpdate();
-        }
-      } else if ((kind == KIND_SUCCESS || kind == KIND_FAILURE || kind == KIND_REFRESH_SUCCESS)
-          && opId != null) {
-        em.createNativeQuery(
-                "DELETE FROM pending_operations WHERE update_id = ?1 AND operation_id = ?2")
-            .setParameter(1, updateId)
-            .setParameter(2, opId)
-            .executeUpdate();
-      }
-    }
-
-    // 8. Advance stack_state. GREATEST guards against earlier PATCHes that already advanced past
+    // 6. Advance stack_state. GREATEST guards against earlier PATCHes that already advanced past
     //    this batch's max (out-of-order arrival across PATCHes).
     em.createNativeQuery(
             "UPDATE stack_state "

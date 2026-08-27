@@ -21,7 +21,7 @@ COLUMNS=(
   pool_active pool_available pool_awaiting pool_blocking_max_s pool_acquire_total
   http_total http_5xx
   locks_live updates_in_progress
-  rows_snapshots rows_journal rows_events rows_updates rows_pending rows_compaction
+  rows_snapshots rows_journal rows_events rows_updates rows_compaction
   compaction_failed growth_bytes
   gc_live_bytes gc_overhead scrape_ok
 )
@@ -68,7 +68,6 @@ db_row() {
            (SELECT count(*) FROM journal_entries),
            (SELECT count(*) FROM update_events),
            (SELECT count(*) FROM stack_updates),
-           (SELECT count(*) FROM pending_operations),
            (SELECT count(*) FROM compaction_jobs),
            (SELECT count(*) FROM compaction_jobs WHERE status = 'failed'),
            (SELECT pg_total_relation_size('snapshots')
@@ -120,7 +119,7 @@ while true; do
   fi
 
   db="$(db_row)"
-  [[ -z "$db" ]] && db=$'0\t0\t0\t0\t0\t0\t0\t0\t0\t0'
+  [[ -z "$db" ]] && db=$'0\t0\t0\t0\t0\t0\t0\t0\t0'
 
   printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \
     "$now" "$((now - START_EPOCH))" "$uptime_s" \

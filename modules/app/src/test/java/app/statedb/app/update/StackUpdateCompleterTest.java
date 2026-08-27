@@ -12,7 +12,6 @@ import app.statedb.persistence.events.UpdateEvent;
 import app.statedb.persistence.identity.Organization;
 import app.statedb.persistence.journal.JournalAppender;
 import app.statedb.persistence.journal.JournalEntry;
-import app.statedb.persistence.journal.PendingOperation;
 import app.statedb.persistence.lock.Lease;
 import app.statedb.persistence.lock.StackLockAcquirer;
 import app.statedb.persistence.lock.StackLockedException;
@@ -271,7 +270,6 @@ class StackUpdateCompleterTest {
     StackUpdate failedUpdate = StackUpdate.findById(failed.updateId());
     assertEquals(StackUpdate.Status.FAILED, failedUpdate.status);
     assertEquals(0L, app.statedb.persistence.lock.StackLock.count("stackId", failed.stackId()));
-    assertEquals(0L, PendingOperation.count("updateId", failed.updateId()));
     assertEquals(1, assemble(failed.stackId()).deployment().required("resources").size());
     assertEquals(
         urn("base"),
@@ -307,7 +305,6 @@ class StackUpdateCompleterTest {
     StackUpdate failedUpdate = StackUpdate.findById(f.updateId());
     assertEquals(StackUpdate.Status.FAILED, failedUpdate.status);
     assertEquals(0L, app.statedb.persistence.lock.StackLock.count("stackId", f.stackId()));
-    assertEquals(0L, PendingOperation.count("updateId", f.updateId()));
 
     JsonNode resources = assemble(f.stackId()).deployment().required("resources");
     assertEquals(1, resources.size());
