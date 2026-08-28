@@ -21,9 +21,6 @@ import java.util.*;
 @Produces(MediaType.APPLICATION_JSON)
 @Consumes(MediaType.APPLICATION_JSON)
 public class OrganizationMembersResource {
-  private static final List<OrgMember.Role> HUMAN_ROLES =
-      List.of(
-          OrgMember.Role.owner, OrgMember.Role.member, OrgMember.Role.viewer, OrgMember.Role.guest);
   @Inject AuthorizedResource authorized;
   @Inject OrgMembershipWriter writer;
 
@@ -34,7 +31,7 @@ public class OrganizationMembersResource {
     return OrgMember.<OrgMember>find(
             "select m from OrgMember m join fetch m.user where m.orgId = ?1 and m.role in ?2 order by m.user.email",
             org.id,
-            HUMAN_ROLES)
+            OrgMember.Role.humanRoles())
         .list()
         .stream()
         .map(this::dto)

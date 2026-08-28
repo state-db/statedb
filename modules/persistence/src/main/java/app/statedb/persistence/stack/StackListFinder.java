@@ -15,6 +15,7 @@ import jakarta.persistence.criteria.Predicate;
 import jakarta.persistence.criteria.Root;
 import jakarta.persistence.criteria.Subquery;
 import java.time.Instant;
+import java.util.Collection;
 import java.util.List;
 import java.util.Locale;
 import java.util.UUID;
@@ -41,10 +42,6 @@ public class StackListFinder {
       List.of(OrgMember.Role.owner, OrgMember.Role.service);
   private static final List<OrgMember.Role> INTERNAL_READ_ROLES =
       List.of(OrgMember.Role.member, OrgMember.Role.viewer);
-  private static final List<OrgMember.Role> HUMAN_ROLES =
-      List.of(
-          OrgMember.Role.owner, OrgMember.Role.member, OrgMember.Role.viewer, OrgMember.Role.guest);
-
   @Inject EntityManager em;
 
   public List<StackSummary> findVisibleToUser(UUID userId, String projectFilter) {
@@ -167,7 +164,7 @@ public class StackListFinder {
             hasOrgRole(cb, query, stack, userId, INTERNAL_READ_ROLES)),
         cb.and(
             hasStackReadGrant(cb, query, stack, userId),
-            hasOrgRole(cb, query, stack, userId, HUMAN_ROLES)));
+            hasOrgRole(cb, query, stack, userId, OrgMember.Role.humanRoles())));
   }
 
   private static Predicate hasOrgRole(
@@ -175,7 +172,7 @@ public class StackListFinder {
       CriteriaQuery<?> query,
       Root<Stack> stack,
       UUID userId,
-      List<OrgMember.Role> roles) {
+      Collection<OrgMember.Role> roles) {
     Subquery<Integer> subquery = query.subquery(Integer.class);
     Root<OrgMember> member = subquery.from(OrgMember.class);
     subquery.select(cb.literal(1));

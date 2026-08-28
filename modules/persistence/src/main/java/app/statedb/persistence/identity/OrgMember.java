@@ -15,6 +15,7 @@ import java.io.Serializable;
 import java.time.Instant;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 import org.hibernate.annotations.Generated;
 import org.hibernate.generator.EventType;
@@ -40,7 +41,14 @@ public class OrgMember extends PanacheEntityBase {
      * pulumi login}, while access is exactly the sum of the user's {@code policy_grants} rows. See
      * {@code design/stack-sharing.md}.
      */
-    guest
+    guest;
+
+    private static final Set<Role> HUMAN_ROLES = Set.of(owner, member, viewer, guest);
+
+    /** Roles in the human inheritance ladder; excludes the independent service-account role. */
+    public static Set<Role> humanRoles() {
+      return HUMAN_ROLES;
+    }
   }
 
   /** The role this user holds in the given org, if they are a member. */

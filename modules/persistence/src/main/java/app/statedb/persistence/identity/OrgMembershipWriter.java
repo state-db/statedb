@@ -5,15 +5,10 @@ import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.persistence.LockModeType;
 import jakarta.transaction.Transactional;
 import java.time.Instant;
-import java.util.EnumSet;
 import java.util.UUID;
 
 @ApplicationScoped
 public class OrgMembershipWriter {
-  private static final EnumSet<OrgMember.Role> HUMAN_ROLES =
-      EnumSet.of(
-          OrgMember.Role.owner, OrgMember.Role.member, OrgMember.Role.viewer, OrgMember.Role.guest);
-
   @Transactional
   public MembershipResult add(UUID orgId, UUID userId, OrgMember.Role role) {
     lockOrg(orgId);
@@ -66,7 +61,7 @@ public class OrgMembershipWriter {
   }
 
   private static void requireHuman(OrgMember.Role role) {
-    if (role == null || !HUMAN_ROLES.contains(role)) {
+    if (role == null || !OrgMember.Role.humanRoles().contains(role)) {
       throw new RequestValidationException("role must be owner, member, viewer, or guest");
     }
   }

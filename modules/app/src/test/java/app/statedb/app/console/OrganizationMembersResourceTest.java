@@ -136,6 +136,7 @@ class OrganizationMembersResourceTest {
         QuarkusTransaction.requiringNew()
             .call(() -> Organization.<Organization>find("name", ORG).firstResult().id);
     UUID userId = candidate("admin-added-user", "admin-added@example.com");
+    UUID serviceUserId = candidate("admin-service-user", "service@example.com");
 
     given()
         .cookie(COOKIE, cookie)
@@ -146,6 +147,15 @@ class OrganizationMembersResourceTest {
         .then()
         .statusCode(200)
         .body("role", is("owner"));
+    QuarkusTransaction.requiringNew()
+        .run(
+            () -> {
+              OrgMember service = new OrgMember();
+              service.orgId = orgId;
+              service.userId = serviceUserId;
+              service.role = OrgMember.Role.service;
+              service.persistAndFlush();
+            });
     given()
         .cookie(COOKIE, cookie)
         .when()
@@ -153,6 +163,13 @@ class OrganizationMembersResourceTest {
         .then()
         .statusCode(200)
         .body("size()", is(1));
+    given()
+        .cookie(COOKIE, cookie)
+        .when()
+        .get("/api/admin/orgs")
+        .then()
+        .statusCode(200)
+        .body("find { it.id == '" + orgId + "' }.members", is(1));
   }
 
   private static Cookie ownerSession() {

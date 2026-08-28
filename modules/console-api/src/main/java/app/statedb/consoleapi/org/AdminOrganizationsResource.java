@@ -36,9 +36,6 @@ public class AdminOrganizationsResource {
           "account",
           "user",
           "favicon.ico");
-  private static final List<OrgMember.Role> HUMAN_ROLES =
-      List.of(
-          OrgMember.Role.owner, OrgMember.Role.member, OrgMember.Role.viewer, OrgMember.Role.guest);
 
   @GET
   public List<OrganizationDto> list() {
@@ -84,7 +81,8 @@ public class AdminOrganizationsResource {
   }
 
   private OrganizationDto dto(Organization org) {
-    long members = OrgMember.count("orgId = ?1 and role in ?2", org.id, HUMAN_ROLES);
+    long members =
+        OrgMember.count("orgId = ?1 and role in ?2", org.id, OrgMember.Role.humanRoles());
     return new OrganizationDto(
         org.id, org.name, org.displayName, members, Stack.count("orgId", org.id), org.createdAt);
   }
