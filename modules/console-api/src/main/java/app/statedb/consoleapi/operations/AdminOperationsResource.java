@@ -17,7 +17,6 @@ import app.statedb.persistence.stack.Stack;
 import app.statedb.persistence.stack.StackRef;
 import jakarta.inject.Inject;
 import jakarta.transaction.Transactional;
-import jakarta.ws.rs.BadRequestException;
 import jakarta.ws.rs.DELETE;
 import jakarta.ws.rs.GET;
 import jakarta.ws.rs.POST;
@@ -80,13 +79,13 @@ public class AdminOperationsResource {
   public Response forceUnlock() {
     String rawLockId = uriInfo.getQueryParameters().getFirst("lockId");
     if (rawLockId == null || rawLockId.isBlank()) {
-      throw new BadRequestException("lockId is required");
+      return badRequest("lockId is required");
     }
     UUID lockId;
     try {
       lockId = UUID.fromString(rawLockId);
     } catch (IllegalArgumentException e) {
-      throw new BadRequestException("lockId must be a UUID");
+      return badRequest("lockId must be a UUID");
     }
 
     StackRef ref = authorized.subject(StackRef.class);
@@ -96,6 +95,13 @@ public class AdminOperationsResource {
           .build();
     }
     return Response.noContent().build();
+  }
+
+  private static Response badRequest(String message) {
+    return Response.status(Response.Status.BAD_REQUEST)
+        .type(MediaType.APPLICATION_JSON)
+        .entity(Map.of("error", message))
+        .build();
   }
 
   @POST

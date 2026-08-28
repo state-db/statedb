@@ -4,6 +4,7 @@ import static app.statedb.app.console.LocalGlassTestSupport.COOKIE;
 import static app.statedb.app.console.LocalGlassTestSupport.PASSWORD;
 import static app.statedb.app.console.LocalGlassTestSupport.login;
 import static io.restassured.RestAssured.given;
+import static io.restassured.http.ContentType.JSON;
 import static org.hamcrest.Matchers.hasSize;
 import static org.hamcrest.Matchers.is;
 import static org.hamcrest.Matchers.notNullValue;
@@ -53,6 +54,32 @@ class AdminOperationsResourceTest {
                 User.deleteById(serviceHolderId);
               }
             });
+  }
+
+  @Test
+  void invalidLockIdsReturnConsoleErrorBodies() {
+    String cookie = login(PASSWORD).statusCode(200).extract().cookie(COOKIE);
+    seed();
+    String path = "/api/admin/stacks/" + ORG + "/" + PROJECT + "/" + STACK + "/lock";
+
+    given()
+        .cookie(COOKIE, cookie)
+        .when()
+        .delete(path)
+        .then()
+        .statusCode(400)
+        .contentType(JSON)
+        .body("error", is("lockId is required"));
+
+    given()
+        .cookie(COOKIE, cookie)
+        .queryParam("lockId", "not-a-uuid")
+        .when()
+        .delete(path)
+        .then()
+        .statusCode(400)
+        .contentType(JSON)
+        .body("error", is("lockId must be a UUID"));
   }
 
   @Test

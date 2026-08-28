@@ -119,17 +119,23 @@ public class OrganizationMembersResource {
   }
 
   private static UUID parseUser(String raw) {
+    if (raw == null) {
+      throw new RequestValidationException("userId must be a UUID");
+    }
     try {
       return UUID.fromString(raw);
-    } catch (Exception e) {
+    } catch (IllegalArgumentException e) {
       throw new RequestValidationException("userId must be a UUID");
     }
   }
 
   private static OrgMember.Role parseRole(String raw) {
+    if (raw == null) {
+      throw new RequestValidationException("invalid human role");
+    }
     try {
       return OrgMember.Role.valueOf(raw);
-    } catch (Exception e) {
+    } catch (IllegalArgumentException e) {
       throw new RequestValidationException("invalid human role");
     }
   }

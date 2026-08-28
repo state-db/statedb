@@ -4,6 +4,7 @@ import static app.statedb.app.console.LocalGlassTestSupport.COOKIE;
 import static app.statedb.app.console.LocalGlassTestSupport.PASSWORD;
 import static app.statedb.app.console.LocalGlassTestSupport.login;
 import static io.restassured.RestAssured.given;
+import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.is;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 
@@ -127,6 +128,41 @@ class OrganizationMembersResourceTest {
         .delete(path)
         .then()
         .statusCode(409);
+  }
+
+  @Test
+  void invalidMemberInputsRetainValidationMessages() {
+    Cookie session = ownerSession();
+    UUID candidate = candidate("invalid-input-candidate", "invalid-input@example.com");
+    String path = "/api/orgs/" + ORG + "/members";
+
+    for (String body :
+        List.of("{\"role\":\"guest\"}", "{\"userId\":\"not-a-uuid\",\"role\":\"guest\"}")) {
+      given()
+          .cookie(session.getName(), session.getValue())
+          .contentType("application/json")
+          .body(body)
+          .when()
+          .post(path)
+          .then()
+          .statusCode(400)
+          .body(containsString("userId must be a UUID"));
+    }
+
+    for (String body :
+        List.of(
+            "{\"userId\":\"" + candidate + "\"}",
+            "{\"userId\":\"" + candidate + "\",\"role\":\"administrator\"}")) {
+      given()
+          .cookie(session.getName(), session.getValue())
+          .contentType("application/json")
+          .body(body)
+          .when()
+          .post(path)
+          .then()
+          .statusCode(400)
+          .body(containsString("invalid human role"));
+    }
   }
 
   @Test
