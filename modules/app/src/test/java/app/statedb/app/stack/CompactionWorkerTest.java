@@ -73,6 +73,10 @@ class CompactionWorkerTest {
     JsonNode before = normalized(assemble(stackId).deployment());
 
     QuarkusTransaction.requiringNew().run(() -> enqueuer.enqueue(stackId));
+    UUID jobId =
+        QuarkusTransaction.requiringNew()
+            .call(() -> CompactionJob.<CompactionJob>find("stackId", stackId).singleResult().id);
+    assertEquals(7, jobId.version());
 
     assertEquals(1, worker.drainOnce());
 

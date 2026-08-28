@@ -81,6 +81,7 @@ class StackLockAcquirerTest {
         acquirer.acquire(stackId, updateId, "user:test", 1, Map.of("foo", "bar"));
     assertTrue(lease.isPresent());
     assertNotNull(lease.get().plaintextToken());
+    assertEquals(7, lease.get().leaseId().version());
 
     Number lockCount =
         (Number)

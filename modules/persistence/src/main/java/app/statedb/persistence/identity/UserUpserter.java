@@ -1,10 +1,10 @@
 package app.statedb.persistence.identity;
 
+import app.statedb.persistence.PersistenceIds;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 import jakarta.persistence.EntityManager;
 import jakarta.transaction.Transactional;
-import org.hibernate.id.uuid.UuidVersion7Strategy;
 
 /**
  * Provisions/refreshes the console {@code users} row from Quarkus's OIDC authentication-completion
@@ -37,7 +37,7 @@ public class UserUpserter {
                   last_login_at = now(),
                   updated_at = now()
             """)
-        .setParameter("id", UuidVersion7Strategy.INSTANCE.generateUuid(null))
+        .setParameter("id", PersistenceIds.newId())
         .setParameter("iss", iss)
         .setParameter("sub", sub)
         .setParameter("email", email)

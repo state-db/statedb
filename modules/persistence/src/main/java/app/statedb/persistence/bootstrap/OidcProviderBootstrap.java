@@ -1,12 +1,12 @@
 package app.statedb.persistence.bootstrap;
 
 import app.statedb.persistence.AdvisoryLock;
+import app.statedb.persistence.PersistenceIds;
 import io.quarkus.runtime.StartupEvent;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.enterprise.event.Observes;
 import jakarta.inject.Inject;
 import jakarta.persistence.EntityManager;
-import org.hibernate.id.uuid.UuidVersion7Strategy;
 import org.jboss.logging.Logger;
 
 /**
@@ -55,7 +55,7 @@ public class OidcProviderBootstrap {
                   enabled = true,
                   updated_at = now()
             """)
-        .setParameter("id", UuidVersion7Strategy.INSTANCE.generateUuid(null))
+        .setParameter("id", PersistenceIds.newId())
         .setParameter("name", config.name())
         .setParameter("issuer", config.issuer())
         .setParameter("clientId", config.clientId())

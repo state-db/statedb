@@ -79,6 +79,12 @@ class StackCreatorTest {
               Stack stack = Stack.findById(ref.stackId());
               assertEquals("dev", stack.name);
               assertEquals(0, stack.version);
+              UUID projectId =
+                  (UUID)
+                      em.createNativeQuery("SELECT project_id FROM stacks WHERE id = ?1")
+                          .setParameter(1, ref.stackId())
+                          .getSingleResult();
+              assertEquals(7, projectId.version());
               Number states =
                   (Number)
                       em.createNativeQuery("SELECT count(*) FROM stack_state WHERE stack_id = ?1")

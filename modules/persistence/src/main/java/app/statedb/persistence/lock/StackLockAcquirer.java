@@ -1,5 +1,6 @@
 package app.statedb.persistence.lock;
 
+import app.statedb.persistence.PersistenceIds;
 import app.statedb.persistence.stack.CompactionJob;
 import app.statedb.persistence.stack.Stack;
 import app.statedb.persistence.stack.StackState;
@@ -16,7 +17,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
-import org.hibernate.id.uuid.UuidVersion7Strategy;
 import org.jboss.logging.Logger;
 
 /**
@@ -105,7 +105,7 @@ public class StackLockAcquirer {
         .withLock(LockModeType.PESSIMISTIC_WRITE)
         .<StackState>firstResult();
 
-    UUID lockId = UuidVersion7Strategy.INSTANCE.generateUuid(null);
+    UUID lockId = PersistenceIds.newId();
     // 122 random bits from SecureRandom. The bearer is a short-lived secret
     // (≤ leaseTtl, hard-capped by maxLeaseLifetime) and is rotated on every
     // /renew_lease, so 122 bits is well past brute-force range for this

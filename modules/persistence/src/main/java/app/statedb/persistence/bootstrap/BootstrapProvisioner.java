@@ -2,6 +2,7 @@ package app.statedb.persistence.bootstrap;
 
 import app.statedb.persistence.AdvisoryLock;
 import app.statedb.persistence.BaseEntity;
+import app.statedb.persistence.PersistenceIds;
 import app.statedb.persistence.TimestampedEntity;
 import io.quarkus.runtime.StartupEvent;
 import jakarta.enterprise.context.ApplicationScoped;
@@ -9,7 +10,6 @@ import jakarta.enterprise.event.Observes;
 import jakarta.inject.Inject;
 import jakarta.persistence.EntityManager;
 import java.util.UUID;
-import org.hibernate.id.uuid.UuidVersion7Strategy;
 import org.jboss.logging.Logger;
 
 /**
@@ -31,8 +31,8 @@ import org.jboss.logging.Logger;
  * AdvisoryLock} on {@link AdvisoryLock#BOOTSTRAP_KEY} — one pod runs {@link #provision}, the rest
  * block until its transaction commits and then re-run against the now-populated rows. Each upsert
  * is still a single {@code INSERT ... ON CONFLICT} statement, so the per-row guarantee holds even
- * for writers that bypass the lock (admin scripts, ad-hoc SQL). Native inserts call Hibernate's
- * UUIDv7 strategy directly, matching {@link BaseEntity}. Native SQL also bypasses Hibernate's
+ * for writers that bypass the lock (admin scripts, ad-hoc SQL). {@link PersistenceIds} supplies the
+ * same UUIDv7 strategy as {@link BaseEntity}. Native SQL also bypasses Hibernate's
  * {@code @UpdateTimestamp}, so {@code updated_at} is set explicitly on the UPDATE branch of the
  * conflict clause for the {@link TimestampedEntity} tables.
  */
@@ -83,7 +83,7 @@ public class BootstrapProvisioner {
             ON CONFLICT (name) DO UPDATE
               SET display_name = EXCLUDED.display_name, updated_at = now()
             """)
-        .setParameter("id", UuidVersion7Strategy.INSTANCE.generateUuid(null))
+        .setParameter("id", PersistenceIds.newId())
         .setParameter("name", config.orgName())
         .setParameter("display", config.orgDisplayName())
         .executeUpdate();
@@ -106,7 +106,7 @@ public class BootstrapProvisioner {
             VALUES (:id, :iss, :sub, :display)
             ON CONFLICT (iss, sub) DO NOTHING
             """)
-        .setParameter("id", UuidVersion7Strategy.INSTANCE.generateUuid(null))
+        .setParameter("id", PersistenceIds.newId())
         .setParameter("iss", BOOTSTRAP_ISS)
         .setParameter("sub", BOOTSTRAP_SUB)
         .setParameter("display", "Break-glass admin")

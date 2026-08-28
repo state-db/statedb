@@ -1,10 +1,10 @@
 package app.statedb.persistence.stack;
 
+import app.statedb.persistence.PersistenceIds;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 import jakarta.persistence.EntityManager;
 import java.util.UUID;
-import org.hibernate.id.uuid.UuidVersion7Strategy;
 
 @ApplicationScoped
 public class CompactionJobEnqueuer {
@@ -19,7 +19,7 @@ public class CompactionJobEnqueuer {
             VALUES (?1, ?2, 'pending')
             ON CONFLICT (stack_id) WHERE status IN ('pending', 'running') DO NOTHING
             """)
-        .setParameter(1, UuidVersion7Strategy.INSTANCE.generateUuid(null))
+        .setParameter(1, PersistenceIds.newId())
         .setParameter(2, stackId)
         .executeUpdate();
   }
