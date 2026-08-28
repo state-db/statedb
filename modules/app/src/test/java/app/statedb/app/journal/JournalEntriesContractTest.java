@@ -1,6 +1,9 @@
 package app.statedb.app.journal;
 
 import static io.restassured.RestAssured.given;
+import static io.restassured.http.ContentType.JSON;
+import static org.hamcrest.Matchers.containsString;
+import static org.hamcrest.Matchers.equalTo;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
 import app.statedb.persistence.auth.ApiToken;
@@ -185,6 +188,48 @@ class JournalEntriesContractTest {
                       .longValue();
               assertEquals(1L, count);
             });
+  }
+
+  @Test
+  void duplicateWireSequenceWithDifferentContentsReturnsPulumiConflict() throws Exception {
+    String updateId = startUpdate();
+    String token = acquireLock(updateId);
+
+    byte[] firstBody =
+        gzip(
+            MAPPER.writeValueAsBytes(
+                Map.of(
+                    "entries",
+                    List.of(Map.of("kind", 1, "operationID", 1, "sequenceID", 1, "version", 1)))));
+    byte[] conflictingBody =
+        gzip(
+            MAPPER.writeValueAsBytes(
+                Map.of(
+                    "entries",
+                    List.of(Map.of("kind", 1, "operationID", 2, "sequenceID", 1, "version", 1)))));
+
+    given()
+        .header("Authorization", "update-token " + token)
+        .header("Content-Encoding", "gzip")
+        .contentType("application/json")
+        .body(firstBody)
+        .when()
+        .patch(journalPath(updateId))
+        .then()
+        .statusCode(200);
+
+    given()
+        .header("Authorization", "update-token " + token)
+        .header("Content-Encoding", "gzip")
+        .contentType("application/json")
+        .body(conflictingBody)
+        .when()
+        .patch(journalPath(updateId))
+        .then()
+        .statusCode(409)
+        .contentType(JSON)
+        .body("code", equalTo(409))
+        .body("message", containsString("duplicate wire sequenceID with different contents"));
   }
 
   @Test

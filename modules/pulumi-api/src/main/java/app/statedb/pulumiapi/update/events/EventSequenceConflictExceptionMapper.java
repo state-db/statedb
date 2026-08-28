@@ -1,11 +1,10 @@
 package app.statedb.pulumiapi.update.events;
 
 import app.statedb.persistence.events.EventSequenceConflictException;
-import jakarta.ws.rs.core.MediaType;
+import app.statedb.pulumiapi.error.PulumiErrorResponses;
 import jakarta.ws.rs.core.Response;
 import jakarta.ws.rs.ext.ExceptionMapper;
 import jakarta.ws.rs.ext.Provider;
-import java.util.Map;
 
 @Provider
 public class EventSequenceConflictExceptionMapper
@@ -13,9 +12,6 @@ public class EventSequenceConflictExceptionMapper
 
   @Override
   public Response toResponse(EventSequenceConflictException e) {
-    return Response.status(Response.Status.CONFLICT)
-        .type(MediaType.APPLICATION_JSON)
-        .entity(Map.of("code", 409, "message", e.getMessage()))
-        .build();
+    return PulumiErrorResponses.conflict(e.getMessage());
   }
 }

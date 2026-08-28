@@ -1,6 +1,9 @@
 package app.statedb.app.events;
 
 import static io.restassured.RestAssured.given;
+import static io.restassured.http.ContentType.JSON;
+import static org.hamcrest.Matchers.containsString;
+import static org.hamcrest.Matchers.equalTo;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -246,6 +249,64 @@ class RecordedEventsBatchReplayTest {
                       .longValue();
               assertEquals(0L, actualRows, "no rows should land for a malformed gzip body");
             });
+  }
+
+  @Test
+  void duplicateEventSequenceReturnsPulumiConflict() {
+    String orgName = "evt-conflict-org";
+    String project = "p-conflict";
+    String stack = "s-conflict";
+    this.org = orgName;
+    seedIdentityAndStack(orgName, project, stack);
+    String updateId = startUpdate(orgName, project, stack);
+    String token = acquireLock(orgName, project, stack, updateId);
+    String path =
+        "/pulumi/api/stacks/"
+            + orgName
+            + "/"
+            + project
+            + "/"
+            + stack
+            + "/update/"
+            + updateId
+            + "/events/batch";
+
+    given()
+        .header("Authorization", "update-token " + token)
+        .contentType("application/json")
+        .body(
+            Map.of(
+                "events",
+                List.of(
+                    Map.of(
+                        "sequence",
+                        1,
+                        "stdoutEvent",
+                        Map.of("message", "first", "color", "auto")))))
+        .when()
+        .post(path)
+        .then()
+        .statusCode(200);
+
+    given()
+        .header("Authorization", "update-token " + token)
+        .contentType("application/json")
+        .body(
+            Map.of(
+                "events",
+                List.of(
+                    Map.of(
+                        "sequence",
+                        1,
+                        "stdoutEvent",
+                        Map.of("message", "different", "color", "auto")))))
+        .when()
+        .post(path)
+        .then()
+        .statusCode(409)
+        .contentType(JSON)
+        .body("code", equalTo(409))
+        .body("message", containsString("duplicate event sequence for update"));
   }
 
   private void seedIdentityAndStack(String orgName, String project, String stack) {

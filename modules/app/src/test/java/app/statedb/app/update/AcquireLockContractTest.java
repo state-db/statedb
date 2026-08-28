@@ -1,6 +1,7 @@
 package app.statedb.app.update;
 
 import static io.restassured.RestAssured.given;
+import static io.restassured.http.ContentType.JSON;
 import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.equalTo;
 import static org.hamcrest.Matchers.greaterThan;
@@ -170,7 +171,10 @@ class AcquireLockContractTest {
         .when()
         .post("/pulumi/api/stacks/" + ORG + "/" + PROJECT + "/" + STACK + "/update/" + secondUpdate)
         .then()
-        .statusCode(409);
+        .statusCode(409)
+        .contentType(JSON)
+        .body("code", equalTo(409))
+        .body("message", containsString("is currently locked by another update"));
   }
 
   @Test

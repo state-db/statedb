@@ -1,6 +1,7 @@
 package app.statedb.pulumiapi.auth;
 
 import app.statedb.persistence.lock.LeaseContext;
+import app.statedb.pulumiapi.error.PulumiErrorResponses;
 import jakarta.enterprise.context.RequestScoped;
 import jakarta.ws.rs.WebApplicationException;
 
@@ -28,7 +29,8 @@ public class LeaseContextHolder {
    */
   public LeaseContext require() {
     if (context == null) {
-      throw new WebApplicationException(LeaseConflictResponse.response());
+      throw new WebApplicationException(
+          PulumiErrorResponses.conflict("update lease is no longer valid"));
     }
     return context;
   }

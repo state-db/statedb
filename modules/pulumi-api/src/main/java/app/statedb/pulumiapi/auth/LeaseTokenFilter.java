@@ -4,6 +4,7 @@ import app.statedb.persistence.lock.LeaseContext;
 import app.statedb.persistence.lock.LeaseLookup;
 import app.statedb.persistence.stack.StackRef;
 import app.statedb.persistence.stack.StackRefResolver;
+import app.statedb.pulumiapi.error.PulumiErrorResponses;
 import io.smallrye.common.annotation.Blocking;
 import jakarta.annotation.Priority;
 import jakarta.inject.Inject;
@@ -91,6 +92,6 @@ public class LeaseTokenFilter implements ContainerRequestFilter {
   }
 
   private static Response conflict() {
-    return LeaseConflictResponse.response();
+    return PulumiErrorResponses.conflict("update lease is no longer valid");
   }
 }
