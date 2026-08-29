@@ -47,6 +47,11 @@ public class WorkspaceListFinder {
     return new PagedWorkspaces(assemble(paged.items()), paged.total(), paged.page());
   }
 
+  /** Adds console status details to one stack row already authorized by {@link StackListFinder}. */
+  public WorkspaceSummary detailsFor(StackSummary stack) {
+    return assemble(List.of(stack)).get(0);
+  }
+
   public WorkspaceOverview overview(UUID userId, String org) {
     List<WorkspaceSummary> all = findVisibleToUser(userId, org, null);
     long projects = all.stream().map(w -> w.orgName() + "/" + w.projectName()).distinct().count();

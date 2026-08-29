@@ -5,10 +5,11 @@ import app.statedb.persistence.NameGrammar;
 import app.statedb.persistence.RequestValidationException;
 import app.statedb.persistence.authz.Authorize;
 import app.statedb.persistence.authz.SiteEntityLoader;
-import app.statedb.persistence.identity.OrgMember;
 import app.statedb.persistence.identity.Organization;
+import app.statedb.persistence.identity.OrganizationInventoryFinder;
 import app.statedb.persistence.stack.Stack;
 import com.fasterxml.jackson.annotation.JsonProperty;
+import jakarta.inject.Inject;
 import jakarta.transaction.Transactional;
 import jakarta.ws.rs.*;
 import jakarta.ws.rs.core.MediaType;
@@ -37,9 +38,13 @@ public class AdminOrganizationsResource {
           "user",
           "favicon.ico");
 
+  @Inject OrganizationInventoryFinder organizationInventoryFinder;
+
   @GET
   public List<OrganizationDto> list() {
-    return Organization.<Organization>list("order by name").stream().map(this::dto).toList();
+    return organizationInventoryFinder.list().stream()
+        .map(row -> dto(row.organization(), row.humanMembers(), row.stacks()))
+        .toList();
   }
 
   @POST
@@ -63,7 +68,7 @@ public class AdminOrganizationsResource {
     org.name = name;
     org.displayName = body.displayName.trim();
     org.persistAndFlush();
-    return dto(org);
+    return dto(org, 0, 0);
   }
 
   @DELETE
@@ -80,11 +85,8 @@ public class AdminOrganizationsResource {
     return Response.ok().build();
   }
 
-  private OrganizationDto dto(Organization org) {
-    long members =
-        OrgMember.count("orgId = ?1 and role in ?2", org.id, OrgMember.Role.humanRoles());
-    return new OrganizationDto(
-        org.id, org.name, org.displayName, members, Stack.count("orgId", org.id), org.createdAt);
+  private static OrganizationDto dto(Organization org, long members, long stacks) {
+    return new OrganizationDto(org.id, org.name, org.displayName, members, stacks, org.createdAt);
   }
 
   private static Organization find(String rawId) {

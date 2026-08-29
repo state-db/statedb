@@ -18,6 +18,7 @@ import java.time.Instant;
 import java.util.Collection;
 import java.util.List;
 import java.util.Locale;
+import java.util.Optional;
 import java.util.UUID;
 
 /**
@@ -45,27 +46,39 @@ public class StackListFinder {
   @Inject EntityManager em;
 
   public List<StackSummary> findVisibleToUser(UUID userId, String projectFilter) {
-    return list(new StackListRequest(userId, null, null, projectFilter, null, null, Instant.now()));
+    return list(
+        new StackListRequest(userId, null, null, projectFilter, null, null, null, Instant.now()));
   }
 
   public List<StackSummary> findVisibleToUser(
       UUID userId, String orgNameFilter, String projectFilter) {
     return list(
         new StackListRequest(
-            userId, null, orgNameFilter, projectFilter, null, null, Instant.now()));
+            userId, null, orgNameFilter, projectFilter, null, null, null, Instant.now()));
+  }
+
+  /** Finds one exactly named stack while applying the same read predicate as list endpoints. */
+  public Optional<StackSummary> findVisibleToUser(
+      UUID userId, String orgName, String project, String stackName) {
+    return list(
+            new StackListRequest(
+                userId, null, orgName, project, stackName, null, null, Instant.now()))
+        .stream()
+        .findFirst();
   }
 
   // Single-org credentials (service-account tokens) additionally clamp to the token's org.
   public List<StackSummary> findVisibleToUserInOrg(UUID userId, UUID orgId, String projectFilter) {
     return list(
-        new StackListRequest(userId, orgId, null, projectFilter, null, null, Instant.now()));
+        new StackListRequest(userId, orgId, null, projectFilter, null, null, null, Instant.now()));
   }
 
   public PagedStacks findVisibleToUserPaged(
       UUID userId, String orgNameFilter, String search, String status, int page, int pageSize) {
     CriteriaBuilder cb = em.getCriteriaBuilder();
     StackListRequest request =
-        new StackListRequest(userId, null, orgNameFilter, null, search, status, Instant.now());
+        new StackListRequest(
+            userId, null, orgNameFilter, null, null, search, status, Instant.now());
 
     CriteriaQuery<Long> countQuery = cb.createQuery(Long.class);
     StackCriteria count = StackCriteria.from(countQuery);
@@ -134,6 +147,9 @@ public class StackListFinder {
     }
     if (request.project() != null) {
       predicates.add(cb.equal(criteria.project().get("name"), request.project()));
+    }
+    if (request.stackName() != null) {
+      predicates.add(cb.equal(criteria.stack().get("name"), request.stackName()));
     }
     if (request.search() != null && !request.search().isBlank()) {
       String term = "%" + request.search().toLowerCase(Locale.ROOT) + "%";
@@ -241,6 +257,7 @@ public class StackListFinder {
       UUID orgId,
       String orgName,
       String project,
+      String stackName,
       String search,
       String status,
       Instant now) {}

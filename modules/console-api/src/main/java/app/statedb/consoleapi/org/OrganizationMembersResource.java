@@ -5,9 +5,8 @@ import app.statedb.persistence.RequestValidationException;
 import app.statedb.persistence.authz.*;
 import app.statedb.persistence.identity.*;
 import app.statedb.persistence.identity.OrgMembershipWriter.MembershipResult;
-import app.statedb.persistence.policy.PolicyGrant;
-import app.statedb.persistence.stack.Project;
-import app.statedb.persistence.stack.Stack;
+import app.statedb.persistence.policy.MemberStackGrantFinder;
+import app.statedb.persistence.policy.MemberStackGrantView;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import jakarta.inject.Inject;
 import jakarta.ws.rs.*;
@@ -23,18 +22,33 @@ import java.util.*;
 public class OrganizationMembersResource {
   @Inject AuthorizedResource authorized;
   @Inject OrgMembershipWriter writer;
+  @Inject MemberStackGrantFinder grantFinder;
 
   @GET
   @Authorize(action = "org:ManageMembers", loader = OrgEntityLoader.class)
   public List<MemberDto> list() {
     Organization org = authorized.subject(Organization.class);
-    return OrgMember.<OrgMember>find(
-            "select m from OrgMember m join fetch m.user where m.orgId = ?1 and m.role in ?2 order by m.user.email",
-            org.id,
-            OrgMember.Role.humanRoles())
-        .list()
-        .stream()
-        .map(this::dto)
+    List<OrgMember> members =
+        OrgMember.<OrgMember>find(
+                "select m from OrgMember m join fetch m.user where m.orgId = ?1 and m.role in ?2 order by m.user.email",
+                org.id,
+                OrgMember.Role.humanRoles())
+            .list();
+    List<UUID> guestIds =
+        members.stream()
+            .filter(member -> member.role == OrgMember.Role.guest)
+            .map(member -> member.userId)
+            .toList();
+    Map<UUID, List<GrantDto>> grantsByUser = new HashMap<>();
+    grantFinder
+        .forUsers(org.id, guestIds)
+        .forEach(
+            grant ->
+                grantsByUser
+                    .computeIfAbsent(grant.principalUserId(), ignored -> new ArrayList<>())
+                    .add(grantDto(grant)));
+    return members.stream()
+        .map(member -> dto(member, grantsByUser.getOrDefault(member.userId, List.of())))
         .toList();
   }
 
@@ -76,9 +90,8 @@ public class OrganizationMembersResource {
     return Response.ok().build();
   }
 
-  private MemberDto dto(OrgMember member) {
+  private MemberDto dto(OrgMember member, List<GrantDto> grants) {
     User user = member.user;
-    List<GrantDto> grants = member.role == OrgMember.Role.guest ? grants(member) : List.of();
     return new MemberDto(
         user.id, user.email, user.displayName, member.role, member.createdAt, grants);
   }
@@ -95,23 +108,19 @@ public class OrganizationMembersResource {
         grants);
   }
 
-  private static List<GrantDto> grants(OrgMember member) {
-    return grants(member.orgId, member.userId);
+  private List<GrantDto> grants(UUID orgId, UUID userId) {
+    return grantFinder.forUsers(orgId, List.of(userId)).stream()
+        .map(OrganizationMembersResource::grantDto)
+        .toList();
   }
 
-  private static List<GrantDto> grants(UUID orgId, UUID userId) {
-    return PolicyGrant.<PolicyGrant>list(
-            "orgId = ?1 and principalUserId = ?2 and resourceStackId is not null order by createdAt",
-            orgId,
-            userId)
-        .stream()
-        .map(
-            g -> {
-              Stack stack = Stack.findById(g.resourceStackId);
-              Project project = Project.findById(stack.projectId);
-              return new GrantDto(stack.id, project.name, stack.name, g.templateId, g.createdAt);
-            })
-        .toList();
+  private static GrantDto grantDto(MemberStackGrantView grant) {
+    return new GrantDto(
+        grant.stackId(),
+        grant.projectName(),
+        grant.stackName(),
+        grant.templateId(),
+        grant.createdAt());
   }
 
   private static void requireBody(MemberWrite body) {

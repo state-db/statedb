@@ -5,7 +5,9 @@ import app.statedb.persistence.authz.CurrentPrincipal;
 import app.statedb.persistence.stack.AssembledDeployment;
 import app.statedb.persistence.stack.Stack;
 import app.statedb.persistence.stack.StackAssembler;
+import app.statedb.persistence.stack.StackListFinder;
 import app.statedb.persistence.stack.StackState;
+import app.statedb.persistence.stack.StackSummary;
 import app.statedb.persistence.stack.WorkspaceListFinder;
 import app.statedb.persistence.stack.WorkspaceSummary;
 import app.statedb.persistence.update.ConsoleUpdateHistoryFinder;
@@ -35,6 +37,8 @@ public class WorkspacesResource {
   @Inject CurrentPrincipal currentPrincipal;
 
   @Inject WorkspaceListFinder workspaceListFinder;
+
+  @Inject StackListFinder stackListFinder;
 
   @Inject StackAssembler stackAssembler;
 
@@ -105,7 +109,7 @@ public class WorkspacesResource {
       @PathParam("org") String org,
       @PathParam("project") String project,
       @PathParam("stack") String stack) {
-    WorkspaceSummary summary = visibleStack(org, project, stack);
+    WorkspaceSummary summary = workspaceListFinder.detailsFor(visibleStack(org, project, stack));
     AssembledDeployment assembled = stackAssembler.assemble(summary.stackId());
     JsonNode resources = assembled.deployment().path("resources");
     Stack stackEntity = Stack.findById(summary.stackId());
@@ -145,7 +149,7 @@ public class WorkspacesResource {
       @PathParam("org") String org,
       @PathParam("project") String project,
       @PathParam("stack") String stack) {
-    WorkspaceSummary summary = visibleStack(org, project, stack);
+    StackSummary summary = visibleStack(org, project, stack);
     AssembledDeployment assembled = stackAssembler.assemble(summary.stackId());
     return new ExportResponse(assembled.version(), assembled.deployment());
   }
@@ -160,7 +164,7 @@ public class WorkspacesResource {
       @QueryParam("page") Integer requestedPage,
       @QueryParam("kind") String requestedKind,
       @QueryParam("status") String requestedStatus) {
-    WorkspaceSummary workspace = visibleStack(org, project, stack);
+    StackSummary workspace = visibleStack(org, project, stack);
     int page = requestedPage == null ? 1 : requestedPage;
     if (page < 1) {
       throw new BadRequestException("page must be positive");
@@ -196,11 +200,10 @@ public class WorkspacesResource {
     }
   }
 
-  private WorkspaceSummary visibleStack(String org, String project, String stack) {
+  private StackSummary visibleStack(String org, String project, String stack) {
     UUID userId = currentPrincipal.get().userId();
-    return workspaceListFinder.findVisibleToUser(userId, org, project).stream()
-        .filter(candidate -> candidate.stackName().equals(stack))
-        .findFirst()
+    return stackListFinder
+        .findVisibleToUser(userId, org, project, stack)
         .orElseThrow(NotFoundException::new);
   }
 

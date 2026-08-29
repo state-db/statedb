@@ -11,12 +11,16 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import app.statedb.persistence.identity.OrgMember;
 import app.statedb.persistence.identity.Organization;
 import app.statedb.persistence.identity.User;
+import app.statedb.persistence.policy.PolicyGrant;
+import app.statedb.persistence.stack.StackCreator;
+import app.statedb.persistence.stack.StackRef;
 import io.quarkus.narayana.jta.QuarkusTransaction;
 import io.quarkus.test.common.QuarkusTestResource;
 import io.quarkus.test.junit.QuarkusTest;
 import io.quarkus.test.junit.TestProfile;
 import io.quarkus.test.oidc.server.OidcWiremockTestResource;
 import io.restassured.http.Cookie;
+import jakarta.inject.Inject;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -31,6 +35,8 @@ import org.junit.jupiter.api.Test;
 class OrganizationMembersResourceTest {
   private static final String ORG = "members-resource-org";
   private static final String OTHER_ORG = "members-resource-other-org";
+
+  @Inject StackCreator stackCreator;
 
   @BeforeEach
   void seedOrganizations() {
@@ -208,6 +214,47 @@ class OrganizationMembersResourceTest {
         .body("find { it.id == '" + orgId + "' }.members", is(1));
   }
 
+  @Test
+  void listsAllGuestGrantsFromThisOrganizationOnly() {
+    Cookie session = ownerSession();
+    UUID guestId = candidate("granted-guest", "granted-guest@example.com");
+    String path = "/api/orgs/" + ORG + "/members";
+
+    given()
+        .cookie(session.getName(), session.getValue())
+        .contentType("application/json")
+        .body(Map.of("userId", guestId, "role", "guest"))
+        .when()
+        .post(path)
+        .then()
+        .statusCode(200)
+        .body("grants.size()", is(0));
+
+    QuarkusTransaction.requiringNew()
+        .run(
+            () -> {
+              Organization org = Organization.<Organization>find("name", ORG).firstResult();
+              Organization other = Organization.<Organization>find("name", OTHER_ORG).firstResult();
+              StackRef app = stackCreator.create(org.id, org.name, "apps", "prod", Map.of());
+              StackRef otherStack =
+                  stackCreator.create(other.id, other.name, "apps", "prod", Map.of());
+              grant(org.id, guestId, app.stackId(), "StackReadResourcePolicy");
+              grant(org.id, guestId, app.stackId(), "StackWriteResourcePolicy");
+              grant(other.id, guestId, otherStack.stackId(), "StackReadResourcePolicy");
+            });
+
+    given()
+        .cookie(session.getName(), session.getValue())
+        .when()
+        .get(path)
+        .then()
+        .statusCode(200)
+        .body("find { it.userId == '" + guestId + "' }.grants.size()", is(2))
+        .body(
+            "find { it.userId == '" + guestId + "' }.grants.project.unique()", is(List.of("apps")))
+        .body("find { it.userId == '" + guestId + "' }.grants.stack.unique()", is(List.of("prod")));
+  }
+
   private static Cookie ownerSession() {
     OidcConsoleSessionFixture.seedProvider();
     Cookie session = OidcConsoleSessionFixture.login();
@@ -258,5 +305,14 @@ class OrganizationMembersResourceTest {
     org.name = name;
     org.displayName = name;
     org.persistAndFlush();
+  }
+
+  private static void grant(UUID orgId, UUID userId, UUID stackId, String templateId) {
+    PolicyGrant grant = new PolicyGrant();
+    grant.orgId = orgId;
+    grant.principalUserId = userId;
+    grant.resourceStackId = stackId;
+    grant.templateId = templateId;
+    grant.persistAndFlush();
   }
 }

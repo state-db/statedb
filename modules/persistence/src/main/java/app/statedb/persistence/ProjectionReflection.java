@@ -2,11 +2,13 @@ package app.statedb.persistence;
 
 import app.statedb.persistence.auth.AuthenticatedPrincipal;
 import app.statedb.persistence.identity.OrgMembershipView;
+import app.statedb.persistence.identity.OrganizationAggregateCount;
 import app.statedb.persistence.identity.ServiceAccountView;
 import app.statedb.persistence.identity.UserOrgMembershipView;
 import app.statedb.persistence.operations.ActiveLockView;
 import app.statedb.persistence.operations.CompactionJobView;
 import app.statedb.persistence.policy.GrantLink;
+import app.statedb.persistence.policy.MemberStackGrantView;
 import app.statedb.persistence.stack.SnapshotResourceCount;
 import app.statedb.persistence.stack.SnapshotRetentionRow;
 import app.statedb.persistence.stack.StackRef;
@@ -30,7 +32,9 @@ import io.quarkus.runtime.annotations.RegisterForReflection;
       CompactionJobView.class,
       GrantLink.class,
       LineageSnapshotVersion.class,
+      MemberStackGrantView.class,
       OrgMembershipView.class,
+      OrganizationAggregateCount.class,
       ServiceAccountView.class,
       SnapshotResourceCount.class,
       SnapshotRetentionRow.class,

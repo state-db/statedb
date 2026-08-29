@@ -106,6 +106,7 @@ class StackSharingVisibilityTest {
 
               stackCreator.create(acmeId, ACME, PROJECT, INTERNAL_STACK, Map.of());
               StackRef prv = stackCreator.create(acmeId, ACME, PROJECT, PRIVATE_STACK, Map.of());
+              stackCreator.create(otherId, OTHER, PROJECT, INTERNAL_STACK, Map.of());
               Stack secrets = Stack.findById(prv.stackId());
               secrets.visibility = Stack.VISIBILITY_PRIVATE;
             });
@@ -145,6 +146,21 @@ class StackSharingVisibilityTest {
     // bare guest sees nothing
     assertEquals(Set.of(), listedAcmeStacks(bareGuestId));
     assertEquals(Set.of(), listedAcmeStacks(outsiderId));
+  }
+
+  @Test
+  void targetedLookupPreservesVisibilityTenantAndExactNameSemantics() {
+    assertTrue(targetedVisible(ownerId, ACME, PROJECT, INTERNAL_STACK));
+    assertTrue(targetedVisible(ownerId, ACME, PROJECT, PRIVATE_STACK));
+    assertTrue(targetedVisible(memberId, ACME, PROJECT, INTERNAL_STACK));
+    assertFalse(targetedVisible(memberId, ACME, PROJECT, PRIVATE_STACK));
+    assertTrue(targetedVisible(viewerId, ACME, PROJECT, PRIVATE_STACK));
+    assertTrue(targetedVisible(guestId, ACME, PROJECT, INTERNAL_STACK));
+    assertFalse(targetedVisible(bareGuestId, ACME, PROJECT, INTERNAL_STACK));
+    assertFalse(targetedVisible(outsiderId, ACME, PROJECT, INTERNAL_STACK));
+    assertFalse(targetedVisible(ownerId, OTHER, PROJECT, INTERNAL_STACK));
+    assertFalse(targetedVisible(ownerId, ACME, "missing-project", INTERNAL_STACK));
+    assertFalse(targetedVisible(ownerId, ACME, PROJECT, "App"));
   }
 
   // The invariant of design/stack-sharing.md §3: for every (principal, stack), listed == PDP
@@ -271,6 +287,11 @@ class StackSharingVisibilityTest {
               OrgMember.Role role = roleResolver.resolve(p, acmeId).orElse(null);
               return authorizer.authorize(p, role, action, resource).allowed();
             });
+  }
+
+  private boolean targetedVisible(UUID userId, String org, String project, String stack) {
+    return QuarkusTransaction.requiringNew()
+        .call(() -> stackListFinder.findVisibleToUser(userId, org, project, stack).isPresent());
   }
 
   private boolean decideOnOrg(AuthenticatedPrincipal p, String action) {
