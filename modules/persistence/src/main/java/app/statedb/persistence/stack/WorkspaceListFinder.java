@@ -6,7 +6,6 @@ import app.statedb.persistence.lock.StackLock;
 import app.statedb.persistence.update.StackUpdate;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
-import java.time.Instant;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
@@ -173,9 +172,8 @@ public class WorkspaceListFinder {
   }
 
   private Map<UUID, WorkspaceSummary.Lock> liveLocks(List<UUID> stackIds) {
-    Instant now = Instant.now();
     Map<UUID, WorkspaceSummary.Lock> locks = new HashMap<>();
-    StackLock.<StackLock>find("stackId in ?1 and expiresAt > ?2", stackIds, now)
+    StackLock.<StackLock>find("stackId in ?1 and expiresAt > current_timestamp", stackIds)
         .list()
         .forEach(
             l -> locks.put(l.stackId, new WorkspaceSummary.Lock(l.id, l.lockedBy, l.lockedAt)));
