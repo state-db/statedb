@@ -22,6 +22,7 @@ usage: ./dev <command>
   protocol        Pulumi smoke and fault checks in that VM
   native-contract focused native-agent metadata verification in that VM
   notices         regenerate THIRD-PARTY-NOTICES.txt in that VM
+  publish-candidate build, publish, and gate this machine's architecture candidate
   ci-protocol     same protocol task on an ephemeral GitHub-hosted runner
   signoff         run check, then publish signoff/ci for the exact commit
   vm-reset        delete the disposable verification VM
@@ -63,6 +64,53 @@ go_verify() {
 
 release_tooling_verify() {
   ./bin/verify-release-tooling
+}
+
+publish_candidate() {
+  [[ $# -eq 0 ]] || fail "publish-candidate takes no arguments"
+
+  local registry=${STATEDB_REGISTRY:-ghcr.io/state-db/statedb}
+  local candidate_registry=${STATEDB_CANDIDATE_REGISTRY:-${registry}-candidates}
+  local commit commit_short arch candidate digest_json digest immutable
+
+  [[ -z $(git status --porcelain --untracked-files=no) ]] ||
+    fail "the tracked tree has uncommitted changes; a candidate must name a real commit"
+  commit=$(git rev-parse HEAD)
+  [[ $commit =~ ^[0-9a-f]{40}$ ]] || fail "Git returned an invalid full commit: $commit"
+  commit_short=$(git rev-parse --short=7 HEAD)
+  [[ $commit_short =~ ^[0-9a-f]{7,40}$ ]] || fail "Git returned an invalid short commit: $commit_short"
+
+  arch=$(docker version --format '{{.Server.Arch}}')
+  case "$arch" in
+  amd64|arm64) ;;
+  *) fail "unsupported Docker server architecture: $arch" ;;
+  esac
+  candidate="$candidate_registry:$commit-$arch"
+
+  echo "==> building $arch candidate for $commit"
+  ./bin/build-native-app-image state-db:native-ci
+
+  [[ $(git rev-parse HEAD) == "$commit" ]] ||
+    fail "HEAD changed while the candidate was building; refusing to publish"
+  [[ -z $(git status --porcelain --untracked-files=no) ]] ||
+    fail "the tracked tree changed while the candidate was building; refusing to publish"
+
+  docker tag state-db:native-ci "$candidate"
+  docker push "$candidate"
+  digest_json=$(docker buildx imagetools inspect "$candidate" --format '{{json .Manifest.Digest}}')
+  [[ $digest_json =~ ^\"sha256:[0-9a-f]{64}\"$ ]] ||
+    fail "registry returned an invalid candidate digest: $digest_json"
+  digest=${digest_json:1:${#digest_json}-2}
+  immutable="$candidate_registry@$digest"
+
+  # Pull and gate the immutable registry reference. Gating the local tag would not prove that a
+  # remote AWS host can resolve and run the bytes that the registry accepted.
+  docker pull "$immutable"
+  ./bin/release-gate "$immutable" --expect-commit "$commit_short"
+
+  echo "published $candidate"
+  echo "digest    $immutable"
+  echo "note      formal releases still require a successful native.yml run for this commit"
 }
 
 run_isolated_task() {
@@ -268,6 +316,7 @@ case "$command" in
 __guest-bootstrap) guest_bootstrap "$@" ;;
 __isolated-task) run_isolated_task "$@" ;;
 doctor) doctor ;;
+publish-candidate) publish_candidate "$@" ;;
 quick|check|protocol|native-contract)
   [[ $# -eq 0 ]] || fail "$command takes no arguments"
   run_isolated "$command"

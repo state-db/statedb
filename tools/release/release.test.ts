@@ -1,5 +1,12 @@
 import { describe, expect, test } from "bun:test";
-import { compareVersions, parseOptions, ReleaseError, rollChangelog, UsageError } from "./release";
+import {
+  compareVersions,
+  parseOptions,
+  ReleaseError,
+  rollChangelog,
+  UsageError,
+  versionedCloudFormationPutArgs,
+} from "./release";
 
 describe("release inputs", () => {
   test("parses the public CLI", () => {
@@ -24,5 +31,21 @@ describe("release policy", () => {
     expect(rollChangelog(changelog, "0.2.0", "2026-08-22")).toBe(
       "Mention `## Unreleased` here.\n\n## Unreleased\n\n## 0.2.0 — 2026-08-22\n\n### Added\n\n- One thing\n",
     );
+  });
+  test("publishes a versioned CloudFormation object only when absent", () => {
+    expect(versionedCloudFormationPutArgs("installer-bucket", "1.2.3", "/tmp/template.yaml")).toEqual([
+      "s3api",
+      "put-object",
+      "--bucket",
+      "installer-bucket",
+      "--key",
+      "releases/1.2.3/cloudformation.yaml",
+      "--body",
+      "/tmp/template.yaml",
+      "--content-type",
+      "application/yaml",
+      "--if-none-match",
+      "*",
+    ]);
   });
 });

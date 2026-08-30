@@ -73,16 +73,19 @@ metadata-affecting and runs the full contract in the same change.
 ## Drift check
 
 The authoritative check runs the comprehensive suite on the mise-pinned Temurin JDK, then re-runs
-`app.statedb.app.auth.*Test` in a Surefire fork of the digest-pinned Mandrel builder's JVM with the tracing agent attached
+`app.statedb.app.auth.*Test` and `DatabaseCredentialsProviderTest` in a Surefire fork of the
+digest-pinned Mandrel builder's JVM with the tracing agent attached
 (`-Pnative-agent-tests`). At `verify`, `bin/check-native-metadata-drift` merges the agent output,
 canonicalizes it, keeps `com.cedarpolicy.*` observations plus exact production resources, and diffs
 against `modules/app/src/test/native-image-agent-reviewed/reachability-metadata.json`. Any addition
 or removal fails the build. `./dev native-contract` runs it locally; the
 `native-image-contract` skill reviews a workspace diff for the same risks earlier.
 
-- The authorization tests are the traced workload: they reach all 21 Cedar types in 3:37, where the
+- The authorization tests are the main traced workload: they reach all 21 Cedar types in 3:37, where the
   whole suite takes 27:00 and observes only types Quarkus derives from the Jandex index. A broader
-  workload would also make the baseline sensitive to unrelated test edits.
+  workload would also make the baseline sensitive to unrelated test edits. The focused database
+  credential test additionally exercises the production ECS credential reader and AWS signer. The
+  reader parses a Jackson tree, so it does not introduce a reflectively constructed application DTO.
 - Removals fail as loudly as additions — that is how the check notices a call path that stopped
   reaching Cedar.
 - Canonicalization sorts and deduplicates arrays of objects only. `parameterTypes` and proxy
@@ -147,5 +150,10 @@ produces them.
 `native.yml` is dispatched on demand because a run costs three native compilations. Consequence:
 nothing rebuilds the digest-pinned base images on its own, and a released image stops receiving
 base-image fixes until a rebuild is dispatched — a manual step in the release cadence.
+
+`./dev publish-candidate` provides a deliberately manual, single-architecture path for testing a
+registry pull on the current Docker server architecture. It gates the immutable reference after
+the registry round trip; it is not release evidence and cannot replace a successful `native.yml`
+run.
 
 `native.yml` and `bin/release` own the rest; see [`release.md`](./release.md).

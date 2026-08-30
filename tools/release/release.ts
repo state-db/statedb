@@ -2,12 +2,14 @@
 import { spawnSync } from "node:child_process";
 import {
   existsSync,
+  mkdtempSync,
   readFileSync,
   readdirSync,
   renameSync,
   rmSync,
   writeFileSync,
 } from "node:fs";
+import { tmpdir } from "node:os";
 import { resolve } from "node:path";
 
 export type Mode = "release" | "dry-run" | "rehearse";
@@ -15,6 +17,7 @@ export type Options = { mode: Mode; version?: string };
 const ROOT = resolve(import.meta.dir, "../..");
 const REGISTRY = process.env.STATEDB_REGISTRY ?? "ghcr.io/state-db/statedb";
 const CANDIDATES = process.env.STATEDB_CANDIDATE_REGISTRY ?? `${REGISTRY}-candidates`;
+const CFN_BUCKET = process.env.STATEDB_CFN_BUCKET;
 const SEMVER = /^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$/;
 const DIGEST = /^sha256:[0-9a-f]{64}$/;
 export class ReleaseError extends Error {}
@@ -92,6 +95,28 @@ export function rollChangelog(changelog: string, version: string, date: string):
   }
   return changelog.replace(/^## Unreleased$/m, `## Unreleased\n\n## ${version} — ${date}`);
 }
+
+export function versionedCloudFormationPutArgs(
+  bucket: string,
+  version: string,
+  artifact: string,
+): string[] {
+  versionParts(version);
+  return [
+    "s3api",
+    "put-object",
+    "--bucket",
+    bucket,
+    "--key",
+    `releases/${version}/cloudformation.yaml`,
+    "--body",
+    artifact,
+    "--content-type",
+    "application/yaml",
+    "--if-none-match",
+    "*",
+  ];
+}
 function changelogNotes(): string {
   const lines = readFileSync(resolve(ROOT, "CHANGELOG.md"), "utf8").split("\n");
   const start = lines.indexOf("## Unreleased");
@@ -150,6 +175,7 @@ export function release(options: Options) {
   let localTagCreated = false;
   let tagPublished = false;
   let completedPhase = "preflight";
+  let releaseArtifacts: string | undefined;
   let version = options.version ?? "unknown";
   let tag = "";
 
@@ -170,6 +196,14 @@ export function release(options: Options) {
     for (const tool of ["docker", "git", "gh", "cosign"]) {
       if (!Bun.which(tool)) {
         throw new ReleaseError(`${tool} is not on PATH`);
+      }
+    }
+    if (!dryRun) {
+      if (!Bun.which("aws")) {
+        throw new ReleaseError("aws is not on PATH");
+      }
+      if (!CFN_BUCKET) {
+        throw new ReleaseError("STATEDB_CFN_BUCKET is required for CloudFormation publishing");
       }
     }
     command("docker", ["buildx", "version"], { capture: true });
@@ -380,6 +414,12 @@ export function release(options: Options) {
       );
     }
     note(`digest ${digest}`);
+    releaseArtifacts = mkdtempSync(resolve(tmpdir(), "statedb-release-artifacts-"));
+    const cloudFormationArtifact = resolve(
+      releaseArtifacts,
+      `state-db-${version}-cloudformation.yaml`,
+    );
+    command("bin/package-aws-installer", [version, digest, cloudFormationArtifact]);
     // Atomic means main advancing also prevents the release tag from appearing remotely.
     command("git", ["push", "--atomic", "origin", tag, `${commitFull}:refs/heads/main`]);
     tagPublished = true;
@@ -399,6 +439,9 @@ export function release(options: Options) {
 
     command("cosign", ["sign", "--yes", `${REGISTRY}@${digest}`]);
     completedPhase = "image signing";
+
+    command("aws", versionedCloudFormationPutArgs(CFN_BUCKET!, version, cloudFormationArtifact));
+    completedPhase = "versioned CloudFormation publication";
 
     command("docker", [
       "buildx",
@@ -424,11 +467,20 @@ export function release(options: Options) {
         "-",
         "--verify-tag",
         evidence.javaSbom,
+        cloudFormationArtifact,
         ...evidence.assets,
       ],
       { input: `${notes}\n` },
     );
     completedPhase = "GitHub Release publication";
+
+    command("aws", [
+      "s3",
+      "cp",
+      `s3://${CFN_BUCKET}/releases/${version}/cloudformation.yaml`,
+      `s3://${CFN_BUCKET}/releases/latest/cloudformation.yaml`,
+    ]);
+    completedPhase = "latest CloudFormation promotion";
 
     step("Rolling the changelog and .version");
     const [major, minorNumber] = minor.split(".").map(BigInt);
@@ -459,6 +511,9 @@ export function release(options: Options) {
     }
     throw new ReleaseError(detail, { cause: error });
   } finally {
+    if (releaseArtifacts) {
+      rmSync(releaseArtifacts, { recursive: true, force: true });
+    }
     if (localTagCreated && !tagPublished) {
       command("git", ["tag", "-d", tag], { capture: true, allowFailure: true });
     }

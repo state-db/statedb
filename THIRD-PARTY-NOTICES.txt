@@ -26,14 +26,23 @@ the appendix; the license texts of all non-Apache components are reproduced
 in the next section.
 
 
-Lists of 238 third-party dependencies.
+Lists of 247 third-party dependencies.
      (Apache License 2.0) Agroal API (io.agroal:agroal-api:3.2.1 - https://github.com/agroal)
      (Apache License 2.0) Agroal Connection Pool (io.agroal:agroal-pool:3.2.1 - https://github.com/agroal)
      (Apache License 2.0) Agroal Narayana Integration (io.agroal:agroal-narayana:3.2.1 - https://github.com/agroal)
      (BSD 3-Clause License) Angus Activation Registries (org.eclipse.angus:angus-activation:2.0.3 - https://github.com/eclipse-ee4j/angus-activation/angus-activation)
      (BSD 3-Clause License) ANTLR 4 Runtime (org.antlr:antlr4-runtime:4.13.2 - https://www.antlr.org/antlr4-runtime/)
-     (Apache License 2.0) ArC - Runtime (io.quarkus.arc:arc:3.38.0 - https://github.com/quarkusio/quarkus)
+     (Apache License 2.0) ArC - Runtime (io.quarkus.arc:arc:3.38.3 - https://github.com/quarkusio/quarkus)
      (BSD 3-Clause License) asm (org.ow2.asm:asm:9.10.1 - http://asm.ow2.io/)
+     (Apache License 2.0) AWS Java SDK :: Annotations (software.amazon.awssdk:annotations:2.54.7 - https://aws.amazon.com/sdkforjava/core/annotations)
+     (Apache License 2.0) AWS Java SDK :: Checksums (software.amazon.awssdk:checksums:2.54.7 - https://aws.amazon.com/sdkforjava)
+     (Apache License 2.0) AWS Java SDK :: Checksums SPI (software.amazon.awssdk:checksums-spi:2.54.7 - https://aws.amazon.com/sdkforjava)
+     (Apache License 2.0) AWS Java SDK :: HTTP Auth AWS (software.amazon.awssdk:http-auth-aws:2.54.7 - https://aws.amazon.com/sdkforjava)
+     (Apache License 2.0) AWS Java SDK :: HTTP Auth SPI (software.amazon.awssdk:http-auth-spi:2.54.7 - https://aws.amazon.com/sdkforjava)
+     (Apache License 2.0) AWS Java SDK :: HTTP Client Interface (software.amazon.awssdk:http-client-spi:2.54.7 - https://aws.amazon.com/sdkforjava/http-client-spi)
+     (Apache License 2.0) AWS Java SDK :: Identity SPI (software.amazon.awssdk:identity-spi:2.54.7 - https://aws.amazon.com/sdkforjava)
+     (Apache License 2.0) AWS Java SDK :: Metrics SPI (software.amazon.awssdk:metrics-spi:2.54.7 - https://aws.amazon.com/sdkforjava/core/metrics-spi)
+     (Apache License 2.0) AWS Java SDK :: Utilities (software.amazon.awssdk:utils:2.54.7 - https://aws.amazon.com/sdkforjava/utils)
      (Apache License 2.0) Brotli4j (com.aayushatharva.brotli4j:brotli4j:1.23.0 - https://github.com/hyperxpro/Brotli4j/brotli4j)
      (Apache License 2.0) Brotli4j (com.aayushatharva.brotli4j:native-linux-aarch64:1.23.0 - https://github.com/hyperxpro/Brotli4j/natives/native-linux-aarch64)
      (Apache License 2.0) Brotli4j (com.aayushatharva.brotli4j:native-linux-x86_64:1.23.0 - https://github.com/hyperxpro/Brotli4j/natives/native-linux-x86_64)
@@ -101,21 +110,21 @@ Lists of 238 third-party dependencies.
      (Apache License 2.0) MicroProfile JWT Auth API (org.eclipse.microprofile.jwt:microprofile-jwt-auth-api:2.1 - https://github.com/eclipse/microprofile-jwt-auth/microprofile-jwt-auth-api)
      (Apache License 2.0) Narayana: ArjunaJTA narayana-jta (org.jboss.narayana.jta:narayana-jta:7.3.4.Final - https://narayana.io)
      (Apache License 2.0) Narayana: ArjunaJTS integration (org.jboss.narayana.jts:narayana-jts-integration:7.3.4.Final - https://narayana.io)
-     (Apache License 2.0) Netty/Buffer (io.netty:netty-buffer:4.1.136.Final - https://netty.io/netty-buffer/)
-     (Apache License 2.0) Netty/Codec (io.netty:netty-codec:4.1.136.Final - https://netty.io/netty-codec/)
-     (Apache License 2.0) Netty/Codec/DNS (io.netty:netty-codec-dns:4.1.136.Final - https://netty.io/netty-codec-dns/)
-     (Apache License 2.0) Netty/Codec/HAProxy (io.netty:netty-codec-haproxy:4.1.136.Final - https://netty.io/netty-codec-haproxy/)
-     (Apache License 2.0) Netty/Codec/HTTP (io.netty:netty-codec-http:4.1.136.Final - https://netty.io/netty-codec-http/)
-     (Apache License 2.0) Netty/Codec/HTTP2 (io.netty:netty-codec-http2:4.1.136.Final - https://netty.io/netty-codec-http2/)
-     (Apache License 2.0) Netty/Codec/Socks (io.netty:netty-codec-socks:4.1.136.Final - https://netty.io/netty-codec-socks/)
-     (Apache License 2.0) Netty/Common (io.netty:netty-common:4.1.136.Final - https://netty.io/netty-common/)
-     (Apache License 2.0) Netty/Handler (io.netty:netty-handler:4.1.136.Final - https://netty.io/netty-handler/)
-     (Apache License 2.0) Netty/Handler/Proxy (io.netty:netty-handler-proxy:4.1.136.Final - https://netty.io/netty-handler-proxy/)
-     (Apache License 2.0) Netty/Resolver (io.netty:netty-resolver:4.1.136.Final - https://netty.io/netty-resolver/)
-     (Apache License 2.0) Netty/Resolver/DNS (io.netty:netty-resolver-dns:4.1.136.Final - https://netty.io/netty-resolver-dns/)
-     (Apache License 2.0) Netty/TomcatNative [OpenSSL - Classes] (io.netty:netty-tcnative-classes:2.0.78.Final - https://github.com/netty/netty-tcnative/netty-tcnative-classes/)
-     (Apache License 2.0) Netty/Transport (io.netty:netty-transport:4.1.136.Final - https://netty.io/netty-transport/)
-     (Apache License 2.0) Netty/Transport/Native/Unix/Common (io.netty:netty-transport-native-unix-common:4.1.136.Final - https://netty.io/netty-transport-native-unix-common/)
+     (Apache License 2.0) Netty/Buffer (io.netty:netty-buffer:4.1.137.Final - https://netty.io/netty-buffer/)
+     (Apache License 2.0) Netty/Codec (io.netty:netty-codec:4.1.137.Final - https://netty.io/netty-codec/)
+     (Apache License 2.0) Netty/Codec/DNS (io.netty:netty-codec-dns:4.1.137.Final - https://netty.io/netty-codec-dns/)
+     (Apache License 2.0) Netty/Codec/HAProxy (io.netty:netty-codec-haproxy:4.1.137.Final - https://netty.io/netty-codec-haproxy/)
+     (Apache License 2.0) Netty/Codec/HTTP (io.netty:netty-codec-http:4.1.137.Final - https://netty.io/netty-codec-http/)
+     (Apache License 2.0) Netty/Codec/HTTP2 (io.netty:netty-codec-http2:4.1.137.Final - https://netty.io/netty-codec-http2/)
+     (Apache License 2.0) Netty/Codec/Socks (io.netty:netty-codec-socks:4.1.137.Final - https://netty.io/netty-codec-socks/)
+     (Apache License 2.0) Netty/Common (io.netty:netty-common:4.1.137.Final - https://netty.io/netty-common/)
+     (Apache License 2.0) Netty/Handler (io.netty:netty-handler:4.1.137.Final - https://netty.io/netty-handler/)
+     (Apache License 2.0) Netty/Handler/Proxy (io.netty:netty-handler-proxy:4.1.137.Final - https://netty.io/netty-handler-proxy/)
+     (Apache License 2.0) Netty/Resolver (io.netty:netty-resolver:4.1.137.Final - https://netty.io/netty-resolver/)
+     (Apache License 2.0) Netty/Resolver/DNS (io.netty:netty-resolver-dns:4.1.137.Final - https://netty.io/netty-resolver-dns/)
+     (Apache License 2.0) Netty/TomcatNative [OpenSSL - Classes] (io.netty:netty-tcnative-classes:2.0.81.Final - https://github.com/netty/netty-tcnative/netty-tcnative-classes/)
+     (Apache License 2.0) Netty/Transport (io.netty:netty-transport:4.1.137.Final - https://netty.io/netty-transport/)
+     (Apache License 2.0) Netty/Transport/Native/Unix/Common (io.netty:netty-transport-native-unix-common:4.1.137.Final - https://netty.io/netty-transport-native-unix-common/)
      (Apache License 2.0) OpenTelemetry Instrumentation for Java (io.opentelemetry.instrumentation:opentelemetry-instrumentation-api:2.28.1 - https://github.com/open-telemetry/opentelemetry-java-instrumentation)
      (Apache License 2.0) OpenTelemetry Java (io.opentelemetry:opentelemetry-api:1.62.0 - https://github.com/open-telemetry/opentelemetry-java)
      (Apache License 2.0) OpenTelemetry Java (io.opentelemetry:opentelemetry-api-incubator:1.62.0-alpha - https://github.com/open-telemetry/opentelemetry-java)
@@ -134,71 +143,71 @@ Lists of 238 third-party dependencies.
      (Apache License 2.0) Prometheus Java Span Context Supplier - OpenTelemetry (io.prometheus:simpleclient_tracer_otel:0.16.0 - http://github.com/prometheus/client_java/simpleclient_tracer/simpleclient_tracer_otel)
      (Apache License 2.0) Prometheus Java Span Context Supplier - OpenTelemetry Agent (io.prometheus:simpleclient_tracer_otel_agent:0.16.0 - http://github.com/prometheus/client_java/simpleclient_tracer/simpleclient_tracer_otel_agent)
      (BSD 3-Clause License) Protocol Buffers [Core] (com.google.protobuf:protobuf-java:4.35.0 - https://developers.google.com/protocol-buffers/protobuf-java/)
-     (Apache License 2.0) Quarkus - Agroal - Runtime (io.quarkus:quarkus-agroal:3.38.0 - https://github.com/quarkusio/quarkus)
-     (Apache License 2.0) Quarkus - ArC - Runtime (io.quarkus:quarkus-arc:3.38.0 - https://github.com/quarkusio/quarkus)
-     (Apache License 2.0) Quarkus - Bootstrap - Classloader common utilities (io.quarkus:quarkus-classloader-commons:3.38.0 - https://github.com/quarkusio/quarkus)
-     (Apache License 2.0) Quarkus - Bootstrap - Runner (io.quarkus:quarkus-bootstrap-runner:3.38.0 - https://github.com/quarkusio/quarkus)
-     (Apache License 2.0) Quarkus - Caffeine - Runtime (io.quarkus:quarkus-caffeine:3.38.0 - https://github.com/quarkusio/quarkus)
-     (Apache License 2.0) Quarkus - Configuration - YAML - Runtime (io.quarkus:quarkus-config-yaml:3.38.0 - https://github.com/quarkusio/quarkus)
-     (Apache License 2.0) Quarkus - Core - Runtime (io.quarkus:quarkus-core:3.38.0 - https://github.com/quarkusio/quarkus)
-     (Apache License 2.0) Quarkus - Credentials - Runtime (io.quarkus:quarkus-credentials:3.38.0 - https://github.com/quarkusio/quarkus)
-     (Apache License 2.0) Quarkus - Datasource - Common (io.quarkus:quarkus-datasource-common:3.38.0 - https://github.com/quarkusio/quarkus)
-     (Apache License 2.0) Quarkus - Datasource - Runtime (io.quarkus:quarkus-datasource:3.38.0 - https://github.com/quarkusio/quarkus)
-     (Apache License 2.0) Quarkus - Development mode - SPI (io.quarkus:quarkus-development-mode-spi:3.38.0 - https://github.com/quarkusio/quarkus)
-     (Apache License 2.0) Quarkus - DevServices - Runtime (io.quarkus:quarkus-devservices:3.38.0 - https://github.com/quarkusio/quarkus)
-     (Apache License 2.0) Quarkus - Elytron Security - Common - Runtime (io.quarkus:quarkus-elytron-security-common:3.38.0 - https://github.com/quarkusio/quarkus)
-     (Apache License 2.0) Quarkus - Flyway - Runtime (io.quarkus:quarkus-flyway:3.38.0 - https://github.com/quarkusio/quarkus)
+     (Apache License 2.0) Quarkus - Agroal - Runtime (io.quarkus:quarkus-agroal:3.38.3 - https://github.com/quarkusio/quarkus)
+     (Apache License 2.0) Quarkus - ArC - Runtime (io.quarkus:quarkus-arc:3.38.3 - https://github.com/quarkusio/quarkus)
+     (Apache License 2.0) Quarkus - Bootstrap - Classloader common utilities (io.quarkus:quarkus-classloader-commons:3.38.3 - https://github.com/quarkusio/quarkus)
+     (Apache License 2.0) Quarkus - Bootstrap - Runner (io.quarkus:quarkus-bootstrap-runner:3.38.3 - https://github.com/quarkusio/quarkus)
+     (Apache License 2.0) Quarkus - Caffeine - Runtime (io.quarkus:quarkus-caffeine:3.38.3 - https://github.com/quarkusio/quarkus)
+     (Apache License 2.0) Quarkus - Configuration - YAML - Runtime (io.quarkus:quarkus-config-yaml:3.38.3 - https://github.com/quarkusio/quarkus)
+     (Apache License 2.0) Quarkus - Core - Runtime (io.quarkus:quarkus-core:3.38.3 - https://github.com/quarkusio/quarkus)
+     (Apache License 2.0) Quarkus - Credentials - Runtime (io.quarkus:quarkus-credentials:3.38.3 - https://github.com/quarkusio/quarkus)
+     (Apache License 2.0) Quarkus - Datasource - Common (io.quarkus:quarkus-datasource-common:3.38.3 - https://github.com/quarkusio/quarkus)
+     (Apache License 2.0) Quarkus - Datasource - Runtime (io.quarkus:quarkus-datasource:3.38.3 - https://github.com/quarkusio/quarkus)
+     (Apache License 2.0) Quarkus - Development mode - SPI (io.quarkus:quarkus-development-mode-spi:3.38.3 - https://github.com/quarkusio/quarkus)
+     (Apache License 2.0) Quarkus - DevServices - Runtime (io.quarkus:quarkus-devservices:3.38.3 - https://github.com/quarkusio/quarkus)
+     (Apache License 2.0) Quarkus - Elytron Security - Common - Runtime (io.quarkus:quarkus-elytron-security-common:3.38.3 - https://github.com/quarkusio/quarkus)
+     (Apache License 2.0) Quarkus - Flyway - Runtime (io.quarkus:quarkus-flyway:3.38.3 - https://github.com/quarkusio/quarkus)
      (Apache License 2.0) Quarkus - FS Util (io.quarkus:quarkus-fs-util:1.4.2 - https://quarkus.io/)
-     (Apache License 2.0) Quarkus - Hibernate ORM - Runtime (io.quarkus:quarkus-hibernate-orm:3.38.0 - https://github.com/quarkusio/quarkus)
-     (Apache License 2.0) Quarkus - Hibernate ORM with Panache - Common - Runtime (io.quarkus:quarkus-hibernate-orm-panache-common:3.38.0 - https://github.com/quarkusio/quarkus)
-     (Apache License 2.0) Quarkus - Hibernate ORM with Panache - Runtime (io.quarkus:quarkus-hibernate-orm-panache:3.38.0 - https://github.com/quarkusio/quarkus)
-     (Apache License 2.0) Quarkus - IDE Launcher (io.quarkus:quarkus-ide-launcher:3.38.0 - https://github.com/quarkusio/quarkus)
-     (Apache License 2.0) Quarkus - Jackson - Runtime (io.quarkus:quarkus-jackson:3.38.0 - https://github.com/quarkusio/quarkus)
-     (Apache License 2.0) Quarkus - JDBC - PostgreSQL - Runtime (io.quarkus:quarkus-jdbc-postgresql:3.38.0 - https://github.com/quarkusio/quarkus)
-     (Apache License 2.0) Quarkus - JSON-P - Runtime (io.quarkus:quarkus-jsonp:3.38.0 - https://github.com/quarkusio/quarkus)
-     (Apache License 2.0) Quarkus - Micrometer - Runtime (io.quarkus:quarkus-micrometer:3.38.0 - https://github.com/quarkusio/quarkus)
-     (Apache License 2.0) Quarkus - Micrometer Registry - Prometheus Runtime (io.quarkus:quarkus-micrometer-registry-prometheus:3.38.0 - https://github.com/quarkusio/quarkus)
-     (Apache License 2.0) Quarkus - Mutiny - Runtime (io.quarkus:quarkus-mutiny:3.38.0 - https://github.com/quarkusio/quarkus)
-     (Apache License 2.0) Quarkus - Narayana JTA - Runtime (io.quarkus:quarkus-narayana-jta:3.38.0 - https://github.com/quarkusio/quarkus)
-     (Apache License 2.0) Quarkus - Netty - Runtime (io.quarkus:quarkus-netty:3.38.0 - https://github.com/quarkusio/quarkus)
-     (Apache License 2.0) Quarkus - OpenID Connect Adapter - Runtime (io.quarkus:quarkus-oidc:3.38.0 - https://github.com/quarkusio/quarkus)
-     (Apache License 2.0) Quarkus - OpenID Connect Common - Runtime (io.quarkus:quarkus-oidc-common:3.38.0 - https://github.com/quarkusio/quarkus)
-     (Apache License 2.0) Quarkus - Panache - Common - Runtime (io.quarkus:quarkus-panache-common:3.38.0 - https://github.com/quarkusio/quarkus)
-     (Apache License 2.0) Quarkus - Panache - Hibernate - Common - Runtime (io.quarkus:quarkus-panache-hibernate-common:3.38.0 - https://github.com/quarkusio/quarkus)
-     (Apache License 2.0) Quarkus - Proxy Registry - Runtime (io.quarkus:quarkus-proxy-registry:3.38.0 - https://github.com/quarkusio/quarkus)
-     (Apache License 2.0) Quarkus - Qute - Runtime (io.quarkus:quarkus-qute:3.38.0 - https://github.com/quarkusio/quarkus)
-     (Apache License 2.0) Quarkus - REST - Common - Runtime (io.quarkus:quarkus-rest-common:3.38.0 - https://github.com/quarkusio/quarkus)
-     (Apache License 2.0) Quarkus - REST - Jackson - Runtime (io.quarkus:quarkus-rest-jackson:3.38.0 - https://github.com/quarkusio/quarkus)
-     (Apache License 2.0) Quarkus - REST - Jackson Common Bits - Runtime (io.quarkus:quarkus-rest-jackson-common:3.38.0 - https://github.com/quarkusio/quarkus)
-     (Apache License 2.0) Quarkus - REST - Runtime (io.quarkus:quarkus-rest:3.38.0 - https://github.com/quarkusio/quarkus)
-     (Apache License 2.0) Quarkus - Scheduler - API (io.quarkus:quarkus-scheduler-api:3.38.0 - https://github.com/quarkusio/quarkus)
-     (Apache License 2.0) Quarkus - Scheduler - Common (io.quarkus:quarkus-scheduler-common:3.38.0 - https://github.com/quarkusio/quarkus)
-     (Apache License 2.0) Quarkus - Scheduler - Kotlin (io.quarkus:quarkus-scheduler-kotlin:3.38.0 - https://github.com/quarkusio/quarkus)
-     (Apache License 2.0) Quarkus - Scheduler - Runtime (io.quarkus:quarkus-scheduler:3.38.0 - https://github.com/quarkusio/quarkus)
-     (Apache License 2.0) Quarkus - Scheduler - SPI (io.quarkus:quarkus-scheduler-spi:3.38.0 - https://github.com/quarkusio/quarkus)
-     (Apache License 2.0) Quarkus - Security - Runtime (io.quarkus:quarkus-security:3.38.0 - https://github.com/quarkusio/quarkus)
-     (Apache License 2.0) Quarkus - Security - Runtime SPI (io.quarkus:quarkus-security-runtime-spi:3.38.0 - https://github.com/quarkusio/quarkus)
-     (Apache License 2.0) Quarkus - SmallRye Context Propagation - Runtime (io.quarkus:quarkus-smallrye-context-propagation:3.38.0 - https://github.com/quarkusio/quarkus)
-     (Apache License 2.0) Quarkus - SmallRye Health - Runtime (io.quarkus:quarkus-smallrye-health:3.38.0 - https://github.com/quarkusio/quarkus)
-     (Apache License 2.0) Quarkus - SmallRye JWT Token Build - Runtime (io.quarkus:quarkus-smallrye-jwt-build:3.38.0 - https://github.com/quarkusio/quarkus)
-     (Apache License 2.0) Quarkus - TLS Registry - Runtime (io.quarkus:quarkus-tls-registry:3.38.0 - https://github.com/quarkusio/quarkus)
-     (Apache License 2.0) Quarkus - TLS Registry - Runtime SPI (io.quarkus:quarkus-tls-registry-spi:3.38.0 - https://github.com/quarkusio/quarkus)
-     (Apache License 2.0) Quarkus - Transaction Annotations - Runtime (io.quarkus:quarkus-transaction-annotations:3.38.0 - https://github.com/quarkusio/quarkus)
-     (Apache License 2.0) Quarkus - Value Registry (io.quarkus:quarkus-value-registry:3.38.0 - https://github.com/quarkusio/quarkus)
-     (Apache License 2.0) Quarkus - Vert.x - HTTP - Runtime (io.quarkus:quarkus-vertx-http:3.38.0 - https://github.com/quarkusio/quarkus)
-     (Apache License 2.0) Quarkus - Vert.x - Runtime (io.quarkus:quarkus-vertx:3.38.0 - https://github.com/quarkusio/quarkus)
-     (Apache License 2.0) Quarkus - Vert.x Late Bound MDC Provider (io.quarkus:quarkus-vertx-latebound-mdc-provider:3.38.0 - https://github.com/quarkusio/quarkus)
-     (Apache License 2.0) Quarkus - Vert.x Utils (io.quarkus.vertx.utils:quarkus-vertx-utils:3.38.0 - https://quarkus.io)
-     (Apache License 2.0) Quarkus - Virtual Threads - Runtime (io.quarkus:quarkus-virtual-threads:3.38.0 - https://github.com/quarkusio/quarkus)
-     (Apache License 2.0) Quarkus - WebSockets Next - SPI (io.quarkus:quarkus-websockets-next-spi:3.38.0 - https://github.com/quarkusio/quarkus)
+     (Apache License 2.0) Quarkus - Hibernate ORM - Runtime (io.quarkus:quarkus-hibernate-orm:3.38.3 - https://github.com/quarkusio/quarkus)
+     (Apache License 2.0) Quarkus - Hibernate ORM with Panache - Common - Runtime (io.quarkus:quarkus-hibernate-orm-panache-common:3.38.3 - https://github.com/quarkusio/quarkus)
+     (Apache License 2.0) Quarkus - Hibernate ORM with Panache - Runtime (io.quarkus:quarkus-hibernate-orm-panache:3.38.3 - https://github.com/quarkusio/quarkus)
+     (Apache License 2.0) Quarkus - IDE Launcher (io.quarkus:quarkus-ide-launcher:3.38.3 - https://github.com/quarkusio/quarkus)
+     (Apache License 2.0) Quarkus - Jackson - Runtime (io.quarkus:quarkus-jackson:3.38.3 - https://github.com/quarkusio/quarkus)
+     (Apache License 2.0) Quarkus - JDBC - PostgreSQL - Runtime (io.quarkus:quarkus-jdbc-postgresql:3.38.3 - https://github.com/quarkusio/quarkus)
+     (Apache License 2.0) Quarkus - JSON-P - Runtime (io.quarkus:quarkus-jsonp:3.38.3 - https://github.com/quarkusio/quarkus)
+     (Apache License 2.0) Quarkus - Micrometer - Runtime (io.quarkus:quarkus-micrometer:3.38.3 - https://github.com/quarkusio/quarkus)
+     (Apache License 2.0) Quarkus - Micrometer Registry - Prometheus Runtime (io.quarkus:quarkus-micrometer-registry-prometheus:3.38.3 - https://github.com/quarkusio/quarkus)
+     (Apache License 2.0) Quarkus - Mutiny - Runtime (io.quarkus:quarkus-mutiny:3.38.3 - https://github.com/quarkusio/quarkus)
+     (Apache License 2.0) Quarkus - Narayana JTA - Runtime (io.quarkus:quarkus-narayana-jta:3.38.3 - https://github.com/quarkusio/quarkus)
+     (Apache License 2.0) Quarkus - Netty - Runtime (io.quarkus:quarkus-netty:3.38.3 - https://github.com/quarkusio/quarkus)
+     (Apache License 2.0) Quarkus - OpenID Connect Adapter - Runtime (io.quarkus:quarkus-oidc:3.38.3 - https://github.com/quarkusio/quarkus)
+     (Apache License 2.0) Quarkus - OpenID Connect Common - Runtime (io.quarkus:quarkus-oidc-common:3.38.3 - https://github.com/quarkusio/quarkus)
+     (Apache License 2.0) Quarkus - Panache - Common - Runtime (io.quarkus:quarkus-panache-common:3.38.3 - https://github.com/quarkusio/quarkus)
+     (Apache License 2.0) Quarkus - Panache - Hibernate - Common - Runtime (io.quarkus:quarkus-panache-hibernate-common:3.38.3 - https://github.com/quarkusio/quarkus)
+     (Apache License 2.0) Quarkus - Proxy Registry - Runtime (io.quarkus:quarkus-proxy-registry:3.38.3 - https://github.com/quarkusio/quarkus)
+     (Apache License 2.0) Quarkus - Qute - Runtime (io.quarkus:quarkus-qute:3.38.3 - https://github.com/quarkusio/quarkus)
+     (Apache License 2.0) Quarkus - REST - Common - Runtime (io.quarkus:quarkus-rest-common:3.38.3 - https://github.com/quarkusio/quarkus)
+     (Apache License 2.0) Quarkus - REST - Jackson - Runtime (io.quarkus:quarkus-rest-jackson:3.38.3 - https://github.com/quarkusio/quarkus)
+     (Apache License 2.0) Quarkus - REST - Jackson Common Bits - Runtime (io.quarkus:quarkus-rest-jackson-common:3.38.3 - https://github.com/quarkusio/quarkus)
+     (Apache License 2.0) Quarkus - REST - Runtime (io.quarkus:quarkus-rest:3.38.3 - https://github.com/quarkusio/quarkus)
+     (Apache License 2.0) Quarkus - Scheduler - API (io.quarkus:quarkus-scheduler-api:3.38.3 - https://github.com/quarkusio/quarkus)
+     (Apache License 2.0) Quarkus - Scheduler - Common (io.quarkus:quarkus-scheduler-common:3.38.3 - https://github.com/quarkusio/quarkus)
+     (Apache License 2.0) Quarkus - Scheduler - Kotlin (io.quarkus:quarkus-scheduler-kotlin:3.38.3 - https://github.com/quarkusio/quarkus)
+     (Apache License 2.0) Quarkus - Scheduler - Runtime (io.quarkus:quarkus-scheduler:3.38.3 - https://github.com/quarkusio/quarkus)
+     (Apache License 2.0) Quarkus - Scheduler - SPI (io.quarkus:quarkus-scheduler-spi:3.38.3 - https://github.com/quarkusio/quarkus)
+     (Apache License 2.0) Quarkus - Security - Runtime (io.quarkus:quarkus-security:3.38.3 - https://github.com/quarkusio/quarkus)
+     (Apache License 2.0) Quarkus - Security - Runtime SPI (io.quarkus:quarkus-security-runtime-spi:3.38.3 - https://github.com/quarkusio/quarkus)
+     (Apache License 2.0) Quarkus - SmallRye Context Propagation - Runtime (io.quarkus:quarkus-smallrye-context-propagation:3.38.3 - https://github.com/quarkusio/quarkus)
+     (Apache License 2.0) Quarkus - SmallRye Health - Runtime (io.quarkus:quarkus-smallrye-health:3.38.3 - https://github.com/quarkusio/quarkus)
+     (Apache License 2.0) Quarkus - SmallRye JWT Token Build - Runtime (io.quarkus:quarkus-smallrye-jwt-build:3.38.3 - https://github.com/quarkusio/quarkus)
+     (Apache License 2.0) Quarkus - TLS Registry - Runtime (io.quarkus:quarkus-tls-registry:3.38.3 - https://github.com/quarkusio/quarkus)
+     (Apache License 2.0) Quarkus - TLS Registry - Runtime SPI (io.quarkus:quarkus-tls-registry-spi:3.38.3 - https://github.com/quarkusio/quarkus)
+     (Apache License 2.0) Quarkus - Transaction Annotations - Runtime (io.quarkus:quarkus-transaction-annotations:3.38.3 - https://github.com/quarkusio/quarkus)
+     (Apache License 2.0) Quarkus - Value Registry (io.quarkus:quarkus-value-registry:3.38.3 - https://github.com/quarkusio/quarkus)
+     (Apache License 2.0) Quarkus - Vert.x - HTTP - Runtime (io.quarkus:quarkus-vertx-http:3.38.3 - https://github.com/quarkusio/quarkus)
+     (Apache License 2.0) Quarkus - Vert.x - Runtime (io.quarkus:quarkus-vertx:3.38.3 - https://github.com/quarkusio/quarkus)
+     (Apache License 2.0) Quarkus - Vert.x Late Bound MDC Provider (io.quarkus:quarkus-vertx-latebound-mdc-provider:3.38.3 - https://github.com/quarkusio/quarkus)
+     (Apache License 2.0) Quarkus - Vert.x Utils (io.quarkus.vertx.utils:quarkus-vertx-utils:3.38.3 - https://quarkus.io)
+     (Apache License 2.0) Quarkus - Virtual Threads - Runtime (io.quarkus:quarkus-virtual-threads:3.38.3 - https://github.com/quarkusio/quarkus)
+     (Apache License 2.0) Quarkus - WebSockets Next - SPI (io.quarkus:quarkus-websockets-next-spi:3.38.3 - https://github.com/quarkusio/quarkus)
      (Apache License 2.0) Quarkus Security API (io.quarkus.security:quarkus-security:2.3.2 - http://www.jboss.org)
-     (Apache License 2.0) Qute - Core (io.quarkus.qute:qute-core:3.38.0 - https://github.com/quarkusio/quarkus)
+     (Apache License 2.0) Qute - Core (io.quarkus.qute:qute-core:3.38.3 - https://github.com/quarkusio/quarkus)
      (MIT License) reactive-streams (org.reactivestreams:reactive-streams:1.0.4 - http://www.reactive-streams.org/)
-     (Apache License 2.0) RESTEasy Reactive - Common Runtime (io.quarkus.resteasy.reactive:resteasy-reactive-common:3.38.0 - https://github.com/quarkusio/quarkus)
-     (Apache License 2.0) RESTEasy Reactive - Common Types (io.quarkus.resteasy.reactive:resteasy-reactive-common-types:3.38.0 - https://github.com/quarkusio/quarkus)
-     (Apache License 2.0) RESTEasy Reactive - Jackson Support - Runtime (io.quarkus.resteasy.reactive:resteasy-reactive-jackson:3.38.0 - https://github.com/quarkusio/quarkus)
-     (Apache License 2.0) RESTEasy Reactive - Runtime (io.quarkus.resteasy.reactive:resteasy-reactive:3.38.0 - https://github.com/quarkusio/quarkus)
-     (Apache License 2.0) RESTEasy Reactive - Vert.x Support - Runtime (io.quarkus.resteasy.reactive:resteasy-reactive-vertx:3.38.0 - https://github.com/quarkusio/quarkus)
+     (Apache License 2.0) RESTEasy Reactive - Common Runtime (io.quarkus.resteasy.reactive:resteasy-reactive-common:3.38.3 - https://github.com/quarkusio/quarkus)
+     (Apache License 2.0) RESTEasy Reactive - Common Types (io.quarkus.resteasy.reactive:resteasy-reactive-common-types:3.38.3 - https://github.com/quarkusio/quarkus)
+     (Apache License 2.0) RESTEasy Reactive - Jackson Support - Runtime (io.quarkus.resteasy.reactive:resteasy-reactive-jackson:3.38.3 - https://github.com/quarkusio/quarkus)
+     (Apache License 2.0) RESTEasy Reactive - Runtime (io.quarkus.resteasy.reactive:resteasy-reactive:3.38.3 - https://github.com/quarkusio/quarkus)
+     (Apache License 2.0) RESTEasy Reactive - Vert.x Support - Runtime (io.quarkus.resteasy.reactive:resteasy-reactive-vertx:3.38.3 - https://github.com/quarkusio/quarkus)
      (MIT License) SLF4J API Module (org.slf4j:slf4j-api:2.0.18 - http://www.slf4j.org)
      (Apache License 2.0) SLF4J: JBoss Log Manager (org.jboss.slf4j:slf4j-jboss-logmanager:2.0.2.Final - http://www.jboss.org)
      (Apache License 2.0) SmallRye Certificate Generator - Private Key PEM utilities (io.smallrye.certs:smallrye-private-key-pem-parser:0.9.3 - https://github.com/cescoffier/certificate-generator)
@@ -243,16 +252,16 @@ Lists of 238 third-party dependencies.
      (Apache License 2.0) SmallRye: MicroProfile JWT Implementation (io.smallrye:smallrye-jwt:4.6.3 - http://smallrye.io)
      (Apache License 2.0) SmallRye: MicroProfile JWT Implementation Common (io.smallrye:smallrye-jwt-common:4.6.3 - http://smallrye.io)
      (Apache License 2.0) SnakeYAML (org.yaml:snakeyaml:2.6 - https://bitbucket.org/snakeyaml/snakeyaml)
-     (Apache License 2.0) Tink Cryptography API (com.google.crypto.tink:tink:1.18.0 - http://github.com/tink-crypto/tink-java)
+     (Apache License 2.0) Tink Cryptography API (com.google.crypto.tink:tink:1.23.0 - http://github.com/tink-crypto/tink-java)
      (BSD 3-Clause License) TXW2 Runtime (org.glassfish.jaxb:txw2:4.0.9 - https://eclipse-ee4j.github.io/jaxb-ri/)
-     (Apache License 2.0) (Eclipse Public License 1.0) Vert.x Auth Common (io.vertx:vertx-auth-common:4.5.30 - https://github.com/vert-x3/vertx-parent/vertx-ext/vertx-ext-parent/vertx-auth-parent/vertx-auth-common)
-     (Apache License 2.0) (Eclipse Public License 1.0) Vert.x Bridge Common (io.vertx:vertx-bridge-common:4.5.30 - https://github.com/vert-x3/vertx-parent/vertx-ext/vertx-ext-parent/vertx-bridge-common)
-     (Apache License 2.0) (Eclipse Public License 1.0) Vert.x Codegen (io.vertx:vertx-codegen:4.5.30 - https://github.com/vert-x3/vertx-parent/vertx-codegen)
-     (Apache License 2.0) (Eclipse Public License 2.0) Vert.x Core (io.vertx:vertx-core:4.5.30 - https://github.com/vert-x3/vertx-parent/vertx-core)
-     (Apache License 2.0) (Eclipse Public License 1.0) Vert.x URI Template (io.vertx:vertx-uri-template:4.5.30 - https://github.com/vert-x3/vertx-parent/vertx-ext/vertx-ext-parent/vertx-uri-template)
-     (Apache License 2.0) (Eclipse Public License 2.0) Vert.x Web (io.vertx:vertx-web:4.5.30 - https://github.com/vert-x3/vertx-parent/vertx-ext/vertx-ext-parent/vertx-web-parent/vertx-web)
-     (Apache License 2.0) (Eclipse Public License 1.0) Vert.x Web Client (io.vertx:vertx-web-client:4.5.30 - https://github.com/vert-x3/vertx-parent/vertx-ext/vertx-ext-parent/vertx-web-parent/vertx-web-client)
-     (Apache License 2.0) (Eclipse Public License 1.0) Vert.x Web Common (io.vertx:vertx-web-common:4.5.30 - https://github.com/vert-x3/vertx-parent/vertx-ext/vertx-ext-parent/vertx-web-parent/vertx-web-common)
+     (Apache License 2.0) (Eclipse Public License 1.0) Vert.x Auth Common (io.vertx:vertx-auth-common:4.5.32 - https://github.com/vert-x3/vertx-parent/vertx-ext/vertx-ext-parent/vertx-auth-parent/vertx-auth-common)
+     (Apache License 2.0) (Eclipse Public License 1.0) Vert.x Bridge Common (io.vertx:vertx-bridge-common:4.5.32 - https://github.com/vert-x3/vertx-parent/vertx-ext/vertx-ext-parent/vertx-bridge-common)
+     (Apache License 2.0) (Eclipse Public License 1.0) Vert.x Codegen (io.vertx:vertx-codegen:4.5.32 - https://github.com/vert-x3/vertx-parent/vertx-codegen)
+     (Apache License 2.0) (Eclipse Public License 2.0) Vert.x Core (io.vertx:vertx-core:4.5.32 - https://github.com/vert-x3/vertx-parent/vertx-core)
+     (Apache License 2.0) (Eclipse Public License 1.0) Vert.x URI Template (io.vertx:vertx-uri-template:4.5.32 - https://github.com/vert-x3/vertx-parent/vertx-ext/vertx-ext-parent/vertx-uri-template)
+     (Apache License 2.0) (Eclipse Public License 2.0) Vert.x Web (io.vertx:vertx-web:4.5.32 - https://github.com/vert-x3/vertx-parent/vertx-ext/vertx-ext-parent/vertx-web-parent/vertx-web)
+     (Apache License 2.0) (Eclipse Public License 1.0) Vert.x Web Client (io.vertx:vertx-web-client:4.5.32 - https://github.com/vert-x3/vertx-parent/vertx-ext/vertx-ext-parent/vertx-web-parent/vertx-web-client)
+     (Apache License 2.0) (Eclipse Public License 1.0) Vert.x Web Common (io.vertx:vertx-web-common:4.5.32 - https://github.com/vert-x3/vertx-parent/vertx-ext/vertx-ext-parent/vertx-web-parent/vertx-web-common)
      (Apache License 2.0) WildFly Elytron - ASN.1 (org.wildfly.security:wildfly-elytron-asn1:2.9.2.Final - https://wildfly-security.github.io/wildfly-elytron/)
      (Apache License 2.0) WildFly Elytron - Base (org.wildfly.security:wildfly-elytron-base:2.9.2.Final - https://wildfly-security.github.io/wildfly-elytron/)
      (Apache License 2.0) WildFly Elytron - Credential (org.wildfly.security:wildfly-elytron-credential:2.9.2.Final - https://wildfly-security.github.io/wildfly-elytron/)
@@ -8782,7 +8791,7 @@ The following packages are bundled in the state-db web console, listed with
 their declared license and the verbatim license/notice files each package
 ships.
 
-87 packages.
+86 packages.
 
 ------------------------------------------------------------------------
 @floating-ui/core@1.8.0
@@ -8889,7 +8898,7 @@ IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
 CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 ------------------------------------------------------------------------
-@radix-ui/number@1.1.2
+@radix-ui/number@1.1.3
 License: MIT
 Homepage: https://radix-ui.com/primitives
 
@@ -8916,7 +8925,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
 ------------------------------------------------------------------------
-@radix-ui/primitive@1.1.5
+@radix-ui/primitive@1.1.7
 License: MIT
 Homepage: https://radix-ui.com/primitives
 
@@ -8943,7 +8952,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
 ------------------------------------------------------------------------
-@radix-ui/react-alert-dialog@1.1.19
+@radix-ui/react-alert-dialog@1.1.23
 License: MIT
 Homepage: https://radix-ui.com/primitives
 
@@ -8970,7 +8979,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
 ------------------------------------------------------------------------
-@radix-ui/react-arrow@1.1.11
+@radix-ui/react-arrow@1.1.15
 License: MIT
 Homepage: https://radix-ui.com/primitives
 
@@ -8997,7 +9006,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
 ------------------------------------------------------------------------
-@radix-ui/react-avatar@1.2.2
+@radix-ui/react-avatar@1.2.6
 License: MIT
 Homepage: https://radix-ui.com/primitives
 
@@ -9024,7 +9033,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
 ------------------------------------------------------------------------
-@radix-ui/react-checkbox@1.3.7
+@radix-ui/react-checkbox@1.3.11
 License: MIT
 Homepage: https://radix-ui.com/primitives
 
@@ -9051,7 +9060,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
 ------------------------------------------------------------------------
-@radix-ui/react-collapsible@1.1.16
+@radix-ui/react-collapsible@1.1.20
 License: MIT
 Homepage: https://radix-ui.com/primitives
 
@@ -9078,7 +9087,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
 ------------------------------------------------------------------------
-@radix-ui/react-collection@1.1.12
+@radix-ui/react-collection@1.1.15
 License: MIT
 Homepage: https://radix-ui.com/primitives
 
@@ -9105,7 +9114,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
 ------------------------------------------------------------------------
-@radix-ui/react-compose-refs@1.1.3
+@radix-ui/react-compose-refs@1.1.5
 License: MIT
 Homepage: https://radix-ui.com/primitives
 
@@ -9132,7 +9141,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
 ------------------------------------------------------------------------
-@radix-ui/react-context@1.2.0
+@radix-ui/react-context@1.2.2
 License: MIT
 Homepage: https://radix-ui.com/primitives
 
@@ -9159,7 +9168,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
 ------------------------------------------------------------------------
-@radix-ui/react-dialog@1.1.19
+@radix-ui/react-dialog@1.1.23
 License: MIT
 Homepage: https://radix-ui.com/primitives
 
@@ -9186,7 +9195,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
 ------------------------------------------------------------------------
-@radix-ui/react-direction@1.1.2
+@radix-ui/react-direction@1.1.4
 License: MIT
 Homepage: https://radix-ui.com/primitives
 
@@ -9213,7 +9222,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
 ------------------------------------------------------------------------
-@radix-ui/react-dismissable-layer@1.1.15
+@radix-ui/react-dismissable-layer@1.1.19
 License: MIT
 Homepage: https://radix-ui.com/primitives
 
@@ -9240,7 +9249,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
 ------------------------------------------------------------------------
-@radix-ui/react-dropdown-menu@2.1.20
+@radix-ui/react-dropdown-menu@2.1.24
 License: MIT
 Homepage: https://radix-ui.com/primitives
 
@@ -9267,7 +9276,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
 ------------------------------------------------------------------------
-@radix-ui/react-focus-guards@1.1.4
+@radix-ui/react-focus-guards@1.1.6
 License: MIT
 Homepage: https://radix-ui.com/primitives
 
@@ -9294,7 +9303,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
 ------------------------------------------------------------------------
-@radix-ui/react-focus-scope@1.1.12
+@radix-ui/react-focus-scope@1.1.16
 License: MIT
 Homepage: https://radix-ui.com/primitives
 
@@ -9321,7 +9330,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
 ------------------------------------------------------------------------
-@radix-ui/react-hover-card@1.1.19
+@radix-ui/react-hover-card@1.1.23
 License: MIT
 Homepage: https://radix-ui.com/primitives
 
@@ -9348,7 +9357,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
 ------------------------------------------------------------------------
-@radix-ui/react-id@1.1.2
+@radix-ui/react-id@1.1.4
 License: MIT
 Homepage: https://radix-ui.com/primitives
 
@@ -9375,7 +9384,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
 ------------------------------------------------------------------------
-@radix-ui/react-label@2.1.11
+@radix-ui/react-label@2.1.15
 License: MIT
 Homepage: https://radix-ui.com/primitives
 
@@ -9402,7 +9411,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
 ------------------------------------------------------------------------
-@radix-ui/react-menu@2.1.20
+@radix-ui/react-menu@2.1.24
 License: MIT
 Homepage: https://radix-ui.com/primitives
 
@@ -9429,7 +9438,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
 ------------------------------------------------------------------------
-@radix-ui/react-popover@1.1.19
+@radix-ui/react-popover@1.1.23
 License: MIT
 Homepage: https://radix-ui.com/primitives
 
@@ -9456,7 +9465,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
 ------------------------------------------------------------------------
-@radix-ui/react-popper@1.3.3
+@radix-ui/react-popper@1.3.7
 License: MIT
 Homepage: https://radix-ui.com/primitives
 
@@ -9483,7 +9492,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
 ------------------------------------------------------------------------
-@radix-ui/react-portal@1.1.13
+@radix-ui/react-portal@1.1.17
 License: MIT
 Homepage: https://radix-ui.com/primitives
 
@@ -9510,7 +9519,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
 ------------------------------------------------------------------------
-@radix-ui/react-presence@1.1.7
+@radix-ui/react-presence@1.1.10
 License: MIT
 Homepage: https://radix-ui.com/primitives
 
@@ -9537,7 +9546,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
 ------------------------------------------------------------------------
-@radix-ui/react-primitive@2.1.7
+@radix-ui/react-primitive@2.1.10
 License: MIT
 Homepage: https://radix-ui.com/primitives
 
@@ -9564,7 +9573,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
 ------------------------------------------------------------------------
-@radix-ui/react-progress@1.1.12
+@radix-ui/react-progress@1.1.16
 License: MIT
 Homepage: https://radix-ui.com/primitives
 
@@ -9591,7 +9600,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
 ------------------------------------------------------------------------
-@radix-ui/react-roving-focus@1.1.15
+@radix-ui/react-roving-focus@1.1.19
 License: MIT
 Homepage: https://radix-ui.com/primitives
 
@@ -9618,7 +9627,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
 ------------------------------------------------------------------------
-@radix-ui/react-scroll-area@1.2.14
+@radix-ui/react-scroll-area@1.2.18
 License: MIT
 Homepage: https://radix-ui.com/primitives
 
@@ -9645,7 +9654,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
 ------------------------------------------------------------------------
-@radix-ui/react-select@2.3.3
+@radix-ui/react-select@2.3.7
 License: MIT
 Homepage: https://radix-ui.com/primitives
 
@@ -9672,7 +9681,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
 ------------------------------------------------------------------------
-@radix-ui/react-separator@1.1.11
+@radix-ui/react-separator@1.1.15
 License: MIT
 Homepage: https://radix-ui.com/primitives
 
@@ -9699,7 +9708,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
 ------------------------------------------------------------------------
-@radix-ui/react-slot@1.2.5
+@radix-ui/react-slot@1.3.3
 License: MIT
 Homepage: https://radix-ui.com/primitives
 
@@ -9726,7 +9735,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
 ------------------------------------------------------------------------
-@radix-ui/react-slot@1.3.0
+@radix-ui/react-switch@1.3.7
 License: MIT
 Homepage: https://radix-ui.com/primitives
 
@@ -9753,7 +9762,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
 ------------------------------------------------------------------------
-@radix-ui/react-switch@1.3.3
+@radix-ui/react-tabs@1.1.21
 License: MIT
 Homepage: https://radix-ui.com/primitives
 
@@ -9780,7 +9789,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
 ------------------------------------------------------------------------
-@radix-ui/react-tabs@1.1.17
+@radix-ui/react-toggle@1.1.18
 License: MIT
 Homepage: https://radix-ui.com/primitives
 
@@ -9807,7 +9816,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
 ------------------------------------------------------------------------
-@radix-ui/react-toggle@1.1.14
+@radix-ui/react-toggle-group@1.1.19
 License: MIT
 Homepage: https://radix-ui.com/primitives
 
@@ -9834,7 +9843,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
 ------------------------------------------------------------------------
-@radix-ui/react-toggle-group@1.1.15
+@radix-ui/react-tooltip@1.2.16
 License: MIT
 Homepage: https://radix-ui.com/primitives
 
@@ -9861,7 +9870,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
 ------------------------------------------------------------------------
-@radix-ui/react-tooltip@1.2.12
+@radix-ui/react-use-callback-ref@1.1.4
 License: MIT
 Homepage: https://radix-ui.com/primitives
 
@@ -9888,7 +9897,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
 ------------------------------------------------------------------------
-@radix-ui/react-use-callback-ref@1.1.2
+@radix-ui/react-use-controllable-state@1.2.6
 License: MIT
 Homepage: https://radix-ui.com/primitives
 
@@ -9915,7 +9924,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
 ------------------------------------------------------------------------
-@radix-ui/react-use-controllable-state@1.2.3
+@radix-ui/react-use-effect-event@0.0.5
 License: MIT
 Homepage: https://radix-ui.com/primitives
 
@@ -9942,7 +9951,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
 ------------------------------------------------------------------------
-@radix-ui/react-use-effect-event@0.0.3
+@radix-ui/react-use-is-hydrated@0.1.3
 License: MIT
 Homepage: https://radix-ui.com/primitives
 
@@ -9969,7 +9978,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
 ------------------------------------------------------------------------
-@radix-ui/react-use-is-hydrated@0.1.1
+@radix-ui/react-use-layout-effect@1.1.4
 License: MIT
 Homepage: https://radix-ui.com/primitives
 
@@ -9996,7 +10005,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
 ------------------------------------------------------------------------
-@radix-ui/react-use-layout-effect@1.1.2
+@radix-ui/react-use-previous@1.1.4
 License: MIT
 Homepage: https://radix-ui.com/primitives
 
@@ -10023,7 +10032,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
 ------------------------------------------------------------------------
-@radix-ui/react-use-previous@1.1.2
+@radix-ui/react-use-rect@1.1.4
 License: MIT
 Homepage: https://radix-ui.com/primitives
 
@@ -10050,7 +10059,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
 ------------------------------------------------------------------------
-@radix-ui/react-use-rect@1.1.2
+@radix-ui/react-use-size@1.1.4
 License: MIT
 Homepage: https://radix-ui.com/primitives
 
@@ -10077,7 +10086,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
 ------------------------------------------------------------------------
-@radix-ui/react-use-size@1.1.2
+@radix-ui/react-visually-hidden@1.2.11
 License: MIT
 Homepage: https://radix-ui.com/primitives
 
@@ -10104,7 +10113,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
 ------------------------------------------------------------------------
-@radix-ui/react-visually-hidden@1.2.7
+@radix-ui/rect@1.1.3
 License: MIT
 Homepage: https://radix-ui.com/primitives
 
@@ -10131,34 +10140,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
 ------------------------------------------------------------------------
-@radix-ui/rect@1.1.2
-License: MIT
-Homepage: https://radix-ui.com/primitives
-
-MIT License
-
-Copyright (c) 2022 WorkOS
-
-Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files (the "Software"), to deal
-in the Software without restriction, including without limitation the rights
-to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
-
-The above copyright notice and this permission notice shall be included in all
-copies or substantial portions of the Software.
-
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-SOFTWARE.
-
-------------------------------------------------------------------------
-@tanstack/history@1.162.0
+@tanstack/history@1.162.1
 License: MIT
 Homepage: https://tanstack.com/router
 
@@ -10185,7 +10167,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
 ------------------------------------------------------------------------
-@tanstack/query-core@5.101.0
+@tanstack/query-core@5.101.4
 License: MIT
 Homepage: https://tanstack.com/query
 
@@ -10212,7 +10194,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
 ------------------------------------------------------------------------
-@tanstack/react-query@5.101.0
+@tanstack/react-query@5.101.4
 License: MIT
 Homepage: https://tanstack.com/query
 
@@ -10239,7 +10221,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
 ------------------------------------------------------------------------
-@tanstack/react-router@1.170.15
+@tanstack/react-router@1.170.31
 License: MIT
 Homepage: https://tanstack.com/router
 
@@ -10320,7 +10302,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
 ------------------------------------------------------------------------
-@tanstack/router-core@1.171.13
+@tanstack/router-core@1.171.26
 License: MIT
 Homepage: https://tanstack.com/router
 
@@ -10401,7 +10383,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
 ------------------------------------------------------------------------
-@types/react@19.2.17
+@types/react@19.2.18
 License: MIT
 Homepage: https://github.com/DefinitelyTyped/DefinitelyTyped/tree/master/types/react
 
@@ -10428,7 +10410,7 @@ MIT License
     SOFTWARE
 
 ------------------------------------------------------------------------
-@types/react-dom@19.2.3
+@types/react-dom@19.2.4
 License: MIT
 Homepage: https://github.com/DefinitelyTyped/DefinitelyTyped/tree/master/types/react-dom
 
@@ -10861,7 +10843,7 @@ OTHER DEALINGS IN THE SOFTWARE.
 For more information, please refer to <http://unlicense.org/>
 
 ------------------------------------------------------------------------
-lucide-react@1.17.0
+lucide-react@1.33.0
 License: ISC
 Homepage: https://lucide.dev
 
@@ -10910,7 +10892,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
 ------------------------------------------------------------------------
-react@19.2.7
+react@19.2.8
 License: MIT
 Homepage: https://react.dev/
 
@@ -10937,7 +10919,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
 ------------------------------------------------------------------------
-react-dom@19.2.7
+react-dom@19.2.8
 License: MIT
 Homepage: https://react.dev/
 
@@ -10964,7 +10946,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
 ------------------------------------------------------------------------
-react-hook-form@7.81.0
+react-hook-form@7.85.0
 License: MIT
 Homepage: https://react-hook-form.com
 
@@ -11077,7 +11059,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
 ------------------------------------------------------------------------
-seroval@1.5.4
+seroval@1.6.3
 License: MIT
 Homepage: https://github.com/lxsmnsyc/seroval/tree/main/packages/seroval
 
@@ -11090,7 +11072,7 @@ The above copyright notice and this permission notice (including the next paragr
 THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 ------------------------------------------------------------------------
-seroval-plugins@1.5.4
+seroval-plugins@1.6.3
 License: MIT
 Homepage: https://github.com/lxsmnsyc/seroval/tree/main/packages/plugins
 
@@ -11103,7 +11085,7 @@ The above copyright notice and this permission notice (including the next paragr
 THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 ------------------------------------------------------------------------
-sonner@2.0.7
+sonner@2.0.8
 License: MIT
 Homepage: https://sonner.emilkowal.ski/
 

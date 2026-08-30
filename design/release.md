@@ -4,9 +4,10 @@ This document defines how state-db versions, builds, verifies, and publishes rel
 
 ## Scope
 
-state-db publishes one artifact:
+state-db publishes these artifacts:
 
 - OCI image: `ghcr.io/state-db/statedb`
+- Digest-pinned AWS CloudFormation template in the release S3 bucket and GitHub Release
 
 The project does not publish Maven artifacts. The Maven reactor remains at
 `0.1.0-SNAPSHOT`; release versions come from Git metadata and `.version`, not from poms.
@@ -166,6 +167,29 @@ The workflow embeds and gates that version in both architectures. Its successful
 gate 1 and publishes the per-architecture candidates used by the release manifest. Ordinary pushes
 and pull requests consume no GitHub Actions minutes.
 
+### Local architecture candidates
+
+For deployment testing that must exercise a real registry pull, a developer can publish the
+current Docker server architecture from a clean tracked tree:
+
+```text
+docker login ghcr.io
+./dev publish-candidate
+```
+
+For GHCR, authenticate Docker as a user with permission to write the candidates package (normally
+a personal access token with `write:packages`; `read:packages` is sufficient for later pulls).
+The command builds the native image, publishes
+`ghcr.io/state-db/statedb-candidates:<full-commit-sha>-<amd64|arm64>`, resolves and validates the
+registry digest, explicitly pulls the immutable digest reference, and runs `bin/release-gate`
+against that reference. It prints both the mutable candidate tag and the immutable
+`ghcr.io/state-db/statedb-candidates@sha256:...` reference.
+
+`STATEDB_REGISTRY` changes the release registry and therefore the default candidates package;
+`STATEDB_CANDIDATE_REGISTRY` overrides the candidates package directly. This local path is for
+testing published bytes, including AWS deployments. It does not produce native build evidence and
+does not satisfy the successful `native.yml` requirement for a formal release.
+
 ### Gate 2: Candidate Image
 
 `bin/release-gate <image>` runs the candidate image and verifies:
@@ -235,11 +259,15 @@ Modes:
    pull it, and repeat the release gate while checking both commit and release version.
 8. Recheck that HEAD, the worktree, and `origin/main` are unchanged, then atomically push the Git
    tag while asserting the expected `main` value.
-9. Copy the gated manifest to `X.Y.Z`, `X.Y`, and `latest`, then sign its digest with `cosign`.
-10. Create the GitHub Release from the changelog section and CI-produced evidence.
-11. Move `CHANGELOG.md`'s `## Unreleased` section under the release heading.
-12. Bump `.version` to the next minor.
-13. Commit and push the changelog/version bump to `main`.
+9. Stamp the gated image digest into the AWS CloudFormation artifact.
+10. Copy the gated manifest to `X.Y.Z`, `X.Y`, and `latest`, then sign its digest with `cosign`.
+11. Publish the immutable versioned CloudFormation object.
+12. Create the GitHub Release from the changelog section and CI-produced evidence, including the
+    CloudFormation artifact.
+13. Promote the versioned CloudFormation object to `releases/latest/cloudformation.yaml`.
+14. Move `CHANGELOG.md`'s `## Unreleased` section under the release heading.
+15. Bump `.version` to the next minor.
+16. Commit and push the changelog/version bump to `main`.
 
 If a failure happens before the tag is pushed, the local tag is removed. The script refuses to
 overwrite an existing `X.Y.Z` image tag with a different digest. After the Git tag is pushed, the

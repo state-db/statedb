@@ -64,6 +64,19 @@ updates:
       web-minor-patch:
         patterns: ["*"]
         update-types: [minor, patch]
+    # @tanstack/react-router is held at an exact version, not a range. 1.170.31
+    # (router-core 1.171.26) breaks the dev bundle under Bun 1.3.14: the HMR
+    # loader initializes load-client to null and the router reads
+    # replaceRouteChunk off it, so the console dies at startup. Production
+    # builds are unaffected, which is why `./dev check` stayed green. 1.170.15
+    # (router-core 1.171.13) is the last good pair. The bug is the Bun/router
+    # interaction, not the router alone — retest and unpin when Bun moves off
+    # 1.3.14 rather than treating this as permanent.
+    ignore:
+      - dependency-name: "@tanstack/react-router"
+        update-types:
+          - "version-update:semver-minor"
+          - "version-update:semver-patch"
 
   # Documentation site — static output, no user data. Lower stakes.
   - package-ecosystem: bun

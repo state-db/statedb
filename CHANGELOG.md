@@ -12,6 +12,8 @@ body.
 - Authenticated `/api/version` endpoint that reports the running build identity.
 - Signed amd64/arm64 native-image releases with Cedar authorization readiness checks, strict
   reachability validation, vulnerability scanning, and Java/container SBOMs.
+- AWS CloudFormation packaging for two ECS Express Mode replicas, encrypted RDS PostgreSQL, and
+  ECS task-role database authentication without a long-lived application password.
 
 ### Changed
 

@@ -123,10 +123,13 @@ statedb:
 "%prod":
   quarkus:
     datasource:
+      credentials-provider: statedb
+      credentials-provider-name: statedb-db-credentials-provider
       jdbc:
         url: ${STATEDB_JDBC_URL}
-      username: ${STATEDB_DB_USER}
-      password: ${STATEDB_DB_PASSWORD}
+        # Recycling exercises credential refresh regularly. RDS IAM tokens only gate a new
+        # connection, so established sessions remain valid after the 15-minute token expires.
+        max-lifetime: 10m
 
 # @TestTransaction wraps the whole test in one JTA tx; on cold-start runs the
 # default 60s ceiling can fire mid-test (Dev Services boot + Flyway + first

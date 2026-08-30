@@ -13,8 +13,12 @@ Production configuration comes from the environment:
 | Variable | Purpose |
 | --- | --- |
 | `STATEDB_JDBC_URL` | JDBC URL of your Postgres database, e.g. `jdbc:postgresql://db:5432/statedb` |
+| `STATEDB_DB_AUTHENTICATION` | `password` (default) or `aws-iam` for RDS IAM database authentication |
 | `STATEDB_DB_USER` | Database user |
-| `STATEDB_DB_PASSWORD` | Database password |
+| `STATEDB_DB_PASSWORD` | Database password; required only with `password` authentication |
+| `STATEDB_DB_HOST` | RDS endpoint; required with `aws-iam` authentication |
+| `STATEDB_DB_PORT` | RDS port for IAM token signing; defaults to `5432` |
+| `STATEDB_DB_REGION` | AWS region; required with `aws-iam` authentication |
 | `STATEDB_SESSION_ENCRYPTION_SECRET` | Encrypts console session cookies. Set it to a stable random value (32+ bytes) so sessions survive restarts and work across replicas. |
 | `STATEDB_LICENSE_PATH` | Preferred mounted offline license path, conventionally `/run/secrets/state-db/license.json`. |
 | `STATEDB_LICENSE` | Inline compact envelope JSON or base64-encoded envelope; ignored when a file path is set. |
@@ -64,6 +68,16 @@ and allowing the mounted file to refresh; no database write is involved.
 - **Backups are Postgres backups.** Your existing `pg_dump` / WAL archiving /
   managed-Postgres snapshot strategy covers all statedb data — state
   checkpoints, history, users, and tokens live in the database.
+
+On ECS, `aws-iam` authentication reads credentials only from the task-role
+credential endpoint and generates a fresh RDS authentication token whenever the
+connection pool requests credentials. Grant the task role `rds-db:connect` for
+the exact database resource and PostgreSQL user; do not put AWS access keys in
+the container. The CloudFormation installer under `deploy/aws` configures this
+path and TLS hostname verification automatically. It can create a minimal,
+CIDR-customizable VPC or use an existing VPC with supplied application and
+database subnets. The existing-network mode does not change gateways, routes,
+endpoints, network ACLs, or DNS settings.
 
 ## Running more than one replica
 
