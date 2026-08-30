@@ -1,5 +1,7 @@
 # state-db storage — task breakdown for implementer models
 
+> Historical migration names in this completed plan describe the pre-release chain. The chain is consolidated into `V001__initial_schema.sql`.
+
 Companion to `storage-options-analysis.md`. Tasks are ordered by
 dependency; T1–T3 are independent of each other, T4–T7 depend as noted. Each is
 sized for one sitting. Authoritative verification goes through `./dev`;

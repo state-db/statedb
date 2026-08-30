@@ -11,7 +11,7 @@ import java.util.regex.Pattern;
  * parse request paths by splitting on {@code /} — a name containing a slash would let two distinct
  * stacks collide on one Cedar entity id (so a policy grant for one would apply to the other) and
  * would desynchronize path parsing from route matching. The {@code *_name_grammar} CHECK
- * constraints (V011) enforce the same regex in the database so no write path can bypass it.
+ * constraints enforce the same regex in the database so no write path can bypass it.
  */
 public final class NameGrammar {
 

@@ -157,7 +157,7 @@ class IdentityConstraintsTest {
     User user = newUser();
     user.persistAndFlush();
 
-    // Account-scoped: an oidc token with an org_id violates api_tokens_org_scope (V010).
+    // Account-scoped: an oidc token with an org_id violates api_tokens_org_scope.
     ApiToken token = new ApiToken();
     token.tokenHash = "sha256:" + "h".repeat(64);
     token.userId = user.id;
@@ -174,7 +174,7 @@ class IdentityConstraintsTest {
     User user = newUser();
     user.persistAndFlush();
 
-    // Org-scoped: a service_account token without an org_id violates api_tokens_org_scope (V010).
+    // Org-scoped: a service_account token without an org_id violates api_tokens_org_scope.
     ApiToken token = new ApiToken();
     token.tokenHash = "sha256:" + "i".repeat(64);
     token.userId = user.id;

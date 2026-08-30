@@ -3,7 +3,8 @@ set -euo pipefail
 
 cd "$(dirname "$0")/.."
 
-bash -n dev bin/build-native-app-image bin/package-aws-installer bin/release bin/release-gate \
+bash -n dev bin/build-native-app-image bin/generate-db-schema bin/package-aws-installer bin/release \
+  bin/release-gate bin/verify-db-schema-generator bin/postgres-images \
   tools/release/dev-publish-candidate.test.sh
 bin/check-aws-installer
 tools/release/dev-publish-candidate.test.sh

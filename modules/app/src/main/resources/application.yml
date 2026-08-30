@@ -47,14 +47,40 @@ quarkus:
     # startup doesn't demand an auth-server-url and the Pulumi surface stays untouched.
     tenant-enabled: false
   datasource:
+    active: true
     db-kind: postgresql
     jdbc:
       metrics:
         # Agroal pool gauges; saturation is otherwise invisible until requests time out.
         enabled: true
   flyway:
+    # StateDbFlywayConfiguration rejects attempts to disable this startup path
+    # or weaken the migration safety settings below.
+    active: true
     migrate-at-start: true
     locations: classpath:db/migration
+    # Image replacement is the complete database upgrade procedure. A task does
+    # not serve traffic until Flyway validates and migrates the shared database.
+    validate-on-migrate: true
+    validate-migration-naming: true
+    clean-disabled: true
+    clean-at-start: false
+    repair-at-start: false
+    baseline-on-migrate: false
+    out-of-order: false
+    ignore-missing-migrations: false
+    ignore-future-migrations: false
+    default-schema: public
+    schemas: public
+    table: flyway_schema_history
+    create-schemas: false
+    # Stop DDL that waits indefinitely behind an application transaction. A
+    # startup statement must finish within the two-minute migration budget.
+    init-sql: "SET lock_timeout = '10s'; SET statement_timeout = '2min'"
+    # Permit one minute of database cold-start delay. The customizer enforces a
+    # five-minute migration-lock wait because Quarkus exposes no Flyway key.
+    connect-retries: 10
+    connect-retries-interval: 6s
   hibernate-orm:
     # Schema is owned by Flyway; Hibernate must never touch DDL.
     database:

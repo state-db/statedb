@@ -1,5 +1,7 @@
 # state-db storage architecture — options analysis
 
+> Historical migration names in this analysis describe the pre-release chain. The chain is consolidated into `V001__initial_schema.sql`.
+
 Scope: how state-db stores per-deploy data (journal, events, snapshots) so a busy
 self-hosted install stays economical, without giving up **per-version state** or
 **console history**. Produced against the 3-hour soak dataset (~3.5 GB, 4 stacks ×

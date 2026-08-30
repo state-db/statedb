@@ -1,0 +1,3 @@
+CREATE OR REPLACE VIEW flyway_nontransactional.flyway_nontransactional_probe_view AS
+SELECT value
+FROM flyway_nontransactional.flyway_nontransactional_probe;

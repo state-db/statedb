@@ -1,0 +1,1 @@
+VACUUM flyway_nontransactional.flyway_nontransactional_probe;

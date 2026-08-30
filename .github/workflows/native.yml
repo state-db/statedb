@@ -18,6 +18,23 @@ on:
         type: string
 
 jobs:
+  postgres-compatibility:
+    name: PostgreSQL ${{ matrix.postgres-version }} migration compatibility
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        postgres-version: ["14", "16", "18"]
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+      - name: Replay the packaged migration chain
+        env:
+          STATEDB_SCHEMA_PG_IMAGE: postgres:${{ matrix.postgres-version }}-alpine
+        run: bin/generate-db-schema --check
+
   cli-battle-tests:
     name: Pulumi compatibility (${{ matrix.pulumi-version }})
     runs-on: ubuntu-latest

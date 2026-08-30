@@ -34,24 +34,8 @@ docker run --mount type=bind,src=/secure/license.json,dst=/run/secrets/state-db/
   -e STATEDB_LICENSE_PATH=/run/secrets/state-db/license.json state-db
 ```
 
-Kubernetes Secret-mounted file example:
-
-```yaml
-env:
-  - name: STATEDB_LICENSE_PATH
-    value: /run/secrets/state-db/license.json
-volumeMounts:
-  - name: state-db-license
-    mountPath: /run/secrets/state-db
-    readOnly: true
-volumes:
-  - name: state-db-license
-    secret:
-      secretName: state-db-license
-```
-
-Create that Secret with a `license.json` key. Rotate it by updating the Secret
-and allowing the mounted file to refresh; no database write is involved.
+Mount the license with the secret-file feature of your container runtime. Rotate
+the file in place. A license rotation does not change the database.
 
 ## Database
 
@@ -69,6 +53,21 @@ and allowing the mounted file to refresh; no database write is involved.
   managed-Postgres snapshot strategy covers all statedb data — state
   checkpoints, history, users, and tokens live in the database.
 
+Use a dedicated database and a dedicated login role. The role does not need to
+own the database or have superuser privileges.
+
+Run these commands as the database owner. Replace the example password before
+you run them:
+
+```sql
+CREATE ROLE statedb LOGIN PASSWORD 'replace-this-password';
+GRANT CONNECT ON DATABASE statedb TO statedb;
+GRANT USAGE, CREATE ON SCHEMA public TO statedb;
+```
+
+Set `STATEDB_DB_USER=statedb`. Flyway creates the application objects, so the
+role owns each object that it must change in a later migration.
+
 On ECS, `aws-iam` authentication reads credentials only from the task-role
 credential endpoint and generates a fresh RDS authentication token whenever the
 connection pool requests credentials. Grant the task role `rds-db:connect` for
@@ -81,20 +80,47 @@ endpoints, network ACLs, or DNS settings.
 
 ## Running more than one replica
 
-statedb is designed to run with multiple replicas behind a load balancer:
+statedb is designed to run with multiple tasks behind a load balancer:
 
-- Flyway migrations serialize across pods via a Postgres advisory lock;
+- Flyway migrations serialize across tasks with a Postgres advisory lock;
   followers find the schema already migrated.
 - Run-once startup work (such as bootstrap provisioning) takes the same kind of
-  advisory lock, so concurrent pods do not race.
-- Update leases live in the database, so locking is correct regardless of which
-  replica serves a request.
+  advisory lock, so concurrent tasks do not race.
+- Update leases live in the database. Thus, each task observes the same lock state.
 
-Set `STATEDB_SESSION_ENCRYPTION_SECRET` explicitly when running more than one
-replica — without it each pod would mint its own key and sessions would bounce.
+Set `STATEDB_SESSION_ENCRYPTION_SECRET` when you run more than one task. All
+tasks must use the same value.
 
 ## Upgrades
 
-Deploy the new version; migrations run at startup before the service accepts
-traffic. With multiple replicas, roll pods as usual — the advisory lock keeps
-concurrent migration attempts safe.
+Replace the image to upgrade statedb. The image contains Flyway and all required
+migrations. Do not add an init container or a separate migration job.
+
+Do not set `QUARKUS_INIT_AND_EXIT`. statedb must remain active after startup and
+serve application traffic from the same task that ran the migration.
+
+The candidate must become ready in less than three minutes. Other new tasks wait
+up to five minutes for the Flyway lock.
+
+Configure the runtime as follows:
+
+- Send readiness checks to `/q/health/ready` on management port `9000`.
+- Keep management port `9000` private to the runtime network.
+- Set the health-check grace period to at least 600 seconds.
+- Keep the old tasks healthy until the new task becomes ready.
+- Enable automatic rollback when a deployment cannot reach a steady state.
+- Give each task at least 10 seconds between `SIGTERM` and `SIGKILL`.
+
+Amazon ECS Express Mode uses a 300-second health-check grace period by default.
+Increase it to 600 seconds for statedb. Express Mode uses canary deployments and
+alarm-based rollback by default.
+
+For a standard ECS rolling service, enable the deployment circuit breaker and
+rollback. Set `minimumHealthyPercent` and `maximumPercent` so ECS starts a new
+task before it stops the last healthy task.
+
+Use expand-only migrations while old and new tasks run together. A migration
+must not remove a column, constraint, or representation that the old image uses.
+
+See the [Amazon ECS Express Mode defaults](https://docs.aws.amazon.com/AmazonECS/latest/developerguide/express-service-work.html)
+and the [Amazon ECS rolling deployment guide](https://docs.aws.amazon.com/AmazonECS/latest/developerguide/deployment-type-ecs.html).

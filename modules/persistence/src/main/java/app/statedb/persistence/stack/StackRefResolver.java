@@ -43,7 +43,7 @@ public class StackRefResolver {
     } catch (NoResultException e) {
       return Optional.empty();
     } catch (NonUniqueResultException e) {
-      // Unreachable under V001/V002 UNIQUE constraints
+      // Unreachable under the stack-tree UNIQUE constraints
       // (organizations.name, projects(org_id,name), stacks(project_id,name)).
       // If it fires, the schema has been tampered with or duplicates were inserted via
       // a path that bypasses the constraints — refuse to guess which row is canonical.

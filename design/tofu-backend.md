@@ -316,10 +316,9 @@ diverge from what every other Tofu backend does and surprise users.
 
 ## Part 3 — Schema
 
-One migration. Use the next free version number when you start (V014 at time
-of writing — check `modules/persistence/src/main/resources/db/migration/`).
-Follow the house style visible in `V002__stack_tree.sql`: comments explain
-invariants, FKs are explicit, no DB-generated UUIDs (app supplies UUIDv7).
+One migration. Use the next free version number when you start. Read
+[`migrations.md`](migrations.md) before you add the migration. Comments explain
+invariants, FKs are explicit, and the application supplies UUIDv7 values.
 
 ```sql
 -- OpenTofu state tables. The tofu_workspaces extension row joins 1:1 to the
