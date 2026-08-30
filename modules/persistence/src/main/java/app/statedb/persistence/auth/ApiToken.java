@@ -28,7 +28,7 @@ public class ApiToken extends BaseEntity {
 
   // Null means all_current_memberships credential scope, currently used by CLI OIDC tokens.
   // Non-null means single_org credential scope, currently used by service-account tokens.
-  // Enforced by the api_tokens_org_scope CHECK constraint (V010).
+  // Enforced by the api_tokens_org_scope CHECK constraint.
   @Column(name = "org_id")
   public UUID orgId;
 

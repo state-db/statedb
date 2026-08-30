@@ -1,0 +1,946 @@
+-- Initial state-db schema for the first stable release.
+--
+-- This migration consolidates the pre-release V001 through V024 history. No
+-- released database depends on those intermediate states. Flyway migrations
+-- are authoritative; design/schema.sql is the generated current-state view.
+
+--
+-- Name: trg_guard_update_status(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.trg_guard_update_status() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+    IF OLD.status IN ('succeeded', 'failed', 'cancelled') THEN
+        RAISE EXCEPTION
+            'stack_updates % is already terminal (status=%). No further transitions allowed.',
+            OLD.id, OLD.status;
+    END IF;
+    IF NEW.status = 'in-progress' AND OLD.status <> 'in-progress' THEN
+        RAISE EXCEPTION
+            'Cannot revert stack_updates % from % back to in-progress.',
+            OLD.id, OLD.status;
+    END IF;
+    RETURN NEW;
+END;
+$$;
+
+--
+-- Name: api_tokens; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.api_tokens (
+    id uuid NOT NULL,
+    token_hash text NOT NULL,
+    description text,
+    user_id uuid NOT NULL,
+    org_id uuid,
+    kind text NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    last_used_at timestamp with time zone,
+    expires_at timestamp with time zone NOT NULL,
+    created_by_user_id uuid,
+    revoked_at timestamp with time zone,
+    revoked_by_user_id uuid,
+    CONSTRAINT api_tokens_kind_check CHECK ((kind = ANY (ARRAY['oidc'::text, 'service_account'::text]))),
+    CONSTRAINT api_tokens_org_scope CHECK ((((kind = 'service_account'::text) AND (org_id IS NOT NULL)) OR ((kind = 'oidc'::text) AND (org_id IS NULL))))
+);
+
+--
+-- Name: compaction_jobs; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.compaction_jobs (
+    id uuid NOT NULL,
+    stack_id uuid NOT NULL,
+    status text NOT NULL,
+    attempts integer DEFAULT 0 NOT NULL,
+    error_message text,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    started_at timestamp with time zone,
+    completed_at timestamp with time zone,
+    CONSTRAINT compaction_jobs_status_check CHECK ((status = ANY (ARRAY['pending'::text, 'running'::text, 'completed'::text, 'failed'::text])))
+);
+
+--
+-- Name: journal_entries; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.journal_entries (
+    id uuid NOT NULL,
+    stack_id uuid NOT NULL,
+    update_id uuid NOT NULL,
+    sequence_id bigint NOT NULL,
+    wire_sequence_id bigint NOT NULL,
+    kind smallint NOT NULL,
+    operation_id bigint,
+    version integer DEFAULT 1 NOT NULL,
+    remove_old bigint,
+    remove_new bigint,
+    delete_old bigint,
+    delete_new bigint,
+    pending_replacement_old bigint,
+    pending_replacement_new bigint,
+    is_refresh boolean DEFAULT false NOT NULL,
+    payload jsonb NOT NULL,
+    resource_urn text,
+    created_at timestamp with time zone DEFAULT now() NOT NULL
+);
+ALTER TABLE ONLY public.journal_entries ALTER COLUMN payload SET COMPRESSION lz4;
+
+--
+-- Name: oidc_providers; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.oidc_providers (
+    id uuid NOT NULL,
+    name text NOT NULL,
+    issuer_url text NOT NULL,
+    client_id text NOT NULL,
+    client_secret text NOT NULL,
+    scopes text[] DEFAULT ARRAY['openid'::text, 'profile'::text, 'email'::text] NOT NULL,
+    enabled boolean DEFAULT true NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL
+);
+
+--
+-- Name: org_members; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.org_members (
+    org_id uuid NOT NULL,
+    user_id uuid NOT NULL,
+    role text NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT org_members_role_check CHECK ((role = ANY (ARRAY['owner'::text, 'member'::text, 'viewer'::text, 'service'::text, 'guest'::text])))
+);
+
+--
+-- Name: organizations; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.organizations (
+    id uuid NOT NULL,
+    name text NOT NULL,
+    display_name text NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT organizations_name_grammar CHECK ((name ~ '^[A-Za-z0-9._-]{1,100}$'::text))
+);
+
+--
+-- Name: policy_grants; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.policy_grants (
+    id uuid NOT NULL,
+    template_id text NOT NULL,
+    org_id uuid NOT NULL,
+    principal_user_id uuid NOT NULL,
+    resource_stack_id uuid,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT policy_grants_template_shape CHECK ((((template_id = 'StackWriteAccess'::text) AND (resource_stack_id IS NULL)) OR ((template_id = ANY (ARRAY['StackReadResourcePolicy'::text, 'StackWriteResourcePolicy'::text])) AND (resource_stack_id IS NOT NULL))))
+);
+
+--
+-- Name: projects; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.projects (
+    id uuid NOT NULL,
+    org_id uuid NOT NULL,
+    name text NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT projects_name_grammar CHECK ((name ~ '^[A-Za-z0-9._-]{1,100}$'::text))
+);
+
+--
+-- Name: service_secrets_keyset; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.service_secrets_keyset (
+    id smallint DEFAULT 1 NOT NULL,
+    key_material bytea NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT service_secrets_keyset_id_check CHECK ((id = 1))
+);
+
+--
+-- Name: snapshots; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.snapshots (
+    id uuid NOT NULL,
+    stack_id uuid NOT NULL,
+    version integer NOT NULL,
+    checkpoint jsonb NOT NULL,
+    compacted_from_journal_seq bigint NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    resource_count integer DEFAULT 0 NOT NULL
+);
+ALTER TABLE ONLY public.snapshots ALTER COLUMN checkpoint SET COMPRESSION lz4;
+
+--
+-- Name: stack_locks; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.stack_locks (
+    id uuid NOT NULL,
+    stack_id uuid NOT NULL,
+    update_id uuid,
+    locked_by text NOT NULL,
+    lock_token_hash bytea NOT NULL,
+    locked_at timestamp with time zone DEFAULT now() NOT NULL,
+    expires_at timestamp with time zone NOT NULL,
+    max_expires_at timestamp with time zone NOT NULL,
+    heartbeat_at timestamp with time zone DEFAULT now() NOT NULL
+);
+
+--
+-- Name: stack_state; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.stack_state (
+    id uuid NOT NULL,
+    stack_id uuid NOT NULL,
+    base_snapshot_id uuid,
+    base_snapshot_version integer DEFAULT 0 NOT NULL,
+    journal_seq bigint DEFAULT 0 NOT NULL,
+    journal_entries_since_compaction integer DEFAULT 0 NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL
+);
+
+--
+-- Name: stack_updates; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.stack_updates (
+    id uuid NOT NULL,
+    stack_id uuid NOT NULL,
+    version integer NOT NULL,
+    kind text NOT NULL,
+    status text DEFAULT 'in-progress'::text NOT NULL,
+    client_request_id text,
+    journal_version integer,
+    base_snapshot_version integer,
+    start_journal_seq bigint,
+    end_journal_seq bigint,
+    config jsonb,
+    metadata jsonb,
+    options jsonb,
+    description text,
+    runtime text,
+    pulumi_version text,
+    tags jsonb,
+    message text,
+    started_by_user_id uuid,
+    started_by_api_token_id uuid,
+    started_at timestamp with time zone DEFAULT now() NOT NULL,
+    ended_at timestamp with time zone,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    dry_run boolean DEFAULT false NOT NULL,
+    events_folded_at timestamp with time zone,
+    CONSTRAINT stack_updates_kind_check CHECK ((kind = ANY (ARRAY['update'::text, 'preview'::text, 'destroy'::text, 'refresh'::text, 'import'::text, 'rename'::text]))),
+    CONSTRAINT stack_updates_status_check CHECK ((status = ANY (ARRAY['in-progress'::text, 'succeeded'::text, 'failed'::text, 'cancelled'::text])))
+);
+
+--
+-- Name: stacks; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.stacks (
+    id uuid NOT NULL,
+    org_id uuid NOT NULL,
+    project_id uuid NOT NULL,
+    name text NOT NULL,
+    workspace_id uuid NOT NULL,
+    version integer DEFAULT 0 NOT NULL,
+    active_update_id uuid,
+    tags jsonb,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    visibility text DEFAULT 'internal'::text NOT NULL,
+    CONSTRAINT stacks_name_grammar CHECK ((name ~ '^[A-Za-z0-9._-]{1,100}$'::text)),
+    CONSTRAINT stacks_visibility_check CHECK ((visibility = ANY (ARRAY['internal'::text, 'private'::text])))
+);
+
+--
+-- Name: update_event_archives; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.update_event_archives (
+    update_id uuid NOT NULL,
+    stack_id uuid NOT NULL,
+    codec text NOT NULL,
+    event_count integer NOT NULL,
+    max_sequence integer NOT NULL,
+    events bytea NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL
+);
+ALTER TABLE ONLY public.update_event_archives ALTER COLUMN events SET STORAGE EXTERNAL;
+
+--
+-- Name: update_events; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.update_events (
+    id uuid NOT NULL,
+    stack_id uuid NOT NULL,
+    update_id uuid NOT NULL,
+    sequence integer NOT NULL,
+    kind text NOT NULL,
+    severity text,
+    payload jsonb NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL
+);
+ALTER TABLE ONLY public.update_events ALTER COLUMN payload SET COMPRESSION lz4;
+
+--
+-- Name: users; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.users (
+    id uuid NOT NULL,
+    iss text NOT NULL,
+    sub text NOT NULL,
+    email text,
+    display_name text,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    last_login_at timestamp with time zone,
+    deactivated_at timestamp with time zone,
+    deactivated_by_user_id uuid
+);
+
+--
+-- Name: workspaces; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.workspaces (
+    id uuid NOT NULL,
+    org_id uuid NOT NULL,
+    kind text NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT workspaces_kind_check CHECK ((kind = ANY (ARRAY['pulumi'::text, 'tofu'::text])))
+);
+
+--
+-- Name: api_tokens api_tokens_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.api_tokens
+    ADD CONSTRAINT api_tokens_pkey PRIMARY KEY (id);
+
+--
+-- Name: api_tokens api_tokens_token_hash_key; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.api_tokens
+    ADD CONSTRAINT api_tokens_token_hash_key UNIQUE (token_hash);
+
+--
+-- Name: compaction_jobs compaction_jobs_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.compaction_jobs
+    ADD CONSTRAINT compaction_jobs_pkey PRIMARY KEY (id);
+
+--
+-- Name: journal_entries journal_entries_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.journal_entries
+    ADD CONSTRAINT journal_entries_pkey PRIMARY KEY (id);
+
+--
+-- Name: journal_entries journal_entries_stack_id_sequence_id_key; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.journal_entries
+    ADD CONSTRAINT journal_entries_stack_id_sequence_id_key UNIQUE (stack_id, sequence_id);
+
+--
+-- Name: journal_entries journal_entries_update_id_wire_sequence_id_key; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.journal_entries
+    ADD CONSTRAINT journal_entries_update_id_wire_sequence_id_key UNIQUE (update_id, wire_sequence_id);
+
+--
+-- Name: oidc_providers oidc_providers_issuer_url_client_id_key; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.oidc_providers
+    ADD CONSTRAINT oidc_providers_issuer_url_client_id_key UNIQUE (issuer_url, client_id);
+
+--
+-- Name: oidc_providers oidc_providers_name_key; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.oidc_providers
+    ADD CONSTRAINT oidc_providers_name_key UNIQUE (name);
+
+--
+-- Name: oidc_providers oidc_providers_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.oidc_providers
+    ADD CONSTRAINT oidc_providers_pkey PRIMARY KEY (id);
+
+--
+-- Name: org_members org_members_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.org_members
+    ADD CONSTRAINT org_members_pkey PRIMARY KEY (org_id, user_id);
+
+--
+-- Name: organizations organizations_name_key; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.organizations
+    ADD CONSTRAINT organizations_name_key UNIQUE (name);
+
+--
+-- Name: organizations organizations_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.organizations
+    ADD CONSTRAINT organizations_pkey PRIMARY KEY (id);
+
+--
+-- Name: policy_grants policy_grants_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.policy_grants
+    ADD CONSTRAINT policy_grants_pkey PRIMARY KEY (id);
+
+--
+-- Name: projects projects_id_org_id_key; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.projects
+    ADD CONSTRAINT projects_id_org_id_key UNIQUE (id, org_id);
+
+--
+-- Name: projects projects_org_id_name_key; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.projects
+    ADD CONSTRAINT projects_org_id_name_key UNIQUE (org_id, name);
+
+--
+-- Name: projects projects_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.projects
+    ADD CONSTRAINT projects_pkey PRIMARY KEY (id);
+
+--
+-- Name: service_secrets_keyset service_secrets_keyset_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.service_secrets_keyset
+    ADD CONSTRAINT service_secrets_keyset_pkey PRIMARY KEY (id);
+
+--
+-- Name: snapshots snapshots_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.snapshots
+    ADD CONSTRAINT snapshots_pkey PRIMARY KEY (id);
+
+--
+-- Name: stack_locks stack_locks_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.stack_locks
+    ADD CONSTRAINT stack_locks_pkey PRIMARY KEY (id);
+
+--
+-- Name: stack_locks stack_locks_stack_id_key; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.stack_locks
+    ADD CONSTRAINT stack_locks_stack_id_key UNIQUE (stack_id);
+
+--
+-- Name: stack_state stack_state_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.stack_state
+    ADD CONSTRAINT stack_state_pkey PRIMARY KEY (id);
+
+--
+-- Name: stack_state stack_state_stack_id_key; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.stack_state
+    ADD CONSTRAINT stack_state_stack_id_key UNIQUE (stack_id);
+
+--
+-- Name: stack_updates stack_updates_id_stack_id_key; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.stack_updates
+    ADD CONSTRAINT stack_updates_id_stack_id_key UNIQUE (id, stack_id);
+
+--
+-- Name: stack_updates stack_updates_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.stack_updates
+    ADD CONSTRAINT stack_updates_pkey PRIMARY KEY (id);
+
+--
+-- Name: stacks stacks_id_org_key; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.stacks
+    ADD CONSTRAINT stacks_id_org_key UNIQUE (id, org_id);
+
+--
+-- Name: stacks stacks_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.stacks
+    ADD CONSTRAINT stacks_pkey PRIMARY KEY (id);
+
+--
+-- Name: stacks stacks_project_id_name_key; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.stacks
+    ADD CONSTRAINT stacks_project_id_name_key UNIQUE (project_id, name);
+
+--
+-- Name: stacks stacks_workspace_id_key; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.stacks
+    ADD CONSTRAINT stacks_workspace_id_key UNIQUE (workspace_id);
+
+--
+-- Name: update_event_archives update_event_archives_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.update_event_archives
+    ADD CONSTRAINT update_event_archives_pkey PRIMARY KEY (update_id);
+
+--
+-- Name: update_events update_events_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.update_events
+    ADD CONSTRAINT update_events_pkey PRIMARY KEY (id);
+
+--
+-- Name: update_events update_events_update_id_sequence_key; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.update_events
+    ADD CONSTRAINT update_events_update_id_sequence_key UNIQUE (update_id, sequence);
+
+--
+-- Name: users users_iss_sub_key; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.users
+    ADD CONSTRAINT users_iss_sub_key UNIQUE (iss, sub);
+
+--
+-- Name: users users_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.users
+    ADD CONSTRAINT users_pkey PRIMARY KEY (id);
+
+--
+-- Name: workspaces workspaces_id_org_id_key; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.workspaces
+    ADD CONSTRAINT workspaces_id_org_id_key UNIQUE (id, org_id);
+
+--
+-- Name: workspaces workspaces_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.workspaces
+    ADD CONSTRAINT workspaces_pkey PRIMARY KEY (id);
+
+--
+-- Name: idx_api_tokens_created_by; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_api_tokens_created_by ON public.api_tokens USING btree (created_by_user_id);
+
+--
+-- Name: idx_api_tokens_org; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_api_tokens_org ON public.api_tokens USING btree (org_id);
+
+--
+-- Name: idx_api_tokens_revoked_by; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_api_tokens_revoked_by ON public.api_tokens USING btree (revoked_by_user_id);
+
+--
+-- Name: idx_api_tokens_service_status; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_api_tokens_service_status ON public.api_tokens USING btree (org_id, expires_at) WHERE ((kind = 'service_account'::text) AND (revoked_at IS NULL));
+
+--
+-- Name: idx_api_tokens_user; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_api_tokens_user ON public.api_tokens USING btree (user_id);
+
+--
+-- Name: idx_compaction_jobs_status_created; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_compaction_jobs_status_created ON public.compaction_jobs USING btree (status, created_at);
+
+--
+-- Name: idx_journal_operation; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_journal_operation ON public.journal_entries USING btree (stack_id, operation_id) WHERE (operation_id IS NOT NULL);
+
+--
+-- Name: idx_journal_update; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_journal_update ON public.journal_entries USING btree (update_id);
+
+--
+-- Name: idx_org_members_user; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_org_members_user ON public.org_members USING btree (user_id);
+
+--
+-- Name: idx_snapshots_stack_boundary; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_snapshots_stack_boundary ON public.snapshots USING btree (stack_id, compacted_from_journal_seq);
+
+--
+-- Name: idx_snapshots_stack_created; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_snapshots_stack_created ON public.snapshots USING btree (stack_id, created_at DESC);
+
+--
+-- Name: idx_stack_locks_token_hash; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX idx_stack_locks_token_hash ON public.stack_locks USING btree (lock_token_hash);
+
+--
+-- Name: idx_update_events_created; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_update_events_created ON public.update_events USING brin (created_at);
+
+--
+-- Name: idx_update_events_severity; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_update_events_severity ON public.update_events USING btree (update_id, severity) WHERE (severity = ANY (ARRAY['warning'::text, 'error'::text]));
+
+--
+-- Name: idx_updates_fold_pending; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_updates_fold_pending ON public.stack_updates USING btree (ended_at) WHERE (events_folded_at IS NULL);
+
+--
+-- Name: idx_updates_idempotency; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX idx_updates_idempotency ON public.stack_updates USING btree (stack_id, client_request_id) WHERE (client_request_id IS NOT NULL);
+
+--
+-- Name: idx_updates_in_progress; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_updates_in_progress ON public.stack_updates USING btree (stack_id) WHERE (status = 'in-progress'::text);
+
+--
+-- Name: idx_updates_stack_started_created; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_updates_stack_started_created ON public.stack_updates USING btree (stack_id, started_at DESC, created_at DESC);
+
+--
+-- Name: idx_updates_stack_status; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_updates_stack_status ON public.stack_updates USING btree (stack_id, status);
+
+--
+-- Name: idx_updates_started_by_token; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_updates_started_by_token ON public.stack_updates USING btree (started_by_api_token_id);
+
+--
+-- Name: idx_updates_started_by_user; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_updates_started_by_user ON public.stack_updates USING btree (started_by_user_id);
+
+--
+-- Name: idx_users_deactivated_by; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_users_deactivated_by ON public.users USING btree (deactivated_by_user_id);
+
+--
+-- Name: idx_workspaces_org_kind; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_workspaces_org_kind ON public.workspaces USING btree (org_id, kind);
+
+--
+-- Name: policy_grants_org_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX policy_grants_org_idx ON public.policy_grants USING btree (org_id);
+
+--
+-- Name: policy_grants_principal_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX policy_grants_principal_idx ON public.policy_grants USING btree (principal_user_id);
+
+--
+-- Name: policy_grants_stack_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX policy_grants_stack_idx ON public.policy_grants USING btree (resource_stack_id);
+
+--
+-- Name: stack_updates_stack_id_version_key; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX stack_updates_stack_id_version_key ON public.stack_updates USING btree (stack_id, version) WHERE (NOT dry_run);
+
+--
+-- Name: ux_compaction_jobs_active_stack; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX ux_compaction_jobs_active_stack ON public.compaction_jobs USING btree (stack_id) WHERE (status = ANY (ARRAY['pending'::text, 'running'::text]));
+
+--
+-- Name: stack_updates trg_update_status_guard; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER trg_update_status_guard BEFORE UPDATE OF status ON public.stack_updates FOR EACH ROW EXECUTE FUNCTION public.trg_guard_update_status();
+
+--
+-- Name: api_tokens api_tokens_created_by_user_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.api_tokens
+    ADD CONSTRAINT api_tokens_created_by_user_id_fkey FOREIGN KEY (created_by_user_id) REFERENCES public.users(id) ON DELETE SET NULL;
+
+--
+-- Name: api_tokens api_tokens_org_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.api_tokens
+    ADD CONSTRAINT api_tokens_org_id_fkey FOREIGN KEY (org_id) REFERENCES public.organizations(id) ON DELETE CASCADE;
+
+--
+-- Name: api_tokens api_tokens_revoked_by_user_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.api_tokens
+    ADD CONSTRAINT api_tokens_revoked_by_user_id_fkey FOREIGN KEY (revoked_by_user_id) REFERENCES public.users(id) ON DELETE SET NULL;
+
+--
+-- Name: api_tokens api_tokens_user_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.api_tokens
+    ADD CONSTRAINT api_tokens_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.users(id) ON DELETE CASCADE;
+
+--
+-- Name: compaction_jobs compaction_jobs_stack_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.compaction_jobs
+    ADD CONSTRAINT compaction_jobs_stack_id_fkey FOREIGN KEY (stack_id) REFERENCES public.stacks(id) ON DELETE CASCADE;
+
+--
+-- Name: stack_state fk_stack_state_base_snapshot; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.stack_state
+    ADD CONSTRAINT fk_stack_state_base_snapshot FOREIGN KEY (base_snapshot_id) REFERENCES public.snapshots(id);
+
+--
+-- Name: stacks fk_stacks_active_update; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.stacks
+    ADD CONSTRAINT fk_stacks_active_update FOREIGN KEY (active_update_id) REFERENCES public.stack_updates(id) DEFERRABLE INITIALLY DEFERRED;
+
+--
+-- Name: journal_entries journal_entries_stack_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.journal_entries
+    ADD CONSTRAINT journal_entries_stack_id_fkey FOREIGN KEY (stack_id) REFERENCES public.stacks(id) ON DELETE CASCADE;
+
+--
+-- Name: journal_entries journal_entries_update_id_stack_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.journal_entries
+    ADD CONSTRAINT journal_entries_update_id_stack_id_fkey FOREIGN KEY (update_id, stack_id) REFERENCES public.stack_updates(id, stack_id);
+
+--
+-- Name: org_members org_members_org_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.org_members
+    ADD CONSTRAINT org_members_org_id_fkey FOREIGN KEY (org_id) REFERENCES public.organizations(id) ON DELETE CASCADE;
+
+--
+-- Name: org_members org_members_user_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.org_members
+    ADD CONSTRAINT org_members_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.users(id) ON DELETE CASCADE;
+
+--
+-- Name: policy_grants policy_grants_org_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.policy_grants
+    ADD CONSTRAINT policy_grants_org_id_fkey FOREIGN KEY (org_id) REFERENCES public.organizations(id) ON DELETE CASCADE;
+
+--
+-- Name: policy_grants policy_grants_principal_user_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.policy_grants
+    ADD CONSTRAINT policy_grants_principal_user_id_fkey FOREIGN KEY (principal_user_id) REFERENCES public.users(id) ON DELETE CASCADE;
+
+--
+-- Name: policy_grants policy_grants_stack_in_org; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.policy_grants
+    ADD CONSTRAINT policy_grants_stack_in_org FOREIGN KEY (resource_stack_id, org_id) REFERENCES public.stacks(id, org_id) ON DELETE CASCADE;
+
+--
+-- Name: projects projects_org_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.projects
+    ADD CONSTRAINT projects_org_id_fkey FOREIGN KEY (org_id) REFERENCES public.organizations(id) ON DELETE CASCADE;
+
+--
+-- Name: snapshots snapshots_stack_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.snapshots
+    ADD CONSTRAINT snapshots_stack_id_fkey FOREIGN KEY (stack_id) REFERENCES public.stacks(id) ON DELETE CASCADE;
+
+--
+-- Name: stack_locks stack_locks_stack_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.stack_locks
+    ADD CONSTRAINT stack_locks_stack_id_fkey FOREIGN KEY (stack_id) REFERENCES public.stacks(id) ON DELETE CASCADE;
+
+--
+-- Name: stack_locks stack_locks_update_id_stack_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.stack_locks
+    ADD CONSTRAINT stack_locks_update_id_stack_id_fkey FOREIGN KEY (update_id, stack_id) REFERENCES public.stack_updates(id, stack_id);
+
+--
+-- Name: stack_state stack_state_stack_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.stack_state
+    ADD CONSTRAINT stack_state_stack_id_fkey FOREIGN KEY (stack_id) REFERENCES public.stacks(id) ON DELETE CASCADE;
+
+--
+-- Name: stack_updates stack_updates_stack_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.stack_updates
+    ADD CONSTRAINT stack_updates_stack_id_fkey FOREIGN KEY (stack_id) REFERENCES public.stacks(id) ON DELETE CASCADE;
+
+--
+-- Name: stack_updates stack_updates_started_by_api_token_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.stack_updates
+    ADD CONSTRAINT stack_updates_started_by_api_token_id_fkey FOREIGN KEY (started_by_api_token_id) REFERENCES public.api_tokens(id) ON DELETE SET NULL;
+
+--
+-- Name: stack_updates stack_updates_started_by_user_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.stack_updates
+    ADD CONSTRAINT stack_updates_started_by_user_id_fkey FOREIGN KEY (started_by_user_id) REFERENCES public.users(id) ON DELETE SET NULL;
+
+--
+-- Name: stacks stacks_project_id_org_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.stacks
+    ADD CONSTRAINT stacks_project_id_org_id_fkey FOREIGN KEY (project_id, org_id) REFERENCES public.projects(id, org_id) ON DELETE CASCADE;
+
+--
+-- Name: stacks stacks_workspace_id_org_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.stacks
+    ADD CONSTRAINT stacks_workspace_id_org_id_fkey FOREIGN KEY (workspace_id, org_id) REFERENCES public.workspaces(id, org_id) ON DELETE CASCADE;
+
+--
+-- Name: update_event_archives update_event_archives_update_id_stack_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.update_event_archives
+    ADD CONSTRAINT update_event_archives_update_id_stack_id_fkey FOREIGN KEY (update_id, stack_id) REFERENCES public.stack_updates(id, stack_id) ON DELETE CASCADE;
+
+--
+-- Name: update_events update_events_update_id_stack_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.update_events
+    ADD CONSTRAINT update_events_update_id_stack_id_fkey FOREIGN KEY (update_id, stack_id) REFERENCES public.stack_updates(id, stack_id) ON DELETE CASCADE;
+
+--
+-- Name: users users_deactivated_by_user_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.users
+    ADD CONSTRAINT users_deactivated_by_user_id_fkey FOREIGN KEY (deactivated_by_user_id) REFERENCES public.users(id) ON DELETE SET NULL;
+
+--
+-- Name: workspaces workspaces_org_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.workspaces
+    ADD CONSTRAINT workspaces_org_id_fkey FOREIGN KEY (org_id) REFERENCES public.organizations(id) ON DELETE CASCADE;

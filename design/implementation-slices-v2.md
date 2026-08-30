@@ -1,5 +1,7 @@
 # state-db Implementation Slices — v2
 
+> Historical migration names in this completed plan describe the pre-release chain. The chain is consolidated into `V001__initial_schema.sql`.
+
 A more granular plan than `implementation-slices.md`. Each slice is a single PR:
 one migration (at most), one focused code change, the tests that prove it, and
 a step a human can run by hand to see it work.

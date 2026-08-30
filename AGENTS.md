@@ -32,6 +32,7 @@ rationale into this file; keep the owning document or code comment current.
 ./dev check            authoritative final code/config gate
 ./dev protocol         real Pulumi CLI smoke and fault tests
 ./dev native-contract  native-image reachability contract
+./dev schema           regenerate the readable PostgreSQL schema
 ./dev notices          regenerate dependency notices
 ./dev signoff          clean-VM check and publish status for an exact commit
 ```
@@ -42,6 +43,7 @@ rationale into this file; keep the owning document or code comment current.
   resources, proxies, JNI, or other native-reachability changes.
 - Run `./dev signoff` only when explicitly requested; it publishes external
   status. Run `./dev notices` only when notices need regeneration.
+- Run `./dev schema` after a Flyway migration changes the current schema.
 - Builds, tests, and dependency resolution used for verification must go
   through public `./dev` intents. Do not invoke Maven, Bun, Go, or their task
   functions directly under host credentials. `./dev -- ...` is a human escape

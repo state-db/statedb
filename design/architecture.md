@@ -133,7 +133,19 @@ Everything else (CRUD on api_tokens, users, oidc_providers; reading stack metada
 
 ### Migrations
 
-`V1__init.sql` is the schema in db-schema.md verbatim. Flyway runs at startup; production deployments use `flyway:migrate` as a separate step in CI before rolling the new image. No auto-migrate in prod.
+`V001__initial_schema.sql` is the consolidated schema for the first stable release. Later releases add immutable, ordered versioned migrations.
+
+The image runs Flyway during startup. Image replacement is the complete upgrade procedure for Docker, Amazon ECS, and similar managed runtimes.
+
+Flyway serializes concurrent startup migrations through PostgreSQL. A task does not serve traffic until migration and startup provisioning complete.
+
+Migration errors stop the new task. The previous task can continue to serve during a managed rolling replacement.
+
+Every migration must support the previous image during that overlap. Use the expand, backfill, switch, and contract sequence in [`migrations.md`](migrations.md).
+
+The startup and runtime requirements are part of the operator contract in the [deployment guide](../site/src/content/docs/docs/deployment.md).
+
+[`schema.sql`](schema.sql) is the generated current-state view. It is documentation and is not a deployment input.
 
 ---
 
@@ -446,6 +458,10 @@ Quarkus profiles: `dev` (local Maven), `prod` (deployed), `local-glass` (admin-r
 
 Single Postgres, version 14+. Encryption at rest is the operator's responsibility — the DB will hold OIDC client secrets and (by reference) tokens. Document this as a deployment requirement.
 
+The database role owns the objects that Flyway creates. It has `USAGE` and `CREATE` on `public`, but it does not own the database.
+
+Managed runtimes can start multiple replacement tasks. Flyway locks the migration, and other tasks wait before they become ready.
+
 ### Backups
 
 `pg_dump`-friendly. No file/object dependencies. Restore is just `psql < dump.sql`; the app is stateless across restarts.
@@ -454,7 +470,7 @@ Single Postgres, version 14+. Encryption at rest is the operator's responsibilit
 
 - **Logs:** structured JSON (default Quarkus). One MDC entry per request with `request_id`, `subject`, `org_id`.
 - **Metrics:** Micrometer + Prometheus endpoint at `/q/metrics`. Custom counters: `pulumi.update.started`, `pulumi.update.completed{result}`, `pulumi.lock.steal`, `compaction.duration`.
-- **Health:** `/q/health/live`, `/q/health/ready` (DB connectivity).
+- **Health:** `/q/health/live`, `/q/health/ready` on private management port 9000.
 - **Tracing:** OpenTelemetry hooks present, off by default; flip on with `quarkus.otel.enabled=true`.
 
 ### Rate limiting
@@ -532,7 +548,7 @@ Future work. Each is additive — solvable inside Wave 1's architecture without 
 | Tofu via shared `workspaces` parent + separate state tables | Identity unified; state model type-specific because Pulumi/Tofu fundamentally differ |
 | Hibernate ORM + Panache | Panache for typical CRUD; native SQL drops in for hot paths (journal apply, sequence allocation, lock acquire) |
 | Quarkus imperative (not reactive) | Short request-response, no streaming, simpler SQL paths |
-| Flyway migrations | No auto-migrate in prod; CI step before image rollout |
+| Flyway migrations | The self-contained image validates and migrates the database before it becomes ready |
 | Bun build, copied into Quarkus resources | Dev: bun proxies to Quarkus. Prod: single static-served bundle |
 | Native-only Wave 1 | State-db owns Cedar JNI/reachability compatibility and gates it on both release architectures |
 | `quarkus-oidc` web-app session via BFF | Standard library; SPA gets HttpOnly session cookie. No rolled-our-own session crypto |

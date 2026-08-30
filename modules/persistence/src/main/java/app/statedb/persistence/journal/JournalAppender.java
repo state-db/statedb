@@ -107,7 +107,7 @@ public class JournalAppender {
     }
 
     // 3. Atomically capture the per-update offset on first PATCH; otherwise read the existing one.
-    //    Reuses stack_updates.start_journal_seq (added in V003) as the offset.
+    //    Reuses stack_updates.start_journal_seq as the offset.
     em.createNativeQuery(
             "UPDATE stack_updates SET start_journal_seq = ?1 "
                 + "WHERE id = ?2 AND start_journal_seq IS NULL")

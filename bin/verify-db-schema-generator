@@ -1,0 +1,50 @@
+#!/usr/bin/env bash
+# Proves that schema generation includes repeatable and nontransactional migrations.
+set -euo pipefail
+
+cd "$(dirname "$0")/.."
+
+work_dir=$(mktemp -d)
+trap 'rc=$?; rm -rf "$work_dir"; exit "$rc"' EXIT
+migration_dir="$work_dir/migrations"
+mkdir -p "$migration_dir"
+cp modules/persistence/src/main/resources/db/migration/beforeMigrate.sql "$migration_dir/"
+
+cat >"$migration_dir/V001__probe_table.sql" <<'SQL'
+CREATE TABLE public.flyway_generator_probe (
+    value INTEGER NOT NULL
+);
+SQL
+
+cat >"$migration_dir/V002__concurrent_index.sql" <<'SQL'
+CREATE INDEX CONCURRENTLY flyway_generator_probe_value_idx
+    ON public.flyway_generator_probe (value);
+SQL
+
+cat >"$migration_dir/V002__concurrent_index.sql.conf" <<'CONF'
+executeInTransaction=false
+CONF
+
+# The production tree initially has no repeatable migration. Exercise that
+# shape explicitly so an empty R__ glob cannot turn --check into a false pass.
+STATEDB_MIGRATION_DIR="$migration_dir" \
+  STATEDB_SCHEMA_OUTPUT="$work_dir/schema.sql" \
+  bin/generate-db-schema >/dev/null
+STATEDB_MIGRATION_DIR="$migration_dir" \
+  STATEDB_SCHEMA_OUTPUT="$work_dir/schema.sql" \
+  bin/generate-db-schema --check >/dev/null
+grep -F 'flyway_generator_probe_value_idx' "$work_dir/schema.sql" >/dev/null
+
+cat >"$migration_dir/R__probe_view.sql" <<'SQL'
+CREATE OR REPLACE VIEW public.flyway_generator_probe_view AS
+SELECT value
+FROM public.flyway_generator_probe;
+SQL
+
+STATEDB_MIGRATION_DIR="$migration_dir" \
+  STATEDB_SCHEMA_OUTPUT="$work_dir/schema.sql" \
+  bin/generate-db-schema >/dev/null
+
+grep -F 'flyway_generator_probe_value_idx' "$work_dir/schema.sql" >/dev/null
+grep -F 'flyway_generator_probe_view' "$work_dir/schema.sql" >/dev/null
+echo "schema generator migration-mode checks passed"

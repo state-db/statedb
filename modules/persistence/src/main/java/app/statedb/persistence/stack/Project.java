@@ -22,7 +22,7 @@ public class Project extends TimestampedEntity {
   public String name;
 
   // Read-only navigation: writers set orgId directly so the DB FK / UNIQUE constraints
-  // (and the composite FK targets in V002) remain the source of truth.
+  // and the composite FK targets remain the source of truth.
   @ManyToOne(fetch = FetchType.LAZY)
   @JoinColumn(name = "org_id", insertable = false, updatable = false)
   public Organization organization;

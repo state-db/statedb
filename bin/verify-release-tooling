@@ -3,7 +3,8 @@ set -euo pipefail
 
 cd "$(dirname "$0")/.."
 
-bash -n bin/build-native-app-image bin/release bin/release-gate
+bash -n bin/build-native-app-image bin/generate-db-schema bin/release bin/release-gate \
+  bin/verify-db-schema-generator bin/postgres-images
 bun test tools/release
 (cd modules/web && bunx tsc -p ../../tools/release/tsconfig.json)
 

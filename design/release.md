@@ -170,8 +170,8 @@ and pull requests consume no GitHub Actions minutes.
 
 `bin/release-gate <image>` runs the candidate image and verifies:
 
-1. upgrade from the previous compatible release;
-2. simultaneous two-replica cold start and migration convergence;
+1. upgrade from the previous compatible release while the previous task continues to serve;
+2. simultaneous two-replica cold start and exact packaged-migration convergence;
 3. non-root/read-only image, notices, and Cedar library integrity;
 4. anonymous rejection plus Cedar owner-allow/viewer-deny;
 5. OIDC and break-glass login, authenticated projections, SPA delivery, forced compaction, and
