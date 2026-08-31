@@ -26,7 +26,7 @@ the appendix; the license texts of all non-Apache components are reproduced
 in the next section.
 
 
-Lists of 247 third-party dependencies.
+Lists of 238 third-party dependencies.
      (Apache License 2.0) Agroal API (io.agroal:agroal-api:3.2.1 - https://github.com/agroal)
      (Apache License 2.0) Agroal Connection Pool (io.agroal:agroal-pool:3.2.1 - https://github.com/agroal)
      (Apache License 2.0) Agroal Narayana Integration (io.agroal:agroal-narayana:3.2.1 - https://github.com/agroal)
@@ -34,15 +34,6 @@ Lists of 247 third-party dependencies.
      (BSD 3-Clause License) ANTLR 4 Runtime (org.antlr:antlr4-runtime:4.13.2 - https://www.antlr.org/antlr4-runtime/)
      (Apache License 2.0) ArC - Runtime (io.quarkus.arc:arc:3.38.3 - https://github.com/quarkusio/quarkus)
      (BSD 3-Clause License) asm (org.ow2.asm:asm:9.10.1 - http://asm.ow2.io/)
-     (Apache License 2.0) AWS Java SDK :: Annotations (software.amazon.awssdk:annotations:2.54.7 - https://aws.amazon.com/sdkforjava/core/annotations)
-     (Apache License 2.0) AWS Java SDK :: Checksums (software.amazon.awssdk:checksums:2.54.7 - https://aws.amazon.com/sdkforjava)
-     (Apache License 2.0) AWS Java SDK :: Checksums SPI (software.amazon.awssdk:checksums-spi:2.54.7 - https://aws.amazon.com/sdkforjava)
-     (Apache License 2.0) AWS Java SDK :: HTTP Auth AWS (software.amazon.awssdk:http-auth-aws:2.54.7 - https://aws.amazon.com/sdkforjava)
-     (Apache License 2.0) AWS Java SDK :: HTTP Auth SPI (software.amazon.awssdk:http-auth-spi:2.54.7 - https://aws.amazon.com/sdkforjava)
-     (Apache License 2.0) AWS Java SDK :: HTTP Client Interface (software.amazon.awssdk:http-client-spi:2.54.7 - https://aws.amazon.com/sdkforjava/http-client-spi)
-     (Apache License 2.0) AWS Java SDK :: Identity SPI (software.amazon.awssdk:identity-spi:2.54.7 - https://aws.amazon.com/sdkforjava)
-     (Apache License 2.0) AWS Java SDK :: Metrics SPI (software.amazon.awssdk:metrics-spi:2.54.7 - https://aws.amazon.com/sdkforjava/core/metrics-spi)
-     (Apache License 2.0) AWS Java SDK :: Utilities (software.amazon.awssdk:utils:2.54.7 - https://aws.amazon.com/sdkforjava/utils)
      (Apache License 2.0) Brotli4j (com.aayushatharva.brotli4j:brotli4j:1.23.0 - https://github.com/hyperxpro/Brotli4j/brotli4j)
      (Apache License 2.0) Brotli4j (com.aayushatharva.brotli4j:native-linux-aarch64:1.23.0 - https://github.com/hyperxpro/Brotli4j/natives/native-linux-aarch64)
      (Apache License 2.0) Brotli4j (com.aayushatharva.brotli4j:native-linux-x86_64:1.23.0 - https://github.com/hyperxpro/Brotli4j/natives/native-linux-x86_64)
@@ -10140,7 +10131,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
 ------------------------------------------------------------------------
-@tanstack/history@1.162.1
+@tanstack/history@1.162.0
 License: MIT
 Homepage: https://tanstack.com/router
 
@@ -10221,7 +10212,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
 ------------------------------------------------------------------------
-@tanstack/react-router@1.170.31
+@tanstack/react-router@1.170.15
 License: MIT
 Homepage: https://tanstack.com/router
 
@@ -10302,7 +10293,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
 ------------------------------------------------------------------------
-@tanstack/router-core@1.171.26
+@tanstack/router-core@1.171.13
 License: MIT
 Homepage: https://tanstack.com/router
 

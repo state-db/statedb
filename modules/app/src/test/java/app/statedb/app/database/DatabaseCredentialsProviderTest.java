@@ -14,7 +14,6 @@ import java.time.Clock;
 import java.util.Map;
 import java.util.Optional;
 import org.junit.jupiter.api.Test;
-import software.amazon.awssdk.identity.spi.AwsCredentialsIdentity;
 
 class DatabaseCredentialsProviderTest {
 
@@ -122,8 +121,7 @@ class DatabaseCredentialsProviderTest {
       Optional<String> host,
       Optional<String> region) {
     RdsIamAuthenticationTokenGenerator generator =
-        new RdsIamAuthenticationTokenGenerator(
-            () -> AwsCredentialsIdentity.create("access-key", "secret"));
+        new RdsIamAuthenticationTokenGenerator(() -> AwsCredentials.basic("access-key", "secret"));
     return new DatabaseCredentialsProvider(
         generator, authentication, Optional.of("statedb"), password, host, 5432, region);
   }

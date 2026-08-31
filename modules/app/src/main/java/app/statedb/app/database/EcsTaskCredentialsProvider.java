@@ -13,8 +13,6 @@ import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.function.Supplier;
-import software.amazon.awssdk.identity.spi.AwsCredentialsIdentity;
-import software.amazon.awssdk.identity.spi.AwsSessionCredentialsIdentity;
 
 /** Reads and caches the task-role credentials that ECS exposes inside the container. */
 @ApplicationScoped
@@ -22,7 +20,7 @@ class EcsTaskCredentialsProvider {
 
   private static final String ECS_CREDENTIALS_ORIGIN = "http://169.254.170.2";
   private static final Duration REQUEST_TIMEOUT = Duration.ofSeconds(2);
-  private static final Duration REFRESH_WINDOW = Duration.ofMinutes(5);
+  private static final Duration REFRESH_WINDOW = RdsIamAuthenticationTokenGenerator.TOKEN_LIFETIME;
 
   private final HttpClient httpClient;
   private final ObjectMapper objectMapper;
@@ -55,7 +53,7 @@ class EcsTaskCredentialsProvider {
     this.fixedEndpoint = fixedEndpoint;
   }
 
-  AwsCredentialsIdentity resolveCredentials() {
+  AwsCredentials resolveCredentials() {
     CachedCredentials current = cached;
     if (current != null && current.expiration().isAfter(clock.instant().plus(REFRESH_WINDOW))) {
       return current.identity();
@@ -80,8 +78,8 @@ class EcsTaskCredentialsProvider {
             "ECS task credentials endpoint returned HTTP " + response.statusCode());
       }
       JsonNode body = objectMapper.readTree(response.body());
-      AwsSessionCredentialsIdentity identity =
-          AwsSessionCredentialsIdentity.create(
+      AwsCredentials identity =
+          new AwsCredentials(
               requiredText(body, "AccessKeyId"),
               requiredText(body, "SecretAccessKey"),
               requiredText(body, "Token"));
@@ -117,5 +115,5 @@ class EcsTaskCredentialsProvider {
     return value.textValue();
   }
 
-  private record CachedCredentials(AwsCredentialsIdentity identity, Instant expiration) {}
+  private record CachedCredentials(AwsCredentials identity, Instant expiration) {}
 }

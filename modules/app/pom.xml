@@ -51,13 +51,6 @@
             <artifactId>quarkus-micrometer-registry-prometheus</artifactId>
         </dependency>
 
-        <!-- The signer is sufficient for RDS IAM tokens. Do not pull in an AWS service client or
-             credentials chain: ECS task credentials are read through the JDK HTTP client. -->
-        <dependency>
-            <groupId>software.amazon.awssdk</groupId>
-            <artifactId>http-auth-aws</artifactId>
-            <version>${aws-sdk.version}</version>
-        </dependency>
         <dependency>
             <groupId>com.fasterxml.jackson.core</groupId>
             <artifactId>jackson-databind</artifactId>
@@ -255,7 +248,7 @@
                          pinned Mandrel JVM used by the native build, and observe their dynamic
                          reachability. They exercise every Cedar call path, which is the reachability
                          Quarkus cannot derive at build time; everything else in the suite resolves to
-                         entities, REST payloads, and the typed AWS signer path. The default
+                         entities, REST payloads, and the source-local RDS signer path. The default
                          Surefire execution above still runs the comprehensive suite on the
                          mise-pinned Temurin JDK. -->
                     <plugin>
