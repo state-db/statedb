@@ -10,11 +10,11 @@
     "generate:test-wall": "node scripts/generate-test-wall.mjs"
   },
   "dependencies": {
-    "@astrojs/starlight": "^0.41.7",
+    "@astrojs/starlight": "^0.41.9",
     "@fontsource-variable/bricolage-grotesque": "^5.2.0",
     "@fontsource-variable/jetbrains-mono": "^5.2.0",
     "astro": "^5.14.0",
     "pagefind": "^1.3.0",
-    "sharp": "^0.35.3"
+    "sharp": "^0.35.4"
   }
 }
