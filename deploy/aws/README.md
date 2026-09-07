@@ -6,7 +6,9 @@ request path, database bootstrap, IAM boundaries, cost posture, and Marketplace 
 This template deploys two state-db replicas behind Amazon ECS Express Mode's managed HTTPS
 Application Load Balancer. It creates an encrypted, private, Single-AZ PostgreSQL 17 RDS instance
 with 80 GiB of gp3 storage by default and storage autoscaling up to 500 GiB. You can deploy into a
-small dedicated VPC or supply an existing VPC and four subnets.
+small dedicated VPC or supply an existing VPC and four subnets. The application task definition is
+explicit so digest-pinned, single-architecture ARM64 and X86_64 candidates can both be tested;
+`CpuArchitecture` must match the supplied image.
 
 The long-running state-db tasks do not receive a database password. A one-off Fargate bootstrap task
 uses RDS's managed administrator secret to create the `statedb` PostgreSQL login and grant
@@ -27,10 +29,32 @@ htpasswd -bnBC 12 "" 'a-long-unique-password' | cut -d: -f2
 Create the stack with `CAPABILITY_IAM`. Stack creation can take 15–25 minutes, mostly for RDS. The
 outputs include the console URL and the correct `pulumi login .../pulumi` command.
 
+For a guided command-line test deployment, run:
+
+```sh
+deploy/aws/deploy.sh
+```
+
+The script defaults to the gated ARM64 candidate from commit `d186ef2`. It confirms the AWS caller
+and region, generates the break-glass bcrypt hash locally, validates the template, displays a
+CloudFormation change set, and pauses before execution. It also verifies that a GHCR image is
+anonymously pullable because the current stack does not inject third-party registry credentials.
+Run `deploy/aws/deploy.sh --help` for image, network, database, and non-interactive overrides.
+
+To delete the test stack after validation, use the same profile, region, and stack name:
+
+```sh
+deploy/aws/teardown.sh
+```
+
+Teardown deletes the live resources after confirmation. The database's final RDS snapshot remains
+and continues to incur snapshot-storage charges until you delete it separately.
+
 ## Topology and cost posture
 
 - Two 0.25-vCPU, 512-MiB Fargate tasks run at all times and may scale to four.
-- Express Mode owns HTTPS, the ALB, target groups, logging, alarms, and autoscaling.
+- Express Mode owns HTTPS, the ALB, target groups, alarms, and autoscaling. The stack owns the
+  application task definition and log group so it can select the container CPU architecture.
 - Express Mode creates and manages the load balancer security group. The stack adds a separate task
   security group so PostgreSQL can identify application and bootstrap tasks without a CIDR rule.
 - RDS uses isolated subnets, is never public, retains seven days of backups, and snapshots on stack

@@ -23,6 +23,10 @@ contains "$template" "MinTaskCount: $MIN_REPLICAS"
 contains "$template" "MaxTaskCount: $MAX_REPLICAS"
 contains "$template" "HealthCheckPath: $HEALTH_PATH"
 contains "$template" 'Type: AWS::ECS::ExpressGatewayService'
+contains "$template" 'Type: AWS::ECS::TaskDefinition'
+contains "$template" 'CpuArchitecture: !Ref CpuArchitecture'
+contains "$template" 'TaskDefinitionArn: !Ref AppTaskDefinition'
+contains "$template" 'Name: Main'
 contains "$template" 'EnableIAMDatabaseAuthentication: true'
 contains "$template" 'Action: rds-db:connect'
 contains "$template" 'STATEDB_DB_AUTHENTICATION'
@@ -60,5 +64,13 @@ fi
 image_references=$(grep -E '^[[:space:]]+Default: .+@sha256:[0-9a-f]{64}$' "$artifact" | wc -l | tr -d ' ')
 [[ $image_references == 2 ]] || fail "$artifact does not contain two digest-pinned default images"
 
-bash -n bin/package-aws-installer
+bash -n bin/package-aws-installer deploy/aws/deploy.sh deploy/aws/teardown.sh
+grep -F 'cloudformation create-change-set' deploy/aws/deploy.sh >/dev/null ||
+  fail "guided deploy does not create a reviewable change set"
+grep -F 'cloudformation execute-change-set' deploy/aws/deploy.sh >/dev/null ||
+  fail "guided deploy does not execute its reviewed change set"
+grep -F 'cloudformation delete-stack' deploy/aws/teardown.sh >/dev/null ||
+  fail "guided teardown does not delete the stack"
+grep -F 'cloudformation wait stack-delete-complete' deploy/aws/teardown.sh >/dev/null ||
+  fail "guided teardown does not wait for deletion"
 echo "AWS installer conformance passed"
