@@ -1,0 +1,86 @@
+replicaCount: 2
+
+image:
+  repository: ghcr.io/state-db/statedb
+  tag: ""            # defaults to .Chart.AppVersion
+  pullPolicy: IfNotPresent
+
+imagePullSecrets: []
+
+service:
+  type: ClusterIP
+  port: 8080
+
+# Management port carries health and metrics. Never expose it publicly.
+managementPort: 9000
+
+ingress:
+  enabled: false
+  className: ""
+  annotations: {}
+  host: statedb.example.com
+  tls:
+    enabled: false
+    secretName: ""
+
+database:
+  # JDBC URL for your PostgreSQL 14+ instance (must support LZ4).
+  jdbcUrl: ""
+  user: ""
+  # Supply the password through an existing Secret rather than here.
+  password: ""
+  existingSecret: ""
+  existingSecretPasswordKey: password
+
+# Encrypts console session cookies. Must be identical across replicas and
+# stable across restarts, or users are logged out as pods roll.
+# Generate with: openssl rand -base64 32
+sessionEncryptionSecret: ""
+sessionExistingSecret: ""
+sessionExistingSecretKey: session-encryption-secret
+
+# First organization, created on startup. Leave name empty to skip.
+bootstrap:
+  orgName: ""
+  orgDisplayName: ""
+
+# Seeds one OpenID Connect provider from the environment at every start.
+# Leave name empty to configure providers in the console instead.
+oidc:
+  name: ""
+  issuer: ""
+  clientId: ""
+  clientSecret: ""
+  existingSecret: ""
+  existingSecretClientSecretKey: client-secret
+  defaultProvider: ""
+  # Comma-separated issuer:subject pairs granted site administrator.
+  adminSubjects: ""
+
+# Commercial license. Mounted read-only and re-read per enforced operation.
+license:
+  existingSecret: ""
+  key: license.json
+  deploymentId: ""
+
+resources:
+  requests:
+    cpu: 250m
+    memory: 512Mi
+  limits:
+    memory: 1Gi
+
+# Migrations run at startup, so allow a generous readiness budget: a database
+# cold start or a wait behind another pod's migration lock can take minutes.
+startupProbe:
+  failureThreshold: 60
+  periodSeconds: 10
+
+podAnnotations: {}
+nodeSelector: {}
+tolerations: []
+affinity: {}
+
+serviceAccount:
+  create: true
+  name: ""

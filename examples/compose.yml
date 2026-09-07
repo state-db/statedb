@@ -1,0 +1,60 @@
+# statedb evaluation stack: the service plus a PostgreSQL database.
+#
+#   docker compose -f examples/compose.yml up
+#
+# Console and Pulumi API: http://localhost:8080
+#
+# This file is for local evaluation only. It hard-codes a break-glass password
+# and a session secret so the stack starts with no configuration, and it opens
+# break-glass to non-loopback connections because Docker publishes ports from
+# the bridge gateway. See docs/deployment for a production configuration.
+
+name: statedb
+
+services:
+  statedb:
+    image: ghcr.io/state-db/statedb:latest
+    container_name: statedb
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      STATEDB_JDBC_URL: jdbc:postgresql://postgres:5432/statedb
+      STATEDB_DB_USER: statedb
+      STATEDB_DB_PASSWORD: statedb
+
+      # Encrypts console session cookies. Generate a real one with
+      # `openssl rand -base64 32` for anything but local evaluation.
+      STATEDB_SESSION_ENCRYPTION_SECRET: evaluation-only-session-secret-32-bytes
+
+      # First organization, created on startup.
+      STATEDB_BOOTSTRAP_ORG_NAME: acme
+      STATEDB_BOOTSTRAP_ORG_DISPLAY_NAME: Acme
+
+      # Break-glass sign-in, since this stack has no identity provider.
+      # Bcrypt hash of the password "statedb". Any username is accepted.
+      # Disables itself automatically once you enable an OIDC provider.
+      STATEDB_LOCAL_GLASS_PASSWORD_HASH: "$$2a$$10$$pr3b8EKWWA/bnmBMrFn1ReIR43FQXwys6KNOmqdzUfe2cXs8tR0oy"
+      STATEDB_LOCAL_GLASS_ALLOW_REMOTE: "true"
+    ports:
+      - "127.0.0.1:8080:8080"
+    restart: unless-stopped
+
+  postgres:
+    image: postgres:16
+    container_name: statedb-postgres
+    environment:
+      POSTGRES_DB: statedb
+      POSTGRES_USER: statedb
+      POSTGRES_PASSWORD: statedb
+    volumes:
+      - statedb-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U statedb -d statedb"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+    restart: unless-stopped
+
+volumes:
+  statedb-data:

@@ -9,34 +9,34 @@ import testWall from "../data/test-wall.json";
 const github = "https://github.com/state-db/statedb";
 
 const scope = [
-  "No deployment runner. No access to repositories or cloud accounts",
-  "AI stays on the read path. MCP exposes state, resources, and history to the tools you choose",
+  "No deployment runner. No access to your repositories or cloud accounts",
+  "No built-in AI or agent with state-writing privileges",
 ];
 
 const tiers = [
   {
-    label: "CONTRACT REPLAY",
-    claim: "Every byte of the protocol, replayed",
-    body: "Sessions recorded from the real CLI — preview, update, refresh, destroy, rename, export, import — are replayed against every build. Each response has to match byte for byte, apart from documented volatile fields.",
+    label: "WIRE CONTRACT",
+    claim: "Recorded CLI sessions catch protocol drift",
+    body: "Recorded exchanges are replayed against statedb. Status codes and covered JSON responses are checked after dynamic fields are normalized.",
   },
   {
-    label: "INTEGRITY VERIFICATION",
-    claim: "Checked with the CLI's own verifier",
-    body: "Every state file a test produces goes through Pulumi's snapshot integrity verifier. If the CLI would refuse to load the result, the test fails.",
+    label: "INTEGRITY CHECKS",
+    claim: "Pulumi verifies assembled checkpoints",
+    body: "Focused assembly and failure tests run checkpoints through Pulumi's own snapshot integrity verifier. If the verifier rejects one, the test fails.",
   },
   {
-    label: "CLI SMOKE",
-    claim: "Released binaries drive the backend",
-    body: "The real CLI runs the whole lifecycle against statedb on every build: stacks, tags, history, stack references, and secrets.",
+    label: "REAL CLI",
+    claim: "Released binaries run complete workflows",
+    body: "The release gate runs real Pulumi binaries against statedb to test stacks, updates, tags, history, stack references, secrets, and recovery scenarios.",
   },
   {
-    label: "FAULT INJECTION",
-    claim: "Then the tests try to break it",
-    body: "Scenarios kill the CLI mid-update, race concurrent runs, fail deployments partway, and tamper with imports — each one asserts both what the operator sees and what survives in the database.",
+    label: "FAULT TESTS",
+    claim: "Failure paths get their own test suite",
+    body: "Tests kill the CLI mid-update, race concurrent runs, stop deployments partway, and tamper with imports. Each one checks what the operator sees and what remains in PostgreSQL.",
   },
 ];
 
-/* Test-wall rows are generated from the compatibility suite itself — run
+/* Test-wall rows are generated from the compatibility suite itself. Run
    `bun run generate:test-wall` after adding a session, class, or scenario. */
 const wallRow = (chips: { label: string; path: string }[], reverse: boolean) => ({
   chips: chips.map(({ label, path }) => ({ label, href: `${github}/blob/main/${path}` })),
@@ -55,104 +55,104 @@ const wallRows = [
 const access = [
   {
     title: "OIDC sign-in",
-    body: "Connect Okta, Microsoft Entra, Keycloak, Google, or another OpenID Connect provider. Provider settings live in the database, so adding or rotating one does not require a redeploy.",
+    body: "Connect Okta, Microsoft Entra, Keycloak, Google, or another OpenID Connect provider. Configure database-backed providers in the console without redeploying. Environment-seeded providers remain deployment-managed.",
   },
   {
     title: "Organization roles",
-    body: "Owner, admin, member, viewer. One identity holds a different role in each organization.",
+    body: "Assign owner, member, viewer, or guest in each organization. The same person can hold a different role in each one. Site administrators are configured separately.",
   },
   {
     title: "Per-stack grants",
-    body: "Read or write access on a single stack, applied on top of the organization role.",
+    body: "Per-stack grants are enforced today. The management UI is still in progress, so administrators manage grants in PostgreSQL for now.",
   },
   {
     title: "Cedar policies",
-    body: "Authorization runs on Cedar. The owner, admin, member, viewer, service, and guardrail policies are all in the public repository.",
+    body: "Authorization is built on Cedar. The built-in role, service, and guardrail policies are public.",
   },
   {
     title: "Service accounts",
-    body: "Create and revoke long-lived automation tokens in the console. CI passes them through PULUMI_ACCESS_TOKEN.",
+    body: "Create and revoke long-lived automation tokens in the console. CI supplies them through PULUMI_ACCESS_TOKEN.",
   },
   {
     title: "Native CLI login",
-    body: "pulumi login opens the browser. The user signs in with your identity provider, and the CLI receives its token.",
+    body: "Interactive pulumi login opens your browser for OIDC sign-in and approval, then returns a token to the CLI.",
   },
 ];
 
 const operating = [
   {
     q: "Backups",
-    a: "Everything is in PostgreSQL: checkpoints, history, users, and tokens. Your existing pg_dump, WAL archive, or managed snapshot process covers statedb too.",
+    a: "State, history, identities, token hashes, policy grants, and the service-secrets keyset live in PostgreSQL. Back up the whole database with your existing process.",
   },
   {
     q: "Upgrades",
-    a: "Migrations run at startup before the service accepts traffic. An advisory lock serializes migrations when several replicas start together.",
+    a: "Database migrations run before statedb accepts traffic. Flyway's PostgreSQL lock prevents replicas from applying them at the same time.",
   },
   {
     q: "Replicas",
-    a: "Update leases live in the database, so a request can land on any replica. Set one shared session encryption secret so browser sessions work across pods.",
+    a: "Update leases live in PostgreSQL, so any replica can accept a request. Share one session encryption secret across pods so browser sessions work everywhere.",
   },
   {
     q: "Requirements",
-    a: "Run one service with PostgreSQL 14 or newer, built with lz4. There is no queue, object store, or second application process. PostgreSQL 16 and 18 are covered by the test matrix.",
+    a: "Run one service with PostgreSQL 14 or newer and LZ4 support. There is no queue, object store, or second application process. The test matrix covers PostgreSQL 14, 16, and 18.",
   },
   {
     q: "Failure recovery",
-    a: "If statedb is unavailable, the CLI cannot reach its backend. State remains in PostgreSQL. If a run is interrupted, the stack becomes available again when its lease expires.",
+    a: "If statedb is offline, Pulumi cannot read or update state. State remains in PostgreSQL. An interrupted stack becomes available when its lease expires.",
   },
   {
     q: "Air-gapped operation",
-    a: "At runtime, statedb connects to PostgreSQL and your identity provider. It does not require an external control plane or telemetry service.",
+    a: "At runtime, statedb connects to PostgreSQL and an identity provider reachable inside your network. It does not depend on an external control plane.",
   },
 ];
 
 const security = [
   {
     title: "Source",
-    body: "The service, database migrations, Cedar policies, console, and compatibility tests are in one public repository. You can trace the code that accepts a checkpoint all the way to the code that stores it.",
+    body: "The service, database migrations, Cedar policies, console, and compatibility tests share one public repository. Trace a state write from its API request to the rows persisted in PostgreSQL.",
   },
   {
     title: "Secrets",
-    body: "The service secrets provider uses Google Tink with AES-GCM. Ciphertext is bound to the stack identity, so a value copied from one stack will not decrypt in another. Passphrase and cloud KMS providers remain client-side and work unchanged.",
+    body: "The service secrets provider uses Google Tink with AES-GCM. Ciphertext from one stack will not decrypt in another. Passphrase and cloud KMS providers stay client-side and work unchanged.",
   },
   {
     title: "Key handling",
-    body: "statedb generates its encryption keyset on first boot and stores it in PostgreSQL, separate from checkpoint data. This protects leaked checkpoints and partial database dumps, not a full database compromise that includes the keyset.",
+    body: "On first boot, statedb generates an encryption keyset and stores it in PostgreSQL, separate from checkpoint data. This protects exposed checkpoints and dumps that omit the keyset. It does not protect a database compromise that includes the keyset.",
   },
   {
     title: "Data residency",
-    body: "Checkpoints, history, users, and tokens stay in the PostgreSQL instance you configure. statedb does not send telemetry to an external service.",
+    body: "Stored state, history, identities, and token hashes remain in your PostgreSQL database. statedb exposes Prometheus metrics locally and does not phone home.",
   },
   {
     title: "Break-glass access",
-    body: "The emergency local login is opt-in and loopback-only. It disables itself while any OIDC provider is enabled, with that condition checked at login and whenever a session is restored.",
+    body: "Emergency local login is disabled by default and limited to loopback unless you explicitly permit remote access. Enabling any OIDC provider disables it.",
   },
   {
     title: "Dependencies",
-    body: "The repository includes targets for static analysis and dependency scanning. The vulnerability reporting process is public in SECURITY.md.",
+    body: "The repository includes static-analysis and dependency-scanning targets. SECURITY.md publicly documents how to report vulnerabilities privately.",
   },
 ];
 
 const faq = [
   {
     q: "What happens if statedb is unavailable?",
-    a: "The CLI cannot read or update state until the service returns. The state itself remains in your PostgreSQL database. You can also export a standard checkpoint and import it into another backend.",
+    a: "Pulumi cannot read or update state until statedb returns. Your state remains in PostgreSQL. When statedb is available, you can export a standard checkpoint for another backend.",
   },
   {
     q: "How does statedb differ from Pulumi Cloud?",
-    a: "Pulumi Cloud is a broader platform with remote deployments, governance, an internal developer platform, and the Neo AI agent. statedb is deliberately narrower: a self-hosted state backend and console, with MCP tools focused on reading and understanding the state you already hold.",
+    a: "Pulumi Cloud is a broader managed platform. statedb is a narrower self-hosted backend and console. It manages state and access without running your deployments.",
   },
   {
-    q: "What does a commercial license cost?",
-    a: "$600 per month. There is one commercial tier, and it removes the ten-active-stack limit. Users and resources are not metered in either edition.",
+    q: "Are commercial terms available?",
+    a: "Not yet. A commercial license lets one deployment manage more than ten active stacks, but pricing and terms are still in progress. Open an issue before a larger deployment and the maintainers will follow up.",
   },
   {
     q: "Does our CI/CD have to change?",
-    a: "The Pulumi commands stay the same. Point the pipeline at statedb and authenticate with a service account token through PULUMI_ACCESS_TOKEN.",
+    a: "Your Pulumi steps do not. Keep preview, up, refresh, and destroy. Change the backend URL and pass a service-account token through PULUMI_ACCESS_TOKEN.",
   },
   {
     q: "Is OpenTofu supported?",
-    a: "Not yet. Its HTTP backend protocol is a planned target.",
+    a: "Not yet. Support for its HTTP backend protocol is planned.",
   },
 ];
 ---
@@ -161,11 +161,28 @@ const faq = [
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>statedb — self-host infrastructure state without giving up the console</title>
+    <title>statedb: self-host Pulumi state and keep the console</title>
     <meta
       name="description"
-      content="Run a Pulumi-compatible state backend and web console inside your network. Keep state in PostgreSQL and keep the CLI workflow your team already uses."
+      content="Run a Pulumi-compatible state backend and console in your network. Keep state in PostgreSQL while preserving the core Pulumi CLI workflow your team already uses."
     />
+    <meta property="og:title" content="statedb: self-host your Pulumi state" />
+    <meta
+      property="og:description"
+      content="Keep Pulumi state in your PostgreSQL database and give your team a console to inspect it."
+    />
+    <meta property="og:type" content="website" />
+    <meta property="og:url" content="https://statedb.app/" />
+    <meta property="og:image" content="https://statedb.app/og.png" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="statedb: self-host your Pulumi state" />
+    <meta
+      name="twitter:description"
+      content="Keep Pulumi state in your PostgreSQL database and give your team a console to inspect it."
+    />
+    <meta name="twitter:image" content="https://statedb.app/og.png" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
   </head>
   <body>
@@ -189,41 +206,38 @@ const faq = [
         <div class="shell hero-grid">
           <div class="hero-copy">
             <h1>
-              Self-host your infrastructure state.
-              <span>Keep the console.</span>
+              The full-service, self-hosted state backend with
+              <span>flat pricing</span>
             </h1>
             <p class="hero-sub">
-              statedb gives the Pulumi CLI a backend inside your network and gives your team
-              a clear view of what is in it. Browse stacks, resources, outputs, and update
-              history from the same service that stores the state.
+              Replace bare object storage with a real state service: locking, history,
+              access control, and a console, all inside your network.
             </p>
-            <p class="hero-sub">
-              Point <code>PULUMI_BACKEND_URL</code> at statedb. The CLI commands and CI
-              pipelines stay the same. The state stays in PostgreSQL you control.
-            </p>
+            <div class="cta-row hero-actions">
+              <a class="btn btn-solid" href="/docs/quickstart/">Quickstart</a>
+              <a class="btn btn-hero-outline" href={github}>GitHub</a>
+            </div>
             <div class="term">
               <div class="term-tabs" role="tablist" aria-label="Choose your CLI">
                 <button role="tab" aria-selected="true" aria-controls="term-pulumi" data-panel="term-pulumi">
                   Pulumi CLI
                 </button>
                 <button role="tab" aria-selected="false" aria-controls="term-tofu" data-panel="term-tofu">
-                  OpenTofu <span class="soon">soon</span>
+                  OpenTofu <span class="soon">planned</span>
                 </button>
               </div>
               <div class="terminal" id="term-pulumi" role="tabpanel">
-                <span class="t-line"><span class="t-prompt">$</span> pulumi login https://statedb.acme.internal/pulumi</span>
-                <span class="t-line t-out">Logged in to statedb.acme.internal</span>
+                <span class="t-line"><span class="t-prompt">$</span> pulumi login https://state.acme/pulumi</span>
+                <span class="t-line t-out">Logged in to state.acme</span>
               </div>
               <div class="terminal" id="term-tofu" role="tabpanel" hidden>
-                <span class="t-line t-comment"># OpenTofu's http backend is a planned target.</span>
-                <span class="t-line t-comment"># Where the protocols overlap, one implementation serves both.</span>
-                <span class="t-line t-comment"># Progress: github.com/state-db/statedb</span>
+                <span class="t-line t-comment"># OpenTofu support is planned. It is not available today.</span>
+                <span class="t-line t-comment"># Its HTTP backend protocol is the intended target.</span>
+                <span class="t-line t-comment"># Follow progress: github.com/state-db/statedb</span>
               </div>
             </div>
-            <p class="terminal-caption">One backend URL changes. The workflow does not.</p>
-            <p class="hero-price">
-              Free for up to <strong>ten active stacks</strong>, then $600 per month.
-              Users and resources are not metered.
+            <p class="terminal-caption">
+              No plugin. No patched CLI. Change the backend URL and carry on.
             </p>
           </div>
 
@@ -236,14 +250,14 @@ const faq = [
             </div>
             <div class="terminal-screen">
               <div class="terminal-scrollback">
-                <span class="term-row term-command" style="--d: 60ms; --ch: 50; --hold: 220ms"
+                <span class="term-row term-command" style="--d: 60ms; --ch: 39; --hold: 220ms"
                   ><span class="t-prompt">$</span><span class="cmd"
-                    >export PULUMI_CONSOLE_DOMAIN=statedb.acme.internal</span
+                    >export PULUMI_CONSOLE_DOMAIN=state.acme</span
                   ></span
                 >
-                <span class="term-row term-command" style="--d: 730ms; --ch: 62; --hold: 220ms"
+                <span class="term-row term-command" style="--d: 730ms; --ch: 51; --hold: 220ms"
                   ><span class="t-prompt">$</span><span class="cmd"
-                    >export PULUMI_BACKEND_URL=https://statedb.acme.internal/pulumi</span
+                    >export PULUMI_BACKEND_URL=https://state.acme/pulumi</span
                   ></span
                 >
                 <span class="term-row term-command" style="--d: 1508ms; --ch: 34; --hold: 520ms"
@@ -252,11 +266,11 @@ const faq = [
                   ></span
                 >
                 <span class="term-row t-out" style="--d: 2334ms"
-                  >Logged in to https://statedb.acme.internal/pulumi as platform-admin</span
+                  >Logged in to https://state.acme/pulumi as platform-admin</span
                 >
-                <span class="term-row term-command" style="--d: 2598ms; --ch: 29; --hold: 200ms"
+                <span class="term-row term-command" style="--d: 2598ms; --ch: 24; --hold: 200ms"
                   ><span class="t-prompt">$</span><span class="cmd"
-                    >pulumi stack select acme/prod</span
+                    >pulumi stack select prod</span
                   ></span
                 >
                 <span class="term-row term-command" style="--d: 3059ms; --ch: 14; --hold: 130ms"
@@ -264,10 +278,10 @@ const faq = [
                 >
                 <span class="term-row t-blank" style="--d: 3318ms" aria-hidden="true"></span>
                 <span class="term-row t-heading" style="--d: 3398ms"
-                  ><span class="spinner" aria-hidden="true"></span>Previewing update (acme/prod)</span
+                  ><span class="spinner" aria-hidden="true"></span>Previewing update (prod)</span
                 >
                 <span class="term-row t-blank" style="--d: 3738ms" aria-hidden="true"></span>
-                <span class="term-row t-link" style="--d: 3818ms">View in Browser (Ctrl+O): https://statedb.acme.internal/acme/payments/prod/previews/01J6E9M9</span>
+                <span class="term-row t-link" style="--d: 3818ms">View in Browser: https://state.acme/acme/payments-api/prod/previews/00000000-0000-4000-8000-000000000041</span>
                 <span class="term-row t-blank" style="--d: 3978ms" aria-hidden="true"></span>
                 <span class="term-row t-table t-table-head" style="--d: 4058ms"><span>Type</span><span>Name</span><span>Plan</span></span>
                 <span class="term-row t-table t-resource" style="--d: 4158ms"><span>+ pulumi:pulumi:Stack</span><span>payments-api-prod</span><span>create</span></span>
@@ -289,18 +303,16 @@ const faq = [
       <!-- SCOPE -->
       <section class="scope">
         <div class="shell">
-          <p class="kicker">Scope</p>
-          <h2>A backend, not a delivery platform</h2>
+          <h2>State management, without a new delivery platform</h2>
           <p class="section-lead">
-            IaC platforms increasingly bundle state with remote execution, deployment
-            workflows, self-service portals, and built-in AI. statedb stops at the backend and
-            console. Keep the rest of your toolchain.
+            statedb handles state, locking, history, access control, and the console. Your
+            repositories, cloud accounts, runners, and deployment workflows stay where they are.
           </p>
           <ul class="scope-list">
             {scope.map((item) => (
               <li class="scope-no">{item}</li>
             ))}
-            <li class="scope-yes">State, locking, history, access control, and a console in one service</li>
+            <li class="scope-yes">One service for state, locking, history, access control, and the console</li>
           </ul>
         </div>
       </section>
@@ -308,12 +320,10 @@ const faq = [
       <!-- CONSOLE -->
       <section class="console">
         <div class="shell">
-          <p class="kicker">Console</p>
-          <h2>A console for self-hosted state</h2>
+          <h2>See what is in your stacks</h2>
           <p class="section-lead">
-            Object storage can hold a checkpoint, but it stops at storage. statedb adds the
-            console missing from a typical self-hosted backend. Browse from organizations and
-            projects into each stack's current resources and update history.
+            Browse the organizations, projects, and stacks you can access. Inspect resources,
+            outputs, and update history without unpacking checkpoint files.
           </p>
 
           <figure class="shot shot-main">
@@ -404,8 +414,8 @@ const faq = [
             </div>
             <figcaption>
               <span class="shot-label">Stacks</span>
-              Every project and stack in the organization, with its latest run, resource
-              count, and status.
+              Every project and stack you can access, with its latest run, resource count,
+              and status.
             </figcaption>
           </figure>
 
@@ -454,7 +464,7 @@ const faq = [
               </div>
               <figcaption>
                 <span class="shot-label">Resources</span>
-                The current state of one stack. Filter by type or name, flat or as a tree.
+                Inspect current resources as a flat list or tree, then filter by type or name.
               </figcaption>
             </figure>
             <figure class="shot">
@@ -525,7 +535,7 @@ const faq = [
               </div>
               <figcaption>
                 <span class="shot-label">Update history</span>
-                Every version with its changes, duration, and result.
+                Review every update, including its changes, duration, and result.
               </figcaption>
             </figure>
           </div>
@@ -536,45 +546,42 @@ const faq = [
       <section class="pricing" id="pricing">
         <div class="shell">
           <p class="kicker">Pricing</p>
-          <h2>Free up to ten stacks. $600 a month after.</h2>
+          <h2>Free for ten active stacks. Flat license after that.</h2>
           <p class="section-lead">
-            That is the whole price list. One commercial tier, no feature gates, and no meter
-            on users or resources in either edition.
+            Every feature is included from the first stack. The free edition covers up to ten
+            active stacks per deployment; larger deployments move to one commercial license
+            instead of per-user or per-resource metering.
           </p>
           <div class="price-tiers">
             <div class="price-tier">
               <span class="price-tier-name">Free edition</span>
               <div class="price-figure">
                 <span class="price-amount">$0</span>
-                <span class="price-period">up to ten active stacks</span>
+                <span class="price-period">up to ten active stacks per deployment</span>
               </div>
               <ul class="price-points">
-                <li>The full product, not a trial or a feature cut</li>
-                <li>OIDC, organization roles, and per-stack grants included</li>
-                <li>Evaluate on one stack, grow to ten</li>
+                <li>No trial period or feature restrictions</li>
+                <li>OIDC, organization roles, and Cedar authorization</li>
+                <li>Start with one stack and grow to ten</li>
               </ul>
             </div>
             <div class="price-tier price-tier-commercial">
               <span class="price-tier-name">Commercial</span>
               <div class="price-figure">
-                <span class="price-amount">$600</span>
-                <span class="price-period">per month</span>
+                <span class="price-amount">Flat license</span>
+                <span class="price-period">for larger deployments</span>
               </div>
               <ul class="price-points">
-                <li>The same product, past ten active stacks</li>
-                <li>No per-user or per-resource meter, at any scale</li>
-                <li>One tier — nothing to size, nothing to upgrade into</li>
+                <li>The same product above ten active stacks</li>
+                <li>No per-user or per-resource meter</li>
+                <li>Contact us to discuss a larger deployment</li>
               </ul>
             </div>
           </div>
           <div class="price-foot">
-            <p>
-              statedb is source-available under the Elastic License 2.0 and may not be offered
-              to third parties as a hosted service.
-            </p>
             <div class="cta-row">
               <a class="btn btn-outline" href="/docs/license/">License &amp; terms</a>
-              <a class="btn btn-outline" href={`${github}/blob/main/COMMERCIAL.md`}>Commercial licensing</a>
+              <a class="btn btn-outline" href={`${github}/blob/main/COMMERCIAL.md`}>Commercial status</a>
             </div>
           </div>
         </div>
@@ -584,13 +591,13 @@ const faq = [
       <section class="proof" id="compatibility">
         <div class="shell">
           <p class="kicker">Compatibility</p>
-          <h2>The CLI is the contract</h2>
+          <h2>We test with the real Pulumi CLI</h2>
           <p class="section-lead">
-            A state backend cannot be mostly compatible. statedb tests against released Pulumi
-            CLI versions, not just an interpretation of the protocol. Four layers cover the
-            normal workflow and the failures most likely to damage state.
+            Protocol documentation is not enough. statedb replays recorded traffic, checks
+            assembled checkpoints, and runs released Pulumi binaries through normal and
+            failure workflows.
           </p>
-          <p class="proof-badge">Nightly matrix &middot; Pulumi CLI 3.242 &ndash; 3.253</p>
+          <p class="proof-badge">Release gate: Pulumi CLI 3.234.0 and 3.259.0</p>
           <div class="tier-list">
             {tiers.map((tier) => (
               <div class="tier">
@@ -601,7 +608,7 @@ const faq = [
             ))}
           </div>
           <p class="section-foot">
-            The scenario catalogue, and how to run these tiers yourself:
+            See the full scenario catalog and learn how to run the same tests in the
             <a href="/docs/compatibility/">compatibility docs</a>.
           </p>
         </div>
@@ -632,8 +639,8 @@ const faq = [
         </div>
         <div class="shell">
           <p class="testwall-note">
-            Recorded CLI sessions, the classes that replay them, and the scenarios they
-            assert. Every chip links to its source in the
+            These are the recorded sessions, test classes, and failure scenarios behind the
+            compatibility claim. Every name links to its source in the
             <a href={github}>public repository</a>.
           </p>
         </div>
@@ -642,12 +649,10 @@ const faq = [
       <!-- ACCESS CONTROL -->
       <section class="access">
         <div class="shell">
-          <p class="kicker">Access control</p>
-          <h2>Your identities, your rules</h2>
+          <h2>Bring the identity system you already use</h2>
           <p class="section-lead">
-            Console users sign in through your OIDC provider. CLI users and automation receive
-            tokens. Cedar policies decide what each identity can do in each organization and
-            stack.
+            People sign in through your OIDC provider. The CLI and CI use tokens. Cedar
+            policies enforce access by organization and stack.
           </p>
           <div class="access-grid">
             {access.map((item) => (
@@ -663,11 +668,10 @@ const faq = [
       <!-- OPERATIONS -->
       <section class="ops">
         <div class="shell">
-          <p class="kicker">Operations</p>
-          <h2>What self-hosting asks of you</h2>
+          <h2>What self-hosting actually involves</h2>
           <p class="section-lead">
-            Control comes with an operational job: run the service, back up PostgreSQL, and
-            connect your identity provider. Here is the whole footprint.
+            You run one service, back up one PostgreSQL database, and connect your identity
+            provider. There is no queue, object store, or separate application process.
           </p>
           <dl class="ops-list">
             {operating.map((item) => (
@@ -678,7 +682,7 @@ const faq = [
             ))}
           </dl>
           <p class="section-foot">
-            Configuration, replicas, and upgrades in detail:
+            Read about configuration, replicas, and upgrades in the
             <a href="/docs/deployment/">deployment docs</a>.
           </p>
         </div>
@@ -688,19 +692,18 @@ const faq = [
       <section class="lockin">
         <div class="shell lockin-grid">
           <div>
-            <p class="kicker">Portability</p>
-            <h2>Your exit is a checkpoint file</h2>
+            <h2>Move out with a standard checkpoint</h2>
             <p class="band-sub">
-              statedb stores the CLI's own checkpoint format. Export a stack at any time and
-              import that file into another backend. Moving in and moving out use the same
-              commands.
+              statedb exports state in Pulumi's standard checkpoint format. Export a stack,
+              create it on another backend, and import the file with the CLI. If a stack uses the
+              service-managed secrets provider, change its secrets provider before moving it.
             </p>
           </div>
           <div class="terminal terminal-tall" role="img" aria-label="Terminal: exporting state and moving to another backend">
             <span class="t-line"><span class="t-prompt">$</span> pulumi stack export --file prod.checkpoint.json</span>
             <span class="t-line t-comment"># standard checkpoint JSON</span>
             <span class="t-line"><span class="t-prompt">$</span> pulumi login s3://your-bucket</span>
-            <span class="t-line t-comment"># any other backend</span>
+            <span class="t-line"><span class="t-prompt">$</span> pulumi stack init prod</span>
             <span class="t-line"><span class="t-prompt">$</span> pulumi stack import --file prod.checkpoint.json</span>
           </div>
         </div>
@@ -710,10 +713,10 @@ const faq = [
       <section class="security" id="security">
         <div class="shell">
           <p class="kicker">Security</p>
-          <h2>A security model you can inspect</h2>
+          <h2>Inspect the security model for yourself</h2>
           <p class="section-lead">
-            Infrastructure state deserves more than a list of security adjectives. The code,
-            policies, migrations, encryption design, and test harness are available for review.
+            The service code, migrations, Cedar policies, encryption design, and test harness
+            are public. You can review the exact path your state takes.
           </p>
           <div class="security-grid">
             {security.map((item) => (
@@ -724,7 +727,7 @@ const faq = [
             ))}
           </div>
           <p class="section-foot">
-            Reporting a vulnerability:
+            Report a vulnerability through
             <a href={`${github}/blob/main/SECURITY.md`}>SECURITY.md</a>.
           </p>
         </div>
@@ -734,39 +737,40 @@ const faq = [
       <section class="adopt">
         <div class="shell">
           <p class="kicker">Migration</p>
-          <h2>Try one stack, not the whole estate</h2>
+          <h2>Move one stack. Leave the rest alone.</h2>
           <p class="section-lead">
-            Migration uses the CLI's standard export and import commands. Start with one stack
-            while every other team stays on its current backend.
+            For stacks that use passphrase or external KMS providers, Pulumi's standard export
+            and import commands handle the move. Service-managed secrets need a provider change
+            first.
           </p>
           <div class="adopt-grid">
             <ol class="adopt-steps">
               <li>
-                <h3>Keep the existing backend running</h3>
+                <h3>Leave the current backend running</h3>
                 <p>
-                  statedb does not modify it. Only the stack being evaluated needs the new
-                  backend URL.
+                  statedb does not modify the current backend. Only the workflow for the stack
+                  under evaluation needs to point at statedb.
                 </p>
               </li>
               <li>
                 <h3>Migrate one stack</h3>
                 <p>
-                  Export from the current backend and import into statedb. The same commands
+                  Export from the current backend and import into statedb. Reverse the steps to
                   move it back.
                 </p>
               </li>
               <li>
-                <h3>Run it with one team</h3>
+                <h3>Use it in a real workflow</h3>
                 <p>
-                  Put the console, access rules, backups, and update path through a real
-                  production workflow. Other teams remain unaffected.
+                  Test the console, access rules, backup process, and update workflow with one
+                  team. Every other team keeps working as before.
                 </p>
               </li>
               <li>
-                <h3>Expand when it fits</h3>
+                <h3>Expand on your schedule</h3>
                 <p>
-                  The free edition supports ten active stacks, so the first evaluation does not
-                  require a commercial license.
+                  Each deployment supports ten active stacks for free, so the first rollout
+                  does not require a commercial license.
                 </p>
               </li>
             </ol>
@@ -775,15 +779,15 @@ const faq = [
               <span class="t-line"><span class="t-prompt">$</span> pulumi stack export --file prod.json</span>
               <span class="t-line t-blank">&nbsp;</span>
               <span class="t-line t-comment"># on statedb</span>
-              <span class="t-line"><span class="t-prompt">$</span> pulumi login https://statedb.acme.internal</span>
-              <span class="t-line"><span class="t-prompt">$</span> pulumi stack init acme/payments/prod</span>
+              <span class="t-line"><span class="t-prompt">$</span> pulumi login https://statedb.acme.internal/pulumi</span>
+              <span class="t-line"><span class="t-prompt">$</span> pulumi stack init acme/payments-api/prod</span>
               <span class="t-line"><span class="t-prompt">$</span> pulumi stack import --file prod.json</span>
               <span class="t-line t-out">Import successful.</span>
             </div>
           </div>
           <p class="section-foot">
-            Step by step, in both directions:
-            <a href="/docs/migration/">migration docs</a>.
+            See how to move a stack in either direction in the
+            <a href="/docs/migration/">migration guide</a>.
           </p>
         </div>
       </section>
@@ -791,7 +795,7 @@ const faq = [
       <!-- QUESTIONS -->
       <section class="faq">
         <div class="shell">
-          <h2>Questions</h2>
+          <h2>Questions before you try it</h2>
           <dl class="faq-list">
             {faq.map((item) => (
               <div class="faq-item">
@@ -806,21 +810,20 @@ const faq = [
       <!-- GETTING STARTED -->
       <section class="close">
         <div class="shell close-inner">
-          <h2>Start with one stack</h2>
+          <h2>Try statedb on a stack you know</h2>
           <p>
-            statedb is under active development and currently runs from source. Connect a test
-            PostgreSQL database, point the CLI at it, and put the compatibility claim through
-            your own workflow. The free edition covers up to ten active stacks.
+            Connect one familiar stack, run your normal Pulumi workflow, and inspect the result
+            in the console. Every feature is free for up to ten active stacks per deployment.
           </p>
           <div class="cta-row">
             <a class="btn btn-solid" href="/docs/quickstart/">Quickstart</a>
-            <a class="btn btn-outline" href={`${github}/blob/main/COMMERCIAL.md`}>Commercial licensing</a>
+            <a class="btn btn-outline" href={`${github}/blob/main/COMMERCIAL.md`}>Commercial status</a>
           </div>
           <p class="close-procurement">
-            For procurement: <a href="/docs/license/">license terms</a> ·
-            <a href={`${github}/blob/main/COMMERCIAL.md`}>commercial terms</a> ·
-            <a href={`${github}/blob/main/SECURITY.md`}>security policy</a> ·
-            <a href={github}>full source</a>
+            Need to review it first? Read the <a href="/docs/license/">license terms</a>,
+            <a href={`${github}/blob/main/COMMERCIAL.md`}>commercial status</a>,
+            <a href={`${github}/blob/main/SECURITY.md`}>security policy</a>, and
+            <a href={github}>full source</a>.
           </p>
         </div>
       </section>
@@ -830,21 +833,21 @@ const faq = [
       <div class="shell footer-grid">
         <div class="footer-brand">
           <img src={logoDark.src} alt="statedb" width="130" height="37" />
-          <p class="footer-tag">Self-hosted state backend for the&nbsp;Pulumi&nbsp;CLI.</p>
+          <p class="footer-tag">A self-hosted state backend and console for the&nbsp;Pulumi&nbsp;CLI.</p>
         </div>
         <nav class="footer-col" aria-label="Product">
           <span class="footer-head">Product</span>
-          <a href="/docs/">Documentation</a>
+          <a href="/docs/">Docs</a>
           <a href="/docs/quickstart/">Quickstart</a>
           <a href="/docs/compatibility/">Compatibility</a>
-          <a href="/docs/license/">License &amp; pricing</a>
+          <a href="/docs/license/">License &amp; terms</a>
         </nav>
         <nav class="footer-col" aria-label="Project">
           <span class="footer-head">Project</span>
           <a href={github}>GitHub</a>
           <a href={`${github}/blob/main/SECURITY.md`}>Security</a>
           <a href={`${github}/blob/main/CONTRIBUTING.md`}>Contributing</a>
-          <a href={`${github}/blob/main/COMMERCIAL.md`}>Commercial</a>
+          <a href={`${github}/blob/main/COMMERCIAL.md`}>Commercial status</a>
         </nav>
         <div class="footer-mascot" aria-hidden="true">
           <img src={mascot.src} alt="" width="80" height="80" loading="lazy" />
@@ -856,7 +859,9 @@ const faq = [
           Foundation. statedb is an independent project and is not affiliated with, endorsed
           by, or sponsored by either.
         </p>
-        <p class="footer-copy">&copy; 2026 statedb &middot; Elastic License 2.0</p>
+        <p class="footer-copy">
+          &copy; 2026 statedb &middot; Elastic License 2.0 with Additional Limitations
+        </p>
       </div>
     </footer>
 
@@ -875,8 +880,8 @@ const faq = [
 
       /* The hero terminal replays on a loop. Every CSS delay on it is absolute
          from cycle start, so replaying is just rewinding the whole timeline to
-         zero — no class toggling, no reflow hack, nothing to keep in sync but
-         the period below. It only runs while the terminal is on screen. */
+         zero. There is no class toggling or reflow hack. Only the period below
+         must stay in sync. It only runs while the terminal is on screen. */
       const term = document.querySelector<HTMLElement>(".deploy-terminal");
       const stillMotion = matchMedia("(prefers-reduced-motion: reduce)");
 
@@ -1143,16 +1148,19 @@ const faq = [
     margin-bottom: 1.75rem;
   }
 
-  .hero-price {
-    margin: 1.25rem 0 0;
-    font-size: 0.92rem;
-    color: var(--muted-on-ink);
-    max-width: 46ch;
+  .hero-actions {
+    margin: -0.35rem 0 1.5rem;
   }
 
-  .hero-price strong {
+  .btn-hero-outline {
+    color: var(--text-on-ink);
+    border: 1px solid var(--mist-dark);
+    background: rgba(219, 228, 242, 0.06);
+  }
+
+  .btn-hero-outline:hover {
     color: #ffffff;
-    font-weight: 600;
+    background: rgba(219, 228, 242, 0.12);
   }
 
   .terminal {
@@ -1690,11 +1698,6 @@ const faq = [
     margin: 0 0 0.9rem;
   }
 
-  .console .kicker,
-  .lockin .kicker {
-    color: var(--tide-lit);
-  }
-
   .section-lead {
     color: var(--muted);
     max-width: 62ch;
@@ -1810,6 +1813,10 @@ const faq = [
     color: var(--ink);
   }
 
+  .price-tier-commercial .price-amount {
+    font-size: clamp(2rem, 4vw, 2.9rem);
+  }
+
   .price-period {
     font-family: var(--mono);
     font-size: 0.8rem;
@@ -1848,15 +1855,8 @@ const faq = [
     display: flex;
     flex-wrap: wrap;
     align-items: baseline;
-    justify-content: space-between;
+    justify-content: flex-end;
     gap: 1rem 2rem;
-  }
-
-  .price-foot p {
-    color: var(--muted);
-    font-size: 0.95rem;
-    max-width: 58ch;
-    margin: 0;
   }
 
   /* ---------- compatibility ---------- */
@@ -2698,7 +2698,6 @@ const faq = [
   .footer-copy {
     font-family: var(--mono);
     font-size: 0.75rem;
-    white-space: nowrap;
   }
 
   /* ---------- motion ---------- */

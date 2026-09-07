@@ -1,59 +1,22 @@
 ---
-title: Deployment
-description: Running statedb in production — database, configuration, replicas, backups.
+title: Self-managed installation
+description: Install, configure, and operate statedb on your own container platform or virtual machine.
 ---
 
-statedb is a single service plus a Postgres database. There is no separate
-console process, queue, or object store to operate.
+statedb runs as one service against one PostgreSQL database. Port `8080` carries
+everything users touch, meaning the Pulumi API and the console, while port
+`9000` carries health and metrics for your platform. Put HTTPS in front of
+`8080` and keep `9000` on the private network.
 
-## Configuration
+## Prepare the database
 
-Production configuration comes from the environment:
+Use PostgreSQL 14 or newer with LZ4 support. Both the official images and the
+major managed services include it, and statedb verifies the capability before
+applying any migration, so startup fails with an explicit error rather than
+producing a schema it cannot use.
 
-| Variable | Purpose |
-| --- | --- |
-| `STATEDB_JDBC_URL` | JDBC URL of your Postgres database, e.g. `jdbc:postgresql://db:5432/statedb` |
-| `STATEDB_DB_USER` | Database user |
-| `STATEDB_DB_PASSWORD` | Database password |
-| `STATEDB_SESSION_ENCRYPTION_SECRET` | Encrypts console session cookies. Set it to a stable random value (32+ bytes) so sessions survive restarts and work across replicas. |
-| `STATEDB_LICENSE_PATH` | Preferred mounted offline license path, conventionally `/run/secrets/state-db/license.json`. |
-| `STATEDB_LICENSE` | Inline compact envelope JSON or base64-encoded envelope; ignored when a file path is set. |
-| `STATEDB_DEPLOYMENT_ID` | Optional stable identifier checked against a license `deploymentId` claim. |
-
-The service listens on port `8080` and serves both the CLI-facing API and the
-web console.
-
-Docker bind-mount example:
-
-```sh
-docker run --mount type=bind,src=/secure/license.json,dst=/run/secrets/state-db/license.json,readonly \
-  -e STATEDB_LICENSE_PATH=/run/secrets/state-db/license.json state-db
-```
-
-Mount the license with the secret-file feature of your container runtime. Rotate
-the file in place. A license rotation does not change the database.
-
-## Database
-
-- Postgres is the only supported database. **PostgreSQL 14 or newer, built with
-  lz4 support (`--with-lz4`)**, is required — statedb stores its large payload
-  columns with lz4 TOAST compression. The official Postgres images and the major
-  managed offerings qualify; some minimal or distribution builds do not.
-  Releases are tested against Postgres 16 and 18.
-- The requirement is checked at startup before any migration is applied, so an
-  unsupported server fails immediately with a clear error rather than leaving a
-  partly migrated database.
-- Schema is owned by Flyway migrations bundled with the service; they apply
-  automatically at startup. Upgrading statedb upgrades the schema.
-- **Backups are Postgres backups.** Your existing `pg_dump` / WAL archiving /
-  managed-Postgres snapshot strategy covers all statedb data — state
-  checkpoints, history, users, and tokens live in the database.
-
-Use a dedicated database and a dedicated login role. The role does not need to
-own the database or have superuser privileges.
-
-Run these commands as the database owner. Replace the example password before
-you run them:
+Give statedb its own database and login role. It needs neither superuser rights
+nor ownership of the database itself:
 
 ```sql
 CREATE ROLE statedb LOGIN PASSWORD 'replace-this-password';
@@ -61,52 +24,127 @@ GRANT CONNECT ON DATABASE statedb TO statedb;
 GRANT USAGE, CREATE ON SCHEMA public TO statedb;
 ```
 
-Set `STATEDB_DB_USER=statedb`. Flyway creates the application objects, so the
-role owns each object that it must change in a later migration.
+Flyway creates the application objects under that role, which is what lets later
+migrations alter them.
 
-## Running more than one replica
+## Configure the service
 
-statedb is designed to run with multiple tasks behind a load balancer:
+These four values are required in production:
 
-- Flyway migrations serialize across tasks with a Postgres advisory lock;
-  followers find the schema already migrated.
-- Run-once startup work (such as bootstrap provisioning) takes the same kind of
-  advisory lock, so concurrent tasks do not race.
-- Update leases live in the database. Thus, each task observes the same lock state.
+| Variable | Meaning |
+| --- | --- |
+| `STATEDB_JDBC_URL` | JDBC URL, such as `jdbc:postgresql://db:5432/statedb` |
+| `STATEDB_DB_USER` | PostgreSQL login name |
+| `STATEDB_DB_PASSWORD` | PostgreSQL password |
+| `STATEDB_SESSION_ENCRYPTION_SECRET` | Secret that encrypts console session cookies |
 
-Set `STATEDB_SESSION_ENCRYPTION_SECRET` when you run more than one task. All
-tasks must use the same value.
+Use at least 32 random bytes for the session secret, and give every replica the
+same value. If replicas disagree, a user's session stops being readable the
+moment their next request lands on a different pod.
+
+On a fresh deployment you can also have statedb create the first organization
+for you. Setting `STATEDB_BOOTSTRAP_ORG_NAME` opts into this;
+`STATEDB_BOOTSTRAP_ORG_DISPLAY_NAME` is optional and defaults to the name. Both
+are ignored once the organization exists.
+
+### First identity provider
+
+You can seed one OpenID Connect provider from the environment, which saves a
+manual database insert on a new deployment:
+
+| Variable | Meaning |
+| --- | --- |
+| `STATEDB_OIDC_BOOTSTRAP_NAME` | Short provider name |
+| `STATEDB_OIDC_BOOTSTRAP_ISSUER` | OpenID Connect issuer URL |
+| `STATEDB_OIDC_BOOTSTRAP_CLIENT_ID` | Application client ID |
+| `STATEDB_OIDC_BOOTSTRAP_CLIENT_SECRET` | Application client secret |
+| `STATEDB_OIDC_DEFAULT_PROVIDER` | Provider used by the default sign-in button |
+| `STATEDB_ADMIN_SUBJECTS` | Comma-separated issuer/subject pairs for site administrators |
+
+`STATEDB_OIDC_BOOTSTRAP_NAME` is the switch: set it and the other three become
+required, so a half-configured provider fails at startup instead of at first
+login. These values are re-applied at every start, which makes rotating the
+client secret a matter of changing the environment and restarting. The console
+shows this provider as environment-managed and read-only.
+
+Any further providers you add from **Manage → Providers** are stored in
+PostgreSQL and editable in the console.
+
+## Recovery access
+
+Recovery access is off unless you set `STATEDB_LOCAL_GLASS_PASSWORD_HASH` to a
+bcrypt hash in Modular Crypt Format. It exists for one situation: your identity
+provider is down and you need to get back in.
+
+Two things keep it contained. It accepts loopback connections only, and it turns
+itself off entirely whenever an enabled OIDC provider exists. That second
+condition is checked both at sign-in and on every session restore, so restoring
+OIDC service also ends any recovery session already open.
+
+:::caution
+`STATEDB_LOCAL_GLASS_ALLOW_REMOTE=true` removes the loopback restriction. Use it
+only in an isolated evaluation environment, never in production.
+:::
+
+## Health checks and traffic
+
+| Purpose | Port | Path |
+| --- | --- | --- |
+| User traffic | `8080` | `/` and `/pulumi` |
+| Readiness | `9000` | `/q/health/ready` |
+| Liveness | `9000` | `/q/health/live` |
+
+Allow at least 600 seconds of health-check grace for a new task. A database cold
+start, or a wait behind another replica's migration lock, can legitimately take
+minutes, and a tighter deadline will kill tasks that were about to succeed.
+
+## Running several replicas
+
+Update leases and session data both live in PostgreSQL, so any healthy replica
+can serve any request. The requirements are just that every replica shares a
+database and a session-encryption secret.
+
+Migrations are safe under this model too. Flyway takes a database lock, one
+replica applies the schema change, and the rest wait and then verify the result.
 
 ## Upgrades
 
-Replace the image to upgrade statedb. The image contains Flyway and all required
-migrations. Do not add an init container or a separate migration job.
+Replacing the application image is the entire upgrade procedure. Every Flyway
+migration ships inside the image and runs at startup, so there is no separate
+migration job to sequence.
 
-Do not set `QUARKUS_INIT_AND_EXIT`. statedb must remain active after startup and
-serve application traffic from the same task that ran the migration.
+Keep the old tasks serving until a new one reports ready, and enable automatic
+rollback for services that never reach a steady state. Allow at least 10 seconds
+between `SIGTERM` and `SIGKILL` so in-flight requests can finish. While old and
+new tasks overlap, only expand-only migrations are safe. That constraint is on
+the migrations themselves, not on your deployment tooling.
 
-The candidate must become ready in less than three minutes. Other new tasks wait
-up to five minutes for the Flyway lock.
+## Backups
 
-Configure the runtime as follows:
+Every statedb record is in PostgreSQL: checkpoints, history, users,
+organizations, policies, and tokens. Your existing backup process therefore
+already covers statedb, whether that means managed snapshots, WAL archiving, or
+`pg_dump`.
 
-- Send readiness checks to `/q/health/ready` on management port `9000`.
-- Keep management port `9000` private to the runtime network.
-- Set the health-check grace period to at least 600 seconds.
-- Keep the old tasks healthy until the new task becomes ready.
-- Enable automatic rollback when a deployment cannot reach a steady state.
-- Give each task at least 10 seconds between `SIGTERM` and `SIGKILL`.
+Test the restore rather than assuming it. Restore into a separate database,
+start the same statedb version against it, and export a stack with the Pulumi
+CLI. That exercises the whole path from stored rows back to a checkpoint the CLI
+accepts.
 
-Amazon ECS Express Mode uses a 300-second health-check grace period by default.
-Increase it to 600 seconds for statedb. Express Mode uses canary deployments and
-alarm-based rollback by default.
+## Commercial license file
 
-For a standard ECS rolling service, enable the deployment circuit breaker and
-rollback. Set `minimumHealthyPercent` and `maximumPercent` so ECS starts a new
-task before it stops the last healthy task.
+Mount a commercial license as a read-only secret file and point at it:
 
-Use expand-only migrations while old and new tasks run together. A migration
-must not remove a column, constraint, or representation that the old image uses.
+```sh
+STATEDB_LICENSE_PATH=/run/secrets/state-db/license.json
+```
 
-See the [Amazon ECS Express Mode defaults](https://docs.aws.amazon.com/AmazonECS/latest/developerguide/express-service-work.html)
-and the [Amazon ECS rolling deployment guide](https://docs.aws.amazon.com/AmazonECS/latest/developerguide/deployment-type-ecs.html).
+`STATEDB_LICENSE` can carry the full document inline instead; if both are set,
+the file path wins. When a license contains a deployment identifier,
+`STATEDB_DEPLOYMENT_ID` must match the signed claim.
+
+statedb re-reads the file for each enforced operation, so replacing it takes
+effect without a restart.
+
+See [license and Pulumi compatibility](/docs/license/) for the Free Edition
+limit and the terms themselves.

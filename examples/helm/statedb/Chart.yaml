@@ -1,0 +1,12 @@
+apiVersion: v2
+name: statedb
+description: Self-hosted state backend for the Pulumi CLI, with a web console.
+type: application
+version: 0.1.0
+appVersion: "0.1.0"
+home: https://statedb.app
+sources:
+  - https://github.com/state-db/statedb
+maintainers:
+  - name: state-db
+    url: https://github.com/state-db/statedb

@@ -1,50 +1,74 @@
 ---
-title: Migrating in and out
-description: Moving state into statedb from any backend — and out again, in one command.
+title: Migrate stacks
+description: Move Pulumi stack state into statedb, and back out again.
 ---
 
-statedb stores state in the CLI's native checkpoint format, not a proprietary
-schema. That makes migration symmetric: the same two commands move you in and
-move you out.
+statedb stores state in the CLI's own checkpoint format, so migration in either
+direction is just `pulumi stack export` and `pulumi stack import`. There is no
+conversion step and no statedb-specific tooling, which is also why moving out is
+as straightforward as moving in.
 
-## Moving in
+Migrate one stack at a time. Nothing about statedb requires you to move an
+entire estate at once, and the free ten-stack allowance is enough to run a real
+team on it before committing.
 
-From a stack on your current backend (a managed cloud, S3, local files —
-anywhere):
+## Before you start
+
+- Back up the source backend.
+- Note the stack's current secrets provider.
+- Keep the source backend available until you have verified the imported stack.
+- Pick a window with no active updates on the stack.
+
+## Moving a stack in
+
+Export from wherever the stack lives today:
 
 ```sh
-# On the old backend
 pulumi stack select my-stack
 pulumi stack export --file my-stack.checkpoint.json
+```
 
-# Point at statedb and import
-pulumi login https://statedb.internal.example.com
+Then create the destination stack on statedb and import into it:
+
+```sh
+pulumi login https://statedb.example.com/pulumi
 pulumi stack init my-stack
 pulumi stack import --file my-stack.checkpoint.json
 ```
 
-Run `pulumi preview` afterwards — it should show no changes. Repeat per stack.
+Finally, confirm the result:
 
-Secrets note: if the stack used a backend-managed secrets provider, re-select a
-secrets provider as part of the move (`pulumi stack change-secrets-provider`).
-Stacks using passphrase or KMS-based providers carry over as-is.
+```sh
+pulumi preview
+```
 
-## Moving out
+A clean preview with no unexpected changes is the signal that the migration
+worked. Anything else means stop and investigate before you delete the source
+copy.
 
-The same commands, pointed the other way:
+## Secrets
+
+Passphrase and external KMS providers travel with the checkpoint and need no
+attention. A backend-managed secrets provider is the case that requires work,
+since the old backend's key does not come with the file.
+
+Use `pulumi stack change-secrets-provider` when the destination cannot use the
+current provider, and test decryption on the imported stack before removing the
+source. Secrets are the one part of a migration that fails quietly, so verify
+them explicitly rather than assuming a clean preview covers it.
+
+## Moving a stack out
+
+The same two commands, pointed the other way:
 
 ```sh
 pulumi stack export --file my-stack.checkpoint.json
-pulumi login s3://your-bucket        # or any other backend
+pulumi login s3://your-bucket
+pulumi stack init my-stack
 pulumi stack import --file my-stack.checkpoint.json
+pulumi preview
 ```
 
-Export works from day one and is never gated — not by license tier, not by
-stack count. Imported checkpoints are validated before persistence, and
-tampered or corrupted files are rejected without touching existing state.
-
-## Why we build it this way
-
-A backend that makes leaving expensive has no incentive to stay good. Keeping
-the exit at one command means statedb has to keep earning the next
-`pulumi up` — that's the deal.
+Export works in both license modes, so a Free Edition deployment is never a
+place your state can get stuck. On the way in, statedb validates a checkpoint
+before it replaces anything already stored.

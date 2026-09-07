@@ -1,0 +1,140 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "statedb.fullname" . }}
+  labels:
+    {{- include "statedb.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "statedb.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "statedb.selectorLabels" . | nindent 8 }}
+      {{- with .Values.podAnnotations }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+    spec:
+      serviceAccountName: {{ include "statedb.serviceAccountName" . }}
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      securityContext:
+        runAsNonRoot: true
+      containers:
+        - name: statedb
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          ports:
+            - name: http
+              containerPort: 8080
+            - name: management
+              containerPort: {{ .Values.managementPort }}
+          env:
+            - name: STATEDB_JDBC_URL
+              value: {{ required "database.jdbcUrl is required" .Values.database.jdbcUrl | quote }}
+            - name: STATEDB_DB_USER
+              value: {{ required "database.user is required" .Values.database.user | quote }}
+            - name: STATEDB_DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  {{- if .Values.database.existingSecret }}
+                  name: {{ .Values.database.existingSecret }}
+                  key: {{ .Values.database.existingSecretPasswordKey }}
+                  {{- else }}
+                  name: {{ include "statedb.fullname" . }}-db
+                  key: password
+                  {{- end }}
+            - name: STATEDB_SESSION_ENCRYPTION_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "statedb.sessionSecretName" . }}
+                  key: {{ include "statedb.sessionSecretKey" . }}
+            {{- with .Values.bootstrap.orgName }}
+            - name: STATEDB_BOOTSTRAP_ORG_NAME
+              value: {{ . | quote }}
+            {{- end }}
+            {{- with .Values.bootstrap.orgDisplayName }}
+            - name: STATEDB_BOOTSTRAP_ORG_DISPLAY_NAME
+              value: {{ . | quote }}
+            {{- end }}
+            {{- if .Values.oidc.name }}
+            - name: STATEDB_OIDC_BOOTSTRAP_NAME
+              value: {{ .Values.oidc.name | quote }}
+            - name: STATEDB_OIDC_BOOTSTRAP_ISSUER
+              value: {{ required "oidc.issuer is required when oidc.name is set" .Values.oidc.issuer | quote }}
+            - name: STATEDB_OIDC_BOOTSTRAP_CLIENT_ID
+              value: {{ required "oidc.clientId is required when oidc.name is set" .Values.oidc.clientId | quote }}
+            - name: STATEDB_OIDC_BOOTSTRAP_CLIENT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  {{- if .Values.oidc.existingSecret }}
+                  name: {{ .Values.oidc.existingSecret }}
+                  key: {{ .Values.oidc.existingSecretClientSecretKey }}
+                  {{- else }}
+                  name: {{ include "statedb.fullname" . }}-oidc
+                  key: client-secret
+                  {{- end }}
+            {{- end }}
+            {{- with .Values.oidc.defaultProvider }}
+            - name: STATEDB_OIDC_DEFAULT_PROVIDER
+              value: {{ . | quote }}
+            {{- end }}
+            {{- with .Values.oidc.adminSubjects }}
+            - name: STATEDB_ADMIN_SUBJECTS
+              value: {{ . | quote }}
+            {{- end }}
+            {{- if .Values.license.existingSecret }}
+            - name: STATEDB_LICENSE_PATH
+              value: /run/secrets/statedb/{{ .Values.license.key }}
+            {{- end }}
+            {{- with .Values.license.deploymentId }}
+            - name: STATEDB_DEPLOYMENT_ID
+              value: {{ . | quote }}
+            {{- end }}
+          {{- if .Values.license.existingSecret }}
+          volumeMounts:
+            - name: license
+              mountPath: /run/secrets/statedb
+              readOnly: true
+          {{- end }}
+          # Migrations run before the service serves traffic, so readiness can
+          # legitimately take minutes on a cold database.
+          startupProbe:
+            httpGet:
+              path: /q/health/ready
+              port: management
+            failureThreshold: {{ .Values.startupProbe.failureThreshold }}
+            periodSeconds: {{ .Values.startupProbe.periodSeconds }}
+          readinessProbe:
+            httpGet:
+              path: /q/health/ready
+              port: management
+          livenessProbe:
+            httpGet:
+              path: /q/health/live
+              port: management
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+      {{- if .Values.license.existingSecret }}
+      volumes:
+        - name: license
+          secret:
+            secretName: {{ .Values.license.existingSecret }}
+      {{- end }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}

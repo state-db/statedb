@@ -78,3 +78,13 @@ pre,
 kbd {
   font-family: "JetBrains Mono Variable", ui-monospace, "SF Mono", Menlo, monospace;
 }
+
+/* Console captures are product evidence, not decorative illustrations. */
+.sl-markdown-content img[src^="/screens/"] {
+  display: block;
+  width: 100%;
+  margin-block: 1rem 1.75rem;
+  border: 1px solid var(--sl-color-hairline-shade);
+  border-radius: 0.75rem;
+  box-shadow: 0 1rem 2.5rem rgb(8 32 49 / 12%);
+}

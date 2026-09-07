@@ -1,112 +1,74 @@
 ---
-title: License & pricing
-description: Elastic License 2.0, free for up to ten active stacks per deployment.
+title: License and Pulumi compatibility
+description: statedb's license terms, and the basis for its Pulumi CLI compatibility.
 ---
 
-statedb is source-available under the
-[Elastic License 2.0](https://github.com/state-db/statedb/blob/main/LICENSE)
-with an additional Free Edition Use Limit.
+statedb is licensed under the Elastic License 2.0 with one additional term, the
+Free Edition Use Limit. The repository's
+[LICENSE](https://github.com/state-db/statedb/blob/main/LICENSE) file is
+authoritative; this page explains it in plain language and is not legal advice.
 
-## The short version
+## Free Edition
 
-- **Free** — use, modify, and self-host statedb for your own internal business
-  purposes, free of charge, for up to **ten active stacks per deployment**.
-- **Commercial** — beyond ten active stacks, a commercial license is required.
-  See
-  [COMMERCIAL.md](https://github.com/state-db/statedb/blob/main/COMMERCIAL.md)
-  for terms and contact.
-- **One hard restriction** — you may not offer statedb to third parties as a
-  hosted or managed service. Running it for your own company (including for
-  internal teams and subsidiaries) is exactly what it's for; reselling it as a
-  service is not.
+One deployment may manage up to ten active stacks at no charge.
 
-## Frequently asked
+Each part of that sentence is defined. A stack is *active* if it currently
+exists in statedb's data store. Deleted stacks stop counting, and users,
+resources, projects, and update history never affect the number. A *deployment*
+is one installation backed by one database, so independent deployments count
+their stacks independently.
 
-**What counts as an active stack?**
-A stack that currently exists in the deployment's database. Deleted stacks
-don't count. Separate deployments (separate databases) count separately. The
-LICENSE file's definition is authoritative.
+## Commercial use
 
-**Is the source really available?**
-Yes — the full source is on
-[GitHub](https://github.com/state-db/statedb). You can read every line that
-touches your state, build it yourself, and audit the test suites the
-[compatibility claims](/docs/compatibility/) rest on.
+Managing more than ten active stacks in a single deployment requires a
+commercial license. Terms and pricing are not final; see
+[COMMERCIAL.md](https://github.com/state-db/statedb/blob/main/COMMERCIAL.md) for
+current status and how to get in touch.
 
-**What happens if I need more than ten stacks?**
-Get in touch via
-[COMMERCIAL.md](https://github.com/state-db/statedb/blob/main/COMMERCIAL.md) —
-commercial licensing is how the project is funded. Deleting stacks you no
-longer use also frees up room under the free limit.
+Two limits apply regardless of edition. You may not offer statedb to third
+parties as a hosted or managed service, and you may not modify it to disable or
+circumvent license enforcement.
 
-**Can I contribute?**
-Yes. Pull requests are accepted from contributors who have signed the
-[CLA](https://github.com/state-db/statedb/blob/main/CLA.md); see
-[CONTRIBUTING.md](https://github.com/state-db/statedb/blob/main/CONTRIBUTING.md).
+Otherwise the license is permissive: use, copy, distribute, and modify statedb
+freely, provided modified copies carry a clear notice that they have been
+changed.
 
-## Offline commercial licenses
+## Why statedb can work with the Pulumi CLI
 
-A commercial license is a local Ed25519-signed document. statedb never contacts
-a licensing server. Missing, unreadable, invalid, not-yet-valid, and expired
-licenses all resolve to the Community entitlement and do not prevent startup.
+Pulumi separates the CLI from the state backend by design. Its own documentation
+describes a backend as an API and storage endpoint the user chooses, and the CLI
+ships with support for both Pulumi Cloud and self-managed backends.
 
-Mount the issued artifact and set:
+statedb implements the HTTP protocol the unmodified CLI already speaks. It is
+not Pulumi Cloud and does not claim to be.
 
-```sh
-STATEDB_LICENSE_PATH=/run/secrets/state-db/license.json
-```
+The Pulumi CLI and engine are Apache 2.0 licensed. statedb uses public Pulumi
+source and API descriptions to build its compatibility tests, and keeps the
+Apache license and copyright notices for that material. The record is public:
 
-`STATEDB_LICENSE` may instead contain the compact envelope JSON or standard
-base64 encoding of that whole JSON document. The mounted file takes precedence.
-The file is read and verified on every enforced operation, so atomically
-replacing it restores entitlement without restarting. `STATEDB_DEPLOYMENT_ID`
-checks a certificate's `deploymentId`. A certificate containing that claim is
-invalid when the setting is absent or different. statedb does not fingerprint
-machines or containers. License artifacts are limited to 64 KiB.
+- [Pulumi state and backend documentation](https://www.pulumi.com/docs/iac/concepts/state-and-backends/)
+- [Pulumi source and Apache 2.0 license](https://github.com/pulumi/pulumi)
+- [Pulumi-derived material in statedb](https://github.com/state-db/statedb/tree/main/third_party/pulumi)
+- [state-db third-party notices](https://github.com/state-db/statedb/blob/main/NOTICE)
 
-The admin endpoint `GET /api/admin/entitlement` reports the effective tier,
-validation status, authoritative stack count, limit, paid expiration, and a
-safe validation failure. It never returns customer/license identifiers,
-commercial metadata, payloads, or signatures; expiration is intentionally
-reported as effective-status data.
+Compatibility is not endorsement. statedb is an independent project, and Pulumi
+Corporation does not sponsor, endorse, or operate it.
 
-### Signed-envelope format
+## Trademarks
 
-The outer document has exactly two strings:
+Pulumi is a trademark of Pulumi Corporation. This site uses the name only to
+identify compatibility with the Pulumi CLI, and does not use Pulumi's logo as
+its own.
 
-```json
-{"payload":"BASE64URL_WITHOUT_PADDING","signature":"BASE64URL_WITHOUT_PADDING"}
-```
+Pulumi publishes [trademark rules](https://www.pulumi.com/trademark/) that
+prohibit product names implying endorsement. The statedb name and visual design
+are deliberately separate from Pulumi branding.
 
-`payload` decodes to the exact UTF-8 bytes of the claims JSON. `signature` is
-Ed25519 over those exact bytes. Verification never parses and reserializes the
-payload. Both envelope and claims reject duplicate fields, unknown fields, and
-trailing content. Schema 1 requires `schema`, `keyId`, `licenseId`,
-`customerId`, `product`, `edition`, `issuedAt`, `notBefore`, and `expiresAt`;
-`subscriptionId` and `deploymentId` are optional. `product` must be `state-db`
-and `edition` must be `paid`. `notBefore` is inclusive and `expiresAt` is
-exclusive.
+## Source availability
 
-Monthly and annual fulfillment use this same format and runtime path. Only the
-signed timestamps differ; billing cadence is not an application concept.
+The full source is public on
+[GitHub](https://github.com/state-db/statedb), including the state path,
+database migrations, access policies, console, and compatibility tests.
 
-### Vendor-side issuance
-
-The website and marketplace fulfillment systems should share one issuer:
-
-1. Keep each Ed25519 private key in a KMS/HSM or an access-controlled secret;
-   never copy it into the statedb repository or image.
-2. Build the schema-1 claims JSON in a fixed field order with RFC 3339 UTC
-   timestamps and compact UTF-8 encoding.
-3. Sign those exact bytes, base64url-encode payload and signature without
-   padding, and emit the envelope above.
-4. Retain old public keys in statedb while any certificate bearing their
-   `keyId` remains valid. Add a new public key and key ID before issuing with a
-   rotated private key.
-
-The application currently contains a visibly marked placeholder for key ID
-`2026-01`. Its private half is not known. Release engineering must replace the
-placeholder with the public half held by the production issuer before
-commercial issuance; this is a release blocker, not an issuable trust anchor.
-The private key under test resources is explicitly test-only, uses a different
-key ID and public key, and matches only the test verifier configuration.
+Source-available is not open source. statedb carries the limits described above,
+and its third-party components keep their own licenses.
