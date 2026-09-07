@@ -3,8 +3,11 @@ set -euo pipefail
 
 cd "$(dirname "$0")/.."
 
-bash -n bin/build-native-app-image bin/generate-db-schema bin/release bin/release-gate \
-  bin/verify-db-schema-generator bin/postgres-images
+bash -n dev bin/build-native-app-image bin/generate-db-schema bin/package-aws-installer bin/release \
+  bin/release-gate bin/verify-db-schema-generator bin/postgres-images \
+  deploy/aws/deploy.sh deploy/aws/teardown.sh tools/release/dev-publish-candidate.test.sh
+bin/check-aws-installer
+tools/release/dev-publish-candidate.test.sh
 bun test tools/release
 (cd modules/web && bunx tsc -p ../../tools/release/tsconfig.json)
 

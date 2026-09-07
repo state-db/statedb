@@ -10131,7 +10131,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
 ------------------------------------------------------------------------
-@tanstack/history@1.162.1
+@tanstack/history@1.162.0
 License: MIT
 Homepage: https://tanstack.com/router
 
@@ -10212,7 +10212,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
 ------------------------------------------------------------------------
-@tanstack/react-router@1.170.31
+@tanstack/react-router@1.170.15
 License: MIT
 Homepage: https://tanstack.com/router
 
@@ -10293,7 +10293,7 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
 ------------------------------------------------------------------------
-@tanstack/router-core@1.171.26
+@tanstack/router-core@1.171.13
 License: MIT
 Homepage: https://tanstack.com/router
 

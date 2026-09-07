@@ -1,0 +1,92 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+cd "$(dirname "$0")/.."
+# shellcheck disable=SC1091
+source deploy/contract.env
+
+fail() {
+  echo "AWS installer conformance: $1" >&2
+  exit 1
+}
+
+contains() {
+  local file=$1 text=$2
+  grep -F -- "$text" "$file" >/dev/null || fail "$file is missing: $text"
+}
+
+template=deploy/aws/cloudformation.yaml
+contains "$template" "$IMAGE_REPOSITORY"
+contains "$template" "ContainerPort: $APP_PORT"
+contains "$template" "Memory: \"$MEMORY_MIB\""
+contains "$template" "MinTaskCount: $MIN_REPLICAS"
+contains "$template" "MaxTaskCount: $MAX_REPLICAS"
+contains "$template" "HealthCheckPath: $HEALTH_PATH"
+contains "$template" 'Type: AWS::ECS::ExpressGatewayService'
+contains "$template" 'Type: AWS::ECS::TaskDefinition'
+contains "$template" 'CpuArchitecture: !Ref CpuArchitecture'
+contains "$template" 'TaskDefinitionArn: !Ref AppTaskDefinition'
+contains "$template" 'Name: Main'
+contains "$template" 'EnableIAMDatabaseAuthentication: true'
+contains "$template" 'DbBackupRetentionDays:'
+contains "$template" 'BackupRetentionPeriod: !Ref DbBackupRetentionDays'
+contains "$template" 'Action: rds-db:connect'
+contains "$template" 'STATEDB_DB_AUTHENTICATION'
+contains "$template" 'Value: aws-iam'
+contains "$template" 'ManageMasterUserPassword: true'
+contains "$template" 'Value: !Sub pulumi login https://${Service.Endpoint}/pulumi'
+contains "$template" ':__VERSION__@sha256:__IMAGE_DIGEST__'
+contains "$template" 'public.ecr.aws/docker/library/postgres:18@sha256:4ef4dbc939d61acea57712655ddb4b4ab27419c913f94cca0cd57cb3ea3c2280'
+contains "$template" "pg_advisory_xact_lock(hashtext('statedb:database-bootstrap'))"
+contains "$template" 'clientToken=client_token(event)'
+contains "$template" 'ecs.stop_task('
+contains "$template" 'AppSubnetARouteAssociation'
+contains "$template" 'NetworkMode:'
+contains "$template" 'AllowedValues:'
+contains "$template" 'UseExisting'
+contains "$template" 'Condition: CreateNetwork'
+contains "$template" 'ExistingNetworkRequiresIdentifiers:'
+contains "$template" 'ExistingApplicationSubnetAId'
+contains "$template" 'ExistingDatabaseSubnetBId'
+contains "$template" '"assignPublicIp": properties["AssignPublicIp"]'
+contains "$template" 'AssignPublicIp: !If [ApplicationSubnetsArePublic, ENABLED, DISABLED]'
+contains "$template" 'RoutingReady: !If'
+contains "$template" 'TaskSecurityGroupId:'
+contains "$template" 'DatabaseSecurityGroupId:'
+runtime_platform_count=$(grep -Fc 'CpuArchitecture: !Ref CpuArchitecture' "$template")
+[[ $runtime_platform_count == 2 ]] ||
+  fail "$template must select CpuArchitecture for both application and bootstrap tasks"
+if grep -E '^[[:space:]]+(Iops|StorageThroughput):' "$template" >/dev/null; then
+  fail "$template provisions gp3 performance that is invalid below 400 GiB for PostgreSQL"
+fi
+
+check_dir=$(mktemp -d "${TMPDIR:-/tmp}/statedb-aws-installer.XXXXXX")
+trap 'rm -rf "$check_dir"' EXIT
+digest=sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+artifact="$check_dir/state-db-0.2.0-cloudformation.yaml"
+bin/package-aws-installer 0.2.0 "$digest" "$artifact" >/dev/null
+contains "$artifact" "ghcr.io/state-db/statedb:0.2.0@$digest"
+if grep -E '__VERSION__|__IMAGE_DIGEST__' "$artifact" >/dev/null; then
+  fail "$artifact contains an unstamped release placeholder"
+fi
+image_references=$(grep -E '^[[:space:]]+Default: .+@sha256:[0-9a-f]{64}$' "$artifact" | wc -l | tr -d ' ')
+[[ $image_references == 2 ]] || fail "$artifact does not contain two digest-pinned default images"
+
+bash -n bin/package-aws-installer deploy/aws/deploy.sh deploy/aws/teardown.sh
+grep -F 'cloudformation create-change-set' deploy/aws/deploy.sh >/dev/null ||
+  fail "guided deploy does not create a reviewable change set"
+grep -F 'DEFAULT_BOOTSTRAP_IMAGE=' deploy/aws/deploy.sh | grep -F 'sha256:4ef4dbc939d61acea57712655ddb4b4ab27419c913f94cca0cd57cb3ea3c2280' >/dev/null ||
+  fail "guided deploy does not use the verified bootstrap image index"
+grep -F 'ParameterKey=BootstrapImageReference' deploy/aws/deploy.sh >/dev/null ||
+  fail "guided deploy does not pass its bootstrap image override to CloudFormation"
+grep -F 'cloudformation execute-change-set' deploy/aws/deploy.sh >/dev/null ||
+  fail "guided deploy does not execute its reviewed change set"
+grep -F 'cloudformation delete-stack' deploy/aws/teardown.sh >/dev/null ||
+  fail "guided teardown does not delete the stack"
+grep -F 'STATEDB_DB_BACKUP_RETENTION_DAYS:-1' deploy/aws/deploy.sh >/dev/null ||
+  fail "guided deploy does not use its low-cost backup-retention default"
+grep -F 'ROLLBACK_COMPLETE' deploy/aws/deploy.sh >/dev/null ||
+  fail "guided deploy does not explain how to recover a rolled-back create"
+grep -F 'cloudformation wait stack-delete-complete' deploy/aws/teardown.sh >/dev/null ||
+  fail "guided teardown does not wait for deletion"
+echo "AWS installer conformance passed"

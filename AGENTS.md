@@ -34,6 +34,7 @@ rationale into this file; keep the owning document or code comment current.
 ./dev native-contract  native-image reachability contract
 ./dev schema           regenerate the readable PostgreSQL schema
 ./dev notices          regenerate dependency notices
+./dev publish-candidate build, publish, and gate this machine's architecture candidate
 ./dev signoff          clean-VM check and publish status for an exact commit
 ```
 
@@ -42,7 +43,9 @@ rationale into this file; keep the owning document or code comment current.
   `./dev native-contract` for reflection, runtime-selected serialization,
   resources, proxies, JNI, or other native-reachability changes.
 - Run `./dev signoff` only when explicitly requested; it publishes external
-  status. Run `./dev notices` only when notices need regeneration.
+  status. Run `./dev publish-candidate` only when explicitly requested; it
+  publishes an image to the candidate registry. Run `./dev notices` only when
+  notices need regeneration.
 - Run `./dev schema` after a Flyway migration changes the current schema.
 - Builds, tests, and dependency resolution used for verification must go
   through public `./dev` intents. Do not invoke Maven, Bun, Go, or their task

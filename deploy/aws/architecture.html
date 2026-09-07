@@ -1,0 +1,206 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light dark">
+  <meta name="description" content="Interactive resource diagram for the state-db AWS CloudFormation installer.">
+  <title>state-db AWS resource diagram</title>
+  <style>
+    :root {
+      --bg:#f3f5f7;--panel:#fff;--panel-2:#f8f9fa;--ink:#20252b;--muted:#68717d;
+      --line:#ccd2d8;--line-strong:#929ba6;--accent:#b94b24;--accent-soft:#f8e1d8;
+      --network:#2e668f;--network-soft:#e5eff6;--compute:#5c4ca0;--compute-soft:#ece9f7;
+      --data:#21715c;--data-soft:#e2f1ec;--iam:#8b621d;--iam-soft:#f6edd9;
+      --ops:#59636e;--ops-soft:#e9edf0;--runtime:#146c94;--create:#9b4d18;
+      --mono:"SFMono-Regular",Consolas,"Liberation Mono",Menlo,monospace;
+      --sans:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+    }
+    @media(prefers-color-scheme:dark){:root{
+      --bg:#111417;--panel:#191d21;--panel-2:#20252a;--ink:#eef1f4;--muted:#a9b0b8;
+      --line:#343b42;--line-strong:#65707b;--accent:#e37851;--accent-soft:#43281f;
+      --network:#83b9dc;--network-soft:#203745;--compute:#b2a8ee;--compute-soft:#322e4b;
+      --data:#7fc7b2;--data-soft:#203c34;--iam:#dfb369;--iam-soft:#40351f;
+      --ops:#b2bac2;--ops-soft:#2b3035;--runtime:#71bce3;--create:#e99a60}}
+    *{box-sizing:border-box}html{scroll-behavior:smooth}body{margin:0;color:var(--ink);background:var(--bg);font:14px/1.45 var(--sans)}button{font:inherit}code,.mono{font-family:var(--mono)}
+    .skip{position:fixed;top:6px;left:6px;z-index:20;padding:7px 10px;color:var(--bg);background:var(--ink);transform:translateY(-150%)}.skip:focus{transform:none}
+    .appbar{position:sticky;top:0;z-index:10;display:flex;min-height:58px;align-items:center;gap:24px;padding:9px 18px;border-bottom:1px solid var(--line);background:color-mix(in srgb,var(--panel) 94%,transparent);backdrop-filter:blur(12px)}
+    .title{min-width:250px}.title strong{display:block;font:700 14px var(--mono)}.title span{color:var(--muted);font-size:12px}
+    .filters{display:flex;flex-wrap:wrap;gap:6px}.filter{min-height:32px;padding:5px 10px;border:1px solid var(--line);border-radius:5px;color:var(--muted);background:var(--panel);cursor:pointer}.filter:hover{border-color:var(--line-strong);color:var(--ink)}.filter[aria-pressed=true]{border-color:var(--accent);color:var(--accent);background:var(--accent-soft)}.counts{margin-left:auto;color:var(--muted);font:12px var(--mono);white-space:nowrap}
+    .workspace{display:grid;grid-template-columns:minmax(720px,1fr) 390px;min-height:calc(100dvh - 58px)}.diagram-scroll{overflow:auto;padding:18px}.diagram{display:grid;min-width:940px;gap:14px}
+    .lane,.vpc{position:relative;padding:30px 12px 12px;border:1px solid var(--line);border-radius:7px;background:var(--panel-2)}.vpc{border:2px solid var(--network);background:color-mix(in srgb,var(--network-soft) 28%,var(--panel))}
+    .lane-label{position:absolute;top:8px;left:11px;color:var(--muted);font:700 10px var(--mono);letter-spacing:.08em;text-transform:uppercase}.vpc>.lane-label{color:var(--network)}
+    .subnet{position:relative;min-height:126px;padding:29px 10px 10px;border:1px dashed var(--line-strong);border-radius:6px;background:var(--panel)}.subnet.public{border-color:var(--network)}.subnet.database{border-color:var(--data)}.subnet .lane-label{top:7px}
+    .chain{display:flex;align-items:stretch;gap:22px}.chain>*{position:relative;flex:1;min-width:0}.chain>*+*::before{content:"→";position:absolute;top:50%;left:-18px;color:var(--line-strong);font:15px var(--mono);transform:translateY(-50%)}
+    .stack{display:grid;gap:7px}.resource{width:100%;min-height:48px;padding:8px 9px;border:1px solid var(--line);border-left:4px solid var(--ops);border-radius:5px;color:var(--ink);background:var(--panel);text-align:left;cursor:pointer;box-shadow:0 2px 4px rgb(0 0 0 / 4%)}
+    .resource:hover{border-color:var(--line-strong)}.resource:focus-visible{outline:3px solid color-mix(in srgb,var(--accent) 45%,transparent);outline-offset:2px}.resource.selected{border-color:var(--accent);border-left-color:var(--accent);background:var(--accent-soft)}.resource.dim,.resource.not-created{opacity:.22;filter:saturate(.35)}.resource.not-created::after{content:"supplied";float:right;margin-top:4px;color:var(--muted);font:9px var(--mono);text-transform:uppercase}
+    .resource.network{border-left-color:var(--network)}.resource.compute{border-left-color:var(--compute)}.resource.data{border-left-color:var(--data)}.resource.iam{border-left-color:var(--iam)}.resource.ops{border-left-color:var(--ops)}
+    .resource .logical{display:block;overflow:hidden;font:700 11px var(--mono);text-overflow:ellipsis;white-space:nowrap}.resource .kind{display:block;overflow:hidden;margin-top:3px;color:var(--muted);font-size:10px;text-overflow:ellipsis;white-space:nowrap}.resource .summary{display:block;margin-top:4px;color:var(--muted);font-size:11px;line-height:1.3}.resource.major{min-height:70px}.resource.major .logical{font-size:12px}
+    .resource[data-path~=runtime] .logical::after{content:" R";color:var(--runtime)}.resource[data-path~=create] .logical::after{content:" C";color:var(--create)}.resource[data-path~=runtime][data-path~=create] .logical::after{content:" R/C"}
+    .edge-row{display:grid;grid-template-columns:.7fr .9fr 1fr 1fr 1.25fr;gap:22px}.control-row{display:grid;grid-template-columns:1.05fr 1fr 1fr 1fr 1.1fr;gap:22px}.iam-row{display:grid;grid-template-columns:repeat(5,1fr);gap:8px}.secret-row{display:grid;grid-template-columns:1fr 1fr 1.35fr;gap:8px}.network-grid{display:grid;grid-template-columns:1.15fr .85fr;gap:12px}.compute-zone{display:grid;grid-template-columns:.72fr 1.28fr;gap:10px}.db-zone{display:grid;grid-template-columns:.9fr 1.1fr;gap:10px}
+    .callout{padding:8px 10px;border:1px solid var(--line);border-radius:5px;color:var(--muted);background:var(--panel);font-size:11px}.legend{display:flex;flex-wrap:wrap;gap:12px;padding:2px 2px 0;color:var(--muted);font-size:11px}.legend span{display:inline-flex;align-items:center;gap:5px}.legend i{width:14px;height:4px;border-radius:2px;background:var(--ops)}
+    .inspector{position:sticky;top:58px;align-self:start;height:calc(100dvh - 58px);overflow:auto;border-left:1px solid var(--line);background:var(--panel)}.inspector-head{padding:18px;border-bottom:1px solid var(--line)}.overline{color:var(--muted);font:10px var(--mono);letter-spacing:.08em;text-transform:uppercase}.inspector h1{margin:7px 0 3px;font:700 19px/1.2 var(--mono);overflow-wrap:anywhere}.type{color:var(--accent);font:11px var(--mono);overflow-wrap:anywhere}.inspector-body{padding:18px}.purpose{margin:0 0 19px;color:var(--muted);font-size:14px}.inspect-section{margin-top:22px}.inspect-section h2{margin:0 0 8px;color:var(--muted);font:700 10px var(--mono);letter-spacing:.08em;text-transform:uppercase}.spec-list{margin:0}.spec-list div{display:grid;grid-template-columns:minmax(100px,.8fr) minmax(0,1.2fr);gap:12px;padding:7px 0}.spec-list div+div{border-top:1px solid var(--line)}.spec-list dt{color:var(--muted);font-size:12px}.spec-list dd{margin:0;font:11px/1.45 var(--mono);overflow-wrap:anywhere}.text-block{margin:0;color:var(--muted);font-size:12px}.refs{display:flex;flex-wrap:wrap;gap:5px}.ref-button{padding:4px 6px;border:1px solid var(--line);border-radius:4px;color:var(--ink);background:var(--panel-2);font:10px var(--mono);cursor:pointer}.status{display:inline-block;margin-top:13px;padding:4px 7px;border-radius:4px;color:var(--muted);background:var(--ops-soft);font:10px var(--mono)}.inspector-empty{padding:24px 18px;color:var(--muted)}.inspector-empty strong{display:block;margin-bottom:8px;color:var(--ink)}.inspector-empty ul{margin:12px 0 0;padding-left:18px}
+    @media(max-width:1050px){.workspace{grid-template-columns:1fr}.inspector{position:static;order:-1;height:auto;max-height:52dvh;border-left:0;border-bottom:1px solid var(--line)}.diagram-scroll{min-height:70dvh}.counts{display:none}}
+    @media(max-width:640px){.appbar{align-items:flex-start;gap:10px;padding:8px 10px}.title{min-width:128px}.title span{display:none}.filters{flex-wrap:nowrap;overflow-x:auto}.filter{white-space:nowrap}.inspector{max-height:47dvh}.diagram-scroll{padding:10px}}
+    @media(prefers-reduced-motion:reduce){html{scroll-behavior:auto}}
+  </style>
+</head>
+<body>
+  <a class="skip" href="#diagram">Skip to diagram</a>
+  <header class="appbar">
+    <div class="title"><strong>state-db / AWS</strong><span>CloudFormation resource map</span></div>
+    <div class="filters" aria-label="Highlight resource path">
+      <button class="filter" type="button" data-filter="all" aria-pressed="true">All resources</button>
+      <button class="filter" type="button" data-filter="runtime" aria-pressed="false">Runtime path</button>
+      <button class="filter" type="button" data-filter="create" aria-pressed="false">Create path</button>
+    </div>
+    <div class="filters" aria-label="Choose network mode">
+      <button class="filter mode" type="button" data-mode="new" aria-pressed="true">New VPC</button>
+      <button class="filter mode" type="button" data-mode="existing" aria-pressed="false">Existing VPC</button>
+    </div>
+    <div class="counts" id="counts">30 resources created / 10 outputs</div>
+  </header>
+  <main class="workspace">
+    <div class="diagram-scroll">
+      <div class="diagram" id="diagram" aria-label="CloudFormation resources">
+        <div class="callout" id="network-mode-summary">CreateNew: the stack owns the VPC, four CIDR-customizable subnets, internet gateway, and public routes. No NAT Gateway is created.</div>
+        <section class="lane" aria-labelledby="edge-label">
+          <span class="lane-label" id="edge-label">Internet edge and public routing</span>
+          <div class="edge-row chain">
+            <button class="resource network" data-id="InternetGateway" data-path="runtime create" data-network="created"><span class="logical">InternetGateway</span><span class="kind">EC2::InternetGateway</span></button>
+            <button class="resource network" data-id="GatewayAttachment" data-path="runtime create" data-network="created"><span class="logical">GatewayAttachment</span><span class="kind">VPCGatewayAttachment</span></button>
+            <button class="resource network" data-id="PublicRouteTable" data-path="runtime create" data-network="created"><span class="logical">PublicRouteTable</span><span class="kind">EC2::RouteTable</span></button>
+            <button class="resource network" data-id="DefaultRoute" data-path="runtime create" data-network="created"><span class="logical">DefaultRoute</span><span class="kind">EC2::Route 0.0.0.0/0</span></button>
+            <div class="stack">
+              <button class="resource network" data-id="AppSubnetARouteAssociation" data-path="runtime create" data-network="created"><span class="logical">AppSubnetARouteAssociation</span><span class="kind">SubnetRouteTableAssociation</span></button>
+              <button class="resource network" data-id="AppSubnetBRouteAssociation" data-path="runtime create" data-network="created"><span class="logical">AppSubnetBRouteAssociation</span><span class="kind">SubnetRouteTableAssociation</span></button>
+            </div>
+          </div>
+        </section>
+        <section class="vpc" aria-labelledby="vpc-label">
+          <span class="lane-label" id="vpc-label">Vpc / customizable CIDR or supplied ID / two Availability Zones</span>
+          <div class="network-grid">
+            <section class="subnet public" aria-labelledby="app-subnets-label">
+              <span class="lane-label" id="app-subnets-label">Application subnets / public or private when supplied</span>
+              <div class="compute-zone">
+                <div class="stack">
+                  <button class="resource network" data-id="AppSubnetA" data-path="runtime create" data-network="created"><span class="logical">AppSubnetA</span><span class="kind">CIDR parameter / AZ 0</span></button>
+                  <button class="resource network" data-id="AppSubnetB" data-path="runtime create" data-network="created"><span class="logical">AppSubnetB</span><span class="kind">CIDR parameter / AZ 1</span></button>
+                  <button class="resource network" data-id="TaskSecurityGroup" data-path="runtime create"><span class="logical">TaskSecurityGroup</span><span class="kind">Task identity / no ingress rules</span></button>
+                </div>
+                <div class="stack">
+                  <button class="resource compute" data-id="Cluster" data-path="runtime create"><span class="logical">Cluster</span><span class="kind">ECS cluster</span></button>
+                  <button class="resource compute" data-id="AppTaskDefinition" data-path="runtime"><span class="logical">AppTaskDefinition</span><span class="kind">Fargate / ARM64 or X86_64</span></button>
+                  <button class="resource compute major" data-id="Service" data-path="runtime"><span class="logical">Service</span><span class="kind">ECS::ExpressGatewayService</span><span class="summary">Managed HTTPS + ALB / 2-4 state-db replicas / port 8080</span></button>
+                  <div class="callout">Traffic: HTTPS endpoint → managed ALB → either replica</div>
+                </div>
+              </div>
+            </section>
+            <section class="subnet database" aria-labelledby="db-subnets-label">
+              <span class="lane-label" id="db-subnets-label">Isolated database subnets</span>
+              <div class="db-zone">
+                <div class="stack">
+                  <button class="resource data" data-id="DatabaseSubnetA" data-path="runtime create" data-network="created"><span class="logical">DatabaseSubnetA</span><span class="kind">CIDR parameter / AZ 0</span></button>
+                  <button class="resource data" data-id="DatabaseSubnetB" data-path="runtime create" data-network="created"><span class="logical">DatabaseSubnetB</span><span class="kind">CIDR parameter / AZ 1</span></button>
+                  <button class="resource data" data-id="DatabaseSubnetGroup" data-path="runtime create"><span class="logical">DatabaseSubnetGroup</span><span class="kind">RDS::DBSubnetGroup</span></button>
+                </div>
+                <div class="stack">
+                  <button class="resource data" data-id="DatabaseSecurityGroup" data-path="runtime create"><span class="logical">DatabaseSecurityGroup</span><span class="kind">TCP 5432 from task SG</span></button>
+                  <button class="resource data major" data-id="Database" data-path="runtime create"><span class="logical">Database</span><span class="kind">RDS::DBInstance</span><span class="summary">PostgreSQL 17 / db.t4g.small / 80 GiB gp3 / Single-AZ</span></button>
+                </div>
+              </div>
+            </section>
+          </div>
+          <div style="margin-top:10px"><button class="resource network" data-id="Vpc" data-path="runtime create" data-network="created"><span class="logical">Vpc</span><span class="kind">EC2::VPC / DNS enabled / CIDR parameter</span></button></div>
+        </section>
+        <section class="lane" aria-labelledby="create-label">
+          <span class="lane-label" id="create-label">CloudFormation create and update control path</span>
+          <div class="control-row chain">
+            <button class="resource ops" data-id="DatabaseBootstrap" data-path="create"><span class="logical">DatabaseBootstrap</span><span class="kind">Custom resource</span></button>
+            <button class="resource ops" data-id="BootstrapInvoker" data-path="create"><span class="logical">BootstrapInvoker</span><span class="kind">Lambda / Python 3.13</span></button>
+            <button class="resource compute" data-id="BootstrapTaskDefinition" data-path="create"><span class="logical">BootstrapTaskDefinition</span><span class="kind">Fargate / postgres client</span></button>
+            <button class="resource compute" data-id="Cluster" data-path="create"><span class="logical">Cluster</span><span class="kind">ECS RunTask target</span></button>
+            <button class="resource data" data-id="Database" data-path="create"><span class="logical">Database</span><span class="kind">CREATE ROLE statedb + rds_iam</span></button>
+          </div>
+        </section>
+        <section class="lane" aria-labelledby="iam-label">
+          <span class="lane-label" id="iam-label">IAM roles</span>
+          <div class="iam-row">
+            <button class="resource iam" data-id="TaskExecutionRole" data-path="runtime"><span class="logical">TaskExecutionRole</span><span class="kind">Images, logs, runtime secrets</span></button>
+            <button class="resource iam" data-id="AppTaskRole" data-path="runtime"><span class="logical">AppTaskRole</span><span class="kind">Exact rds-db:connect</span></button>
+            <button class="resource iam" data-id="EcsInfrastructureRole" data-path="runtime create"><span class="logical">EcsInfrastructureRole</span><span class="kind">Express Mode infrastructure</span></button>
+            <button class="resource iam" data-id="BootstrapExecutionRole" data-path="create"><span class="logical">BootstrapExecutionRole</span><span class="kind">RDS admin secret injection</span></button>
+            <button class="resource iam" data-id="BootstrapInvokerRole" data-path="create"><span class="logical">BootstrapInvokerRole</span><span class="kind">Run, inspect, stop task</span></button>
+          </div>
+        </section>
+        <section class="lane" aria-labelledby="support-label">
+          <span class="lane-label" id="support-label">Secrets and logs</span>
+          <div class="secret-row">
+            <button class="resource iam" data-id="SessionSecret" data-path="runtime"><span class="logical">SessionSecret</span><span class="kind">Generated 64-character secret</span></button>
+            <button class="resource iam" data-id="BreakGlassSecret" data-path="runtime"><span class="logical">BreakGlassSecret</span><span class="kind">Supplied bcrypt hash</span></button>
+            <button class="resource ops" data-id="AppLogGroup" data-path="runtime"><span class="logical">AppLogGroup</span><span class="kind">CloudWatch Logs / 7 days</span></button>
+            <button class="resource ops" data-id="BootstrapLogGroup" data-path="create"><span class="logical">BootstrapLogGroup</span><span class="kind">CloudWatch Logs / 7 days</span></button>
+          </div>
+          <div class="callout" style="margin-top:8px">RDS also creates a managed administrator secret through <span class="mono">ManageMasterUserPassword: true</span>. It is an attribute of <span class="mono">Database</span>, not a separate template resource.</div>
+        </section>
+        <div class="legend" aria-label="Diagram legend">
+          <span><i style="background:var(--network)"></i>Network</span><span><i style="background:var(--compute)"></i>Compute</span><span><i style="background:var(--data)"></i>Data</span><span><i style="background:var(--iam)"></i>IAM and secrets</span><span><i style="background:var(--ops)"></i>Lifecycle and logs</span><span><b style="color:var(--runtime)">R</b> runtime</span><span><b style="color:var(--create)">C</b> create</span>
+        </div>
+      </div>
+    </div>
+    <aside class="inspector" aria-live="polite" aria-label="Selected resource details">
+      <div id="inspector-empty" class="inspector-empty"><strong>Click any resource.</strong>The panel shows its CloudFormation type, configured properties, connections, lifecycle, and cost relevance.<ul><li>Runtime path isolates request and database access.</li><li>Create path isolates bootstrap orchestration.</li><li>Duplicate nodes are one logical resource used in two paths.</li></ul></div>
+      <div id="inspector-content" hidden>
+        <div class="inspector-head"><span class="overline">CloudFormation logical resource</span><h1 id="inspect-name"></h1><div class="type" id="inspect-type"></div><span class="status" id="inspect-path"></span></div>
+        <div class="inspector-body">
+          <p class="purpose" id="inspect-purpose"></p>
+          <section class="inspect-section"><h2>Configured properties</h2><dl class="spec-list" id="inspect-specs"></dl></section>
+          <section class="inspect-section"><h2>Connects to or depends on</h2><div class="refs" id="inspect-refs"></div></section>
+          <section class="inspect-section"><h2>Permissions and data boundary</h2><p class="text-block" id="inspect-security"></p></section>
+          <section class="inspect-section"><h2>Lifecycle and cost</h2><p class="text-block" id="inspect-lifecycle"></p></section>
+        </div>
+      </div>
+    </aside>
+  </main>
+  <script>
+    const resources={
+      Vpc:{type:"AWS::EC2::VPC",purpose:"Optional network boundary created only in CreateNew mode.",specs:{Condition:"CreateNetwork",CIDR:"VpcCidr (default 10.42.0.0/16)",DNS:"Hostnames and support enabled",ExistingMode:"ExistingVpcId parameter"},refs:["InternetGateway","AppSubnetA","AppSubnetB","DatabaseSubnetA","DatabaseSubnetB"],security:"Choose a non-overlapping CIDR before connecting through peering, Transit Gateway, or VPN.",lifecycle:"CreateNew: stack-owned. UseExisting: not created or changed. VpcId resolves either adapter."},
+      InternetGateway:{type:"AWS::EC2::InternetGateway",purpose:"Provides internet routing for the public application subnets.",specs:{Attachment:"GatewayAttachment",Route:"DefaultRoute"},refs:["GatewayAttachment","DefaultRoute"],security:"It does not expose a workload by itself. Routes, public IP assignment, and security groups still control access.",lifecycle:"No hourly charge. Standard data-transfer charges apply."},
+      GatewayAttachment:{type:"AWS::EC2::VPCGatewayAttachment",purpose:"Attaches the internet gateway to this VPC.",specs:{VpcId:"Vpc",InternetGatewayId:"InternetGateway"},refs:["Vpc","InternetGateway","DefaultRoute"],security:"Control-plane association only.",lifecycle:"Created before the default route. Removed during stack deletion."},
+      PublicRouteTable:{type:"AWS::EC2::RouteTable",purpose:"Route table shared by both public application subnets.",specs:{VpcId:"Vpc"},refs:["Vpc","DefaultRoute","AppSubnetARouteAssociation","AppSubnetBRouteAssociation"],security:"The default route enables outbound internet routing. TaskSecurityGroup still restricts inbound container traffic.",lifecycle:"No direct hourly charge."},
+      DefaultRoute:{type:"AWS::EC2::Route",purpose:"Sends non-VPC IPv4 traffic to the internet gateway.",specs:{Destination:"0.0.0.0/0",Gateway:"InternetGateway",RouteTable:"PublicRouteTable",DependsOn:"GatewayAttachment"},refs:["GatewayAttachment","InternetGateway","PublicRouteTable"],security:"Required by bootstrap for image pull and secret retrieval without a NAT Gateway.",lifecycle:"No direct hourly charge. Explicit dependency prevents creation before gateway attachment."},
+      AppSubnetARouteAssociation:{type:"AWS::EC2::SubnetRouteTableAssociation",purpose:"Associates AppSubnetA with the public route table.",specs:{Subnet:"AppSubnetA",RouteTable:"PublicRouteTable"},refs:["AppSubnetA","PublicRouteTable"],security:"Makes the subnet public when a task also receives a public IP.",lifecycle:"No direct charge."},
+      AppSubnetBRouteAssociation:{type:"AWS::EC2::SubnetRouteTableAssociation",purpose:"Associates AppSubnetB with the public route table.",specs:{Subnet:"AppSubnetB",RouteTable:"PublicRouteTable"},refs:["AppSubnetB","PublicRouteTable"],security:"Makes the subnet public when a task also receives a public IP.",lifecycle:"No direct charge."},
+      AppSubnetA:{type:"AWS::EC2::Subnet",purpose:"First application subnet, created in CreateNew mode or replaced by a supplied ID.",specs:{Condition:"CreateNetwork",CIDR:"ApplicationSubnetACidr",AZ:"First available AZ",ExistingMode:"ExistingApplicationSubnetAId"},refs:["Vpc","AppSubnetARouteAssociation","Service","DatabaseBootstrap"],security:"Existing mode can use public or private routing. ApplicationSubnetType changes bootstrap public-IP assignment; it does not edit routes.",lifecycle:"CreateNew maps public IPs. UseExisting leaves subnet configuration untouched."},
+      AppSubnetB:{type:"AWS::EC2::Subnet",purpose:"Second application subnet in another Availability Zone.",specs:{Condition:"CreateNetwork",CIDR:"ApplicationSubnetBCidr",AZ:"Second available AZ",ExistingMode:"ExistingApplicationSubnetBId"},refs:["Vpc","AppSubnetBRouteAssociation","Service","DatabaseBootstrap"],security:"Both application subnets must have consistent public or private routing.",lifecycle:"CreateNew maps public IPs. UseExisting leaves subnet configuration untouched."},
+      DatabaseSubnetA:{type:"AWS::EC2::Subnet",purpose:"First isolated database subnet, or a supplied private subnet in existing mode.",specs:{Condition:"CreateNetwork",CIDR:"DatabaseSubnetACidr",AZ:"First available AZ",ExistingMode:"ExistingDatabaseSubnetAId"},refs:["Vpc","DatabaseSubnetGroup"],security:"RDS is not publicly accessible. Existing routing remains customer-owned.",lifecycle:"CreateNew: stack-owned. UseExisting: referenced only."},
+      DatabaseSubnetB:{type:"AWS::EC2::Subnet",purpose:"Second isolated database subnet in another Availability Zone.",specs:{Condition:"CreateNetwork",CIDR:"DatabaseSubnetBCidr",AZ:"Second available AZ",ExistingMode:"ExistingDatabaseSubnetBId"},refs:["Vpc","DatabaseSubnetGroup"],security:"RDS requires the subnet group to cover at least two Availability Zones.",lifecycle:"CreateNew: stack-owned. UseExisting: referenced only."},
+      TaskSecurityGroup:{type:"AWS::EC2::SecurityGroup",purpose:"Stable workload identity attached to application and bootstrap task ENIs in either mode.",specs:{VpcId:"created or existing VPC",Ingress:"none",Egress:"AWS default all outbound"},refs:["Vpc","Service","DatabaseBootstrap","DatabaseSecurityGroup"],security:"Express Mode attaches its managed load-balancer security group separately. This group is the narrow source identity for database access.",lifecycle:"Always stack-owned and exported for integration. No direct charge."},
+      DatabaseSecurityGroup:{type:"AWS::EC2::SecurityGroup",purpose:"Allows PostgreSQL only from tasks using TaskSecurityGroup.",specs:{Ingress:"TCP 5432",Source:"TaskSecurityGroup",PublicIngress:"none"},refs:["TaskSecurityGroup","Database"],security:"Security-group referencing avoids a broad VPC CIDR rule for PostgreSQL.",lifecycle:"No direct charge."},
+      DatabaseSubnetGroup:{type:"AWS::RDS::DBSubnetGroup",purpose:"Constrains RDS placement to the two resolved database subnets.",specs:{CreateNew:"DatabaseSubnetA, DatabaseSubnetB",UseExisting:"two existing database subnet IDs"},refs:["DatabaseSubnetA","DatabaseSubnetB","Database"],security:"Supply private subnets in different Availability Zones. The stack never changes their routes.",lifecycle:"No direct charge."},
+      Database:{type:"AWS::RDS::DBInstance",purpose:"Durable PostgreSQL store shared by every state-db replica.",specs:{Engine:"PostgreSQL 17",Class:"db.t4g.small",Storage:"80 GiB gp3, baseline performance",Autoscaling:"Up to 500 GiB",Availability:"Single-AZ",Encryption:"Enabled",Public:"false",IAMAuth:"Enabled",Backups:"Configurable, 7-day template default",AdminPassword:"RDS-managed secret"},refs:["DatabaseSubnetGroup","DatabaseSecurityGroup","DatabaseBootstrap","AppTaskRole","Service"],security:"Private endpoint. Runtime uses IAM tokens for user statedb. Only bootstrap receives the managed administrator secret.",lifecycle:"Main recurring data cost. DeletionPolicy and UpdateReplacePolicy are Snapshot. Storage can grow but cannot shrink."},
+      Cluster:{type:"AWS::ECS::Cluster",purpose:"Execution boundary for the Express service and one-off bootstrap task.",specs:{Name:"${StackName}-cluster"},refs:["Service","BootstrapInvoker","BootstrapTaskDefinition"],security:"Tasks receive separate task and execution roles.",lifecycle:"No direct cluster charge. Fargate task resources are billed."},
+      Service:{type:"AWS::ECS::ExpressGatewayService",purpose:"Runs and load-balances the long-lived state-db replicas.",specs:{Scaling:"2 minimum, 4 maximum",HealthCheck:"/api/auth/providers",Subnets:"resolved application pair",TaskDefinition:"stack-owned ARM64 or X86_64 definition"},refs:["Cluster","AppTaskDefinition","AppSubnetA","AppSubnetB","TaskSecurityGroup","EcsInfrastructureRole","DatabaseBootstrap"],security:"Express Mode owns the ALB and its security group. Public subnets produce an internet-facing ALB; private subnets produce an internal ALB.",lifecycle:"Always-on Fargate plus the managed ALB are recurring costs. Creation waits for DatabaseBootstrap."},
+      AppTaskDefinition:{type:"AWS::ECS::TaskDefinition",purpose:"Pins the application image, roles, runtime configuration, and CPU architecture used by Express Mode.",specs:{CPU:"256 units / 0.25 vCPU",Memory:"512 MiB",Architecture:"CpuArchitecture parameter",Container:"Main",Port:"named TCP 8080",Image:"digest-pinned parameter",DatabaseAuth:"aws-iam"},refs:["Service","TaskExecutionRole","AppTaskRole","Database","SessionSecret","BreakGlassSecret","AppLogGroup"],security:"The task role gets exact rds-db:connect; runtime secrets are injected through the execution role.",lifecycle:"A new revision is registered when its immutable configuration changes. Task definitions have no separate charge."},
+      AppLogGroup:{type:"AWS::Logs::LogGroup",purpose:"Receives application stdout and stderr from both replicas.",specs:{Retention:"7 days",Driver:"awslogs",StreamPrefix:"app"},refs:["AppTaskDefinition","TaskExecutionRole"],security:"The task execution role can create streams and publish events.",lifecycle:"Log ingestion and retained bytes are billed; the group is deleted with the stack."},
+      DatabaseBootstrap:{type:"Custom::StateDbDatabaseBootstrap",purpose:"Makes database role preparation a blocking CloudFormation lifecycle step.",specs:{ServiceToken:"BootstrapInvoker ARN",Subnets:"resolved application pair",PublicIP:"ENABLED for Public; DISABLED for Private",RoutingReady:"new route resources or existing-network sentinel",SecurityGroup:"TaskSecurityGroup",Delete:"No-op"},refs:["Database","BootstrapInvoker","BootstrapTaskDefinition","Cluster","AppSubnetA","AppSubnetB","TaskSecurityGroup","DefaultRoute"],security:"Passes identifiers to Lambda, not the administrator password. Private subnets need NAT or endpoints for registry, logs, and secrets.",lifecycle:"Runs on create and relevant updates. The conditional RoutingReady value orders new public routes without making existing mode depend on skipped resources."},
+      BootstrapInvoker:{type:"AWS::Lambda::Function",purpose:"Starts one bootstrap task, waits for its exit code, and reports to CloudFormation.",specs:{Runtime:"Python 3.13",Timeout:"900 seconds",ResponseRetries:"4",TaskWait:"6 seconds x 100 attempts",Delete:"Immediate success"},refs:["BootstrapInvokerRole","Cluster","BootstrapTaskDefinition","DatabaseBootstrap"],security:"Cannot read the database secret. It can run, inspect, and stop the specific bootstrap task and pass its execution role.",lifecycle:"Short invocation cost only during stack operations. Stops a launched task after failure or timeout."},
+      BootstrapTaskDefinition:{type:"AWS::ECS::TaskDefinition",purpose:"Definition for the one-off PostgreSQL client that creates the runtime login.",specs:{Launch:"Fargate / awsvpc",CPU:"256 units",Memory:"512 MiB",Architecture:"CpuArchitecture parameter",Image:"Digest-pinned multi-platform postgres:18 index",Database:"statedb",TLS:"PGSSLMODE=require",Readiness:"90 attempts x 2 seconds"},refs:["Cluster","BootstrapExecutionRole","BootstrapLogGroup","Database"],security:"Receives the RDS administrator password through ECS secret injection. Uses an advisory lock and idempotent role creation.",lifecycle:"A task runs only during bootstrap. It creates user statedb, grants rds_iam, database access, and schema privileges."},
+      BootstrapLogGroup:{type:"AWS::Logs::LogGroup",purpose:"Captures stdout and stderr from the bootstrap container.",specs:{Retention:"7 days",StreamPrefix:"bootstrap"},refs:["BootstrapTaskDefinition"],security:"May contain database error details but should not contain the injected secret.",lifecycle:"Small recurring storage charge based on retained log volume."},
+      SessionSecret:{type:"AWS::SecretsManager::Secret",purpose:"Stable session-encryption material shared by all replicas.",specs:{Generation:"64 characters",Punctuation:"Excluded"},refs:["TaskExecutionRole","Service"],security:"Read only by the application execution role and injected into the container environment.",lifecycle:"Secrets Manager monthly secret and API-call charges apply."},
+      BreakGlassSecret:{type:"AWS::SecretsManager::Secret",purpose:"Stores the supplied bcrypt hash for initial administrator access.",specs:{Input:"BreakGlassPasswordHash",Format:"bcrypt MCF, 59-60 characters"},refs:["TaskExecutionRole","Service"],security:"This is a hash, not plaintext. Remote break-glass login stays enabled until OIDC is configured.",lifecycle:"Secrets Manager charges apply. Marketplace hardening should improve the first-run access flow."},
+      TaskExecutionRole:{type:"AWS::IAM::Role",purpose:"Lets ECS prepare each long-running application task.",specs:{Principal:"ecs-tasks.amazonaws.com",ManagedPolicy:"AmazonECSTaskExecutionRolePolicy",Secrets:"SessionSecret, BreakGlassSecret"},refs:["SessionSecret","BreakGlassSecret","Service"],security:"Can pull images, publish logs, and read two runtime secrets. It does not get rds-db:connect or the RDS administrator secret.",lifecycle:"IAM role has no direct charge."},
+      AppTaskRole:{type:"AWS::IAM::Role",purpose:"Workload identity available inside each state-db container.",specs:{Principal:"ecs-tasks.amazonaws.com",Action:"rds-db:connect",Resource:"dbuser:${DatabaseResourceId}/statedb",SourceAccount:"Current account"},refs:["Database","Service"],security:"This is the ECS equivalent of the workload-identity goal called IRSA on EKS. No static AWS keys or database password are stored.",lifecycle:"IAM has no direct charge. RDS IAM authentication consumes database memory and tokens affect connection behavior."},
+      BootstrapExecutionRole:{type:"AWS::IAM::Role",purpose:"Lets ECS prepare the one-off bootstrap task.",specs:{Principal:"ecs-tasks.amazonaws.com",ManagedPolicy:"AmazonECSTaskExecutionRolePolicy",Secret:"Database.MasterUserSecret.SecretArn"},refs:["Database","BootstrapTaskDefinition"],security:"Only this execution role can read the RDS-managed administrator secret. It is never assigned to the long-running service.",lifecycle:"IAM role has no direct charge."},
+      BootstrapInvokerRole:{type:"AWS::IAM::Role",purpose:"Permission boundary for the bootstrap Lambda.",specs:{Principal:"lambda.amazonaws.com",Actions:"ecs:RunTask, DescribeTasks, StopTask",PassRole:"BootstrapExecutionRole only",Logs:"AWSLambdaBasicExecutionRole"},refs:["BootstrapInvoker","BootstrapTaskDefinition","BootstrapExecutionRole","Cluster"],security:"RunTask is constrained to the task definition and cluster. PassRole is constrained to ECS tasks.",lifecycle:"IAM role has no direct charge."},
+      EcsInfrastructureRole:{type:"AWS::IAM::Role",purpose:"Allows ECS Express Mode to manage load-balancer and service infrastructure.",specs:{Principal:"ecs.amazonaws.com",ManagedPolicy:"AmazonECSInfrastructureRoleforExpressGatewayServices"},refs:["Service"],security:"Assumed by ECS, not by application containers.",lifecycle:"IAM role has no direct charge. Resources managed through it can be billed."}
+    };
+    const buttons=[...document.querySelectorAll('.resource')],filters=[...document.querySelectorAll('.filter[data-filter]')],modes=[...document.querySelectorAll('.mode')],byId=id=>document.getElementById(id);
+    function selectResource(id,updateHash=true){const item=resources[id];if(!item)return;buttons.forEach(button=>button.classList.toggle('selected',button.dataset.id===id));byId('inspector-empty').hidden=true;byId('inspector-content').hidden=false;byId('inspect-name').textContent=id;byId('inspect-type').textContent=item.type;byId('inspect-purpose').textContent=item.purpose;byId('inspect-specs').innerHTML=Object.entries(item.specs).map(([key,value])=>`<div><dt>${key}</dt><dd>${value}</dd></div>`).join('');byId('inspect-security').textContent=item.security;byId('inspect-lifecycle').textContent=item.lifecycle;const paths=[...new Set(buttons.filter(button=>button.dataset.id===id).flatMap(button=>button.dataset.path.split(' ')))];byId('inspect-path').textContent=paths.map(path=>path==='runtime'?'RUNTIME':'CREATE').join(' + ');const refs=byId('inspect-refs');refs.replaceChildren(...item.refs.map(ref=>{const button=document.createElement('button');button.type='button';button.className='ref-button';button.textContent=ref;button.addEventListener('click',()=>selectResource(ref));return button}));if(updateHash)history.replaceState(null,'',`#${id}`)}
+    buttons.forEach(button=>button.addEventListener('click',()=>selectResource(button.dataset.id)));
+    filters.forEach(filter=>filter.addEventListener('click',()=>{filters.forEach(candidate=>candidate.setAttribute('aria-pressed',String(candidate===filter)));const selected=filter.dataset.filter;buttons.forEach(button=>button.classList.toggle('dim',selected!=='all'&&!button.dataset.path.split(' ').includes(selected)))}));
+    modes.forEach(mode=>mode.addEventListener('click',()=>{modes.forEach(candidate=>candidate.setAttribute('aria-pressed',String(candidate===mode)));const existing=mode.dataset.mode==='existing';buttons.forEach(button=>button.classList.toggle('not-created',existing&&button.dataset.network==='created'));byId('counts').textContent=existing?'19 resources created / 10 outputs':'30 resources created / 10 outputs';byId('network-mode-summary').textContent=existing?'UseExisting: the stack consumes one VPC and four subnet IDs. It creates no VPC, subnet, route, gateway, NAT, endpoint, network ACL, or DNS resource.':'CreateNew: the stack owns the VPC, four CIDR-customizable subnets, internet gateway, and public routes. No NAT Gateway is created.'}));
+    const initial=location.hash.slice(1);if(resources[initial])selectResource(initial,false);
+  </script>
+</body>
+</html>

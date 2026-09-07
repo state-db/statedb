@@ -29,13 +29,17 @@ migrations alter them.
 
 ## Configure the service
 
-These four values are required in production:
+Configure the database connection and the session secret for production:
 
 | Variable | Meaning |
 | --- | --- |
 | `STATEDB_JDBC_URL` | JDBC URL, such as `jdbc:postgresql://db:5432/statedb` |
+| `STATEDB_DB_AUTHENTICATION` | `password` by default, or `aws-iam` for RDS IAM authentication |
 | `STATEDB_DB_USER` | PostgreSQL login name |
-| `STATEDB_DB_PASSWORD` | PostgreSQL password |
+| `STATEDB_DB_PASSWORD` | PostgreSQL password, required for `password` authentication |
+| `STATEDB_DB_HOST` | RDS endpoint, required for `aws-iam` authentication |
+| `STATEDB_DB_PORT` | RDS port for IAM token signing, with a default of `5432` |
+| `STATEDB_DB_REGION` | AWS Region, required for `aws-iam` authentication |
 | `STATEDB_SESSION_ENCRYPTION_SECRET` | Secret that encrypts console session cookies |
 
 Use at least 32 random bytes for the session secret, and give every replica the
@@ -46,6 +50,19 @@ On a fresh deployment you can also have statedb create the first organization
 for you. Setting `STATEDB_BOOTSTRAP_ORG_NAME` opts into this;
 `STATEDB_BOOTSTRAP_ORG_DISPLAY_NAME` is optional and defaults to the name. Both
 are ignored once the organization exists.
+
+### AWS IAM database authentication
+
+With `aws-iam` authentication, statedb reads credentials only from the ECS
+task-role endpoint. It creates a new RDS authentication token when the connection
+pool requests credentials. Grant the task role `rds-db:connect` for the exact
+database resource and PostgreSQL user. Do not put AWS access keys in the
+container.
+
+The CloudFormation installer in `deploy/aws` configures this authentication path
+and TLS hostname verification. It can create a small VPC or use an existing VPC
+and four supplied subnets. Existing-network mode does not change gateways,
+routes, endpoints, network ACLs, or DNS configuration.
 
 ### First identity provider
 

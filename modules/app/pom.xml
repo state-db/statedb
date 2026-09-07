@@ -52,6 +52,11 @@
         </dependency>
 
         <dependency>
+            <groupId>com.fasterxml.jackson.core</groupId>
+            <artifactId>jackson-databind</artifactId>
+        </dependency>
+
+        <dependency>
             <groupId>app.statedb</groupId>
             <artifactId>state-db-test-support</artifactId>
             <version>${project.version}</version>
@@ -239,11 +244,11 @@
             </properties>
             <build>
                 <plugins>
-                    <!-- Re-run the existing authorization tests — and only those — inside the same
+                    <!-- Re-run the focused authorization and AWS credential-boundary tests inside the same
                          pinned Mandrel JVM used by the native build, and observe their dynamic
                          reachability. They exercise every Cedar call path, which is the reachability
                          Quarkus cannot derive at build time; everything else in the suite resolves to
-                         entities and REST payloads that augmentation already registers. The default
+                         entities, REST payloads, and the source-local RDS signer path. The default
                          Surefire execution above still runs the comprehensive suite on the
                          mise-pinned Temurin JDK. -->
                     <plugin>
@@ -262,6 +267,7 @@
                                     <argLine>@{argLine} -agentlib:native-image-agent=config-output-dir=${project.build.directory}/native-image-agent-base-config</argLine>
                                     <includes>
                                         <include>app/statedb/app/auth/*Test.java</include>
+                                        <include>app/statedb/app/database/DatabaseCredentialsProviderTest.java</include>
                                     </includes>
                                     <reportsDirectory>${project.build.directory}/surefire-reports-native-agent</reportsDirectory>
                                 </configuration>

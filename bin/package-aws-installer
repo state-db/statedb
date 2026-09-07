@@ -1,0 +1,35 @@
+#!/usr/bin/env bash
+# Stamp one release's immutable image digest into its CloudFormation template.
+set -euo pipefail
+
+cd "$(dirname "$0")/.."
+
+version=${1:?usage: package-aws-installer VERSION DIGEST OUTPUT_FILE}
+digest=${2:?usage: package-aws-installer VERSION DIGEST OUTPUT_FILE}
+output=${3:?usage: package-aws-installer VERSION DIGEST OUTPUT_FILE}
+registry=${STATEDB_REGISTRY:-ghcr.io/state-db/statedb}
+
+[[ $version =~ ^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$ ]] || {
+  echo "version '$version' is not X.Y.Z" >&2
+  exit 2
+}
+[[ $digest =~ ^sha256:[0-9a-f]{64}$ ]] || {
+  echo "digest '$digest' is not sha256:<64 lowercase hex chars>" >&2
+  exit 2
+}
+[[ ! -e $output ]] || {
+  echo "output path already exists: $output" >&2
+  exit 2
+}
+
+mkdir -p "$(dirname "$output")"
+image="$registry:$version@$digest"
+sed "s|ghcr.io/state-db/statedb:__VERSION__@sha256:__IMAGE_DIGEST__|$image|" \
+  deploy/aws/cloudformation.yaml >"$output"
+
+if grep -E '__VERSION__|__IMAGE_DIGEST__' "$output" >/dev/null; then
+  echo "release placeholder remains in $output" >&2
+  exit 1
+fi
+
+printf '%s\n' "$output"

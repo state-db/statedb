@@ -1,0 +1,774 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: state-db on Amazon ECS Express Mode with RDS PostgreSQL and IAM database authentication
+
+Metadata:
+  AWS::CloudFormation::Interface:
+    ParameterGroups:
+      - Label:
+          default: Network mode
+        Parameters:
+          - NetworkMode
+          - ApplicationSubnetType
+      - Label:
+          default: New network
+        Parameters:
+          - VpcCidr
+          - ApplicationSubnetACidr
+          - ApplicationSubnetBCidr
+          - DatabaseSubnetACidr
+          - DatabaseSubnetBCidr
+      - Label:
+          default: Existing network
+        Parameters:
+          - ExistingVpcId
+          - ExistingApplicationSubnetAId
+          - ExistingApplicationSubnetBId
+          - ExistingDatabaseSubnetAId
+          - ExistingDatabaseSubnetBId
+      - Label:
+          default: Administrator access
+        Parameters:
+          - BreakGlassPasswordHash
+          - OrganizationName
+      - Label:
+          default: Database
+        Parameters:
+          - DbInstanceClass
+          - DbAllocatedStorage
+          - DbBackupRetentionDays
+      - Label:
+          default: Release images
+        Parameters:
+          - ImageReference
+          - CpuArchitecture
+          - BootstrapImageReference
+    ParameterLabels:
+      NetworkMode:
+        default: Network ownership
+      ApplicationSubnetType:
+        default: Application subnet routing
+      BreakGlassPasswordHash:
+        default: Initial administrator password hash
+
+Parameters:
+  NetworkMode:
+    Type: String
+    Default: CreateNew
+    AllowedValues:
+      - CreateNew
+      - UseExisting
+    Description: Create a minimal dedicated VPC, or deploy into four subnets in an existing VPC.
+  ApplicationSubnetType:
+    Type: String
+    Default: Public
+    AllowedValues:
+      - Public
+      - Private
+    Description: Public subnets need an internet-gateway route. Private subnets need NAT or VPC endpoints for image pulls, logs, and secrets.
+  VpcCidr:
+    Type: String
+    Default: 10.42.0.0/16
+    AllowedPattern: '^(?:\d{1,3}\.){3}\d{1,3}/(?:1[6-9]|2[0-8])$'
+    ConstraintDescription: Supply an IPv4 CIDR with a /16 through /28 prefix.
+    Description: CIDR for a new dedicated VPC. Choose a non-overlapping range if this VPC will be peered or attached to a transit gateway.
+  ApplicationSubnetACidr:
+    Type: String
+    Default: 10.42.0.0/20
+    AllowedPattern: '^(?:\d{1,3}\.){3}\d{1,3}/(?:1[6-9]|2[0-8])$'
+    Description: Public application subnet in the first available Availability Zone.
+  ApplicationSubnetBCidr:
+    Type: String
+    Default: 10.42.16.0/20
+    AllowedPattern: '^(?:\d{1,3}\.){3}\d{1,3}/(?:1[6-9]|2[0-8])$'
+    Description: Public application subnet in the second available Availability Zone.
+  DatabaseSubnetACidr:
+    Type: String
+    Default: 10.42.32.0/20
+    AllowedPattern: '^(?:\d{1,3}\.){3}\d{1,3}/(?:1[6-9]|2[0-8])$'
+    Description: Isolated database subnet in the first available Availability Zone.
+  DatabaseSubnetBCidr:
+    Type: String
+    Default: 10.42.48.0/20
+    AllowedPattern: '^(?:\d{1,3}\.){3}\d{1,3}/(?:1[6-9]|2[0-8])$'
+    Description: Isolated database subnet in the second available Availability Zone.
+  ExistingVpcId:
+    Type: String
+    Default: ""
+    AllowedPattern: '^$|^vpc-[0-9a-f]+$'
+    Description: Existing VPC for UseExisting mode. The stack does not change its routes or gateways.
+  ExistingApplicationSubnetAId:
+    Type: String
+    Default: ""
+    AllowedPattern: '^$|^subnet-[0-9a-f]+$'
+    Description: Existing application subnet in one Availability Zone.
+  ExistingApplicationSubnetBId:
+    Type: String
+    Default: ""
+    AllowedPattern: '^$|^subnet-[0-9a-f]+$'
+    Description: Existing application subnet in a different Availability Zone.
+  ExistingDatabaseSubnetAId:
+    Type: String
+    Default: ""
+    AllowedPattern: '^$|^subnet-[0-9a-f]+$'
+    Description: Existing private database subnet in one Availability Zone.
+  ExistingDatabaseSubnetBId:
+    Type: String
+    Default: ""
+    AllowedPattern: '^$|^subnet-[0-9a-f]+$'
+    Description: Existing private database subnet in a different Availability Zone.
+  BreakGlassPasswordHash:
+    Type: String
+    NoEcho: true
+    MinLength: 59
+    MaxLength: 60
+    AllowedPattern: '^\$2[aby]\$[0-9]{2}\$[./A-Za-z0-9]{53}$'
+    ConstraintDescription: Supply a bcrypt Modular Crypt Format hash, for example from htpasswd -bnBC 12.
+    Description: Break-glass login is public until an OIDC provider is enabled; use a strong unique password.
+  OrganizationName:
+    Type: String
+    Default: default
+    AllowedPattern: "^[a-z0-9](?:[a-z0-9-]{0,37}[a-z0-9])?$"
+    ConstraintDescription: Use 1-39 lowercase letters, numbers, or hyphens; start and end with a letter or number.
+    Description: Initial Pulumi organization name.
+  DbInstanceClass:
+    Type: String
+    Default: db.t4g.small
+    AllowedValues:
+      - db.t4g.small
+      - db.t4g.medium
+      - db.t3.small
+      - db.t3.medium
+    Description: IAM database authentication uses additional memory; 1-GiB micro classes are deliberately excluded.
+  DbAllocatedStorage:
+    Type: Number
+    Default: 80
+    MinValue: 60
+    MaxValue: 200
+    Description: Initial gp3 storage in GiB. RDS may autoscale it up to 500 GiB; never reduce this value after creation.
+  DbBackupRetentionDays:
+    Type: Number
+    Default: 7
+    MinValue: 0
+    MaxValue: 35
+    Description: Automated backup retention in days. Use 0 to disable automated backups for an ephemeral test stack.
+  ImageReference:
+    Type: String
+    Default: ghcr.io/state-db/statedb:__VERSION__@sha256:__IMAGE_DIGEST__
+    MinLength: 1
+    AllowedPattern: '^.+@sha256:[0-9a-f]{64}$'
+    ConstraintDescription: Supply an immutable image reference ending in @sha256:<64 lowercase hex characters>.
+    Description: Digest-pinned state-db image. Marketplace packaging replaces this with its regional ECR image.
+  CpuArchitecture:
+    Type: String
+    Default: ARM64
+    AllowedValues:
+      - ARM64
+      - X86_64
+    Description: CPU architecture contained in ImageReference. Single-architecture candidates must match this value.
+  BootstrapImageReference:
+    Type: String
+    # Pin the runnable multi-platform image index, not one of its unknown/unknown
+    # OCI attestation manifests. RuntimePlatform selects the matching image.
+    Default: public.ecr.aws/docker/library/postgres:18@sha256:4ef4dbc939d61acea57712655ddb4b4ab27419c913f94cca0cd57cb3ea3c2280
+    MinLength: 1
+    AllowedPattern: '^.+@sha256:[0-9a-f]{64}$'
+    ConstraintDescription: Supply an immutable image reference ending in @sha256:<64 lowercase hex characters>.
+    Description: PostgreSQL client image used by a one-off bootstrap task. Marketplace packaging must supply its copied ECR image.
+
+Rules:
+  ExistingNetworkRequiresIdentifiers:
+    RuleCondition: !Equals [!Ref NetworkMode, UseExisting]
+    Assertions:
+      - Assert: !And
+          - !Not [!Equals [!Ref ExistingVpcId, ""]]
+          - !Not [!Equals [!Ref ExistingApplicationSubnetAId, ""]]
+          - !Not [!Equals [!Ref ExistingApplicationSubnetBId, ""]]
+          - !Not [!Equals [!Ref ExistingDatabaseSubnetAId, ""]]
+          - !Not [!Equals [!Ref ExistingDatabaseSubnetBId, ""]]
+        AssertDescription: UseExisting requires a VPC, two application subnets, and two database subnets.
+  NewNetworkUsesPublicApplicationSubnets:
+    RuleCondition: !Equals [!Ref NetworkMode, CreateNew]
+    Assertions:
+      - Assert: !Equals [!Ref ApplicationSubnetType, Public]
+        AssertDescription: The lean CreateNew network has public application subnets and no NAT gateway. Select UseExisting for private application subnets.
+
+Conditions:
+  CreateNetwork: !Equals [!Ref NetworkMode, CreateNew]
+  ApplicationSubnetsArePublic: !Equals [!Ref ApplicationSubnetType, Public]
+
+Resources:
+  Vpc:
+    Type: AWS::EC2::VPC
+    Condition: CreateNetwork
+    Properties:
+      CidrBlock: !Ref VpcCidr
+      EnableDnsHostnames: true
+      EnableDnsSupport: true
+      Tags:
+        - Key: Name
+          Value: !Sub ${AWS::StackName}-vpc
+
+  InternetGateway:
+    Type: AWS::EC2::InternetGateway
+    Condition: CreateNetwork
+
+  GatewayAttachment:
+    Type: AWS::EC2::VPCGatewayAttachment
+    Condition: CreateNetwork
+    Properties:
+      InternetGatewayId: !Ref InternetGateway
+      VpcId: !Ref Vpc
+
+  AppSubnetA:
+    Type: AWS::EC2::Subnet
+    Condition: CreateNetwork
+    Properties:
+      AvailabilityZone: !Select [0, !GetAZs ""]
+      CidrBlock: !Ref ApplicationSubnetACidr
+      MapPublicIpOnLaunch: true
+      VpcId: !Ref Vpc
+
+  AppSubnetB:
+    Type: AWS::EC2::Subnet
+    Condition: CreateNetwork
+    Properties:
+      AvailabilityZone: !Select [1, !GetAZs ""]
+      CidrBlock: !Ref ApplicationSubnetBCidr
+      MapPublicIpOnLaunch: true
+      VpcId: !Ref Vpc
+
+  DatabaseSubnetA:
+    Type: AWS::EC2::Subnet
+    Condition: CreateNetwork
+    Properties:
+      AvailabilityZone: !Select [0, !GetAZs ""]
+      CidrBlock: !Ref DatabaseSubnetACidr
+      MapPublicIpOnLaunch: false
+      VpcId: !Ref Vpc
+
+  DatabaseSubnetB:
+    Type: AWS::EC2::Subnet
+    Condition: CreateNetwork
+    Properties:
+      AvailabilityZone: !Select [1, !GetAZs ""]
+      CidrBlock: !Ref DatabaseSubnetBCidr
+      MapPublicIpOnLaunch: false
+      VpcId: !Ref Vpc
+
+  PublicRouteTable:
+    Type: AWS::EC2::RouteTable
+    Condition: CreateNetwork
+    Properties:
+      VpcId: !Ref Vpc
+
+  DefaultRoute:
+    Type: AWS::EC2::Route
+    Condition: CreateNetwork
+    DependsOn: GatewayAttachment
+    Properties:
+      DestinationCidrBlock: 0.0.0.0/0
+      GatewayId: !Ref InternetGateway
+      RouteTableId: !Ref PublicRouteTable
+
+  AppSubnetARouteAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Condition: CreateNetwork
+    Properties:
+      RouteTableId: !Ref PublicRouteTable
+      SubnetId: !Ref AppSubnetA
+
+  AppSubnetBRouteAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Condition: CreateNetwork
+    Properties:
+      RouteTableId: !Ref PublicRouteTable
+      SubnetId: !Ref AppSubnetB
+
+  TaskSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: state-db application tasks
+      VpcId: !If [CreateNetwork, !Ref Vpc, !Ref ExistingVpcId]
+
+  DatabaseSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: PostgreSQL from state-db tasks only
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 5432
+          ToPort: 5432
+          SourceSecurityGroupId: !Ref TaskSecurityGroup
+      VpcId: !If [CreateNetwork, !Ref Vpc, !Ref ExistingVpcId]
+
+  SessionSecret:
+    Type: AWS::SecretsManager::Secret
+    Properties:
+      Description: !Sub ${AWS::StackName} stable session encryption secret
+      GenerateSecretString:
+        PasswordLength: 64
+        ExcludePunctuation: true
+
+  BreakGlassSecret:
+    Type: AWS::SecretsManager::Secret
+    Properties:
+      Description: !Sub ${AWS::StackName} initial administrator bcrypt hash
+      SecretString: !Ref BreakGlassPasswordHash
+
+  DatabaseSubnetGroup:
+    Type: AWS::RDS::DBSubnetGroup
+    Properties:
+      DBSubnetGroupDescription: Isolated subnets for state-db PostgreSQL
+      SubnetIds:
+        - !If [CreateNetwork, !Ref DatabaseSubnetA, !Ref ExistingDatabaseSubnetAId]
+        - !If [CreateNetwork, !Ref DatabaseSubnetB, !Ref ExistingDatabaseSubnetBId]
+
+  Database:
+    Type: AWS::RDS::DBInstance
+    DeletionPolicy: Snapshot
+    UpdateReplacePolicy: Snapshot
+    Properties:
+      AllocatedStorage: !Ref DbAllocatedStorage
+      MaxAllocatedStorage: 500
+      StorageType: gp3
+      StorageEncrypted: true
+      Engine: postgres
+      EngineVersion: "17"
+      DBInstanceClass: !Ref DbInstanceClass
+      DBName: statedb
+      DBSubnetGroupName: !Ref DatabaseSubnetGroup
+      VPCSecurityGroups:
+        - !Ref DatabaseSecurityGroup
+      MasterUsername: statedb_admin
+      ManageMasterUserPassword: true
+      EnableIAMDatabaseAuthentication: true
+      BackupRetentionPeriod: !Ref DbBackupRetentionDays
+      CopyTagsToSnapshot: true
+      AutoMinorVersionUpgrade: true
+      MultiAZ: false
+      PubliclyAccessible: false
+      DeletionProtection: false
+
+  Cluster:
+    Type: AWS::ECS::Cluster
+    Properties:
+      ClusterName: !Sub ${AWS::StackName}-cluster
+
+  BootstrapLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      RetentionInDays: 7
+
+  AppLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      RetentionInDays: 7
+
+  TaskExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: ecs-tasks.amazonaws.com
+            Action: sts:AssumeRole
+            Condition:
+              StringEquals:
+                aws:SourceAccount: !Ref AWS::AccountId
+      ManagedPolicyArns:
+        - !Sub arn:${AWS::Partition}:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy
+      Policies:
+        - PolicyName: ReadStateDbRuntimeSecrets
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action: secretsmanager:GetSecretValue
+                Resource:
+                  - !Ref SessionSecret
+                  - !Ref BreakGlassSecret
+
+  BootstrapExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: ecs-tasks.amazonaws.com
+            Action: sts:AssumeRole
+            Condition:
+              StringEquals:
+                aws:SourceAccount: !Ref AWS::AccountId
+      ManagedPolicyArns:
+        - !Sub arn:${AWS::Partition}:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy
+      Policies:
+        - PolicyName: ReadDatabaseMasterSecret
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action: secretsmanager:GetSecretValue
+                Resource: !GetAtt Database.MasterUserSecret.SecretArn
+
+  AppTaskRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: ecs-tasks.amazonaws.com
+            Action: sts:AssumeRole
+            Condition:
+              StringEquals:
+                aws:SourceAccount: !Ref AWS::AccountId
+              ArnLike:
+                aws:SourceArn: !Sub arn:${AWS::Partition}:ecs:${AWS::Region}:${AWS::AccountId}:*
+      Policies:
+        - PolicyName: ConnectToStateDbPostgres
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action: rds-db:connect
+                Resource: !Sub
+                  - arn:${AWS::Partition}:rds-db:${AWS::Region}:${AWS::AccountId}:dbuser:${DatabaseResourceId}/statedb
+                  - DatabaseResourceId: !GetAtt Database.DbiResourceId
+
+  AppTaskDefinition:
+    Type: AWS::ECS::TaskDefinition
+    Properties:
+      Cpu: "256"
+      Memory: "512"
+      NetworkMode: awsvpc
+      RequiresCompatibilities:
+        - FARGATE
+      RuntimePlatform:
+        CpuArchitecture: !Ref CpuArchitecture
+        OperatingSystemFamily: LINUX
+      ExecutionRoleArn: !GetAtt TaskExecutionRole.Arn
+      TaskRoleArn: !GetAtt AppTaskRole.Arn
+      ContainerDefinitions:
+        - Name: Main
+          Image: !Ref ImageReference
+          Essential: true
+          PortMappings:
+            - Name: http
+              ContainerPort: 8080
+              Protocol: tcp
+              AppProtocol: http
+          LogConfiguration:
+            LogDriver: awslogs
+            Options:
+              awslogs-group: !Ref AppLogGroup
+              awslogs-region: !Ref AWS::Region
+              awslogs-stream-prefix: app
+          Environment:
+            - Name: STATEDB_JDBC_URL
+              Value: !Sub >-
+                jdbc:postgresql://${Database.Endpoint.Address}:${Database.Endpoint.Port}/statedb?sslmode=verify-full&sslrootcert=/work/aws-rds-global-bundle.pem
+            - Name: STATEDB_DB_AUTHENTICATION
+              Value: aws-iam
+            - Name: STATEDB_DB_USER
+              Value: statedb
+            - Name: STATEDB_DB_HOST
+              Value: !GetAtt Database.Endpoint.Address
+            - Name: STATEDB_DB_PORT
+              Value: !GetAtt Database.Endpoint.Port
+            - Name: STATEDB_DB_REGION
+              Value: !Ref AWS::Region
+            - Name: STATEDB_BOOTSTRAP_ORG_NAME
+              Value: !Ref OrganizationName
+            - Name: STATEDB_LOCAL_GLASS_ALLOW_REMOTE
+              Value: "true"
+            - Name: QUARKUS_HTTP_PROXY_PROXY_ADDRESS_FORWARDING
+              Value: "true"
+          Secrets:
+            - Name: STATEDB_SESSION_ENCRYPTION_SECRET
+              ValueFrom: !Ref SessionSecret
+            - Name: STATEDB_LOCAL_GLASS_PASSWORD_HASH
+              ValueFrom: !Ref BreakGlassSecret
+
+  BootstrapTaskDefinition:
+    Type: AWS::ECS::TaskDefinition
+    Properties:
+      Cpu: "256"
+      Memory: "512"
+      NetworkMode: awsvpc
+      RequiresCompatibilities:
+        - FARGATE
+      RuntimePlatform:
+        CpuArchitecture: !Ref CpuArchitecture
+        OperatingSystemFamily: LINUX
+      ExecutionRoleArn: !GetAtt BootstrapExecutionRole.Arn
+      ContainerDefinitions:
+        - Name: bootstrap
+          Image: !Ref BootstrapImageReference
+          Essential: true
+          LogConfiguration:
+            LogDriver: awslogs
+            Options:
+              awslogs-group: !Ref BootstrapLogGroup
+              awslogs-region: !Ref AWS::Region
+              awslogs-stream-prefix: bootstrap
+          Environment:
+            - Name: PGHOST
+              Value: !GetAtt Database.Endpoint.Address
+            - Name: PGPORT
+              Value: !GetAtt Database.Endpoint.Port
+            - Name: PGDATABASE
+              Value: statedb
+            - Name: PGUSER
+              Value: statedb_admin
+            - Name: PGSSLMODE
+              Value: require
+          Secrets:
+            - Name: PGPASSWORD
+              ValueFrom: !Sub '${Database.MasterUserSecret.SecretArn}:password::'
+          Command:
+            - sh
+            - -ec
+            - |
+              attempts=0
+              until pg_isready; do
+                attempts=$((attempts + 1))
+                if [ "$attempts" -ge 90 ]; then
+                  echo "database did not become ready within 180 seconds" >&2
+                  exit 1
+                fi
+                sleep 2
+              done
+              psql --set ON_ERROR_STOP=1 <<'SQL'
+              BEGIN;
+              SELECT pg_advisory_xact_lock(hashtext('statedb:database-bootstrap'));
+              DO $bootstrap$
+              BEGIN
+                IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'statedb') THEN
+                  CREATE ROLE statedb LOGIN;
+                END IF;
+              EXCEPTION
+                WHEN duplicate_object THEN NULL;
+              END
+              $bootstrap$;
+              GRANT rds_iam TO statedb;
+              GRANT CONNECT, TEMPORARY ON DATABASE statedb TO statedb;
+              GRANT USAGE, CREATE ON SCHEMA public TO statedb;
+              COMMIT;
+              SQL
+
+  BootstrapInvokerRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - !Sub arn:${AWS::Partition}:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+      Policies:
+        - PolicyName: RunDatabaseBootstrapTask
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action: ecs:RunTask
+                Resource: !Ref BootstrapTaskDefinition
+                Condition:
+                  ArnEquals:
+                    ecs:cluster: !GetAtt Cluster.Arn
+              - Effect: Allow
+                Action:
+                  - ecs:DescribeTasks
+                  - ecs:StopTask
+                Resource: !Sub arn:${AWS::Partition}:ecs:${AWS::Region}:${AWS::AccountId}:task/${AWS::StackName}-cluster/*
+              - Effect: Allow
+                Action: iam:PassRole
+                Resource: !GetAtt BootstrapExecutionRole.Arn
+                Condition:
+                  StringEquals:
+                    iam:PassedToService: ecs-tasks.amazonaws.com
+
+  BootstrapInvoker:
+    Type: AWS::Lambda::Function
+    Properties:
+      Runtime: python3.13
+      Handler: index.handler
+      Role: !GetAtt BootstrapInvokerRole.Arn
+      Timeout: 900
+      Code:
+        ZipFile: |
+          import hashlib
+          import json
+          import time
+          import urllib.request
+          import boto3
+
+          ecs = boto3.client("ecs")
+
+          def respond(event, context, status, reason):
+              body = json.dumps({
+                  "Status": status,
+                  "Reason": reason,
+                  "PhysicalResourceId": event.get("PhysicalResourceId", "statedb-database-bootstrap"),
+                  "StackId": event["StackId"],
+                  "RequestId": event["RequestId"],
+                  "LogicalResourceId": event["LogicalResourceId"],
+              }).encode()
+              last_error = None
+              for attempt in range(4):
+                  try:
+                      request = urllib.request.Request(
+                          event["ResponseURL"], data=body, method="PUT",
+                          headers={"content-type": "", "content-length": str(len(body))})
+                      urllib.request.urlopen(request, timeout=10).read()
+                      return
+                  except Exception as error:
+                      last_error = error
+                      if attempt < 3:
+                          time.sleep(2 ** attempt)
+              raise last_error
+
+          def client_token(event):
+              identity = f'{event["StackId"]}|{event["RequestId"]}'.encode()
+              return "statedb-" + hashlib.sha256(identity).hexdigest()[:56]
+
+          def handler(event, context):
+              task_arn = None
+              try:
+                  if event["RequestType"] == "Delete":
+                      respond(event, context, "SUCCESS", "bootstrap role is retained in the database snapshot")
+                      return
+                  properties = event["ResourceProperties"]
+                  result = ecs.run_task(
+                      cluster=properties["Cluster"],
+                      taskDefinition=properties["TaskDefinition"],
+                      clientToken=client_token(event),
+                      launchType="FARGATE",
+                      networkConfiguration={"awsvpcConfiguration": {
+                          "subnets": properties["Subnets"],
+                          "securityGroups": [properties["SecurityGroup"]],
+                          "assignPublicIp": properties["AssignPublicIp"],
+                      }})
+                  if result.get("failures"):
+                      raise RuntimeError(str(result["failures"]))
+                  if len(result.get("tasks", [])) != 1:
+                      raise RuntimeError("ECS RunTask did not return exactly one task")
+                  task_arn = result["tasks"][0]["taskArn"]
+                  ecs.get_waiter("tasks_stopped").wait(
+                      cluster=properties["Cluster"], tasks=[task_arn],
+                      WaiterConfig={"Delay": 6, "MaxAttempts": 100})
+                  described = ecs.describe_tasks(cluster=properties["Cluster"], tasks=[task_arn])
+                  if described.get("failures") or len(described.get("tasks", [])) != 1:
+                      raise RuntimeError(f"could not describe bootstrap task {task_arn}")
+                  task = described["tasks"][0]
+                  container = next(
+                      (item for item in task.get("containers", []) if item.get("name") == "bootstrap"),
+                      None)
+                  if container is None:
+                      raise RuntimeError(f"bootstrap container missing from task {task_arn}")
+                  if container.get("exitCode") != 0:
+                      detail = container.get("reason") or task.get("stoppedReason") or "bootstrap failed"
+                      raise RuntimeError(f"{detail}; task={task_arn}")
+                  respond(event, context, "SUCCESS", "database IAM role is ready")
+              except Exception as error:
+                  if task_arn is not None:
+                      try:
+                          ecs.stop_task(
+                              cluster=event["ResourceProperties"]["Cluster"],
+                              task=task_arn,
+                              reason="CloudFormation database bootstrap failed or timed out")
+                      except Exception:
+                          pass
+                  respond(event, context, "FAILED", str(error)[:1024])
+
+  DatabaseBootstrap:
+    Type: Custom::StateDbDatabaseBootstrap
+    Properties:
+      ServiceToken: !GetAtt BootstrapInvoker.Arn
+      Cluster: !Ref Cluster
+      TaskDefinition: !Ref BootstrapTaskDefinition
+      Subnets:
+        - !If [CreateNetwork, !Ref AppSubnetA, !Ref ExistingApplicationSubnetAId]
+        - !If [CreateNetwork, !Ref AppSubnetB, !Ref ExistingApplicationSubnetBId]
+      SecurityGroup: !Ref TaskSecurityGroup
+      AssignPublicIp: !If [ApplicationSubnetsArePublic, ENABLED, DISABLED]
+      RoutingReady: !If
+        - CreateNetwork
+        - !Join
+          - ","
+          - - !Ref DefaultRoute
+            - !Ref AppSubnetARouteAssociation
+            - !Ref AppSubnetBRouteAssociation
+        - existing-network-routing
+      DatabaseEndpoint: !GetAtt Database.Endpoint.Address
+
+  EcsInfrastructureRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: ecs.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - !Sub arn:${AWS::Partition}:iam::aws:policy/service-role/AmazonECSInfrastructureRoleforExpressGatewayServices
+
+  Service:
+    Type: AWS::ECS::ExpressGatewayService
+    DependsOn: DatabaseBootstrap
+    Properties:
+      Cluster: !Ref Cluster
+      InfrastructureRoleArn: !GetAtt EcsInfrastructureRole.Arn
+      HealthCheckPath: /api/auth/providers
+      TaskDefinitionArn: !Ref AppTaskDefinition
+      NetworkConfiguration:
+        Subnets:
+          - !If [CreateNetwork, !Ref AppSubnetA, !Ref ExistingApplicationSubnetAId]
+          - !If [CreateNetwork, !Ref AppSubnetB, !Ref ExistingApplicationSubnetBId]
+        SecurityGroups:
+          - !Ref TaskSecurityGroup
+      ScalingTarget:
+        MinTaskCount: 2
+        MaxTaskCount: 4
+
+Outputs:
+  ConsoleUrl:
+    Value: !Sub https://${Service.Endpoint}
+    Description: Open this URL and sign in as admin using the password represented by the supplied bcrypt hash.
+  PulumiLoginCommand:
+    Value: !Sub pulumi login https://${Service.Endpoint}/pulumi
+    Description: Run this command to point the Pulumi CLI at state-db.
+  OrganizationName:
+    Value: !Ref OrganizationName
+  DatabaseEndpoint:
+    Value: !GetAtt Database.Endpoint.Address
+  DatabaseResourceId:
+    Value: !GetAtt Database.DbiResourceId
+    Description: Used in the exact rds-db:connect policy resource.
+  VpcId:
+    Value: !If [CreateNetwork, !Ref Vpc, !Ref ExistingVpcId]
+    Description: VPC used by state-db, whether supplied or created by this stack.
+  ApplicationSubnetIds:
+    Value: !Join
+      - ","
+      - - !If [CreateNetwork, !Ref AppSubnetA, !Ref ExistingApplicationSubnetAId]
+        - !If [CreateNetwork, !Ref AppSubnetB, !Ref ExistingApplicationSubnetBId]
+  DatabaseSubnetIds:
+    Value: !Join
+      - ","
+      - - !If [CreateNetwork, !Ref DatabaseSubnetA, !Ref ExistingDatabaseSubnetAId]
+        - !If [CreateNetwork, !Ref DatabaseSubnetB, !Ref ExistingDatabaseSubnetBId]
+  TaskSecurityGroupId:
+    Value: !Ref TaskSecurityGroup
+  DatabaseSecurityGroupId:
+    Value: !Ref DatabaseSecurityGroup
