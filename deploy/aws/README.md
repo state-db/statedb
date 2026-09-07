@@ -39,6 +39,8 @@ The script defaults to the gated ARM64 candidate from commit `d186ef2`. It confi
 and region, generates the break-glass bcrypt hash locally, validates the template, displays a
 CloudFormation change set, and pauses before execution. It also verifies that a GHCR image is
 anonymously pullable because the current stack does not inject third-party registry credentials.
+For test-stack compatibility, the script sets automated backup retention to one day. Override it
+with `STATEDB_DB_BACKUP_RETENTION_DAYS`; the standalone template defaults to seven days.
 Run `deploy/aws/deploy.sh --help` for image, network, database, and non-interactive overrides.
 
 To delete the test stack after validation, use the same profile, region, and stack name:
@@ -57,8 +59,10 @@ and continues to incur snapshot-storage charges until you delete it separately.
   application task definition and log group so it can select the container CPU architecture.
 - Express Mode creates and manages the load balancer security group. The stack adds a separate task
   security group so PostgreSQL can identify application and bootstrap tasks without a CIDR rule.
-- RDS uses isolated subnets, is never public, retains seven days of backups, and snapshots on stack
-  deletion or replacement.
+- RDS uses isolated subnets, is never public, and snapshots on stack deletion or replacement. The
+  template retains seven days of automated backups; the guided test script requests one day.
+- At the default 80 GiB, RDS gp3 includes 3,000 IOPS and 125 MiB/s. The template deliberately does
+  not provision extra IOPS or throughput; PostgreSQL only supports those gp3 settings at 400 GiB.
 - RDS storage can autoscale but cannot shrink. Never reduce `DbAllocatedStorage` after stack
   creation; raise it only when deliberately increasing the storage floor.
 - The dedicated VPC has no NAT Gateway. Its application subnets are public, and the one-off

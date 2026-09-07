@@ -26,6 +26,7 @@ Common environment overrides:
   STATEDB_ORGANIZATION_NAME           initial Pulumi organization (default: default)
   STATEDB_DB_INSTANCE_CLASS           RDS class (default: db.t4g.small)
   STATEDB_DB_ALLOCATED_STORAGE        initial gp3 GiB (default: 80)
+  STATEDB_DB_BACKUP_RETENTION_DAYS    automated backup days (default: 1; 0 disables)
   STATEDB_BREAK_GLASS_PASSWORD_HASH   bcrypt hash; prompted and generated when omitted
   STATEDB_AUTO_APPROVE=true           skip Enter prompts (intended for controlled automation)
 
@@ -79,6 +80,7 @@ cpu_architecture=${STATEDB_CPU_ARCHITECTURE:-ARM64}
 organization_name=${STATEDB_ORGANIZATION_NAME:-default}
 db_instance_class=${STATEDB_DB_INSTANCE_CLASS:-db.t4g.small}
 db_storage=${STATEDB_DB_ALLOCATED_STORAGE:-80}
+db_backup_retention_days=${STATEDB_DB_BACKUP_RETENTION_DAYS:-1}
 network_mode=${STATEDB_NETWORK_MODE:-CreateNew}
 application_subnet_type=${STATEDB_APPLICATION_SUBNET_TYPE:-Public}
 
@@ -88,6 +90,8 @@ application_subnet_type=${STATEDB_APPLICATION_SUBNET_TYPE:-Public}
 case "$cpu_architecture" in ARM64|X86_64) ;; *) fail "CPU architecture must be ARM64 or X86_64" ;; esac
 case "$network_mode" in CreateNew|UseExisting) ;; *) fail "network mode must be CreateNew or UseExisting" ;; esac
 case "$application_subnet_type" in Public|Private) ;; *) fail "application subnet type must be Public or Private" ;; esac
+[[ $db_backup_retention_days =~ ^[0-9]+$ ]] && (( db_backup_retention_days <= 35 )) ||
+  fail "STATEDB_DB_BACKUP_RETENTION_DAYS must be an integer from 0 through 35"
 [[ $network_mode != CreateNew || $application_subnet_type == Public ]] ||
   fail "CreateNew supports Public application subnets; use an existing network for private tasks"
 
@@ -117,6 +121,7 @@ parameters=(
   "ParameterKey=OrganizationName,ParameterValue=$organization_name"
   "ParameterKey=DbInstanceClass,ParameterValue=$db_instance_class"
   "ParameterKey=DbAllocatedStorage,ParameterValue=$db_storage"
+  "ParameterKey=DbBackupRetentionDays,ParameterValue=$db_backup_retention_days"
   "ParameterKey=ImageReference,ParameterValue=$image_reference"
   "ParameterKey=CpuArchitecture,ParameterValue=$cpu_architecture"
   "ParameterKey=NetworkMode,ParameterValue=$network_mode"
@@ -158,7 +163,8 @@ echo "  stack:        $stack_name"
 echo "  image:        $image_reference"
 echo "  architecture: $cpu_architecture"
 echo "  replicas:     2 minimum, 4 maximum"
-echo "  database:     PostgreSQL 17, $db_instance_class, ${db_storage} GiB gp3, Single-AZ"
+echo "  database:     PostgreSQL 17, $db_instance_class, ${db_storage} GiB gp3 baseline, Single-AZ"
+echo "  backups:      $db_backup_retention_days day(s)"
 echo "  network:      $network_mode ($application_subnet_type application subnets)"
 echo
 echo "This stack creates IAM roles, an RDS database, two always-running Fargate tasks, and an HTTPS"
@@ -197,7 +203,16 @@ echo
 echo "Validating the rendered template with CloudFormation..."
 aws_cli cloudformation validate-template --template-body "file://$template" >/dev/null
 
-if aws_cli cloudformation describe-stacks --stack-name "$stack_name" >/dev/null 2>&1; then
+if stack_status=$(aws_cli cloudformation describe-stacks --stack-name "$stack_name" \
+  --query 'Stacks[0].StackStatus' --output text 2>/dev/null); then
+  case "$stack_status" in
+    ROLLBACK_COMPLETE)
+      fail "stack $stack_name is ROLLBACK_COMPLETE; run deploy/aws/teardown.sh, then deploy again"
+      ;;
+    *_IN_PROGRESS)
+      fail "stack $stack_name is still $stack_status; wait for it to settle before deploying again"
+      ;;
+  esac
   change_type=UPDATE
   completion_waiter=stack-update-complete
 else

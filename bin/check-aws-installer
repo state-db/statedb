@@ -28,6 +28,8 @@ contains "$template" 'CpuArchitecture: !Ref CpuArchitecture'
 contains "$template" 'TaskDefinitionArn: !Ref AppTaskDefinition'
 contains "$template" 'Name: Main'
 contains "$template" 'EnableIAMDatabaseAuthentication: true'
+contains "$template" 'DbBackupRetentionDays:'
+contains "$template" 'BackupRetentionPeriod: !Ref DbBackupRetentionDays'
 contains "$template" 'Action: rds-db:connect'
 contains "$template" 'STATEDB_DB_AUTHENTICATION'
 contains "$template" 'Value: aws-iam'
@@ -51,6 +53,9 @@ contains "$template" 'AssignPublicIp: !If [ApplicationSubnetsArePublic, ENABLED,
 contains "$template" 'RoutingReady: !If'
 contains "$template" 'TaskSecurityGroupId:'
 contains "$template" 'DatabaseSecurityGroupId:'
+if grep -E '^[[:space:]]+(Iops|StorageThroughput):' "$template" >/dev/null; then
+  fail "$template provisions gp3 performance that is invalid below 400 GiB for PostgreSQL"
+fi
 
 check_dir=$(mktemp -d "${TMPDIR:-/tmp}/statedb-aws-installer.XXXXXX")
 trap 'rm -rf "$check_dir"' EXIT
@@ -71,6 +76,10 @@ grep -F 'cloudformation execute-change-set' deploy/aws/deploy.sh >/dev/null ||
   fail "guided deploy does not execute its reviewed change set"
 grep -F 'cloudformation delete-stack' deploy/aws/teardown.sh >/dev/null ||
   fail "guided teardown does not delete the stack"
+grep -F 'STATEDB_DB_BACKUP_RETENTION_DAYS:-1' deploy/aws/deploy.sh >/dev/null ||
+  fail "guided deploy does not use its low-cost backup-retention default"
+grep -F 'ROLLBACK_COMPLETE' deploy/aws/deploy.sh >/dev/null ||
+  fail "guided deploy does not explain how to recover a rolled-back create"
 grep -F 'cloudformation wait stack-delete-complete' deploy/aws/teardown.sh >/dev/null ||
   fail "guided teardown does not wait for deletion"
 echo "AWS installer conformance passed"

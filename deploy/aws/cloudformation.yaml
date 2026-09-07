@@ -35,6 +35,7 @@ Metadata:
         Parameters:
           - DbInstanceClass
           - DbAllocatedStorage
+          - DbBackupRetentionDays
       - Label:
           default: Release images
         Parameters:
@@ -144,6 +145,12 @@ Parameters:
     MinValue: 60
     MaxValue: 200
     Description: Initial gp3 storage in GiB. RDS may autoscale it up to 500 GiB; never reduce this value after creation.
+  DbBackupRetentionDays:
+    Type: Number
+    Default: 7
+    MinValue: 0
+    MaxValue: 35
+    Description: Automated backup retention in days. Use 0 to disable automated backups for an ephemeral test stack.
   ImageReference:
     Type: String
     Default: ghcr.io/state-db/statedb:__VERSION__@sha256:__IMAGE_DIGEST__
@@ -322,7 +329,6 @@ Resources:
       AllocatedStorage: !Ref DbAllocatedStorage
       MaxAllocatedStorage: 500
       StorageType: gp3
-      Iops: 3000
       StorageEncrypted: true
       Engine: postgres
       EngineVersion: "17"
@@ -334,7 +340,7 @@ Resources:
       MasterUsername: statedb_admin
       ManageMasterUserPassword: true
       EnableIAMDatabaseAuthentication: true
-      BackupRetentionPeriod: 7
+      BackupRetentionPeriod: !Ref DbBackupRetentionDays
       CopyTagsToSnapshot: true
       AutoMinorVersionUpgrade: true
       MultiAZ: false
