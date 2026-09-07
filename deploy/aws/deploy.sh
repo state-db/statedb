@@ -9,6 +9,7 @@ set -euo pipefail
 cd "$(dirname "$0")/../.."
 
 readonly DEFAULT_IMAGE='ghcr.io/state-db/statedb-candidates@sha256:cb00b7f4f26db4ab2850f706452f602c042d5e3b6db6c10dde7b41604c344e6d'
+readonly DEFAULT_BOOTSTRAP_IMAGE='public.ecr.aws/docker/library/postgres:18@sha256:4ef4dbc939d61acea57712655ddb4b4ab27419c913f94cca0cd57cb3ea3c2280'
 readonly SOURCE_IMAGE='ghcr.io/state-db/statedb:__VERSION__@sha256:__IMAGE_DIGEST__'
 
 usage() {
@@ -22,6 +23,7 @@ Common environment overrides:
   AWS_REGION                          deployment region (or AWS_DEFAULT_REGION/profile region)
   STATEDB_STACK_NAME                  stack name (default: statedb-test)
   STATEDB_IMAGE_REFERENCE             immutable application image
+  STATEDB_BOOTSTRAP_IMAGE_REFERENCE   immutable multi-platform PostgreSQL client image
   STATEDB_CPU_ARCHITECTURE            ARM64 or X86_64 (default: ARM64)
   STATEDB_ORGANIZATION_NAME           initial Pulumi organization (default: default)
   STATEDB_DB_INSTANCE_CLASS           RDS class (default: db.t4g.small)
@@ -76,6 +78,7 @@ aws_cli() { aws "${aws_scope[@]}" "$@"; }
 
 stack_name=${STATEDB_STACK_NAME:-statedb-test}
 image_reference=${STATEDB_IMAGE_REFERENCE:-$DEFAULT_IMAGE}
+bootstrap_image_reference=${STATEDB_BOOTSTRAP_IMAGE_REFERENCE:-$DEFAULT_BOOTSTRAP_IMAGE}
 cpu_architecture=${STATEDB_CPU_ARCHITECTURE:-ARM64}
 organization_name=${STATEDB_ORGANIZATION_NAME:-default}
 db_instance_class=${STATEDB_DB_INSTANCE_CLASS:-db.t4g.small}
@@ -87,6 +90,8 @@ application_subnet_type=${STATEDB_APPLICATION_SUBNET_TYPE:-Public}
 [[ $stack_name =~ ^[A-Za-z][A-Za-z0-9-]{0,127}$ ]] || fail "invalid stack name: $stack_name"
 [[ $image_reference =~ ^[^[:space:]]+@sha256:[0-9a-f]{64}$ ]] ||
   fail "STATEDB_IMAGE_REFERENCE must be an immutable repository@sha256:<digest> reference"
+[[ $bootstrap_image_reference =~ ^[^[:space:]]+@sha256:[0-9a-f]{64}$ ]] ||
+  fail "STATEDB_BOOTSTRAP_IMAGE_REFERENCE must be an immutable repository@sha256:<digest> reference"
 case "$cpu_architecture" in ARM64|X86_64) ;; *) fail "CPU architecture must be ARM64 or X86_64" ;; esac
 case "$network_mode" in CreateNew|UseExisting) ;; *) fail "network mode must be CreateNew or UseExisting" ;; esac
 case "$application_subnet_type" in Public|Private) ;; *) fail "application subnet type must be Public or Private" ;; esac
@@ -123,6 +128,7 @@ parameters=(
   "ParameterKey=DbAllocatedStorage,ParameterValue=$db_storage"
   "ParameterKey=DbBackupRetentionDays,ParameterValue=$db_backup_retention_days"
   "ParameterKey=ImageReference,ParameterValue=$image_reference"
+  "ParameterKey=BootstrapImageReference,ParameterValue=$bootstrap_image_reference"
   "ParameterKey=CpuArchitecture,ParameterValue=$cpu_architecture"
   "ParameterKey=NetworkMode,ParameterValue=$network_mode"
   "ParameterKey=ApplicationSubnetType,ParameterValue=$application_subnet_type"
@@ -161,6 +167,7 @@ echo "  region:       $region"
 echo "Deployment"
 echo "  stack:        $stack_name"
 echo "  image:        $image_reference"
+echo "  bootstrap:    $bootstrap_image_reference"
 echo "  architecture: $cpu_architecture"
 echo "  replicas:     2 minimum, 4 maximum"
 echo "  database:     PostgreSQL 17, $db_instance_class, ${db_storage} GiB gp3 baseline, Single-AZ"

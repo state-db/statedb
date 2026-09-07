@@ -13,6 +13,8 @@ explicit so digest-pinned, single-architecture ARM64 and X86_64 candidates can b
 The long-running state-db tasks do not receive a database password. A one-off Fargate bootstrap task
 uses RDS's managed administrator secret to create the `statedb` PostgreSQL login and grant
 `rds_iam`; the application tasks then authenticate with short-lived tokens from their ECS task role.
+Both task definitions use `CpuArchitecture`. The bootstrap image is pinned to a multi-platform OCI
+image index so ECS selects a runnable manifest instead of OCI provenance metadata.
 
 ## Before deployment
 

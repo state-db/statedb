@@ -167,7 +167,9 @@ Parameters:
     Description: CPU architecture contained in ImageReference. Single-architecture candidates must match this value.
   BootstrapImageReference:
     Type: String
-    Default: public.ecr.aws/docker/library/postgres:18@sha256:d7b341f98c9600e05b75469411469dde887d4e999e1f51daed35204d6e2cb6b7
+    # Pin the runnable multi-platform image index, not one of its unknown/unknown
+    # OCI attestation manifests. RuntimePlatform selects the matching image.
+    Default: public.ecr.aws/docker/library/postgres:18@sha256:4ef4dbc939d61acea57712655ddb4b4ab27419c913f94cca0cd57cb3ea3c2280
     MinLength: 1
     AllowedPattern: '^.+@sha256:[0-9a-f]{64}$'
     ConstraintDescription: Supply an immutable image reference ending in @sha256:<64 lowercase hex characters>.
@@ -500,6 +502,9 @@ Resources:
       NetworkMode: awsvpc
       RequiresCompatibilities:
         - FARGATE
+      RuntimePlatform:
+        CpuArchitecture: !Ref CpuArchitecture
+        OperatingSystemFamily: LINUX
       ExecutionRoleArn: !GetAtt BootstrapExecutionRole.Arn
       ContainerDefinitions:
         - Name: bootstrap

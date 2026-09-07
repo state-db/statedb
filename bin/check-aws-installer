@@ -36,7 +36,7 @@ contains "$template" 'Value: aws-iam'
 contains "$template" 'ManageMasterUserPassword: true'
 contains "$template" 'Value: !Sub pulumi login https://${Service.Endpoint}/pulumi'
 contains "$template" ':__VERSION__@sha256:__IMAGE_DIGEST__'
-contains "$template" 'public.ecr.aws/docker/library/postgres:18@sha256:'
+contains "$template" 'public.ecr.aws/docker/library/postgres:18@sha256:4ef4dbc939d61acea57712655ddb4b4ab27419c913f94cca0cd57cb3ea3c2280'
 contains "$template" "pg_advisory_xact_lock(hashtext('statedb:database-bootstrap'))"
 contains "$template" 'clientToken=client_token(event)'
 contains "$template" 'ecs.stop_task('
@@ -53,6 +53,9 @@ contains "$template" 'AssignPublicIp: !If [ApplicationSubnetsArePublic, ENABLED,
 contains "$template" 'RoutingReady: !If'
 contains "$template" 'TaskSecurityGroupId:'
 contains "$template" 'DatabaseSecurityGroupId:'
+runtime_platform_count=$(grep -Fc 'CpuArchitecture: !Ref CpuArchitecture' "$template")
+[[ $runtime_platform_count == 2 ]] ||
+  fail "$template must select CpuArchitecture for both application and bootstrap tasks"
 if grep -E '^[[:space:]]+(Iops|StorageThroughput):' "$template" >/dev/null; then
   fail "$template provisions gp3 performance that is invalid below 400 GiB for PostgreSQL"
 fi
@@ -72,6 +75,10 @@ image_references=$(grep -E '^[[:space:]]+Default: .+@sha256:[0-9a-f]{64}$' "$art
 bash -n bin/package-aws-installer deploy/aws/deploy.sh deploy/aws/teardown.sh
 grep -F 'cloudformation create-change-set' deploy/aws/deploy.sh >/dev/null ||
   fail "guided deploy does not create a reviewable change set"
+grep -F 'DEFAULT_BOOTSTRAP_IMAGE=' deploy/aws/deploy.sh | grep -F 'sha256:4ef4dbc939d61acea57712655ddb4b4ab27419c913f94cca0cd57cb3ea3c2280' >/dev/null ||
+  fail "guided deploy does not use the verified bootstrap image index"
+grep -F 'ParameterKey=BootstrapImageReference' deploy/aws/deploy.sh >/dev/null ||
+  fail "guided deploy does not pass its bootstrap image override to CloudFormation"
 grep -F 'cloudformation execute-change-set' deploy/aws/deploy.sh >/dev/null ||
   fail "guided deploy does not execute its reviewed change set"
 grep -F 'cloudformation delete-stack' deploy/aws/teardown.sh >/dev/null ||
