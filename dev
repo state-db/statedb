@@ -215,7 +215,13 @@ require_mise() {
 }
 
 vm_exists() {
-  limactl list --format '{{.Name}}' 2>/dev/null | grep -Fxq "$VERIFY_VM"
+  # Collected before matching rather than piped into it: `grep -q` exits at the first match, and
+  # under `pipefail` the SIGPIPE that kills `limactl` (141) becomes the function's status. The VM
+  # name sorts first, so the match is immediate and the race is frequent — the failure reads as
+  # "no VM", and ensure_vm then tries to create one that already exists and aborts.
+  local names
+  names=$(limactl list --format '{{.Name}}' 2>/dev/null) || return 1
+  grep -Fxq "$VERIFY_VM" <<<"$names"
 }
 
 ensure_vm() {
