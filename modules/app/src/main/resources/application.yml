@@ -107,6 +107,12 @@ quarkus:
     level: INFO
 
 statedb:
+  eula:
+    # Unset by default: a fresh deployment refuses to create stacks until a site
+    # administrator accepts the agreement in the console. Operators who provision from
+    # infrastructure as code set this to the exact version the image ships (see EULA.md)
+    # to record that acceptance at startup instead.
+    accepted-version: ${STATEDB_EULA_ACCEPTED_VERSION:}
   license:
     path: ${STATEDB_LICENSE_PATH:}
     inline: ${STATEDB_LICENSE:}
@@ -166,6 +172,11 @@ statedb:
 # connection). Five minutes is generous; trim later if it masks real hangs.
 "%test":
   statedb:
+    # Tests exercise the gate directly (see EulaGateTest); every other test needs stack
+    # creation open, so the suite runs with the shipped agreement accepted. EulaDocumentTest
+    # fails if this drifts from EulaDocument.CURRENT_VERSION.
+    eula:
+      accepted-version: "1.0"
     # The scheduler is off below, so tests drive compaction directly; nothing would clear a job.
     lock:
       compaction-wait: 0

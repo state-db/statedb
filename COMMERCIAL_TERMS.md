@@ -2,11 +2,13 @@
 
 **DRAFT — not effective until reviewed by legal counsel and executed alongside an Order Form. This document is provided for evaluation only; the binding commercial agreement between Licensor and any Customer will be the version signed (or click-accepted on AWS Marketplace) at the time of purchase.**
 
-These Commercial License Terms (the "Agreement") govern the commercial license of state-db (the "Software") granted by Sharath Madappa, an individual, and any successor entity to which the Software is assigned (the "Licensor"), to the customer identified in an Order Form (the "Customer").
+These Commercial License Terms (the "Agreement") govern the commercial license of state-db (the "Software") granted by STATEDB INC., an Ontario corporation (Ontario Corporation Number 1001702441, incorporated under the *Business Corporations Act* (Ontario), registered office #6014, 2150 Winston Park Drive, Unit 203, Oakville, Ontario, L6H 5V1, Canada) (the "Licensor"), to the customer identified in an Order Form (the "Customer").
 
 ## 1. Relationship to the Public License
 
 The Software is also made available under the [Elastic License 2.0 with Additional Limitations](LICENSE) (the "Public License"). The Public License continues to govern Customer's use of the Software except as expressly modified by this Agreement. In the event of a conflict between this Agreement and the Public License, this Agreement controls *as between Licensor and Customer*.
+
+Customer's use of the Software is also subject to the [End User License Agreement](EULA.md) (the "EULA"), which a site administrator must accept in the state-db console before a Deployment will create Stacks. Sections 6 through 10 of the EULA (warranty disclaimer, no service commitment, limitation of liability, no indemnification by Licensor, and Customer indemnification) apply to every use of the Software.
 
 This Agreement does not grant any rights to third parties.
 
@@ -18,6 +20,7 @@ This Agreement does not grant any rights to third parties.
 - **"License Key"** means an authorization token issued by Licensor that enables Customer's use of the Software beyond the Free Edition Use Limit.
 - **"Order Form"** means a written or click-accepted ordering document executed between Licensor and Customer (including AWS Marketplace subscription records) that identifies the Customer, term, fees, and scope of License Keys.
 - **"Term"** means the period during which Customer's License Key is valid, as set out in the Order Form.
+- **"Monthly Subscription Fee"** means the fees attributable to a single calendar month of the subscription in effect immediately before the first event giving rise to a claim. Where fees are billed other than monthly, the Monthly Subscription Fee is the total fees for the billing period divided by the number of months in that period.
 
 ## 3. Commercial License Grant
 
@@ -57,7 +60,9 @@ Customer is solely responsible for the availability, performance, security, moni
 
 TO THE MAXIMUM EXTENT PERMITTED BY APPLICABLE LAW:
 
-(a) **Cap on direct damages.** Licensor's aggregate liability arising out of or related to this Agreement, the Software, or its use — under any theory of liability, whether in contract, tort (including negligence), strict liability, or otherwise — shall not exceed the fees actually paid by Customer to Licensor for the Software in the twelve (12) months preceding the first event giving rise to the claim.
+(a) **Aggregate cap — one month of fees.** Licensor's total aggregate liability arising out of or related to this Agreement, the Public License, the EULA, the Software, or its use or inability to be used — under any theory of liability, whether in contract, tort (including negligence), strict liability, statute, or otherwise, and for all claims in the aggregate — shall not exceed the greater of (i) one hundred Canadian dollars (CAD $100) and (ii) the Monthly Subscription Fee.
+
+This cap is aggregate across all claims and all causes of action. Multiple claims do not increase it, and it is not reset or multiplied by the number of incidents, Deployments, Stacks, users, or months in which incidents occur. It applies even if a limited remedy fails of its essential purpose.
 
 (b) **Exclusion of indirect damages.** In no event shall Licensor be liable for any indirect, incidental, special, consequential, exemplary, or punitive damages, including without limitation lost profits, lost revenue, lost business opportunity, lost data, loss of goodwill, business interruption, cost of substitute goods or services, or damage to systems or data, regardless of the theory of liability and even if Licensor has been advised of the possibility of such damages.
 
@@ -87,15 +92,15 @@ Customer may not assign this Agreement, in whole or in part, without Licensor's 
 
 ## 15. Governing Law and Disputes
 
-This Agreement is governed by the laws of *<TODO: jurisdiction — to be set when Licensor's principal place of business is established>*, without regard to conflict-of-laws principles. The parties consent to the exclusive jurisdiction of the state and federal courts located in *<TODO: venue>* for any dispute arising out of or related to this Agreement, except that either party may seek injunctive relief in any court of competent jurisdiction.
+This Agreement is governed by the laws of the Province of Ontario and the federal laws of Canada applicable in Ontario, without regard to conflict-of-laws principles. The parties attorn to the exclusive jurisdiction of the courts of the Province of Ontario sitting in Toronto for any dispute arising out of or related to this Agreement, except that either party may seek injunctive relief in any court of competent jurisdiction.
 
-The United Nations Convention on Contracts for the International Sale of Goods does not apply.
+The *United Nations Convention on Contracts for the International Sale of Goods* does not apply. The *International Sale of Goods Act* (Ontario) does not apply.
 
 ## 16. General Provisions
 
-**Entire agreement.** This Agreement, together with the Public License and any Order Form, constitutes the entire agreement between the parties regarding the Software and supersedes all prior or contemporaneous communications, whether written or oral.
+**Entire agreement.** This Agreement, together with the Public License, the EULA, and any Order Form, constitutes the entire agreement between the parties regarding the Software and supersedes all prior or contemporaneous communications, whether written or oral.
 
-**Order of precedence.** In the event of conflict: (1) the Order Form prevails; (2) then this Agreement; (3) then the Public License.
+**Order of precedence.** In the event of conflict: (1) the Order Form prevails; (2) then this Agreement; (3) then the EULA; (4) then the Public License.
 
 **Amendments.** No amendment to this Agreement is effective unless in writing and signed by both parties.
 
@@ -111,4 +116,4 @@ The United Nations Convention on Contracts for the International Sale of Goods d
 
 ---
 
-*Last updated: 2026-05-15. This draft references the Public License version as of the same date. Customer should request the then-current versions of both documents before executing an Order Form.*
+*Last updated: 2026-09-08. This draft references the Public License and EULA versions as of the same date. Customer should request the then-current versions of both documents before executing an Order Form.*

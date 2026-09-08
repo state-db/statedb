@@ -54,6 +54,18 @@ action "entitlement:Read" in ["site:AdminAccess"] appliesTo {
   resource: [Site]
 };
 
+// The EULA gate is deployment-wide: a site administrator accepts on behalf of the
+// licensee operating this deployment, so the resource is the Site, not an Org.
+action "eula:Read" in ["site:AdminAccess"] appliesTo {
+  principal: [User],
+  resource: [Site]
+};
+
+action "eula:Accept" in ["site:AdminAccess"] appliesTo {
+  principal: [User],
+  resource: [Site]
+};
+
 // Actions are named IAM-style as `service:Operation`. `stack:*` is the all-of-
 // service wildcard (≈ IAM `"Action": "stack:*"`); the two `*Access` actions are
 // pre-canned bundles (≈ AWS managed-policy action sets). All three are action

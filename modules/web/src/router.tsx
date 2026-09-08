@@ -22,6 +22,7 @@ import { AdminProvidersPage } from "@/routes/admin-providers";
 import { AdminOrganizationsPage } from "@/routes/admin-orgs";
 import { AdminUsersPage } from "@/routes/admin-users";
 import { AdminOperationsPage } from "@/routes/admin-operations";
+import { AdminEulaPage } from "@/routes/admin-eula";
 import {
   AdminServiceTokensPage,
   canManageServiceTokens,
@@ -297,6 +298,12 @@ const adminOperationsRoute = createRoute({
   component: AdminOperationsPage,
 });
 
+const adminEulaRoute = createRoute({
+  getParentRoute: () => adminRoute,
+  path: "admin/eula",
+  component: AdminEulaPage,
+});
+
 const adminLicenseRoute = createRoute({
   getParentRoute: () => adminRoute,
   path: "admin/license",
@@ -333,6 +340,7 @@ const routeTree = rootRoute.addChildren([
       adminOrgsRoute,
       adminUsersRoute,
       adminOperationsRoute,
+      adminEulaRoute,
       adminLicenseRoute,
     ]),
   ]),

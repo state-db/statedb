@@ -14,6 +14,11 @@ body.
   reachability validation, vulnerability scanning, and Java/container SBOMs.
 - AWS CloudFormation packaging for two ECS Express Mode replicas, encrypted RDS PostgreSQL, and
   ECS task-role database authentication without a long-lived application password.
+- End User License Agreement ([EULA.md](EULA.md)) that a site administrator accepts in the console
+  before the deployment will create stacks. The Pulumi CLI and the console are both refused until
+  then. Acceptance is recorded in the deployment's own database with the accepted version and the
+  SHA-256 of the exact document served. Operators who provision from infrastructure as code can set
+  `STATEDB_EULA_ACCEPTED_VERSION` to the shipped version instead.
 
 ### Changed
 

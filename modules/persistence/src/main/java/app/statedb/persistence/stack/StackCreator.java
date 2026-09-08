@@ -5,6 +5,7 @@ import app.statedb.persistence.NameGrammar;
 import app.statedb.persistence.PersistenceExceptions;
 import app.statedb.persistence.entitlement.EffectiveEntitlement;
 import app.statedb.persistence.entitlement.Entitlements;
+import app.statedb.persistence.eula.EulaAcknowledgment;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 import jakarta.persistence.PersistenceException;
@@ -23,6 +24,7 @@ public class StackCreator {
   @Inject ProjectUpserter projectUpserter;
   @Inject AdvisoryLock advisoryLock;
   @Inject Entitlements entitlements;
+  @Inject EulaAcknowledgment eula;
 
   /**
    * @throws StackAlreadyExistsException if {@code stackName} already exists under {@code (orgId,
@@ -34,6 +36,7 @@ public class StackCreator {
       UUID orgId, String orgName, String projectName, String stackName, Map<String, String> tags) {
     NameGrammar.requireValid("project name", projectName);
     NameGrammar.requireValid("stack name", stackName);
+    eula.requireAccepted("Stack creation");
     EffectiveEntitlement entitlement = entitlements.effective();
     if (entitlement.tier() != EffectiveEntitlement.Tier.PAID) {
       advisoryLock.acquire(AdvisoryLock.STACK_CREATION_ENTITLEMENT_KEY);

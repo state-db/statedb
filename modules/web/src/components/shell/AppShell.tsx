@@ -3,11 +3,13 @@ import {
   Building2,
   ChevronDown,
   Database,
+  FileText,
   KeyRound,
   LogOut,
   Moon,
   ServerCog,
   Shield,
+  ShieldAlert,
   Sun,
   UserRound,
   Users,
@@ -145,6 +147,7 @@ export function AppShell() {
               </div>
             </header>
             <main className="min-w-0 flex-1 p-6">
+              <EulaGateBanner user={user} />
               <Outlet />
             </main>
           </SidebarInset>
@@ -152,6 +155,39 @@ export function AppShell() {
         <Toaster richColors />
       </TooltipProvider>
     </ShellContext.Provider>
+  );
+}
+
+/**
+ * Until a site administrator accepts the EULA, this deployment refuses to create stacks
+ * from every path — console and Pulumi CLI alike. Only an administrator can clear the
+ * gate, so only an administrator is shown it; everyone else sees the refusal message on
+ * the failing operation.
+ */
+function EulaGateBanner({ user }: { user: CurrentUser }) {
+  const location = useLocation();
+  const { data } = useQuery({
+    queryKey: ["admin", "eula"],
+    queryFn: api.admin.eula.get,
+    enabled: user.siteAdmin,
+    retry: false,
+  });
+
+  if (!data || data.accepted || location.pathname === "/console/admin/eula") {
+    return null;
+  }
+
+  return (
+    <div className="mb-6 flex flex-wrap items-center gap-3 rounded-md border border-destructive/40 bg-destructive/10 px-4 py-3 text-sm">
+      <ShieldAlert className="size-4 shrink-0 text-destructive" />
+      <span className="min-w-0 flex-1">
+        Stack creation is blocked until a site administrator accepts the state-db End User
+        License Agreement.
+      </span>
+      <Button asChild size="sm" variant="destructive">
+        <Link to="/console/admin/eula">Review and accept</Link>
+      </Button>
+    </div>
   );
 }
 
@@ -167,6 +203,7 @@ function AppSidebar({ user }: { user: CurrentUser }) {
     { label: "Users", to: "/console/admin/users", icon: Users },
     { label: "Service tokens", to: "/console/admin/tokens", icon: KeyRound },
     { label: "Operations", to: "/console/admin/operations", icon: ServerCog },
+    { label: "License agreement", to: "/console/admin/eula", icon: FileText },
     { label: "License", to: "/console/admin/license", icon: Workflow },
   ];
   const ownsOrganization = user.organizations.some((org) => org.role === "owner");

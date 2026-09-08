@@ -30,6 +30,8 @@ This project is licensed under the [Elastic License 2.0, with Additional Limitat
 
 You are free to use, modify, and self-host this software for your own internal business purposes, free of charge, for up to **ten (10) active stacks per deployment**. Beyond that, a commercial license is required — see [COMMERCIAL.md](COMMERCIAL.md). You may **not** offer this software to third parties as a hosted or managed service. See the [LICENSE](LICENSE) file for full terms.
 
+Every deployment is also subject to the [End User License Agreement](EULA.md), which a site administrator accepts in the console before the deployment will create stacks. The software is provided **as is**, with no warranty, no service level commitment, and no indemnity, and total liability is capped at the greater of CAD $100 and one month of subscription fees.
+
 ## Contributing
 
 Contributions are welcome. Pull requests are accepted only from contributors who have signed the [Contributor License Agreement](CLA.md); see [CONTRIBUTING.md](CONTRIBUTING.md) for the workflow.

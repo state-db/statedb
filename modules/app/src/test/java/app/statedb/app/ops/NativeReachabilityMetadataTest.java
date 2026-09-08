@@ -4,6 +4,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import app.statedb.persistence.eula.EulaDocument;
 import app.statedb.persistence.policy.ClasspathPolicyStore;
 import app.statedb.testsupport.RepoRoot;
 import com.fasterxml.jackson.databind.JsonNode;
@@ -75,21 +76,25 @@ class NativeReachabilityMetadataTest {
 
   @Test
   void sourceLocalResourceGlobsMatchProductionResources() {
-    RegisterResources registration =
-        ClasspathPolicyStore.class.getAnnotation(RegisterResources.class);
+    List<String> violations = new ArrayList<>();
+    violations.addAll(validateGlobsOf(ClasspathPolicyStore.class));
+    violations.addAll(validateGlobsOf(EulaDocument.class));
+    assertEquals(List.of(), violations, () -> String.join("\n", violations));
+  }
+
+  /** A class that computes resource names must declare the globs that keep them in the image. */
+  private static List<String> validateGlobsOf(Class<?> owner) {
+    RegisterResources registration = owner.getAnnotation(RegisterResources.class);
     assertNotNull(
         registration,
-        "ClasspathPolicyStore computes resource names and must declare @RegisterResources");
+        owner.getSimpleName() + " computes resource names and must declare @RegisterResources");
     var metadata = MAPPER.createObjectNode();
     var resources = metadata.putArray("resources");
     for (String glob : registration.globs()) {
       resources.addObject().put("glob", glob);
     }
-
-    List<String> violations =
-        NativeMetadataValidator.validate(
-            "ClasspathPolicyStore.java @RegisterResources", metadata, productionResources());
-    assertEquals(List.of(), violations, () -> String.join("\n", violations));
+    return NativeMetadataValidator.validate(
+        owner.getSimpleName() + ".java @RegisterResources", metadata, productionResources());
   }
 
   private static Set<String> productionResources() {

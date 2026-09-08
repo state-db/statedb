@@ -39,8 +39,8 @@ class FlywayConfigurationTest {
     assertEquals(0, configuration.getIgnoreMigrationPatterns().length);
     assertEquals(
         "SET lock_timeout = '10s'; SET statement_timeout = '2min'", configuration.getInitSql());
-    assertEquals("001", flyway.info().current().getVersion().getVersion());
-    assertEquals("initial schema", flyway.info().current().getDescription());
+    assertEquals("002", flyway.info().current().getVersion().getVersion());
+    assertEquals("eula acceptances", flyway.info().current().getDescription());
 
     Config config = ConfigProvider.getConfig();
     assertTrue(config.getValue("quarkus.datasource.active", Boolean.class));

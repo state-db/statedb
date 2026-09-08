@@ -44,6 +44,12 @@ public class AdvisoryLock {
   /** Serializes the deployment-wide community stack-limit count-and-create decision. */
   public static final long STACK_CREATION_ENTITLEMENT_KEY = 0x5354415444425F34L;
 
+  /**
+   * Guards the boot-time recording of a configured EULA acceptance. See {@link
+   * app.statedb.persistence.eula.EulaConfigurationAcceptor}.
+   */
+  public static final long EULA_ACCEPTANCE_KEY = 0x5354415444425F35L;
+
   @Inject EntityManager em;
 
   /** Acquires {@code key} for the caller's current transaction. */

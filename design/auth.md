@@ -247,9 +247,12 @@ Actions are named IAM-style as `resource:Operation` (lowercase service prefix = 
 | `user:ReadOthers` | `GET /api/admin/users` | Admin-only |
 | `operations:Read` | `GET /api/admin/locks`, `GET /api/admin/compaction-jobs` | Admin-only global inventory |
 | `entitlement:Read` | `GET /api/admin/entitlement` | Admin-only deployment entitlement |
+| `eula:Read` | `GET /api/admin/eula` | Admin-only; serves the bundled agreement and its acceptance state |
+| `eula:Accept` | `POST /api/admin/eula/acceptance` | Admin-only; records deployment-wide acceptance |
 
 The global console actions (`provider:Manage`, `org:Admin`, `user:ReadOthers`,
-`operations:Read`, and `entitlement:Read`) are members of `site:AdminAccess` and target the
+`operations:Read`, `entitlement:Read`, `eula:Read`, and `eula:Accept`) are members of
+`site:AdminAccess` and target the
 singleton `Site::"statedb:site:root"`. `SiteAdministrationRequiresAdmin` forbids that bundle unless
 the principal carries the env-derived `Role::"admin"`; because Cedar forbids override every permit,
 policy grants cannot turn site administration into a delegable capability.
@@ -268,7 +271,7 @@ Three schema-declared **bundle actions** group leaf actions so a policy or guard
 |--------|---------|
 | `stack:ReadOnlyAccess` | `stack:Read`, `stack:DecryptSecrets` |
 | `stack:WriteAccess` | `stack:Create`, `stack:Lock`, `stack:Delete`, `stack:EncryptSecrets` |
-| `site:AdminAccess` | `provider:Manage`, `org:Admin`, `user:ReadOthers`, `operations:Read`, `entitlement:Read` |
+| `site:AdminAccess` | `provider:Manage`, `org:Admin`, `user:ReadOthers`, `operations:Read`, `entitlement:Read`, `eula:Read`, `eula:Accept` |
 | `stack:*` | both bundles above (all stack actions — the IAM `"Action": "stack:*"` wildcard) |
 
 `stack:*` is the all-of-service wildcard: the two `*Access` bundles are themselves members of it, so
