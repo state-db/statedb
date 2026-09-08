@@ -19,6 +19,9 @@ TOKEN_HASH   ?= 5ffbb9af69ff36cfa7e28cea7b3da597ed0d0489113674b3eb3a6c2b7e386ef5
 ## `cmd=glass-on` / `cmd=glass-off`.
 GLASS_PASSWORD_HASH ?= $$2a$$10$$T56PF8UE80K1VeLu6iMJjOLW68rR.xHzHUppcyvcd2ZAudpNUgn9O
 BACKEND_URL  ?= http://localhost:8080/pulumi
+## Preflight budget. Instant locally, but a remote BACKEND_URL pays a TLS handshake
+## that measured 2-4s cold.
+CHECK_TIMEOUT ?= 10
 
 ## `cmd=app` runs this image, building it the first time it's missing (see
 ## build-image-if-missing). Rebuild after code changes with `cmd=build-image`.
@@ -32,6 +35,10 @@ CHURN_STACK_REF ?= $(ORG)/$(CHURN_STACK)
 ## High-cardinality local provider scale runs.
 SIM_PROVIDER_VERSION       ?= 0.1.0
 SIM_PROVIDER_BUILDER_IMAGE ?= golang:1.26-bookworm
+## The host Pulumi CLI execs this plugin, so the build targets the host OS/arch; the
+## container default would install a Linux binary. Tests still run natively in the container.
+SIM_PROVIDER_GOOS          ?= $(shell uname -s | tr 'A-Z' 'a-z')
+SIM_PROVIDER_GOARCH        ?= $(shell uname -m | sed -e 's/^x86_64$$/amd64/' -e 's/^aarch64$$/arm64/')
 SCALE_STACK                ?= scale
 SCALE_STACK_REF            ?= $(ORG)/$(SCALE_STACK)
 SCALE_RESOURCES            ?= 250
@@ -159,7 +166,7 @@ app-stop:
 
 ## Fail early with a useful message if the state-db app is not running.
 check-app:
-	@curl -fs --max-time 2 -H "Authorization: token $(TOKEN)" "$(BACKEND_URL)/api/capabilities" >/dev/null || { \
+	@curl -fs --max-time $(CHECK_TIMEOUT) -H "Authorization: token $(TOKEN)" "$(BACKEND_URL)/api/capabilities" >/dev/null || { \
 		echo ""; \
 		echo "state-db is not reachable at $(BACKEND_URL), or the workbench token was not accepted."; \
 		echo "Start the workbench app in another terminal first:"; \
@@ -257,7 +264,7 @@ scale-provider-test:
 
 ## Build the local-only statedbsim provider binary and write the plugin binary back into the worktree.
 scale-provider-build:
-	$(call go-builder-run,mkdir -p bin && /usr/local/go/bin/go build -o bin/pulumi-resource-statedbsim .)
+	$(call go-builder-run,mkdir -p bin && GOOS=$(SIM_PROVIDER_GOOS) GOARCH=$(SIM_PROVIDER_GOARCH) CGO_ENABLED=0 /usr/local/go/bin/go build -o bin/pulumi-resource-statedbsim .)
 
 ## Install the locally built statedbsim provider into the workbench-local Pulumi plugin cache.
 scale-provider-install: scale-provider-build
