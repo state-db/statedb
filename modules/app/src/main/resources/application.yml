@@ -85,6 +85,10 @@ quarkus:
     # Schema is owned by Flyway; Hibernate must never touch DDL.
     database:
       generation: none
+    log:
+      # Add the SQL statement when a request is slow but pool acquisition was not the cause.
+      # The console's normal queries are well below this threshold.
+      queries-slower-than-ms: 100
     # Use Quarkus's default JSON format mapper for JSONB columns rather than
     # the REST-facing ObjectMapper, whose date customizations would affect DB
     # serialization. Will be the default in a future Quarkus.

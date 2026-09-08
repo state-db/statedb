@@ -1,4 +1,4 @@
-import { useQuery } from "@tanstack/react-query";
+import { queryOptions, useQuery, type QueryClient } from "@tanstack/react-query";
 import {
   ArrowDown,
   ChevronDown,
@@ -43,6 +43,7 @@ import { jsonDiffLines as computeJsonDiffLines, type JsonDiffLine } from "@/lib/
 import { cn } from "@/lib/utils";
 
 type RunLocator = { version: number } | { previewId: string };
+type RunFetcher = typeof api.workspaces.run;
 type ResourceChange = { sequence: number; op: string; type: string; name: string; detail: unknown };
 type ResourceDisplayRow = ResourceChange & {
   urn: string;
@@ -69,11 +70,7 @@ export function RunDetailPage({
   stack: string;
   locator: RunLocator;
 }) {
-  const query = useQuery({
-    queryKey: ["run", org, project, stack, locator],
-    queryFn: ({ signal }) => api.workspaces.run(org, project, stack, locator, signal),
-    refetchInterval: (current) => current.state.data?.status === "in-progress" ? 3_000 : false,
-  });
+  const query = useQuery(runQueryOptions(org, project, stack, locator));
   const [events, setEvents] = useState<RunEvent[]>([]);
   const [eventsError, setEventsError] = useState<unknown>(null);
   const previousStatus = useRef<string | null>(null);
@@ -152,6 +149,34 @@ export function RunDetailPage({
       eventsError={eventsError}
     />
   );
+}
+
+export function runQueryOptions(
+  org: string,
+  project: string,
+  stack: string,
+  locator: RunLocator,
+  fetchRun: RunFetcher = api.workspaces.run,
+) {
+  return queryOptions({
+    queryKey: ["run", org, project, stack, locator],
+    queryFn: ({ signal }) => fetchRun(org, project, stack, locator, signal),
+    // Keep the loader result fresh long enough for the component mount to reuse it.
+    staleTime: 5_000,
+    refetchInterval: (current) => current.state.data?.status === "in-progress" ? 3_000 : false,
+  });
+}
+
+/** Starts the run request during route load without blocking shell rendering. */
+export function prefetchRun(
+  client: QueryClient,
+  org: string,
+  project: string,
+  stack: string,
+  locator: RunLocator,
+  fetchRun: RunFetcher = api.workspaces.run,
+): void {
+  void client.prefetchQuery(runQueryOptions(org, project, stack, locator, fetchRun));
 }
 
 function RunView({

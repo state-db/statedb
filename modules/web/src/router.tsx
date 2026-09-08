@@ -10,13 +10,14 @@ import {
 import { Settings } from "lucide-react";
 
 import { AppShell, useShell } from "@/components/shell/AppShell";
+import { queryClient } from "@/lib/query-client";
 import { HomePage } from "@/routes/home";
 import { LoginPage } from "@/routes/login";
 import { NotFoundPage } from "@/routes/not-found";
 import { PlaceholderPage } from "@/routes/placeholder";
 import { OrgStacksPage, ProjectStacksPage } from "@/routes/scoped-stacks";
 import { StackDetailPage, type StackTab } from "@/routes/stack-detail";
-import { RunDetailPage } from "@/routes/run-detail";
+import { RunDetailPage, prefetchRun } from "@/routes/run-detail";
 import { AdminProvidersPage } from "@/routes/admin-providers";
 import { AdminOrganizationsPage } from "@/routes/admin-orgs";
 import { AdminUsersPage } from "@/routes/admin-users";
@@ -190,6 +191,10 @@ const updateRoute = createRoute({
   beforeLoad: ({ params }) => {
     if (!/^\d+$/.test(params.version)) throw notFound();
   },
+  loader: ({ params }) =>
+    prefetchRun(queryClient, params.org, params.project, params.stack, {
+      version: Number(params.version),
+    }),
   component: UpdateDetailRoute,
 });
 
@@ -204,6 +209,10 @@ const previewRoute = createRoute({
   beforeLoad: ({ params }) => {
     if (!isUuid(params.updateId)) throw notFound();
   },
+  loader: ({ params }) =>
+    prefetchRun(queryClient, params.org, params.project, params.stack, {
+      previewId: params.updateId,
+    }),
   component: PreviewDetailRoute,
 });
 
