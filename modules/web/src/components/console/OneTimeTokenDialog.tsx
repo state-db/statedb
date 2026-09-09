@@ -15,7 +15,7 @@ import { Input } from "@/components/ui/input";
 export function OneTimeTokenDialog({
   rawToken,
   title = "Your CLI token",
-  description = "Copy it now. state-db cannot show this token again.",
+  description = "Copy it now. statedb cannot show this token again.",
   onClose,
 }: {
   rawToken: string | null;

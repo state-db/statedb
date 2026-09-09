@@ -3,7 +3,6 @@ import {
   Building2,
   ChevronDown,
   Database,
-  FileText,
   KeyRound,
   LogOut,
   Moon,
@@ -79,7 +78,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { useTheme } from "@/components/theme/ThemeProvider";
 import { useCurrentUser } from "@/hooks/useCurrentUser";
 import { useUnauthorizedRedirect } from "@/hooks/useUnauthorizedRedirect";
-import { api, type CurrentUser, type OrgMembership } from "@/lib/api";
+import { api, type CurrentUser, type Eula, type OrgMembership } from "@/lib/api";
 
 type ShellContextValue = {
   user: CurrentUser;
@@ -99,6 +98,8 @@ export function useShell() {
 
 export function AppShell() {
   const { data: user, error, isLoading } = useCurrentUser();
+  const location = useLocation();
+  const navigate = useNavigate();
   const [selectedOrg, setSelectedOrgState] = useState<string | null>(() => {
     if (typeof window === "undefined") {
       return null;
@@ -107,6 +108,22 @@ export function AppShell() {
   });
 
   const unauthorized = useUnauthorizedRedirect(error);
+  const eula = useQuery({
+    queryKey: ["admin", "eula"],
+    queryFn: api.admin.eula.get,
+    enabled: Boolean(user?.siteAdmin),
+    retry: false,
+  });
+  const onLicensePage =
+    location.pathname === "/console/admin/license" || location.pathname === "/console/admin/eula";
+  const redirectToEula =
+    Boolean(user?.siteAdmin) && eula.data?.accepted === false && !onLicensePage;
+
+  useEffect(() => {
+    if (redirectToEula) {
+      void navigate({ to: "/console/admin/license", replace: true });
+    }
+  }, [navigate, redirectToEula]);
 
   const setSelectedOrg = (org: string | null) => {
     setSelectedOrgState(org);
@@ -117,7 +134,12 @@ export function AppShell() {
     }
   };
 
-  if (isLoading || unauthorized) {
+  if (
+    isLoading ||
+    unauthorized ||
+    redirectToEula ||
+    (Boolean(user?.siteAdmin) && eula.isPending && !onLicensePage)
+  ) {
     return (
       <div className="flex min-h-full flex-col gap-4 p-6">
         <Skeleton className="h-8 w-48" />
@@ -147,7 +169,7 @@ export function AppShell() {
               </div>
             </header>
             <main className="min-w-0 flex-1 p-6">
-              <EulaGateBanner user={user} />
+              <EulaGateBanner eula={eula.data} />
               <Outlet />
             </main>
           </SidebarInset>
@@ -159,21 +181,14 @@ export function AppShell() {
 }
 
 /**
- * Until a site administrator accepts the EULA, this deployment refuses to create stacks
- * from every path — console and Pulumi CLI alike. Only an administrator can clear the
- * gate, so only an administrator is shown it; everyone else sees the refusal message on
- * the failing operation.
+ * Until a site administrator accepts the EULA, full functionality is not enabled. Only an
+ * administrator can clear the gate, so only an administrator is shown it; everyone else
+ * sees the acceptance message on the failing operation.
  */
-function EulaGateBanner({ user }: { user: CurrentUser }) {
+function EulaGateBanner({ eula }: { eula: Eula | undefined }) {
   const location = useLocation();
-  const { data } = useQuery({
-    queryKey: ["admin", "eula"],
-    queryFn: api.admin.eula.get,
-    enabled: user.siteAdmin,
-    retry: false,
-  });
 
-  if (!data || data.accepted || location.pathname === "/console/admin/eula") {
+  if (!eula || eula.accepted || location.pathname === "/console/admin/license") {
     return null;
   }
 
@@ -181,11 +196,10 @@ function EulaGateBanner({ user }: { user: CurrentUser }) {
     <div className="mb-6 flex flex-wrap items-center gap-3 rounded-md border border-destructive/40 bg-destructive/10 px-4 py-3 text-sm">
       <ShieldAlert className="size-4 shrink-0 text-destructive" />
       <span className="min-w-0 flex-1">
-        Stack creation is blocked until a site administrator accepts the state-db End User
-        License Agreement.
+        The EULA must be accepted to enable full functionality for this deployment.
       </span>
       <Button asChild size="sm" variant="destructive">
-        <Link to="/console/admin/eula">Review and accept</Link>
+        <Link to="/console/admin/license">Review and accept</Link>
       </Button>
     </div>
   );
@@ -203,7 +217,6 @@ function AppSidebar({ user }: { user: CurrentUser }) {
     { label: "Users", to: "/console/admin/users", icon: Users },
     { label: "Service tokens", to: "/console/admin/tokens", icon: KeyRound },
     { label: "Operations", to: "/console/admin/operations", icon: ServerCog },
-    { label: "License agreement", to: "/console/admin/eula", icon: FileText },
     { label: "License", to: "/console/admin/license", icon: Workflow },
   ];
   const ownsOrganization = user.organizations.some((org) => org.role === "owner");

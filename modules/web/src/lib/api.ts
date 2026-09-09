@@ -236,7 +236,7 @@ export interface AdminLock {
 
 /**
  * The End User License Agreement this deployment ships, plus whether a site
- * administrator has accepted it. Stack creation is refused until `accepted`.
+ * administrator has accepted it. Full functionality is not enabled until `accepted`.
  */
 export interface Eula {
   version: string;

@@ -6,7 +6,7 @@ description: statedb's license terms, and the basis for its Pulumi CLI compatibi
 statedb is licensed under the Elastic License 2.0 with one additional term, the
 Free Edition Use Limit. The repository's
 [LICENSE](https://github.com/state-db/statedb/blob/main/LICENSE) file is
-authoritative; this page explains it in plain language and is not legal advice.
+authoritative; this page explains the public terms in plain language.
 
 ## Free Edition
 
@@ -24,6 +24,20 @@ Managing more than ten active stacks in a single deployment requires a
 commercial license. Terms and pricing are not final; see
 [COMMERCIAL.md](https://github.com/state-db/statedb/blob/main/COMMERCIAL.md) for
 current status and how to get in touch.
+
+## End User License Agreement
+
+Every deployment is also subject to the
+[End User License Agreement](https://github.com/state-db/statedb/blob/main/EULA.md).
+Before a deployment will create or import stacks, a site administrator must
+accept the agreement in the console, or an operator must set
+`STATEDB_EULA_ACCEPTED_VERSION` to the exact agreement version shipped with that
+deployment.
+
+The software is provided as is, with no warranty, service level commitment,
+support obligation, maintenance obligation, or indemnity unless a separate
+written agreement says otherwise. Liability is CAD $0 for free use and capped at
+one month of subscription fees for paid use.
 
 Two limits apply regardless of edition. You may not offer statedb to third
 parties as a hosted or managed service, and you may not modify it to disable or
@@ -49,7 +63,7 @@ Apache license and copyright notices for that material. The record is public:
 - [Pulumi state and backend documentation](https://www.pulumi.com/docs/iac/concepts/state-and-backends/)
 - [Pulumi source and Apache 2.0 license](https://github.com/pulumi/pulumi)
 - [Pulumi-derived material in statedb](https://github.com/state-db/statedb/tree/main/third_party/pulumi)
-- [state-db third-party notices](https://github.com/state-db/statedb/blob/main/NOTICE)
+- [statedb third-party notices](https://github.com/state-db/statedb/blob/main/NOTICE)
 
 Compatibility is not endorsement. statedb is an independent project, and Pulumi
 Corporation does not sponsor, endorse, or operate it.

@@ -607,7 +607,7 @@ function FirstRunOnboarding() {
       />
       <OnboardingStep
         step="1"
-        title="Point Pulumi at state-db"
+        title="Point Pulumi at statedb"
         command={`pulumi login ${origin}/pulumi`}
       />
       <Card>

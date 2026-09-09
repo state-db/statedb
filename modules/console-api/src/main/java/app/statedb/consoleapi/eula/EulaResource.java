@@ -23,8 +23,8 @@ import java.util.UUID;
 
 /**
  * Site-admin view and acceptance of the End User License Agreement. Until an administrator accepts
- * the version this image ships, the deployment refuses to create stacks — see {@code
- * EulaAcknowledgment} and the gate in {@code StackCreator}.
+ * the version this image ships, full functionality is not enabled. See {@code EulaAcknowledgment}
+ * and the gate in {@code StackCreator}.
  */
 @Path("/api/admin/eula")
 @SessionPrincipal
@@ -68,8 +68,8 @@ public class EulaResource {
 
   /**
    * Best-effort client address for the acceptance record. A deployment behind a proxy that does not
-   * set {@code X-Forwarded-For} records the peer address, and an unknown address records nothing —
-   * the accepting user and timestamp are the evidence that matters.
+   * set {@code X-Forwarded-For} records the peer address. An unknown address records nothing; the
+   * accepting user and timestamp are the evidence that matters.
    */
   private String clientAddress() {
     String forwarded = headers.getHeaderString("X-Forwarded-For");

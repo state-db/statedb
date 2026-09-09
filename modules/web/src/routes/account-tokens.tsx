@@ -141,7 +141,7 @@ export function AccountTokensPage() {
         <CardHeader>
           <CardTitle>Use a CLI token</CardTitle>
           <CardDescription>
-            Export the token you copied, then connect Pulumi to this state-db instance.
+            Export the token you copied, then connect Pulumi to this statedb instance.
           </CardDescription>
         </CardHeader>
         <CardContent className="flex flex-col gap-3">

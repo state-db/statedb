@@ -108,10 +108,10 @@ quarkus:
 
 statedb:
   eula:
-    # Unset by default: a fresh deployment refuses to create stacks until a site
-    # administrator accepts the agreement in the console. Operators who provision from
-    # infrastructure as code set this to the exact version the image ships (see EULA.md)
-    # to record that acceptance at startup instead.
+    # Unset by default: a fresh deployment keeps full functionality disabled until a
+    # site administrator accepts the agreement in the console. Operators who provision
+    # from infrastructure as code set this to the exact version the image ships (see
+    # EULA.md) to record that acceptance at startup instead.
     accepted-version: ${STATEDB_EULA_ACCEPTED_VERSION:}
   license:
     path: ${STATEDB_LICENSE_PATH:}

@@ -1,14 +1,12 @@
-# state-db Commercial License Terms
+# statedb Commercial License Terms
 
-**DRAFT — not effective until reviewed by legal counsel and executed alongside an Order Form. This document is provided for evaluation only; the binding commercial agreement between Licensor and any Customer will be the version signed (or click-accepted on AWS Marketplace) at the time of purchase.**
-
-These Commercial License Terms (the "Agreement") govern the commercial license of state-db (the "Software") granted by STATEDB INC., an Ontario corporation (Ontario Corporation Number 1001702441, incorporated under the *Business Corporations Act* (Ontario), registered office #6014, 2150 Winston Park Drive, Unit 203, Oakville, Ontario, L6H 5V1, Canada) (the "Licensor"), to the customer identified in an Order Form (the "Customer").
+These Commercial License Terms (the "Agreement") govern the commercial license of statedb (the "Software") granted by STATEDB INC., an Ontario corporation (Ontario Corporation Number 1001702441, incorporated under the *Business Corporations Act* (Ontario), registered office #6014, 2150 Winston Park Drive, Unit 203, Oakville, Ontario, L6H 5V1, Canada) (the "Licensor"), to the customer identified in an Order Form (the "Customer").
 
 ## 1. Relationship to the Public License
 
 The Software is also made available under the [Elastic License 2.0 with Additional Limitations](LICENSE) (the "Public License"). The Public License continues to govern Customer's use of the Software except as expressly modified by this Agreement. In the event of a conflict between this Agreement and the Public License, this Agreement controls *as between Licensor and Customer*.
 
-Customer's use of the Software is also subject to the [End User License Agreement](EULA.md) (the "EULA"), which a site administrator must accept in the state-db console before a Deployment will create Stacks. Sections 6 through 10 of the EULA (warranty disclaimer, no service commitment, limitation of liability, no indemnification by Licensor, and Customer indemnification) apply to every use of the Software.
+Customer's use of the Software is also subject to the [End User License Agreement](EULA.md) (the "EULA"), which must be accepted in the statedb console by a site administrator or through deployment configuration before a Deployment will create or import Stacks. Sections 6 through 10 of the EULA (warranty disclaimer, no service commitment, limitation of liability, no indemnification by Licensor, and Customer indemnification) apply to every use of the Software.
 
 This Agreement does not grant any rights to third parties.
 
@@ -60,7 +58,7 @@ Customer is solely responsible for the availability, performance, security, moni
 
 TO THE MAXIMUM EXTENT PERMITTED BY APPLICABLE LAW:
 
-(a) **Aggregate cap — one month of fees.** Licensor's total aggregate liability arising out of or related to this Agreement, the Public License, the EULA, the Software, or its use or inability to be used — under any theory of liability, whether in contract, tort (including negligence), strict liability, statute, or otherwise, and for all claims in the aggregate — shall not exceed the greater of (i) one hundred Canadian dollars (CAD $100) and (ii) the Monthly Subscription Fee.
+(a) **Aggregate cap: one month of fees.** Licensor's total aggregate liability arising out of or related to this Agreement, the Public License, the EULA, the Software, or its use or inability to be used, under any theory of liability, whether in contract, tort (including negligence), strict liability, statute, or otherwise, and for all claims in the aggregate, shall not exceed the Monthly Subscription Fee.
 
 This cap is aggregate across all claims and all causes of action. Multiple claims do not increase it, and it is not reset or multiplied by the number of incidents, Deployments, Stacks, users, or months in which incidents occur. It applies even if a limited remedy fails of its essential purpose.
 
@@ -68,7 +66,7 @@ This cap is aggregate across all claims and all causes of action. Multiple claim
 
 (c) **Basis of bargain.** Customer acknowledges that the fees charged for the Software reflect the allocation of risk set out in this Agreement, and that the limitations in this Section 9 are an essential basis of the bargain between the parties.
 
-(d) **Carve-outs.** Nothing in this Section 9 limits or excludes liability that cannot be limited or excluded under applicable law, including without limitation liability for: (i) fraud or fraudulent misrepresentation; (ii) gross negligence or willful misconduct; (iii) death or personal injury caused by negligence; or (iv) any other liability that cannot be excluded or limited under applicable law.
+(d) **Carve-outs.** Nothing in this Section 9 limits or excludes liability that cannot be limited or excluded under applicable law, including without limitation liability for: (i) fraud or fraudulent misrepresentation; (ii) death or personal injury caused by negligence; or (iii) any other liability that cannot be excluded or limited under applicable law. Where applicable law does not permit the exclusion or limitation of liability for gross negligence or willful misconduct, that liability is excluded from the cap in Section 9(a) only to the minimum extent that law requires.
 
 ## 10. No Indemnification by Licensor
 
@@ -76,7 +74,7 @@ Licensor provides no indemnification, defense, or hold-harmless commitment of an
 
 ## 11. Customer Indemnification
 
-Customer shall defend, indemnify, and hold harmless Licensor from and against any third-party claims, damages, and costs (including reasonable attorneys' fees) arising out of or related to: (a) Customer's use of the Software in breach of this Agreement or the Public License; (b) Customer's combination of the Software with any other product, service, or data not provided by Licensor; or (c) Customer's data, content, or systems processed by the Software.
+Customer shall defend, indemnify, and hold harmless Licensor from and against any third-party claims, damages, and costs (including reasonable legal fees) arising out of or related to: (a) Customer's use of the Software in breach of this Agreement or the Public License; (b) Customer's combination of the Software with any other product, service, or data not provided by Licensor; or (c) Customer's data, content, or systems processed by the Software.
 
 ## 12. Compliance
 
@@ -116,4 +114,4 @@ The *United Nations Convention on Contracts for the International Sale of Goods*
 
 ---
 
-*Last updated: 2026-09-08. This draft references the Public License and EULA versions as of the same date. Customer should request the then-current versions of both documents before executing an Order Form.*
+*Last updated: 2026-09-08.*

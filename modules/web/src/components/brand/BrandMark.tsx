@@ -1,7 +1,7 @@
 import { cn } from "@/lib/utils";
 
 /**
- * The state-db otter mark, auto-traced from the original illustration
+ * The statedb mark, auto-traced from the original illustration
  * (assets/brand/statedb-logo.png — see assets/brand/README.md). Line work
  * follows `currentColor` (navy in light mode, pale slate in dark) while the
  * face, its features, and the waves keep brand colors. Generated from

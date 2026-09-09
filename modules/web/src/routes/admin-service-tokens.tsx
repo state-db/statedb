@@ -262,7 +262,7 @@ export function AdminServiceTokensPage() {
       <OneTimeTokenDialog
         rawToken={minted?.token ?? null}
         title="Your service token"
-        description="Copy it now and store it in your CI secret manager. state-db cannot show this token again."
+        description="Copy it now and store it in your CI secret manager. statedb cannot show this token again."
         onClose={() => setMinted(null)}
       />
     </div>

@@ -7,14 +7,11 @@ import {
   createRouter,
   Outlet,
 } from "@tanstack/react-router";
-import { Settings } from "lucide-react";
-
 import { AppShell, useShell } from "@/components/shell/AppShell";
 import { queryClient } from "@/lib/query-client";
 import { HomePage } from "@/routes/home";
 import { LoginPage } from "@/routes/login";
 import { NotFoundPage } from "@/routes/not-found";
-import { PlaceholderPage } from "@/routes/placeholder";
 import { OrgStacksPage, ProjectStacksPage } from "@/routes/scoped-stacks";
 import { StackDetailPage, type StackTab } from "@/routes/stack-detail";
 import { RunDetailPage, prefetchRun } from "@/routes/run-detail";
@@ -22,7 +19,7 @@ import { AdminProvidersPage } from "@/routes/admin-providers";
 import { AdminOrganizationsPage } from "@/routes/admin-orgs";
 import { AdminUsersPage } from "@/routes/admin-users";
 import { AdminOperationsPage } from "@/routes/admin-operations";
-import { AdminEulaPage } from "@/routes/admin-eula";
+import { AdminLicensePage } from "@/routes/admin-eula";
 import {
   AdminServiceTokensPage,
   canManageServiceTokens,
@@ -301,19 +298,15 @@ const adminOperationsRoute = createRoute({
 const adminEulaRoute = createRoute({
   getParentRoute: () => adminRoute,
   path: "admin/eula",
-  component: AdminEulaPage,
+  beforeLoad: () => {
+    throw redirect({ to: "/console/admin/license", replace: true });
+  },
 });
 
 const adminLicenseRoute = createRoute({
   getParentRoute: () => adminRoute,
   path: "admin/license",
-  component: () => (
-    <PlaceholderPage
-      icon={Settings}
-      title="License and usage"
-      description="Free Edition limits and usage fill in here in S15."
-    />
-  ),
+  component: AdminLicensePage,
 });
 
 const routeTree = rootRoute.addChildren([

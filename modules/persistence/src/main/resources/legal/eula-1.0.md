@@ -1,22 +1,17 @@
-# state-db End User License Agreement
+# statedb End User License Agreement
 
-**Version 1.0 — effective 2026-09-08**
-
-**DRAFT — reviewed by no legal counsel as of this version. STATEDB INC. should have this
-document reviewed by qualified counsel in Ontario before relying on it commercially. It is
-presented in the product as a click-accept agreement; the version accepted by a Licensee's
-site administrator is the version recorded in that Deployment's database.**
+**Version 1.0, effective 2026-09-08**
 
 This End User License Agreement (this "**Agreement**") is a binding legal agreement between
 **STATEDB INC.**, an Ontario corporation (Ontario Corporation Number 1001702441, incorporated
 under the *Business Corporations Act* (Ontario), registered office #6014, 2150 Winston Park
 Drive, Unit 203, Oakville, Ontario, L6H 5V1, Canada) ("**Licensor**", "**we**", "**us**"), and
-the individual or legal entity that installs, deploys, or uses the state-db software (the
+the individual or legal entity that installs, deploys, or uses the statedb software (the
 "**Software**") ("**Licensee**", "**you**").
 
-**BY ACCEPTING THIS AGREEMENT IN THE STATE-DB CONSOLE, OR BY INSTALLING, DEPLOYING, OR USING
-THE SOFTWARE, YOU AGREE TO BE BOUND BY THIS AGREEMENT. IF YOU DO NOT AGREE, DO NOT INSTALL,
-DEPLOY, OR USE THE SOFTWARE.**
+**BY ACCEPTING THIS AGREEMENT IN THE STATEDB CONSOLE, CONFIGURING A DEPLOYMENT TO ACCEPT THIS
+AGREEMENT, OR INSTALLING, DEPLOYING, OR USING THE SOFTWARE, YOU AGREE TO BE BOUND BY THIS
+AGREEMENT. IF YOU DO NOT AGREE, DO NOT INSTALL, DEPLOY, OR USE THE SOFTWARE.**
 
 If you accept this Agreement on behalf of an organization, you represent that you have
 authority to bind that organization, and "Licensee" means that organization.
@@ -49,24 +44,29 @@ displaced by the Public License.
   month of the subscription in effect immediately before the first event giving rise to a claim.
   Where fees are billed other than monthly, the Monthly Subscription Fee is the total fees for
   the billing period divided by the number of months in that period.
-- "**Site Administrator**" means a user of a Deployment holding the state-db site-admin role.
+- "**Site Administrator**" means a user of a Deployment holding the statedb site-admin role.
 - "**Licensee Data**" means any infrastructure state, configuration, secrets, credentials,
   telemetry, or other data that Licensee stores in, transmits through, or processes with the
   Software.
 
 ## 3. Acceptance and Records
 
-The Software requires a Site Administrator to accept this Agreement in the state-db console
-before the Deployment will create Stacks. Licensor records the accepted version, the accepting
-user, and the acceptance timestamp in the Deployment's own database. That record is Licensee's
-evidence of acceptance and Licensor's evidence of the terms in force.
+Before a Deployment will create or import Stacks, this Agreement must be accepted either by a
+Site Administrator in the statedb console or by the operator setting the Deployment's configured
+accepted version to the exact version of this Agreement shipped with the Software. Licensor records
+the accepted version, document digest, acceptance channel, acceptance timestamp, and, for console
+acceptance, the accepting user in the Deployment's own database. That record is Licensee's evidence
+of acceptance and Licensor's evidence of the terms in force.
 
 Licensor may publish a new version of this Agreement with a new version identifier. A new
-version applies to a Deployment when a Site Administrator accepts it. Continued use of a
-Deployment after a Site Administrator accepts a new version constitutes acceptance of that
-version by Licensee. Licensee's remedy if it does not agree to a new version is to stop using
-the Software; no refund of prepaid fees is owed for a version Licensee declines, except as
-required by applicable law.
+version applies to a Deployment when a Site Administrator accepts it in the console or when an
+operator configures the Deployment to accept that exact version. Continued use of a Deployment
+after the new version is accepted constitutes acceptance of that version by Licensee. The
+Software may continue to permit operations other than Stack creation or import before the new
+version is accepted, but that access does not waive this Agreement or create a right to use the
+Software without accepting the current Agreement. Licensee's remedy if it does not agree to a new
+version is to stop using the Software; no refund of prepaid fees is owed for a version Licensee
+declines, except as required by applicable law.
 
 ## 4. License Grant and Restrictions
 
@@ -134,12 +134,11 @@ continuity of its Deployments and of every system that depends on them.
 
 TO THE MAXIMUM EXTENT PERMITTED BY APPLICABLE LAW:
 
-**(a) Aggregate cap — one month of fees.** LICENSOR'S TOTAL AGGREGATE LIABILITY ARISING OUT OF
+**(a) Aggregate cap for paid use: one month of fees.** LICENSOR'S TOTAL AGGREGATE LIABILITY ARISING OUT OF
 OR RELATED TO THIS AGREEMENT, THE PUBLIC LICENSE, THE COMMERCIAL TERMS, THE SOFTWARE, OR ITS USE
-OR INABILITY TO BE USED — UNDER ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, TORT (INCLUDING
-NEGLIGENCE), STRICT LIABILITY, STATUTE, OR OTHERWISE, AND FOR ALL CLAIMS IN THE AGGREGATE — SHALL
-NOT EXCEED THE GREATER OF (i) ONE HUNDRED CANADIAN DOLLARS (CAD $100) AND (ii) THE MONTHLY
-SUBSCRIPTION FEE.
+OR INABILITY TO BE USED, UNDER ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, TORT (INCLUDING
+NEGLIGENCE), STRICT LIABILITY, STATUTE, OR OTHERWISE, AND FOR ALL CLAIMS IN THE AGGREGATE, SHALL
+NOT EXCEED THE MONTHLY SUBSCRIPTION FEE.
 
 This cap is aggregate across all claims and all causes of action. Multiple claims do not
 increase it, and it is not reset or multiplied by the number of incidents, Deployments, Stacks,
@@ -150,13 +149,13 @@ INDIRECT, INCIDENTAL, SPECIAL, CONSEQUENTIAL, EXEMPLARY, AGGRAVATED, OR PUNITIVE
 ANY LOST PROFITS, LOST REVENUE, LOST SAVINGS, LOST BUSINESS OPPORTUNITY, LOST OR CORRUPTED DATA
 OR INFRASTRUCTURE STATE, LOSS OR DESTRUCTION OF INFRASTRUCTURE, FAILED OR ERRONEOUS DEPLOYMENTS,
 LOSS OF GOODWILL OR REPUTATION, BUSINESS INTERRUPTION, DOWNTIME, COST OF SUBSTITUTE GOODS OR
-SERVICES, COST OF RECOVERY OR RECONSTRUCTION OF DATA OR INFRASTRUCTURE, OR THIRD-PARTY CLAIMS —
+SERVICES, COST OF RECOVERY OR RECONSTRUCTION OF DATA OR INFRASTRUCTURE, OR THIRD-PARTY CLAIMS,
 REGARDLESS OF THE THEORY OF LIABILITY AND EVEN IF LICENSOR HAS BEEN ADVISED OF THE POSSIBILITY
 OF SUCH DAMAGES. THIS EXCLUSION APPLIES INDEPENDENTLY OF, AND IN ADDITION TO, THE CAP IN
 SECTION 8(a).
 
 **(c) Free use.** Where Licensee uses the Software at no charge, the Monthly Subscription Fee is
-zero and Licensor's aggregate liability is limited to CAD $100.
+zero and Licensor's aggregate liability is CAD $0.
 
 **(d) Failure of essential purpose.** The limitations in this Section 8 apply even if a limited
 remedy fails of its essential purpose.
@@ -206,13 +205,14 @@ information, and other sensitive content before doing so.
 This Agreement takes effect on the earlier of a Site Administrator's acceptance and Licensee's
 first installation, deployment, or use of the Software, and continues until terminated.
 
-This Agreement terminates automatically if Licensee breaches it and does not cure the breach
-within thirty (30) days after written notice. Licensee may terminate at any time by ceasing all
-use of the Software and deleting all copies.
+Licensor may terminate this Agreement if Licensee breaches it and does not cure the breach within
+thirty (30) days after written notice. Licensee may terminate at any time by ceasing all use of the
+Software and deleting all copies.
 
-On termination, Licensee's rights under this Agreement, the Public License, and the Commercial
-Terms end, and Licensee shall cease using and delete all copies of the Software. Sections 2, 5,
-6, 7, 8, 9, 10, 11, 12 (this sentence), 13, and 14 survive termination.
+On termination, Licensee's rights under this Agreement and the Commercial Terms end, and Licensee
+shall cease using and delete all copies of the Software. Termination of Licensee's rights under the
+Public License is governed by the Public License. Sections 2, 5, 6, 7, 8, 9, 10, 11, 12 (this
+sentence), 13, and 14 survive termination.
 
 ## 13. Governing Law and Disputes
 
@@ -263,4 +263,4 @@ rattachent soient rédigés en anglais.*
 
 ---
 
-*Version 1.0 — effective 2026-09-08. The version identifier recorded on acceptance is `1.0`.*
+*Version 1.0, effective 2026-09-08. The version identifier recorded on acceptance is `1.0`.*

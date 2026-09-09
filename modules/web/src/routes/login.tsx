@@ -46,7 +46,7 @@ export function LoginPage() {
           <div className="text-sm font-semibold text-muted-foreground">
             state<span className="text-[var(--tide-deep)] dark:text-[var(--tide-lit)]">db</span>
           </div>
-          <CardTitle className="text-xl">Sign in to state-db</CardTitle>
+          <CardTitle className="text-xl">Sign in to statedb</CardTitle>
           <CardDescription>
             Use your configured identity provider to open the console.
           </CardDescription>
