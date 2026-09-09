@@ -1,0 +1,35 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+fail() {
+  echo "prepare-cedar-jni-test-lib: $*" >&2
+  exit 1
+}
+
+[[ $# -eq 2 ]] || fail "usage: prepare-cedar-jni-test-lib <output-dir> <cedar-uber-jar>"
+
+output_dir=$1
+cedar_jar=$2
+
+[[ -f $cedar_jar ]] || fail "Cedar uber jar not found: $cedar_jar"
+
+case "$(uname -m)" in
+aarch64 | arm64) cedar_arch=aarch64 ;;
+x86_64 | amd64) cedar_arch=x86_64 ;;
+*) fail "unsupported Linux architecture: $(uname -m)" ;;
+esac
+
+entry="jne/linux/${cedar_arch}/libcedar_java_ffi.so"
+tmp_dir=$(mktemp -d)
+trap 'rm -rf "$tmp_dir"' EXIT
+
+(
+  cd "$tmp_dir"
+  jar xf "$cedar_jar" "$entry"
+)
+
+[[ -f $tmp_dir/$entry ]] || fail "Cedar native library not found in jar: $entry"
+
+mkdir -p "$output_dir"
+cp "$tmp_dir/$entry" "$output_dir/libcedar_java_ffi.so"
+chmod 0555 "$output_dir/libcedar_java_ffi.so"
