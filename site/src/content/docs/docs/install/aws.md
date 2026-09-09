@@ -74,22 +74,41 @@ change set before applying any such update.
 | `OrganizationName` | `default` | Name of the first statedb organization |
 | `DbInstanceClass` | `db.t4g.small` | RDS instance size |
 | `DbAllocatedStorage` | `80` | Initial gp3 storage in GiB |
-| `BreakGlassPasswordHash` | None | Bcrypt hash for the initial recovery password |
+
+The stack asks for no credential. It generates the recovery password itself
+during creation, so there is nothing to prepare before you launch it.
 
 The released template will also pin immutable image references, and AWS
 Marketplace packaging will rewrite both images to regional ECR copies.
 
 ## Installation flow, once released
 
-1. Generate a strong, unique recovery password and hash it with bcrypt using the
-   command in the release guide.
-2. Create the stack with `CAPABILITY_IAM`.
-3. Wait for RDS and the ECS service to become ready. Expect 15 to 25 minutes,
+1. Create the stack with `CAPABILITY_IAM`.
+2. Wait for RDS and the ECS service to become ready. Expect 15 to 25 minutes,
    most of it RDS.
-4. Read `ConsoleUrl` and `PulumiLoginCommand` from the stack outputs.
-5. Sign in with recovery access and configure an OpenID Connect provider
+3. Read `ConsoleUrl`, `PulumiLoginCommand`, and `BreakGlassPasswordCommand` from
+   the stack outputs.
+4. Run `BreakGlassPasswordCommand` to read the generated recovery password from
+   Secrets Manager.
+5. Sign in as `admin` with that password and configure an OpenID Connect provider
    immediately. Recovery access disables itself as soon as a provider is
    enabled.
+
+## How recovery access is protected
+
+The stack generates a 48-character random password during creation and stores it
+in Secrets Manager, where an operator reads it. The application never receives
+that password. It receives only a PBKDF2-SHA256 verifier, held in an SSM
+parameter, so a compromised task yields nothing an attacker can sign in with.
+
+The bootstrap Lambda that generates the credential can write both halves and
+read the verifier for idempotency, but it cannot read the password or anything
+else that would let it reconstruct one. No role in the stack can both obtain the
+password and serve the console with it.
+
+Recovery access does not expire. It is honored only while no OpenID Connect
+provider is enabled, and disabling that provider row reopens it — which is how
+you get back in when an identity provider is unavailable.
 
 ## Deletion and storage
 

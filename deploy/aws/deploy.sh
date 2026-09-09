@@ -29,7 +29,6 @@ Common environment overrides:
   STATEDB_DB_INSTANCE_CLASS           RDS class (default: db.t4g.small)
   STATEDB_DB_ALLOCATED_STORAGE        initial gp3 GiB (default: 80)
   STATEDB_DB_BACKUP_RETENTION_DAYS    automated backup days (default: 1; 0 disables)
-  STATEDB_BREAK_GLASS_PASSWORD_HASH   bcrypt hash; prompted and generated when omitted
   STATEDB_AUTO_APPROVE=true           skip Enter prompts (intended for controlled automation)
 
 Network defaults create 10.42.0.0/16 with two public application subnets and two isolated DB
@@ -100,29 +99,11 @@ case "$application_subnet_type" in Public|Private) ;; *) fail "application subne
 [[ $network_mode != CreateNew || $application_subnet_type == Public ]] ||
   fail "CreateNew supports Public application subnets; use an existing network for private tasks"
 
-password_hash=${STATEDB_BREAK_GLASS_PASSWORD_HASH:-}
-if [[ -z $password_hash ]]; then
-  command -v htpasswd >/dev/null ||
-    fail "htpasswd is required to generate the bcrypt hash, or set STATEDB_BREAK_GLASS_PASSWORD_HASH"
-  echo "No break-glass hash was supplied. The password is read locally and only its bcrypt hash"
-  echo "is sent to CloudFormation. It is the initial admin password for this internet-facing test."
-  read -r -s -p "Break-glass admin password: " password
-  echo
-  read -r -s -p "Repeat password: " password_again
-  echo
-  [[ -n $password && $password == "$password_again" ]] || fail "passwords are empty or do not match"
-  password_hash=$(htpasswd -bnBC 12 "" "$password" | cut -d: -f2)
-  unset password password_again
-fi
-bcrypt_pattern='^\$2[aby]\$[0-9]{2}\$[./A-Za-z0-9]{53}$'
-[[ $password_hash =~ $bcrypt_pattern ]] || fail "break-glass password hash is not bcrypt modular crypt format"
-
 identity=$(aws_cli sts get-caller-identity --query '[Account,Arn]' --output text)
 read -r account principal <<<"$identity"
 [[ -n $account && -n $principal ]] || fail "AWS STS returned an incomplete caller identity"
 
 parameters=(
-  "ParameterKey=BreakGlassPasswordHash,ParameterValue=$password_hash"
   "ParameterKey=OrganizationName,ParameterValue=$organization_name"
   "ParameterKey=DbInstanceClass,ParameterValue=$db_instance_class"
   "ParameterKey=DbAllocatedStorage,ParameterValue=$db_storage"
@@ -276,6 +257,12 @@ aws_cli cloudformation describe-stacks --stack-name "$stack_name" \
   --query 'Stacks[0].Outputs[].{Name:OutputKey,Value:OutputValue}' --output table
 console_url=$(aws_cli cloudformation describe-stacks --stack-name "$stack_name" \
   --query "Stacks[0].Outputs[?OutputKey=='ConsoleUrl'].OutputValue | [0]" --output text)
+password_command=$(aws_cli cloudformation describe-stacks --stack-name "$stack_name" \
+  --query "Stacks[0].Outputs[?OutputKey=='BreakGlassPasswordCommand'].OutputValue | [0]" --output text)
 echo
 echo "Console: $console_url"
+# Print the command, not the password. The stack generated it; nothing needs it on a terminal
+# or in shell history until someone actually signs in.
+echo "Sign in as admin with the password from:"
+echo "  $password_command"
 echo "When testing is complete, run deploy/aws/teardown.sh with the same AWS profile, region, and stack name."

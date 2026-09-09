@@ -28,7 +28,6 @@ Metadata:
       - Label:
           default: Administrator access
         Parameters:
-          - BreakGlassPasswordHash
           - OrganizationName
       - Label:
           default: Database
@@ -47,8 +46,6 @@ Metadata:
         default: Network ownership
       ApplicationSubnetType:
         default: Application subnet routing
-      BreakGlassPasswordHash:
-        default: Initial administrator password hash
 
 Parameters:
   NetworkMode:
@@ -116,14 +113,6 @@ Parameters:
     Default: ""
     AllowedPattern: '^$|^subnet-[0-9a-f]+$'
     Description: Existing private database subnet in a different Availability Zone.
-  BreakGlassPasswordHash:
-    Type: String
-    NoEcho: true
-    MinLength: 59
-    MaxLength: 60
-    AllowedPattern: '^\$2[aby]\$[0-9]{2}\$[./A-Za-z0-9]{53}$'
-    ConstraintDescription: Supply a bcrypt Modular Crypt Format hash, for example from htpasswd -bnBC 12.
-    Description: Break-glass login is public until an OIDC provider is enabled; use a strong unique password.
   OrganizationName:
     Type: String
     Default: default
@@ -309,11 +298,24 @@ Resources:
         PasswordLength: 64
         ExcludePunctuation: true
 
-  BreakGlassSecret:
+  # The break-glass credential is split so that no principal can both read the password and
+  # serve the console with it. The operator borrows the password from Secrets Manager; the
+  # application task only ever sees the derived hash, which is deliberately kept out of Secrets
+  # Manager so a human reading the secret cannot mistake one for the other. Created empty:
+  # DatabaseBootstrap generates the password and writes both halves before the service starts.
+  BreakGlassPassword:
     Type: AWS::SecretsManager::Secret
     Properties:
-      Description: !Sub ${AWS::StackName} initial administrator bcrypt hash
-      SecretString: !Ref BreakGlassPasswordHash
+      Description: !Sub ${AWS::StackName} break-glass administrator password
+
+  BreakGlassHash:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Type: String
+      Description: !Sub ${AWS::StackName} break-glass password hash consumed by the application task
+      # Replaced by DatabaseBootstrap. A PBKDF2 verifier of a 288-bit random password is not a
+      # credential, so it needs the task execution role's read grant and nothing stronger.
+      Value: pending-bootstrap
 
   DatabaseSubnetGroup:
     Type: AWS::RDS::DBSubnetGroup
@@ -386,9 +388,12 @@ Resources:
             Statement:
               - Effect: Allow
                 Action: secretsmanager:GetSecretValue
-                Resource:
-                  - !Ref SessionSecret
-                  - !Ref BreakGlassSecret
+                Resource: !Ref SessionSecret
+              # The break-glass hash only. This role cannot read BreakGlassPassword, so a
+              # compromised task yields a PBKDF2 verifier rather than a working admin login.
+              - Effect: Allow
+                Action: ssm:GetParameters
+                Resource: !Sub arn:${AWS::Partition}:ssm:${AWS::Region}:${AWS::AccountId}:parameter/${BreakGlassHash}
 
   BootstrapExecutionRole:
     Type: AWS::IAM::Role
@@ -492,7 +497,7 @@ Resources:
             - Name: STATEDB_SESSION_ENCRYPTION_SECRET
               ValueFrom: !Ref SessionSecret
             - Name: STATEDB_LOCAL_GLASS_PASSWORD_HASH
-              ValueFrom: !Ref BreakGlassSecret
+              ValueFrom: !Sub arn:${AWS::Partition}:ssm:${AWS::Region}:${AWS::AccountId}:parameter/${BreakGlassHash}
 
   BootstrapTaskDefinition:
     Type: AWS::ECS::TaskDefinition
@@ -595,6 +600,21 @@ Resources:
                 Condition:
                   StringEquals:
                     iam:PassedToService: ecs-tasks.amazonaws.com
+        # This role generates the credential and cannot read the password back, so compromising
+        # it discloses nothing. It may read the hash parameter — a PBKDF2 verifier is not a
+        # credential, and its contents are what make generation idempotent across stack updates.
+        - PolicyName: ProvisionBreakGlassCredential
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action: secretsmanager:PutSecretValue
+                Resource: !Ref BreakGlassPassword
+              - Effect: Allow
+                Action:
+                  - ssm:GetParameter
+                  - ssm:PutParameter
+                Resource: !Sub arn:${AWS::Partition}:ssm:${AWS::Region}:${AWS::AccountId}:parameter/${BreakGlassHash}
 
   BootstrapInvoker:
     Type: AWS::Lambda::Function
@@ -605,13 +625,55 @@ Resources:
       Timeout: 900
       Code:
         ZipFile: |
+          import base64
           import hashlib
           import json
+          import secrets
           import time
           import urllib.request
           import boto3
 
           ecs = boto3.client("ecs")
+          secretsmanager = boto3.client("secretsmanager")
+          ssm = boto3.client("ssm")
+
+          PBKDF2_ITERATIONS = 600000
+
+          def derive(password):
+              salt = secrets.token_bytes(16)
+              digest = hashlib.pbkdf2_hmac(
+                  "sha256", password.encode(), salt, PBKDF2_ITERATIONS)
+              return "$pbkdf2-sha256${}${}${}".format(
+                  PBKDF2_ITERATIONS,
+                  base64.b64encode(salt).decode(),
+                  base64.b64encode(digest).decode())
+
+          def provision_break_glass(properties):
+              """Generate the break-glass credential when the stack does not already have one.
+
+              The password goes where an operator can borrow it and the derived hash goes where
+              only the application task can read it. The password is never read back, so an
+              operator cannot rotate by choosing a new one — nothing here could re-derive the
+              hash from it. Rotation is instead a request for a fresh generated credential:
+              overwrite the hash parameter with any non-hash value and update the stack.
+              """
+              parameter_name = properties["BreakGlassHashParameter"]
+              current = ssm.get_parameter(Name=parameter_name)["Parameter"]["Value"]
+              # The hash discloses nothing, so reading it back is safe and makes the placeholder
+              # itself the provisioning flag. No shared magic string: anything that is not a
+              # verifier means "generate one".
+              if current.startswith("$pbkdf2-sha256$"):
+                  return "existing break-glass credential retained"
+              password = secrets.token_urlsafe(36)
+              # Password first. A failure between the two writes leaves the parameter unprovisioned,
+              # so the next run regenerates both halves. Writing the hash first would flip the flag
+              # before the password was readable and strand the operator with a credential nobody
+              # can retrieve.
+              secretsmanager.put_secret_value(
+                  SecretId=properties["BreakGlassSecretId"], SecretString=password)
+              ssm.put_parameter(
+                  Name=parameter_name, Value=derive(password), Type="String", Overwrite=True)
+              return "break-glass credential generated"
 
           def respond(event, context, status, reason):
               body = json.dumps({
@@ -677,7 +739,8 @@ Resources:
                   if container.get("exitCode") != 0:
                       detail = container.get("reason") or task.get("stoppedReason") or "bootstrap failed"
                       raise RuntimeError(f"{detail}; task={task_arn}")
-                  respond(event, context, "SUCCESS", "database IAM role is ready")
+                  credential = provision_break_glass(properties)
+                  respond(event, context, "SUCCESS", f"database IAM role is ready; {credential}")
               except Exception as error:
                   if task_arn is not None:
                       try:
@@ -695,6 +758,11 @@ Resources:
       ServiceToken: !GetAtt BootstrapInvoker.Arn
       Cluster: !Ref Cluster
       TaskDefinition: !Ref BootstrapTaskDefinition
+      # Unused by the Lambda. This makes app task definition changes, including image upgrades,
+      # re-invoke the custom resource before the service rolls onto tasks that read the SSM hash.
+      AppTaskDefinitionRevision: !Ref AppTaskDefinition
+      BreakGlassSecretId: !Ref BreakGlassPassword
+      BreakGlassHashParameter: !Ref BreakGlassHash
       Subnets:
         - !If [CreateNetwork, !Ref AppSubnetA, !Ref ExistingApplicationSubnetAId]
         - !If [CreateNetwork, !Ref AppSubnetB, !Ref ExistingApplicationSubnetBId]
@@ -744,7 +812,10 @@ Resources:
 Outputs:
   ConsoleUrl:
     Value: !Sub https://${Service.Endpoint}
-    Description: Open this URL and sign in as admin using the password represented by the supplied bcrypt hash.
+    Description: Open this URL and sign in as admin with the password from BreakGlassPasswordCommand.
+  BreakGlassPasswordCommand:
+    Value: !Sub aws secretsmanager get-secret-value --secret-id ${BreakGlassPassword} --query SecretString --output text
+    Description: Read the generated break-glass administrator password. Break-glass stops being honored once an OIDC provider is enabled.
   PulumiLoginCommand:
     Value: !Sub pulumi login https://${Service.Endpoint}/pulumi
     Description: Run this command to point the Pulumi CLI at state-db.

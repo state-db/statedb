@@ -2,7 +2,6 @@ package app.statedb.consoleapi.auth;
 
 import app.statedb.persistence.bootstrap.BootstrapProvisioner;
 import app.statedb.persistence.identity.OidcProvider;
-import io.quarkus.elytron.security.common.BcryptUtil;
 import io.quarkus.narayana.jta.QuarkusTransaction;
 import io.vertx.core.net.SocketAddress;
 import jakarta.enterprise.context.ApplicationScoped;
@@ -20,9 +19,11 @@ import org.eclipse.microprofile.config.inject.ConfigProperty;
  * identity providers behind it:
  *
  * <ul>
- *   <li><b>Opt-in.</b> {@code STATEDB_LOCAL_GLASS_PASSWORD_HASH} (bcrypt, Modular Crypt Format)
- *       must be set. Env, never DB — recovery credentials must be readable while the IdP (and the
- *       console's own data) are unavailable.
+ *   <li><b>Opt-in.</b> {@code STATEDB_LOCAL_GLASS_PASSWORD_HASH} must be set, in either format
+ *       {@link PasswordHashes} accepts. Env, never DB — a recovery credential the console stores
+ *       for itself would be unreachable in exactly the situations break-glass exists for, and would
+ *       be rewritable by anyone who reached the database. Managed installers generate the password
+ *       and inject only the hash, so the plaintext never enters this process.
  *   <li><b>Self-destruct.</b> No enabled {@code oidc_providers} row may exist. Checked at login
  *       <em>and</em> on every cookie restore, so existing break-glass sessions die the moment OIDC
  *       comes up. Tying the gate to system state rather than a profile flag means operators cannot
@@ -73,7 +74,7 @@ public class LocalGlass {
   }
 
   public boolean verify(char[] password) {
-    return passwordConfigured() && BcryptUtil.matches(new String(password), passwordHash.get());
+    return passwordConfigured() && PasswordHashes.matches(new String(password), passwordHash.get());
   }
 
   /**

@@ -22,14 +22,41 @@ Released templates contain digest-pinned application and bootstrap images. The s
 `__VERSION__` and `__IMAGE_DIGEST__` markers are replaced by `bin/package-aws-installer` and must
 not be deployed as-is.
 
-Create a bcrypt hash for the initial administrator password:
+The stack needs no credential input. Create it with `CAPABILITY_IAM`. Stack creation can take 15–25
+minutes, mostly for RDS. The outputs include the console URL, the correct `pulumi login .../pulumi`
+command, and `BreakGlassPasswordCommand`.
+
+## First sign-in
+
+The bootstrap Lambda generates the break-glass administrator password during stack creation and
+writes it to Secrets Manager. Read it with the `BreakGlassPasswordCommand` output:
 
 ```sh
-htpasswd -bnBC 12 "" 'a-long-unique-password' | cut -d: -f2
+aws secretsmanager get-secret-value --secret-id <BreakGlassPassword> --query SecretString --output text
 ```
 
-Create the stack with `CAPABILITY_IAM`. Stack creation can take 15–25 minutes, mostly for RDS. The
-outputs include the console URL and the correct `pulumi login .../pulumi` command.
+Only the derived PBKDF2 hash reaches the application, through an SSM parameter the task execution
+role can read; the password itself is never injected into a container. The Lambda can read the hash
+parameter for idempotency, but it cannot read the password back, so no role in the stack can both
+obtain the password and serve the console with it.
+
+Break-glass is permanent and has no expiry, but it is only honored while no OIDC provider is enabled
+— configure one and the login stops working immediately, including for sessions already open.
+Disabling that provider row reopens it, which is how recovery works when an IdP is unavailable.
+
+Rotation asks the stack for a fresh password rather than supplying one — nothing in the stack can
+read the password back, so nothing could re-derive the hash from a value you chose. Overwrite the
+hash parameter with any non-verifier value:
+
+```sh
+aws ssm put-parameter --name <BreakGlassHash> --value rotate --type String --overwrite
+```
+
+The bootstrap Lambda regenerates the credential on the stack's next application task definition
+update, such as an image upgrade, before the service rolls onto tasks that read the new hash. Note
+the limitation: CloudFormation only re-invokes the custom resource when the stack actually changes,
+so clearing the parameter does not rotate on its own. Until then the previous password keeps
+working. A standalone rotation command does not exist yet.
 
 For a guided command-line test deployment, run:
 
@@ -38,7 +65,7 @@ deploy/aws/deploy.sh
 ```
 
 The script defaults to the gated ARM64 candidate from commit `d186ef2`. It confirms the AWS caller
-and region, generates the break-glass bcrypt hash locally, validates the template, displays a
+and region, validates the template, displays a
 CloudFormation change set, and pauses before execution. It also verifies that a GHCR image is
 anonymously pullable because the current stack does not inject third-party registry credentials.
 For test-stack compatibility, the script sets automated backup retention to one day. Override it
