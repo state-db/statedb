@@ -250,9 +250,7 @@
                       Cedar's Linux JNI library uses static TLS. The glibc loader can reject a
                       late dlopen after Quarkus/Testcontainers have loaded other native libraries,
                       especially on aarch64. Preload the exact cedar-java native library into each
-                      forked test JVM and point Cedar's loader at that path. Quarkus tests create
-                      multiple application classloaders, and Cedar's System.load(path) is not
-                      cross-classloader idempotent, so Linux test forks cannot be reused safely.
+                      forked test JVM and point Cedar's loader at that path.
                     -->
                     <plugin>
                         <groupId>org.codehaus.mojo</groupId>
@@ -266,6 +264,7 @@
                                 </goals>
                                 <phase>process-test-classes</phase>
                                 <configuration>
+                                    <skip>${skipTests}</skip>
                                     <executable>${maven.multiModuleProjectDirectory}/../bin/prepare-cedar-jni-test-lib</executable>
                                     <arguments>
                                         <argument>${project.build.directory}/cedar-jni</argument>
@@ -280,12 +279,34 @@
                         <artifactId>maven-surefire-plugin</artifactId>
                         <version>${maven-failsafe-plugin.version}</version>
                         <configuration>
-                            <reuseForks>false</reuseForks>
+                            <excludes>
+                                <exclude>app/statedb/app/auth/CedarTemplateLinkTest.java</exclude>
+                                <exclude>app/statedb/app/ops/NativeReachabilityMetadataTest.java</exclude>
+                            </excludes>
                             <environmentVariables>
                                 <CEDAR_JAVA_FFI_LIB>${project.build.directory}/cedar-jni/libcedar_java_ffi.so</CEDAR_JAVA_FFI_LIB>
                                 <LD_PRELOAD>${project.build.directory}/cedar-jni/libcedar_java_ffi.so</LD_PRELOAD>
                             </environmentVariables>
                         </configuration>
+                        <executions>
+                            <execution>
+                                <id>cedar-jni-isolated</id>
+                                <goals>
+                                    <goal>test</goal>
+                                </goals>
+                                <phase>test</phase>
+                                <configuration>
+                                    <includes>
+                                        <include>app/statedb/app/auth/CedarTemplateLinkTest.java</include>
+                                        <include>app/statedb/app/ops/NativeReachabilityMetadataTest.java</include>
+                                    </includes>
+                                    <excludes combine.self="override"/>
+                                    <forkCount>1</forkCount>
+                                    <reuseForks>false</reuseForks>
+                                    <reportsDirectory>${project.build.directory}/surefire-reports-cedar-jni</reportsDirectory>
+                                </configuration>
+                            </execution>
+                        </executions>
                     </plugin>
                 </plugins>
             </build>

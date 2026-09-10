@@ -30,6 +30,7 @@
         <spotbugs-maven-plugin.version>4.10.4.0</spotbugs-maven-plugin.version>
         <findsecbugs-plugin.version>1.14.0</findsecbugs-plugin.version>
         <google-java-format.version>1.35.0</google-java-format.version>
+        <skipTests>false</skipTests>
         <cedar-java.version>4.10.0</cedar-java.version>
         <tink.version>1.23.0</tink.version>
         <zstd-jni.version>1.5.7-6</zstd-jni.version>
