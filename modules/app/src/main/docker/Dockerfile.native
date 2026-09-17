@@ -115,7 +115,7 @@ ARG BUILD_COMMIT=unknown
 LABEL org.opencontainers.image.title="state-db" \
       org.opencontainers.image.description="Self-hosted state backend for the Pulumi CLI, with a web console." \
       org.opencontainers.image.source="https://github.com/state-db/statedb" \
-      org.opencontainers.image.licenses="Elastic-2.0" \
+      org.opencontainers.image.licenses="AGPL-3.0-only" \
       org.opencontainers.image.version="${BUILD_VERSION}" \
       org.opencontainers.image.revision="${BUILD_COMMIT}"
 

@@ -1,0 +1,18 @@
+name: Contributor agreement
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, edited]
+
+permissions:
+  contents: read
+
+jobs:
+  acceptance:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          fetch-depth: 0
+      - name: Validate contributor agreement records
+        run: bin/check-cla-acceptance '${{ github.event.pull_request.base.sha }}' '${{ github.event.pull_request.head.sha }}' '${{ github.event.pull_request.user.login }}'

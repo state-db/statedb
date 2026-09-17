@@ -1,88 +1,41 @@
 ---
 title: License and Pulumi compatibility
-description: statedb's license terms, and the basis for its Pulumi CLI compatibility.
+description: state-db's open-source license and the basis for its Pulumi CLI compatibility.
 ---
 
-statedb is licensed under the Elastic License 2.0 with one additional term, the
-Free Edition Use Limit. The repository's
-[LICENSE](https://github.com/state-db/statedb/blob/main/LICENSE) file is
-authoritative; this page explains the public terms in plain language.
+state-db is open-source software under the GNU Affero General Public License v3.0 only. The SPDX identifier is `AGPL-3.0-only`.
 
-## Free Edition
+The repository [LICENSE](https://github.com/state-db/statedb/blob/main/LICENSE) contains the complete license text. That file is authoritative.
 
-One deployment may manage up to ten active stacks at no charge.
+## Source code for network users
 
-Each part of that sentence is defined. A stack is *active* if it currently
-exists in statedb's data store. Deleted stacks stop counting, and users,
-resources, projects, and update history never affect the number. A *deployment*
-is one installation backed by one database, so independent deployments count
-their stacks independently.
+The AGPL includes a source-code requirement for modified software that users access over a network. Review section 13 of the license for the exact requirement.
 
-## Commercial use
+The complete source for the official state-db service is available in the [state-db repository](https://github.com/state-db/statedb). This source includes the server, console, database migrations, access policies, and compatibility tests.
 
-Managing more than ten active stacks in a single deployment requires a
-commercial license. Terms and pricing are not final; see
-[COMMERCIAL.md](https://github.com/state-db/statedb/blob/main/COMMERCIAL.md) for
-current status and how to get in touch.
+If you operate a modified version, give its network users a clear link to the corresponding source. The source must match the version that those users access.
 
-## End User License Agreement
+This page summarizes the license. The [LICENSE](https://github.com/state-db/statedb/blob/main/LICENSE) text controls if this summary differs from it.
 
-Every deployment is also subject to the
-[End User License Agreement](https://github.com/state-db/statedb/blob/main/EULA.md).
-Before a deployment will create or import stacks, a site administrator must
-accept the agreement in the console, or an operator must set
-`STATEDB_EULA_ACCEPTED_VERSION` to the exact agreement version shipped with that
-deployment.
+## Why state-db can work with the Pulumi CLI
 
-The software is provided as is, with no warranty, service level commitment,
-support obligation, maintenance obligation, or indemnity unless a separate
-written agreement says otherwise. Liability is CAD $0 for free use and capped at
-one month of subscription fees for paid use.
+Pulumi separates the CLI from the state backend. Its documentation describes a backend as an API and storage endpoint that a user selects.
 
-Two limits apply regardless of edition. You may not offer statedb to third
-parties as a hosted or managed service, and you may not modify it to disable or
-circumvent license enforcement.
+state-db implements the HTTP protocol that the unmodified CLI uses. state-db is not Pulumi Cloud and does not claim to be.
 
-Otherwise the license is permissive: use, copy, distribute, and modify statedb
-freely, provided modified copies carry a clear notice that they have been
-changed.
+The Pulumi CLI and engine use the Apache License 2.0. state-db uses public Pulumi source and API descriptions for compatibility tests.
 
-## Why statedb can work with the Pulumi CLI
-
-Pulumi separates the CLI from the state backend by design. Its own documentation
-describes a backend as an API and storage endpoint the user chooses, and the CLI
-ships with support for both Pulumi Cloud and self-managed backends.
-
-statedb implements the HTTP protocol the unmodified CLI already speaks. It is
-not Pulumi Cloud and does not claim to be.
-
-The Pulumi CLI and engine are Apache 2.0 licensed. statedb uses public Pulumi
-source and API descriptions to build its compatibility tests, and keeps the
-Apache license and copyright notices for that material. The record is public:
+The repository preserves the required notices:
 
 - [Pulumi state and backend documentation](https://www.pulumi.com/docs/iac/concepts/state-and-backends/)
 - [Pulumi source and Apache 2.0 license](https://github.com/pulumi/pulumi)
-- [Pulumi-derived material in statedb](https://github.com/state-db/statedb/tree/main/third_party/pulumi)
-- [statedb third-party notices](https://github.com/state-db/statedb/blob/main/NOTICE)
+- [Pulumi-derived material in state-db](https://github.com/state-db/statedb/tree/main/third_party/pulumi)
+- [state-db third-party notices](https://github.com/state-db/statedb/blob/main/NOTICE)
 
-Compatibility is not endorsement. statedb is an independent project, and Pulumi
-Corporation does not sponsor, endorse, or operate it.
+Compatibility is not endorsement. state-db is an independent project. Pulumi Corporation does not sponsor, endorse, or operate it.
 
 ## Trademarks
 
-Pulumi is a trademark of Pulumi Corporation. This site uses the name only to
-identify compatibility with the Pulumi CLI, and does not use Pulumi's logo as
-its own.
+Pulumi is a trademark of Pulumi Corporation. This site uses the name only to identify compatibility with the Pulumi CLI.
 
-Pulumi publishes [trademark rules](https://www.pulumi.com/trademark/) that
-prohibit product names implying endorsement. The statedb name and visual design
-are deliberately separate from Pulumi branding.
-
-## Source availability
-
-The full source is public on
-[GitHub](https://github.com/state-db/statedb), including the state path,
-database migrations, access policies, console, and compatibility tests.
-
-Source-available is not open source. statedb carries the limits described above,
-and its third-party components keep their own licenses.
+Pulumi publishes [trademark rules](https://www.pulumi.com/trademark/). The state-db name and visual design are separate from Pulumi branding.

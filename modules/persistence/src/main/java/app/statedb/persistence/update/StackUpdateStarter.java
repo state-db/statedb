@@ -1,8 +1,5 @@
 package app.statedb.persistence.update;
 
-import app.statedb.persistence.entitlement.EffectiveEntitlement;
-import app.statedb.persistence.entitlement.Entitlements;
-import app.statedb.persistence.stack.Stack;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 import jakarta.persistence.EntityManager;
@@ -22,7 +19,6 @@ import java.util.UUID;
 public class StackUpdateStarter {
 
   @Inject EntityManager em;
-  @Inject Entitlements entitlements;
 
   @Transactional
   public StartedUpdate start(
@@ -34,9 +30,6 @@ public class StackUpdateStarter {
       StartUpdateRequest req) {
 
     boolean dryRun = kind == StackUpdate.Kind.PREVIEW || isDryRun(req);
-    EffectiveEntitlement entitlement =
-        entitlements.requiresPaidEntitlement(kind, dryRun) ? entitlements.effective() : null;
-
     em.createNativeQuery("SELECT 1 FROM stacks WHERE id = ?1 FOR UPDATE")
         .setParameter(1, stackId)
         .getSingleResult();
@@ -57,9 +50,6 @@ public class StackUpdateStarter {
 
     // Dry runs (pulumi preview, and the dry-run pass of up/refresh/destroy) do not consume the
     // applied-version sequence: versions address applied updates, 1-based and contiguous.
-    if (entitlement != null && entitlement.tier() != EffectiveEntitlement.Tier.PAID) {
-      entitlements.requireUpdateAllowed(Stack.count(), kind, dryRun, entitlement);
-    }
     int version = dryRun ? 0 : StackUpdate.nextAppliedVersionForLockedStack(stackId);
 
     StackUpdate u = new StackUpdate();

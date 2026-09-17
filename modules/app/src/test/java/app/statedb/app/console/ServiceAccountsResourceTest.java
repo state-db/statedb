@@ -159,11 +159,7 @@ class ServiceAccountsResourceTest {
 
     for (String path :
         List.of(
-            "/api/admin/providers",
-            "/api/admin/orgs",
-            "/api/admin/users",
-            "/api/admin/entitlement",
-            "/api/admin/locks")) {
+            "/api/admin/providers", "/api/admin/orgs", "/api/admin/users", "/api/admin/locks")) {
       given().cookie(session.getName(), session.getValue()).when().get(path).then().statusCode(403);
     }
   }

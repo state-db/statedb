@@ -39,15 +39,6 @@ readonly VIEWER_TOKEN=state-db-release-gate-viewer-token
 readonly CONFIG_PASSPHRASE=release-gate
 readonly GLASS_PASSWORD=glass-recovery-pw
 readonly GLASS_HASH='$2y$10$lL8GkJSvjMqOCqSTfXX6Xe1vs4EwlJ8UnPk2FNz7/zIGbVTsH.Cea'
-readonly EULA_DOCUMENT=modules/persistence/src/main/java/app/statedb/persistence/eula/EulaDocument.java
-readonly EULA_VERSION=$(
-  sed -n 's/.*CURRENT_VERSION = "\([^"]*\)".*/\1/p' "$EULA_DOCUMENT"
-)
-[[ -n $EULA_VERSION ]] || {
-  echo "release gate cannot parse EULA version from $EULA_DOCUMENT" >&2
-  exit 1
-}
-
 image=""
 previous=""
 expected_commit=""
@@ -153,7 +144,6 @@ run_app() {
     -e STATEDB_OIDC_BOOTSTRAP_CLIENT_ID=console \
     -e STATEDB_OIDC_BOOTSTRAP_CLIENT_SECRET=console-secret \
     -e STATEDB_OIDC_DEFAULT_PROVIDER=mock \
-    -e STATEDB_EULA_ACCEPTED_VERSION="$EULA_VERSION" \
     -e STATEDB_ADMIN_SUBJECTS="http://$IDP:8080/default:admin" \
     -e STATEDB_LOCAL_GLASS_PASSWORD_HASH="$GLASS_HASH" \
     -e STATEDB_LOCAL_GLASS_ALLOW_REMOTE=true \
@@ -298,7 +288,7 @@ case "$image_user" in
 esac
 
 image_license=$(docker image inspect "$image" --format '{{index .Config.Labels "org.opencontainers.image.licenses"}}')
-[[ $image_license == Elastic-2.0 ]] || fail "candidate image license label is '$image_license', expected Elastic-2.0"
+[[ $image_license == AGPL-3.0-only ]] || fail "candidate image license label is '$image_license', expected AGPL-3.0-only"
 
 license_dir=$(mktemp -d)
 trap 'rc=$?; rm -rf "$license_dir"; cleanup; exit "$rc"' EXIT

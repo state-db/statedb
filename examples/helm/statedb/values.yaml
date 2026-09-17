@@ -57,12 +57,6 @@ oidc:
   # Comma-separated issuer:subject pairs granted site administrator.
   adminSubjects: ""
 
-# Commercial license. Mounted read-only and re-read per enforced operation.
-license:
-  existingSecret: ""
-  key: license.json
-  deploymentId: ""
-
 resources:
   requests:
     cpu: 250m

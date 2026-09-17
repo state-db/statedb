@@ -61,24 +61,6 @@ CREATE TABLE public.compaction_jobs (
 );
 
 --
--- Name: eula_acceptances; Type: TABLE; Schema: public; Owner: -
---
-
-CREATE TABLE public.eula_acceptances (
-    id uuid NOT NULL,
-    version text NOT NULL,
-    document_sha256 text NOT NULL,
-    accepted_via text NOT NULL,
-    accepted_by_user_id uuid,
-    accepted_from text,
-    created_at timestamp with time zone DEFAULT now() NOT NULL,
-    CONSTRAINT eula_acceptances_accepted_via_check CHECK ((accepted_via = ANY (ARRAY['console'::text, 'configuration'::text]))),
-    CONSTRAINT eula_acceptances_console_user_check CHECK (((accepted_via <> 'console'::text) OR (accepted_by_user_id IS NOT NULL))),
-    CONSTRAINT eula_acceptances_document_sha256_check CHECK ((document_sha256 ~ '^[0-9a-f]{64}$'::text)),
-    CONSTRAINT eula_acceptances_version_check CHECK ((version <> ''::text))
-);
-
---
 -- Name: journal_entries; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -367,13 +349,6 @@ ALTER TABLE ONLY public.compaction_jobs
     ADD CONSTRAINT compaction_jobs_pkey PRIMARY KEY (id);
 
 --
--- Name: eula_acceptances eula_acceptances_pkey; Type: CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.eula_acceptances
-    ADD CONSTRAINT eula_acceptances_pkey PRIMARY KEY (id);
-
---
 -- Name: journal_entries journal_entries_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -634,24 +609,6 @@ CREATE INDEX idx_api_tokens_user ON public.api_tokens USING btree (user_id);
 CREATE INDEX idx_compaction_jobs_status_created ON public.compaction_jobs USING btree (status, created_at);
 
 --
--- Name: idx_eula_acceptances_version_configuration; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE UNIQUE INDEX idx_eula_acceptances_version_configuration ON public.eula_acceptances USING btree (version) WHERE (accepted_via = 'configuration'::text);
-
---
--- Name: idx_eula_acceptances_version_created; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE INDEX idx_eula_acceptances_version_created ON public.eula_acceptances USING btree (version, created_at DESC);
-
---
--- Name: idx_eula_acceptances_version_user; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE UNIQUE INDEX idx_eula_acceptances_version_user ON public.eula_acceptances USING btree (version, accepted_by_user_id) WHERE (accepted_by_user_id IS NOT NULL);
-
---
 -- Name: idx_journal_operation; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -823,13 +780,6 @@ ALTER TABLE ONLY public.api_tokens
 
 ALTER TABLE ONLY public.compaction_jobs
     ADD CONSTRAINT compaction_jobs_stack_id_fkey FOREIGN KEY (stack_id) REFERENCES public.stacks(id) ON DELETE CASCADE;
-
---
--- Name: eula_acceptances eula_acceptances_accepted_by_user_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.eula_acceptances
-    ADD CONSTRAINT eula_acceptances_accepted_by_user_id_fkey FOREIGN KEY (accepted_by_user_id) REFERENCES public.users(id);
 
 --
 -- Name: stack_state fk_stack_state_base_snapshot; Type: FK CONSTRAINT; Schema: public; Owner: -

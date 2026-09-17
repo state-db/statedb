@@ -1,7 +1,7 @@
 # AWS CloudFormation installer
 
 See the standalone [AWS architecture guide](architecture.html) for a visual explanation of the
-request path, database bootstrap, IAM boundaries, cost posture, and Marketplace work.
+request path, database bootstrap, IAM boundaries, and cost posture.
 
 This template deploys two state-db replicas behind Amazon ECS Express Mode's managed HTTPS
 Application Load Balancer. It creates an encrypted, private, Single-AZ PostgreSQL 17 RDS instance
@@ -147,11 +147,7 @@ service in that VPC.
 See the AWS documentation for [Express Mode networking](https://docs.aws.amazon.com/AmazonECS/latest/developerguide/express-service-work.html)
 and [CloudFormation conditions](https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/conditions-section-structure.html).
 
-## Marketplace path
+## Image portability
 
-`ImageReference` and `BootstrapImageReference` are parameters so Marketplace packaging can replace
-both with regional Marketplace-managed ECR images. AWS Marketplace requires every image used by a
-delivery option, including the PostgreSQL bootstrap client, to be copied into its ECR repositories.
-
-Before Marketplace submission, validate a limited-visibility buyer deployment in every advertised
-region and document the IAM roles, database cost, ALB cost, backups, and deletion behavior.
+`ImageReference` and `BootstrapImageReference` let an operator use approved, digest-pinned images
+from a regional registry. Validate both images in each deployment region.

@@ -888,114 +888,26 @@ opens the same detail page.
 
 ---
 
-## Phase 10 — Licensing and commercial readiness
+## Phase 10 — Open-source distribution
 
-The cap in `LICENSE` (Free Edition Use Limit, ten active stacks per deployment) is currently legal-text-only. This phase makes it operational and prepares the repo for external contributions and paid customers.
+state-db uses `AGPL-3.0-only`. Distribution keeps the project license, third-party notices, dependency license texts, SBOMs, and container metadata aligned.
 
-### Slice 32 · Per-file license headers + `license-maven-plugin`
-
-**Why now.** ELv2's Notices clause requires anyone receiving any part of the software to also receive the license terms. Per-file headers make that concrete and let license scanners (FOSSA, ScanCode, AWS Marketplace tooling) classify files correctly — important before any external distribution channel.
+### Slice 32 · Project license metadata
 
 **Scope**
 
-- Add `license-maven-plugin` to `modules/pom.xml` parent config.
-- Header file `etc/header.txt` containing the copyright line, an ELv2-with-Additional-Limitations notice, and `SPDX-License-Identifier: LicenseRef-state-db`.
-- One-time `mvn license:format` to apply headers to every existing `.java` file.
-- Bind `mvn license:check` to the `verify` phase so missing or stale headers fail the build.
-- Add `LICENSES/LicenseRef-statedb.txt` (a copy of `LICENSE`) so SPDX-aware scanners can resolve the `LicenseRef-`.
-
-**Out of scope.** Headers in other languages — none yet; revisit when the web console adds JS/TS.
-
-**Tests.** Add a deliberately unheaded source file in a scratch commit; `mvn verify` fails; revert.
-
-**Manual verification**
-
-```
-./dev -- modules/mvnw -f modules/pom.xml license:check
-```
-
----
-
-### Slice 34 · License-key verifier
-
-**Why now.** The Free Edition Use Limit needs a way to recognize a paid commercial license. Decision: signed Ed25519 token carrying `{ sub, exp, max_stacks }`, verified offline against a public key bundled in the binary; the private key is held by the licensor and never ships.
-
-**Scope**
-
-- New module `modules/licensing/`:
-  - `LicenseKey` record + parser.
-  - `LicenseKeyVerifier` using a bundled Ed25519 public key (classpath resource).
-  - Boot-time load from `STATEDB_LICENSE_KEY` env var, falling back to `/etc/state-db/license.key`.
-  - `LicenseState` `@ApplicationScoped` CDI bean exposing `{ active, maxStacks, expiresAt, subject }`. Default with no key: `{ active: false, maxStacks: 10 }`.
-- Boot log line stating Free Edition or commercial subject + expiry.
-
-**Out of scope.** Online key revocation. AWS Marketplace metering. Customer-facing UX in the console. The key-minting CLI (held by the licensor only) is a separate follow-up — the verifier ships first.
-
-**Tests**
-
-- Valid key parses and verifies.
-- Expired key is rejected with a clear error.
-- Wrong-signature key is rejected.
-- Missing key leaves `LicenseState.active=false, maxStacks=10` (Free Edition default).
-
-**Manual verification.** Set `STATEDB_LICENSE_KEY=<test-key>` and inspect the boot log; expect the active license fields to be printed.
-
----
-
-### Slice 35 · Free Edition Use Limit enforcement
-
-**Why now.** This is where the legal cap in `LICENSE` reaches actual customer-visible behavior. The 11th stack must refuse without a commercial key.
-
-**Scope**
-
-- Modify the stack-create handler (Slice 7) to count active stacks across the deployment: `SELECT count(*) FROM stacks`. The count is **global** to the database — `LICENSE` defines a "deployment" as "a single running installation backed by a single database," so no scoping by org or project.
-- If `count + 1 > LicenseState.maxStacks`, return **`402 Payment Required`** with a JSON body referencing `COMMERCIAL.md`.
-- Deletion (Slice 10) frees a slot immediately — no soft-deleted rows counted.
-- Boot-time log: print Free Edition or commercial license status so operators see it.
-
-**Out of scope.** Console UI for license status (Wave 2 console phase).
-
-**Tests**
-
-- 10 stacks create OK; 11th returns 402 without a key.
-- With a key carrying `max_stacks=50`, the 50th stack creates OK; 51st returns 402.
-- Deleting a stack frees a slot.
-- An expired key behaves like no key (drops back to free-tier 10).
-- 402 response body shape pinned by a contract test so customers can parse the error.
-
-**Manual verification**
-
-```
-# Without a license key set on the server:
-for i in $(seq 1 11); do pulumi stack init test-$i; done
-# Expect the first 10 to succeed and the 11th to fail with "Free Edition Use Limit reached".
-```
-
----
+- Keep the canonical GNU AGPL v3 text in `LICENSE`.
+- Use the SPDX identifier `AGPL-3.0-only` in package and OCI metadata.
+- Keep the ICLA and CCLA acceptance record separate from the runtime product license.
 
 ### Slice 36 · Third-party dependency notices in release artifacts
 
-**Why now.** AWS Marketplace and most enterprise procurement processes check shipped artifacts for bundled-dependency license attribution. Generate this automatically so it always reflects what was actually shipped.
-
 **Scope**
 
-- Configure `license-maven-plugin`'s `aggregate-add-third-party` goal to produce `THIRD-PARTY-NOTICES.txt` at the aggregate level.
-- Include `THIRD-PARTY-NOTICES.txt` in the runnable JAR and any container image we build.
-- Fail the build if any dependency reports an unresolved license name — force explicit override in `etc/license-mapping.xml` rather than silent fallthrough.
-- AGPL / GPL detection: build fails if any direct or transitive dependency is AGPL or GPL — these are incompatible with the commercial relicensing path. See the project's existing license-compatibility stance for the same reason jOOQ was avoided.
-
-**Out of scope.** Full SBOM (CycloneDX / SPDX-Document) — useful for AWS Marketplace; doable when listing for real.
-
-**Tests.** Build produces `THIRD-PARTY-NOTICES.txt`. Adding a fake AGPL dependency in a scratch commit fails the build.
-
-**Manual verification**
-
-```
-./dev -- modules/mvnw -f modules/pom.xml package
-# Confirm THIRD-PARTY-NOTICES.txt is present in the built JAR.
-```
-
----
+- Keep `license-maven-plugin` and the web dependency collector.
+- Generate `THIRD-PARTY-NOTICES.txt` with `./dev notices`.
+- Ship `LICENSE`, `NOTICE`, third-party notices, and vendored license texts in the container.
+- Keep CycloneDX and container SBOM generation in the release path.
 
 ## PR cadence reminder
 

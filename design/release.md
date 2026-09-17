@@ -289,7 +289,7 @@ Each release entry should include:
 
 - supported Pulumi CLI range
 - schema version range and whether the migration is one-way
-- Free Edition active-stack limit
+- project license identifier
 
 ## Documentation
 

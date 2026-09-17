@@ -26,12 +26,10 @@ See [`modules/pulumi-cli-smoke/README.md`](modules/pulumi-cli-smoke/README.md) f
 
 ## License
 
-This project is licensed under the [Elastic License 2.0, with Additional Limitations](LICENSE).
+state-db is open-source software under the [GNU Affero General Public License v3.0 only](LICENSE), identified as `AGPL-3.0-only`.
 
-You are free to use, modify, and self-host this software for your own internal business purposes, free of charge, for up to **ten (10) active stacks per deployment**. Beyond that, a commercial license is required. See [COMMERCIAL.md](COMMERCIAL.md). You may **not** offer this software to third parties as a hosted or managed service. See the [LICENSE](LICENSE) file for full terms.
-
-Every deployment is also subject to the [End User License Agreement](EULA.md), which a site administrator accepts in the console, or an operator accepts through deployment configuration, before the deployment will create or import stacks. The software is provided **as is**, with no warranty, no service level commitment, and no indemnity. Liability is CAD $0 for free use and capped at one month of subscription fees for paid use.
+If you operate a modified version over a network, the AGPL requires you to offer its corresponding source to network users. The complete source for the official state-db service is available in the [state-db repository](https://github.com/state-db/statedb).
 
 ## Contributing
 
-Contributions are welcome. Pull requests are accepted only from contributors who have signed the [Contributor License Agreement](CLA.md); see [CONTRIBUTING.md](CONTRIBUTING.md) for the workflow.
+Contributions are welcome. Pull requests require the applicable [individual](CLA.md) or [corporate](CCLA.md) contributor agreement. See [CONTRIBUTING.md](CONTRIBUTING.md) for the acceptance workflow.

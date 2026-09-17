@@ -139,8 +139,8 @@ cedar-java and its FFI crate are Apache-2.0, but its `uberJar` task omits the re
 Re-verified on every Cedar upgrade: the `.so` is a Rust `cdylib` built from cedar-policy and
 transitive crates, so a scanner sees an opaque ELF, not the Cargo graph.
 
-GraalVM CE is GPLv2 with the Classpath Exception, so native compilation does not affect state-db's
-Elastic-2.0 licensing. Mandrel is a build stage, not a runtime layer. UBI Micro content is
+GraalVM CE is GPLv2 with the Classpath Exception, so native compilation does not change state-db's
+`AGPL-3.0-only` license. Mandrel is a build stage, not a runtime layer. UBI Micro content is
 redistributable under the UBI EULA; non-UBI RHEL packages are not added to the image.
 
 Mandrel has no `--enable-sbom` (Oracle GraalVM only), so releases carry a CycloneDX Maven SBOM from

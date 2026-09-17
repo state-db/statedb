@@ -78,8 +78,7 @@ change set before applying any such update.
 The stack asks for no credential. It generates the recovery password itself
 during creation, so there is nothing to prepare before you launch it.
 
-The released template will also pin immutable image references, and AWS
-Marketplace packaging will rewrite both images to regional ECR copies.
+The released template will pin immutable image references. Operators can replace both references with approved regional ECR copies.
 
 ## Installation flow, once released
 

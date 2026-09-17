@@ -16,7 +16,7 @@
 
 ## Checklist
 
-- [ ] I have read and agree to the [Contributor License Agreement](/CLA.md).
+- [ ] My applicable [ICLA](/CLA.md) or [CCLA](/CCLA.md) acceptance is recorded in `signatures/v1/cla.json` with this pull request's Git identities.
 - [ ] Build and dependency commands ran through `./dev`; no host credentials or Docker socket were exposed.
 - [ ] Local CI passes via `./dev check`.
 - [ ] New behavior is covered by tests where practical.

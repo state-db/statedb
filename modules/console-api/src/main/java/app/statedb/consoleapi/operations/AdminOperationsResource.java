@@ -5,15 +5,12 @@ import app.statedb.persistence.authz.Authorize;
 import app.statedb.persistence.authz.AuthorizedResource;
 import app.statedb.persistence.authz.SiteEntityLoader;
 import app.statedb.persistence.authz.StackEntityLoader;
-import app.statedb.persistence.entitlement.EffectiveEntitlement;
-import app.statedb.persistence.entitlement.Entitlements;
 import app.statedb.persistence.identity.ServiceAccountCreator;
 import app.statedb.persistence.lock.StackLockCanceller;
 import app.statedb.persistence.operations.ActiveLockView;
 import app.statedb.persistence.operations.CompactionJobView;
 import app.statedb.persistence.operations.OperationalInventoryFinder;
 import app.statedb.persistence.stack.CompactionJobEnqueuer;
-import app.statedb.persistence.stack.Stack;
 import app.statedb.persistence.stack.StackRef;
 import jakarta.inject.Inject;
 import jakarta.transaction.Transactional;
@@ -42,22 +39,7 @@ public class AdminOperationsResource {
   @Inject AuthorizedResource authorized;
   @Inject StackLockCanceller lockCanceller;
   @Inject CompactionJobEnqueuer compactionJobs;
-  @Inject Entitlements entitlements;
   @Context UriInfo uriInfo;
-
-  @GET
-  @Path("/entitlement")
-  @Authorize(action = "entitlement:Read", loader = SiteEntityLoader.class)
-  public EntitlementDto entitlement() {
-    EffectiveEntitlement effective = entitlements.effective();
-    return new EntitlementDto(
-        effective.tier().name().toLowerCase(Locale.ROOT),
-        effective.status().wireValue(),
-        Stack.count(),
-        effective.stackLimit(),
-        effective.expiresAt(),
-        effective.validationFailure());
-  }
 
   @GET
   @Path("/locks")
@@ -186,12 +168,4 @@ public class AdminOperationsResource {
       Instant createdAt,
       Instant startedAt,
       Instant completedAt) {}
-
-  public record EntitlementDto(
-      String tier,
-      String status,
-      long stackCount,
-      Long stackLimit,
-      Instant expiresAt,
-      String validationFailure) {}
 }

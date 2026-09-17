@@ -19,7 +19,6 @@ import { AdminProvidersPage } from "@/routes/admin-providers";
 import { AdminOrganizationsPage } from "@/routes/admin-orgs";
 import { AdminUsersPage } from "@/routes/admin-users";
 import { AdminOperationsPage } from "@/routes/admin-operations";
-import { AdminLicensePage } from "@/routes/admin-eula";
 import {
   AdminServiceTokensPage,
   canManageServiceTokens,
@@ -295,20 +294,6 @@ const adminOperationsRoute = createRoute({
   component: AdminOperationsPage,
 });
 
-const adminEulaRoute = createRoute({
-  getParentRoute: () => adminRoute,
-  path: "admin/eula",
-  beforeLoad: () => {
-    throw redirect({ to: "/console/admin/license", replace: true });
-  },
-});
-
-const adminLicenseRoute = createRoute({
-  getParentRoute: () => adminRoute,
-  path: "admin/license",
-  component: AdminLicensePage,
-});
-
 const routeTree = rootRoute.addChildren([
   rootIndexRedirectRoute,
   accountTokensRedirectRoute,
@@ -333,8 +318,6 @@ const routeTree = rootRoute.addChildren([
       adminOrgsRoute,
       adminUsersRoute,
       adminOperationsRoute,
-      adminEulaRoute,
-      adminLicenseRoute,
     ]),
   ]),
   notFoundRoute,

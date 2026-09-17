@@ -134,7 +134,6 @@ scheme, so these are inherent, not incidental.)
 /console/admin/users                            Users
 /console/admin/tokens                           Service-account tokens
 /console/admin/operations                       Active locks + compaction queue health
-/console/admin/license                          License & usage (Free Edition limit)
 ```
 
 Router: TanStack Router, code-based route tree (extend the existing
@@ -167,7 +166,6 @@ Replace the current top-bar-only `AppShell` with a shadcn **Sidebar** layout
 │ ▸ Service │                                                      │
 │   tokens  │                                                      │
 │ ▸ Operations                                                     │
-│ ▸ License │                                                      │
 │           │                                                      │
 │ [org ▾]   │  ← org switcher pinned to sidebar footer             │
 └──────────┴──────────────────────────────────────────────────────┘
@@ -175,7 +173,7 @@ Replace the current top-bar-only `AppShell` with a shadcn **Sidebar** layout
 
 - **Nav groups:** `Stacks` and `Tokens` (→ `/console/account/tokens`) for everyone;
   a `Manage` group appears for site admins and org owners. Site admins see
-  Providers, Orgs, Users, Service tokens, Operations, and License; owners see
+  Providers, Orgs, Users, Service tokens, and Operations; owners see
   only Service tokens. `/console/admin/orgs/{org}` remains the other
   owner-accessible management route, reached contextually from the org.
 - **Org switcher** (sidebar footer, shadcn `DropdownMenu` on a `SidebarMenuButton`):
@@ -258,7 +256,6 @@ Monospace stack (`font-mono`) for all technical identifiers and the log viewer.
 | S12 | Admin — Users | `/console/admin/users` | 2 |
 | S13 | Admin — Service tokens | `/console/admin/tokens` | 2 |
 | S14 | Admin — Operations (locks, compaction queue) | `/console/admin/operations` | 2 |
-| S15 | Admin — License & usage | `/console/admin/license` | 3 |
 | S16 | First-run onboarding / empty deployment | overlays `/console` | 2 |
 | S17 | Org — Members & sharing (owner-or-admin) | `/console/admin/orgs/{org}` | 2 |
 
@@ -835,21 +832,6 @@ surfaces its error message.
 
 ---
 
-### S15 · Admin — License & usage — `/console/admin/license`
-
-**Purpose.** Free Edition Use Limit visibility (10 active stacks/deployment) and
-license key management. Tier 3 — spec loosely; firm up with slices 34–35.
-
-**Layout.** Usage `Card`: `Progress` bar "N of 10 active stacks (Free Edition)"
-(unlimited under a commercial key → "Licensed to {org}, expires {date}").
-License `Card`: current key status, `Textarea` + "Apply key". When over the free
-limit, the shell shows a persistent dismissable `Alert` banner linking here
-(banner behavior belongs to S0 but is triggered by this data).
-
-**Data.** **API gap**: `GET/PUT /api/admin/license` — shape TBD by slice 34.
-
----
-
 ### S16 · First-run onboarding (empty-deployment state)
 
 **Purpose.** A fresh deployment's `/` must teach the CLI hookup in one screen —
@@ -974,7 +956,6 @@ Screens above depend on these endpoints beyond what slices 26–29 already plan:
 | `GET/POST /api/admin/orgs`, `DELETE /api/admin/orgs/{id}` (empty-only) | S11 | **Slice 29.5 (full-stack)** — admin-only tenant lifecycle; delete guard mirrors S7 |
 | `org:ManageMembers` action + `GET/POST/PATCH/DELETE /api/orgs/{id}/members` | S17 | **Slice 29.5 (full-stack)** — owner-or-admin (owner.cedar + OrgEntityLoader); server-side last-owner guard; resolves the old "membership unowned" flag |
 | Guest-grant listing (read `policy_grants` per member) | S17 | **Slice 29.5** — read-only; minting stays on S7 shares API (stack-sharing.md §7) |
-| `GET/PUT /api/admin/license` | S15 | slice 34 shape |
 | cli-mint callback lands on `/console/account/tokens#token=` | S9 | SPA-rendered one-time display |
 | Reserved org-name validation (frozen list, §2.2) | permalink integrity | server-side create guard; closed set, never grows with screens |
 

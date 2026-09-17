@@ -88,20 +88,6 @@ spec:
             - name: STATEDB_ADMIN_SUBJECTS
               value: {{ . | quote }}
             {{- end }}
-            {{- if .Values.license.existingSecret }}
-            - name: STATEDB_LICENSE_PATH
-              value: /run/secrets/statedb/{{ .Values.license.key }}
-            {{- end }}
-            {{- with .Values.license.deploymentId }}
-            - name: STATEDB_DEPLOYMENT_ID
-              value: {{ . | quote }}
-            {{- end }}
-          {{- if .Values.license.existingSecret }}
-          volumeMounts:
-            - name: license
-              mountPath: /run/secrets/statedb
-              readOnly: true
-          {{- end }}
           # Migrations run before the service serves traffic, so readiness can
           # legitimately take minutes on a cold database.
           startupProbe:
@@ -120,12 +106,6 @@ spec:
               port: management
           resources:
             {{- toYaml .Values.resources | nindent 12 }}
-      {{- if .Values.license.existingSecret }}
-      volumes:
-        - name: license
-          secret:
-            secretName: {{ .Values.license.existingSecret }}
-      {{- end }}
       {{- with .Values.nodeSelector }}
       nodeSelector:
         {{- toYaml . | nindent 8 }}

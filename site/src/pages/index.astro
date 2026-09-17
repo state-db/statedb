@@ -143,10 +143,6 @@ const faq = [
     a: "Pulumi Cloud is a broader managed platform. statedb is a narrower self-hosted backend and console. It manages state and access without running your deployments.",
   },
   {
-    q: "Are commercial terms available?",
-    a: "Not yet. A commercial license lets one deployment manage more than ten active stacks, but pricing and terms are still in progress. Open an issue before a larger deployment and the maintainers will follow up.",
-  },
-  {
     q: "Does our CI/CD have to change?",
     a: "Your Pulumi steps do not. Keep preview, up, refresh, and destroy. Change the backend URL and pass a service-account token through PULUMI_ACCESS_TOKEN.",
   },
@@ -192,7 +188,6 @@ const faq = [
           <img src={logoDark.src} alt="statedb" width="150" height="42" />
         </a>
         <nav class="nav-links" aria-label="Main">
-          <a href="#pricing">Pricing</a>
           <a href="#security">Security</a>
           <a href="/docs/">Docs</a>
           <a href={github}>GitHub</a>
@@ -206,8 +201,8 @@ const faq = [
         <div class="shell hero-grid">
           <div class="hero-copy">
             <h1>
-              The full-service, self-hosted state backend with
-              <span>flat pricing</span>
+              The open-source, self-hosted state backend with
+              <span>a real console</span>
             </h1>
             <p class="hero-sub">
               Replace bare object storage with a real state service: locking, history,
@@ -542,51 +537,6 @@ const faq = [
         </div>
       </section>
 
-      <!-- PRICING -->
-      <section class="pricing" id="pricing">
-        <div class="shell">
-          <p class="kicker">Pricing</p>
-          <h2>Free for ten active stacks. Flat license after that.</h2>
-          <p class="section-lead">
-            Every feature is included from the first stack. The free edition covers up to ten
-            active stacks per deployment; larger deployments move to one commercial license
-            instead of per-user or per-resource metering.
-          </p>
-          <div class="price-tiers">
-            <div class="price-tier">
-              <span class="price-tier-name">Free edition</span>
-              <div class="price-figure">
-                <span class="price-amount">$0</span>
-                <span class="price-period">up to ten active stacks per deployment</span>
-              </div>
-              <ul class="price-points">
-                <li>No trial period or feature restrictions</li>
-                <li>OIDC, organization roles, and Cedar authorization</li>
-                <li>Start with one stack and grow to ten</li>
-              </ul>
-            </div>
-            <div class="price-tier price-tier-commercial">
-              <span class="price-tier-name">Commercial</span>
-              <div class="price-figure">
-                <span class="price-amount">Flat license</span>
-                <span class="price-period">for larger deployments</span>
-              </div>
-              <ul class="price-points">
-                <li>The same product above ten active stacks</li>
-                <li>No per-user or per-resource meter</li>
-                <li>Contact us to discuss a larger deployment</li>
-              </ul>
-            </div>
-          </div>
-          <div class="price-foot">
-            <div class="cta-row">
-              <a class="btn btn-outline" href="/docs/license/">License &amp; terms</a>
-              <a class="btn btn-outline" href={`${github}/blob/main/COMMERCIAL.md`}>Commercial status</a>
-            </div>
-          </div>
-        </div>
-      </section>
-
       <!-- COMPATIBILITY -->
       <section class="proof" id="compatibility">
         <div class="shell">
@@ -769,8 +719,7 @@ const faq = [
               <li>
                 <h3>Expand on your schedule</h3>
                 <p>
-                  Each deployment supports ten active stacks for free, so the first rollout
-                  does not require a commercial license.
+                  Move more stacks when the first workflow and backup restore meet your needs.
                 </p>
               </li>
             </ol>
@@ -813,17 +762,16 @@ const faq = [
           <h2>Try statedb on a stack you know</h2>
           <p>
             Connect one familiar stack, run your normal Pulumi workflow, and inspect the result
-            in the console. Every feature is free for up to ten active stacks per deployment.
+            in the console. The complete project is open source under <code>AGPL-3.0-only</code>.
           </p>
           <div class="cta-row">
             <a class="btn btn-solid" href="/docs/quickstart/">Quickstart</a>
-            <a class="btn btn-outline" href={`${github}/blob/main/COMMERCIAL.md`}>Commercial status</a>
+            <a class="btn btn-outline" href={github}>Source code</a>
           </div>
           <p class="close-procurement">
-            Need to review it first? Read the <a href="/docs/license/">license terms</a>,
-            <a href={`${github}/blob/main/COMMERCIAL.md`}>commercial status</a>,
+            Review the <a href="/docs/license/">AGPL license</a>,
             <a href={`${github}/blob/main/SECURITY.md`}>security policy</a>, and
-            <a href={github}>full source</a>.
+            <a href={github}>complete source</a>.
           </p>
         </div>
       </section>
@@ -840,14 +788,13 @@ const faq = [
           <a href="/docs/">Docs</a>
           <a href="/docs/quickstart/">Quickstart</a>
           <a href="/docs/compatibility/">Compatibility</a>
-          <a href="/docs/license/">License &amp; terms</a>
+          <a href="/docs/license/">AGPL license</a>
         </nav>
         <nav class="footer-col" aria-label="Project">
           <span class="footer-head">Project</span>
           <a href={github}>GitHub</a>
           <a href={`${github}/blob/main/SECURITY.md`}>Security</a>
           <a href={`${github}/blob/main/CONTRIBUTING.md`}>Contributing</a>
-          <a href={`${github}/blob/main/COMMERCIAL.md`}>Commercial status</a>
         </nav>
         <div class="footer-mascot" aria-hidden="true">
           <img src={mascot.src} alt="" width="80" height="80" loading="lazy" />
@@ -860,7 +807,7 @@ const faq = [
           by, or sponsored by either.
         </p>
         <p class="footer-copy">
-          &copy; 2026 statedb &middot; Elastic License 2.0 with Additional Limitations
+          &copy; 2026 statedb &middot; AGPL-3.0-only
         </p>
       </div>
     </footer>
@@ -1676,7 +1623,6 @@ const faq = [
   /* ---------- section rhythm ---------- */
 
   .scope,
-  .pricing,
   .proof,
   .console,
   .access,
@@ -1759,104 +1705,6 @@ const faq = [
   .scope-yes::before {
     content: "✓";
     color: var(--blue);
-  }
-
-  /* ---------- pricing ---------- */
-
-  .price-tiers {
-    margin-top: 2.25rem;
-    display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 1.5rem;
-  }
-
-  .price-tier {
-    display: flex;
-    flex-direction: column;
-    gap: 1.4rem;
-    border: 1px solid var(--rule);
-    border-radius: 12px;
-    padding: 2rem 2.25rem 2.25rem;
-    background: var(--card);
-  }
-
-  .price-tier-commercial {
-    border: 1.5px solid var(--blue);
-    background: linear-gradient(160deg, rgba(37, 99, 235, 0.06), transparent 60%), var(--card);
-  }
-
-  .price-tier-name {
-    font-family: var(--mono);
-    font-size: 0.75rem;
-    font-weight: 700;
-    letter-spacing: 0.16em;
-    text-transform: uppercase;
-    color: var(--muted);
-  }
-
-  .price-tier-commercial .price-tier-name {
-    color: var(--blue);
-  }
-
-  .price-figure {
-    display: flex;
-    flex-direction: column;
-    gap: 0.35rem;
-  }
-
-  .price-amount {
-    font-family: var(--display);
-    font-size: clamp(2.6rem, 5vw, 3.6rem);
-    font-weight: 700;
-    line-height: 1;
-    letter-spacing: -0.02em;
-    color: var(--ink);
-  }
-
-  .price-tier-commercial .price-amount {
-    font-size: clamp(2rem, 4vw, 2.9rem);
-  }
-
-  .price-period {
-    font-family: var(--mono);
-    font-size: 0.8rem;
-    letter-spacing: 0.04em;
-    color: var(--muted);
-  }
-
-  .price-points {
-    list-style: none;
-    margin: 0;
-    padding: 0;
-    display: flex;
-    flex-direction: column;
-    gap: 0.65rem;
-  }
-
-  .price-points li {
-    position: relative;
-    padding-left: 1.6rem;
-    color: var(--muted);
-    font-size: 0.95rem;
-    line-height: 1.5;
-  }
-
-  .price-points li::before {
-    content: "✓";
-    position: absolute;
-    left: 0;
-    font-family: var(--mono);
-    font-size: 0.9rem;
-    color: var(--blue);
-  }
-
-  .price-foot {
-    margin-top: 1.75rem;
-    display: flex;
-    flex-wrap: wrap;
-    align-items: baseline;
-    justify-content: flex-end;
-    gap: 1rem 2rem;
   }
 
   /* ---------- compatibility ---------- */
@@ -2726,14 +2574,6 @@ const faq = [
     .adopt-grid {
       grid-template-columns: 1fr;
       gap: 2.5rem;
-    }
-
-    .price-tiers {
-      grid-template-columns: 1fr;
-    }
-
-    .price-tier {
-      padding: 1.75rem 1.5rem;
     }
 
     .nav-links {

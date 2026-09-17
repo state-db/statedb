@@ -148,20 +148,6 @@ start the same statedb version against it, and export a stack with the Pulumi
 CLI. That exercises the whole path from stored rows back to a checkpoint the CLI
 accepts.
 
-## Commercial license file
+## Source code and license
 
-Mount a commercial license as a read-only secret file and point at it:
-
-```sh
-STATEDB_LICENSE_PATH=/run/secrets/state-db/license.json
-```
-
-`STATEDB_LICENSE` can carry the full document inline instead; if both are set,
-the file path wins. When a license contains a deployment identifier,
-`STATEDB_DEPLOYMENT_ID` must match the signed claim.
-
-statedb re-reads the file for each enforced operation, so replacing it takes
-effect without a restart.
-
-See [license and Pulumi compatibility](/docs/license/) for the Free Edition
-limit and the terms themselves.
+state-db uses `AGPL-3.0-only`. See [license and Pulumi compatibility](/docs/license/) for the license text and source-code link.

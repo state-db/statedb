@@ -14,10 +14,6 @@ body.
   reachability validation, vulnerability scanning, and Java/container SBOMs.
 - AWS CloudFormation packaging for two ECS Express Mode replicas, encrypted RDS PostgreSQL, and
   ECS task-role database authentication without a long-lived application password.
-- End User License Agreement ([EULA.md](EULA.md)) that a site administrator accepts in the console
-  before full functionality is enabled. Operators who provision from infrastructure as code can
-  set `STATEDB_EULA_ACCEPTED_VERSION` to the shipped version instead. Site administrators are sent
-  to the agreement page after sign-in while acceptance is still required.
 
 ### Changed
 

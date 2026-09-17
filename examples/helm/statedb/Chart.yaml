@@ -2,6 +2,8 @@ apiVersion: v2
 name: statedb
 description: Self-hosted state backend for the Pulumi CLI, with a web console.
 type: application
+annotations:
+  artifacthub.io/license: AGPL-3.0-only
 version: 0.1.0
 appVersion: "0.1.0"
 home: https://statedb.app

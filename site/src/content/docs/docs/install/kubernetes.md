@@ -95,7 +95,6 @@ strategy controls.
 | `sessionExistingSecret` | none | Secret holding the session key, if you manage it |
 | `bootstrap.orgName` | none | First organization, created at startup |
 | `oidc.name` | none | Seeds a provider when set |
-| `license.existingSecret` | none | Secret holding a commercial license file |
 | `ingress.enabled` | `false` | Expose the service through an Ingress |
 
 The full set is in

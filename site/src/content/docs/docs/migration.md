@@ -8,9 +8,7 @@ direction is just `pulumi stack export` and `pulumi stack import`. There is no
 conversion step and no statedb-specific tooling, which is also why moving out is
 as straightforward as moving in.
 
-Migrate one stack at a time. Nothing about statedb requires you to move an
-entire estate at once, and the free ten-stack allowance is enough to run a real
-team on it before committing.
+Migrate one stack at a time. state-db does not require you to move an entire estate at once.
 
 ## Before you start
 
@@ -69,6 +67,4 @@ pulumi stack import --file my-stack.checkpoint.json
 pulumi preview
 ```
 
-Export works in both license modes, so a Free Edition deployment is never a
-place your state can get stuck. On the way in, statedb validates a checkpoint
-before it replaces anything already stored.
+On the way in, state-db validates a checkpoint before it replaces stored state.

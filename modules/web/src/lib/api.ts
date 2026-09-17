@@ -234,22 +234,6 @@ export interface AdminLock {
   };
 }
 
-/**
- * The End User License Agreement this deployment ships, plus whether a site
- * administrator has accepted it. Full functionality is not enabled until `accepted`.
- */
-export interface Eula {
-  version: string;
-  documentSha256: string;
-  accepted: boolean;
-  /** How it was accepted: in the console, or by deployment configuration. */
-  acceptedVia: "console" | "configuration" | null;
-  acceptedByUserId: string | null;
-  acceptedAt: string | null;
-  /** Full Markdown agreement, bundled in the image so air-gapped installs can read it. */
-  text: string;
-}
-
 export interface AdminCompactionJob {
   id: string;
   stackId: string;
@@ -460,14 +444,6 @@ export const api = {
     operations: {
       locks: () => request<AdminLock[]>("/admin/locks"),
       compactionJobs: () => request<AdminCompactionJob[]>("/admin/compaction-jobs"),
-    },
-    eula: {
-      get: () => request<Eula>("/admin/eula"),
-      accept: (version: string) =>
-        request<Eula>("/admin/eula/acceptance", {
-          method: "POST",
-          body: JSON.stringify({ version }),
-        }),
     },
   },
   orgs: {

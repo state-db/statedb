@@ -1,16 +1,11 @@
 state-db
 Copyright (c) 2025 Sharath Madappa
 
-This product is licensed under the Elastic License 2.0 with Additional
-Limitations. See the LICENSE file for the full terms, including the
-Free Edition Use Limit.
+This product is licensed under AGPL-3.0-only. See LICENSE for the full terms.
 
 Contributions to this product are governed by the Contributor License
-Agreement set out in CLA.md. Each contributor retains the copyright in
-their contribution and grants the licensor a perpetual, sublicensable,
-relicensable license under the terms of that agreement.
-
-For commercial licensing inquiries, see COMMERCIAL.md.
+Agreement in CLA.md or CCLA.md. Each contributor retains copyright and
+grants the Steward the rights that the applicable agreement describes.
 
 Third-party notices:
 

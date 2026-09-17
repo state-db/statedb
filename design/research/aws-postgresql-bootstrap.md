@@ -18,7 +18,7 @@ required PostgreSQL operation as connecting with the master user (or another
 role with role-management privileges), creating a user, and granting
 `rds_iam`.
 
-For the Marketplace MVP, keep the current Lambda-backed custom resource unless
+For the managed installer, keep the current Lambda-backed custom resource unless
 removing Lambda is itself a product requirement. It is the conventional
 CloudFormation mechanism for an imperative operation and already provides the
 create/update/delete response contract. Replacing it with Systems Manager
@@ -37,7 +37,7 @@ Also prototype `AWS::SSMQuickSetup::LifecycleAutomation`. Its CloudFormation
 documentation explicitly says that it runs an SSM Automation document on
 CREATE, UPDATE, and DELETE and replaces inline Lambda custom resources. It is
 the closest first-party resource to the desired lifecycle. Do not make it the
-Marketplace default until an integration stack proves its update, delete,
+default until an integration stack proves its update, delete,
 rollback, timeout, and failure behavior. Quick Setup also has a smaller region
 footprint than RDS, ECS, and Systems Manager generally, which would limit the
 regions in which the product can be installed.
@@ -133,8 +133,7 @@ Putting a bootstrap container inside every service task is technically
 possible with an ECS `SUCCESS` container dependency, but it runs again during
 scaling and every deployment. ECS task roles are task-level, not
 container-level, so the application container would inherit the bootstrap
-task's master access. That is a poor least-privilege trade for a Marketplace
-package.
+task's master access. That is a poor least-privilege trade for a managed installer.
 
 ### CloudFormation registry resource provider
 
@@ -174,27 +173,17 @@ Bootstrap disappears only if the architecture changes one of its contracts:
 - use the RDS master user in the application, contrary to AWS's explicit
   least-privilege guidance;
 - require a customer-supplied database with a pre-created application role;
-- require a manual post-install SQL step, weakening Marketplace self-service;
+- require a manual post-install SQL step, weakening installer self-service;
   or
 - give every application task enough database authority to run idempotent
   bootstrap on startup, exposing master capability to the long-lived task.
 
-For a self-contained Marketplace install with a freshly created RDS instance,
+For a self-contained install with a freshly created RDS instance,
 none of these is preferable. Keep a separate one-off bootstrap task.
-
-## Marketplace implications
-
-AWS Marketplace container products must be self-service, use ECS task roles
-instead of embedded AWS credentials, avoid hard-coded secrets, and use least
-privilege. Every required container image must be copied to Marketplace-managed
-ECR. Reusing the state-db image with a dedicated bootstrap command avoids a
-third image. Usage instructions must disclose the created IAM roles, networking
-and encryption configuration, and AWS resource costs. A manual SQL step is a
-poor fit for those requirements.
 
 ## Decision
 
-Do not replace the Lambda custom resource for the Marketplace MVP merely to
+Do not replace the Lambda custom resource merely to
 remove Lambda. The MVP uses RDS's managed master secret only in the one-off
 bootstrap task and retains a separate IAM-authenticated PostgreSQL application
 role at runtime. This avoids adding IAM-token tooling to the PostgreSQL client
@@ -210,9 +199,8 @@ as an accepted limitation and prove update, rollback, timeout, and nonzero-exit
 behavior in integration tests.
 
 Treat `AWS::SSMQuickSetup::LifecycleAutomation` as a promising follow-up, not
-yet the default. If stack-level tests establish reliable wait/failure/rollback
-semantics and the initial Marketplace region list fits Quick Setup's
-availability, it can simplify the Association wiring further.
+yet the default. If stack-level tests establish reliable wait, failure, and rollback
+semantics in the supported regions, it can simplify the Association wiring further.
 
 ## Sources
 
@@ -242,5 +230,3 @@ availability, it can simplify the Association wiring further.
 - [RDS Proxy](https://docs.aws.amazon.com/AmazonRDS/latest/UserGuide/rds-proxy.html)
 - [Adding database users for RDS Proxy](https://docs.aws.amazon.com/AmazonRDS/latest/UserGuide/rds-proxy-new-db-user.html)
 - [ECS Exec](https://docs.aws.amazon.com/AmazonECS/latest/developerguide/ecs-exec.html)
-- [AWS Marketplace container product policies](https://docs.aws.amazon.com/marketplace/latest/userguide/container-product-policies.html)
-- [AWS Marketplace AMI and container usage instructions](https://docs.aws.amazon.com/marketplace/latest/userguide/ami-container-product-usage-instructions.html)

@@ -146,7 +146,7 @@ Parameters:
     MinLength: 1
     AllowedPattern: '^.+@sha256:[0-9a-f]{64}$'
     ConstraintDescription: Supply an immutable image reference ending in @sha256:<64 lowercase hex characters>.
-    Description: Digest-pinned state-db image. Marketplace packaging replaces this with its regional ECR image.
+    Description: Digest-pinned state-db image. Operators can replace this with an approved regional ECR image.
   CpuArchitecture:
     Type: String
     Default: ARM64
@@ -162,7 +162,7 @@ Parameters:
     MinLength: 1
     AllowedPattern: '^.+@sha256:[0-9a-f]{64}$'
     ConstraintDescription: Supply an immutable image reference ending in @sha256:<64 lowercase hex characters>.
-    Description: PostgreSQL client image used by a one-off bootstrap task. Marketplace packaging must supply its copied ECR image.
+    Description: PostgreSQL client image used by a one-off bootstrap task. Operators can supply an approved regional ECR copy.
 
 Rules:
   ExistingNetworkRequiresIdentifiers:

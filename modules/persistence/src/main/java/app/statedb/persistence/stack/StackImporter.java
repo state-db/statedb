@@ -1,14 +1,10 @@
 package app.statedb.persistence.stack;
 
 import app.statedb.persistence.RequestValidationException;
-import app.statedb.persistence.entitlement.EffectiveEntitlement;
-import app.statedb.persistence.entitlement.Entitlements;
-import app.statedb.persistence.eula.EulaAcknowledgment;
 import app.statedb.persistence.lock.StackLockedException;
 import app.statedb.persistence.update.StackUpdate;
 import com.fasterxml.jackson.databind.JsonNode;
 import jakarta.enterprise.context.ApplicationScoped;
-import jakarta.inject.Inject;
 import jakarta.persistence.LockModeType;
 import jakarta.transaction.Transactional;
 import java.time.Instant;
@@ -24,16 +20,12 @@ import java.util.UUID;
 @ApplicationScoped
 public class StackImporter {
 
-  @Inject Entitlements entitlements;
-  @Inject EulaAcknowledgment eula;
-
   @Transactional
   public UUID importDeployment(
       UUID stackId, UUID startedByUserId, UUID startedByApiTokenId, JsonNode deployment) {
     if (deployment == null || !deployment.isObject()) {
       throw new RequestValidationException("import request must contain a deployment object");
     }
-    eula.requireAccepted("Stack import");
     // Pulumi stack import does not run the normal update lease protocol: the CLI POSTs the whole
     // checkpoint, gets an updateId, then polls that already-completed update. Since there is no
     // cloud work between start and finish, the backend protects the operation with row locks and an
@@ -43,8 +35,6 @@ public class StackImporter {
     if (stack.activeUpdateId != null) {
       throw new StackLockedException(stackId);
     }
-    requireImportEntitlement();
-
     StackState state =
         StackState.find("stackId", stackId).withLock(LockModeType.PESSIMISTIC_WRITE).singleResult();
 
@@ -83,13 +73,5 @@ public class StackImporter {
 
     stack.version++;
     return update.id;
-  }
-
-  private void requireImportEntitlement() {
-    EffectiveEntitlement entitlement = entitlements.effective();
-    if (entitlement.tier() == EffectiveEntitlement.Tier.PAID) {
-      return;
-    }
-    entitlements.requireUpdateAllowed(Stack.count(), StackUpdate.Kind.IMPORT, false, entitlement);
   }
 }

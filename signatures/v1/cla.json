@@ -1,0 +1,32 @@
+{
+  "schemaVersion": 1,
+  "agreements": {
+    "ICLA-1.0": {
+      "path": "CLA.md",
+      "sha256": "93143f93ed055c513fcf0dcbff110c594c2023dfeb1edd6de3740d6f5c5d398d"
+    },
+    "CCLA-1.0": {
+      "path": "CCLA.md",
+      "sha256": "73e72931a224fb6163996e2aaf6f908b9fabab58c9bb779bc0c2203d29c3cb8d"
+    }
+  },
+  "steward": {
+    "githubLogins": ["madappa-sharath"],
+    "gitIdentities": [
+      {
+        "name": "Sharath Madappa",
+        "email": "11866217+madappa-sharath@users.noreply.github.com"
+      }
+    ]
+  },
+  "automation": {
+    "githubLogins": ["dependabot[bot]"],
+    "gitIdentities": [
+      {
+        "name": "dependabot[bot]",
+        "email": "49699333+dependabot[bot]@users.noreply.github.com"
+      }
+    ]
+  },
+  "acceptances": []
+}

@@ -23,9 +23,7 @@ they did before. What changes is where the state lands, and who can see it.
 all belong to an organization, and every access grant is scoped to one. A single
 deployment can host as many as you need.
 
-**Projects and Stacks** mean what they mean in `Pulumi.yaml` and
-`pulumi stack init`. Stacks are also the unit the Free Edition limit counts, so
-ten active stacks is the line between free and commercial use.
+**Projects and Stacks** mean what they mean in `Pulumi.yaml` and `pulumi stack init`.
 
 **Update** is one run of `up`, `preview`, `refresh`, or `destroy`. statedb
 records each update's events alongside the checkpoint it produced, which is what

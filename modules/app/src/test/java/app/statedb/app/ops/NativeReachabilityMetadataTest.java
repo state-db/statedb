@@ -4,7 +4,6 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-import app.statedb.persistence.eula.EulaDocument;
 import app.statedb.persistence.policy.ClasspathPolicyStore;
 import app.statedb.testsupport.RepoRoot;
 import com.fasterxml.jackson.databind.JsonNode;
@@ -78,7 +77,6 @@ class NativeReachabilityMetadataTest {
   void sourceLocalResourceGlobsMatchProductionResources() {
     List<String> violations = new ArrayList<>();
     violations.addAll(validateGlobsOf(ClasspathPolicyStore.class));
-    violations.addAll(validateGlobsOf(EulaDocument.class));
     assertEquals(List.of(), violations, () -> String.join("\n", violations));
   }
 

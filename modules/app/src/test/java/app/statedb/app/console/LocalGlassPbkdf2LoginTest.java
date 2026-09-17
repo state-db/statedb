@@ -16,8 +16,8 @@ import org.junit.jupiter.api.Test;
  * injected only the PBKDF2 verifier must still produce a working admin session.
  *
  * <p>{@link LocalGlassLoginTest} covers the same flow for a bcrypt hash. This exists separately
- * because the AWS template's first-run access depends on the PBKDF2 branch specifically — if it
- * regressed, every fresh Marketplace stack would be unopenable and no bcrypt test would notice.
+ * because the AWS template's first-run access depends on the PBKDF2 branch specifically. If it
+ * regressed, every fresh managed AWS stack would be unopenable and no bcrypt test would notice.
  */
 @QuarkusTest
 @TestProfile(LocalGlassPbkdf2LoginTest.Profile.class)
