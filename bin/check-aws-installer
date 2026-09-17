@@ -126,6 +126,8 @@ grep -F 'STATEDB_DB_BACKUP_RETENTION_DAYS:-1' deploy/aws/deploy.sh >/dev/null ||
   fail "guided deploy does not use its low-cost backup-retention default"
 grep -F 'ROLLBACK_COMPLETE' deploy/aws/deploy.sh >/dev/null ||
   fail "guided deploy does not explain how to recover a rolled-back create"
+grep -F 'cloudformation continue-update-rollback' deploy/aws/deploy.sh >/dev/null ||
+  fail "guided deploy does not continue a failed update rollback before retrying"
 grep -F 'cloudformation wait stack-delete-complete' deploy/aws/teardown.sh >/dev/null ||
   fail "guided teardown does not wait for deletion"
 echo "AWS installer conformance passed"

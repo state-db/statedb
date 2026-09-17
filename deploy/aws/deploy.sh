@@ -8,7 +8,7 @@ set -euo pipefail
 
 cd "$(dirname "$0")/../.."
 
-readonly DEFAULT_IMAGE='ghcr.io/state-db/statedb-candidates@sha256:cb00b7f4f26db4ab2850f706452f602c042d5e3b6db6c10dde7b41604c344e6d'
+readonly DEFAULT_IMAGE='ghcr.io/state-db/statedb-candidates@sha256:987b2bfb1d2e233260f05f6e39dcf8558caff1fcf421fb3366a4c15f6bf953d6'
 readonly DEFAULT_BOOTSTRAP_IMAGE='public.ecr.aws/docker/library/postgres:18@sha256:4ef4dbc939d61acea57712655ddb4b4ab27419c913f94cca0cd57cb3ea3c2280'
 readonly SOURCE_IMAGE='ghcr.io/state-db/statedb:__VERSION__@sha256:__IMAGE_DIGEST__'
 
@@ -196,6 +196,21 @@ if stack_status=$(aws_cli cloudformation describe-stacks --stack-name "$stack_na
   case "$stack_status" in
     ROLLBACK_COMPLETE)
       fail "stack $stack_name is ROLLBACK_COMPLETE; run deploy/aws/teardown.sh, then deploy again"
+      ;;
+    UPDATE_ROLLBACK_FAILED)
+      echo
+      echo "Stack $stack_name is UPDATE_ROLLBACK_FAILED."
+      echo "CloudFormation must finish rolling back the failed update before a new change set can run."
+      pause "Continue the failed update rollback, then deploy from the last stable stack state?"
+      aws_cli cloudformation continue-update-rollback --stack-name "$stack_name"
+      echo "Waiting for $stack_name to reach UPDATE_ROLLBACK_COMPLETE..."
+      if ! aws_cli cloudformation wait stack-update-rollback-complete --stack-name "$stack_name"; then
+        echo "Recent events with reasons:" >&2
+        aws_cli cloudformation describe-stack-events --stack-name "$stack_name" \
+          --query 'StackEvents[?ResourceStatusReason!=null].[Timestamp,LogicalResourceId,ResourceStatus,ResourceStatusReason] | [0:12]' \
+          --output table >&2 || true
+        fail "stack rollback did not reach UPDATE_ROLLBACK_COMPLETE"
+      fi
       ;;
     *_IN_PROGRESS)
       fail "stack $stack_name is still $stack_status; wait for it to settle before deploying again"
