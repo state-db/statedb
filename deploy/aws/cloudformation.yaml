@@ -29,6 +29,7 @@ Metadata:
           default: Administrator access
         Parameters:
           - OrganizationName
+          - AdminSubjects
       - Label:
           default: Database
         Parameters:
@@ -46,6 +47,8 @@ Metadata:
         default: Network ownership
       ApplicationSubnetType:
         default: Application subnet routing
+      AdminSubjects:
+        default: OIDC site administrator subjects
 
 Parameters:
   NetworkMode:
@@ -119,6 +122,11 @@ Parameters:
     AllowedPattern: "^[a-z0-9](?:[a-z0-9-]{0,37}[a-z0-9])?$"
     ConstraintDescription: Use 1-39 lowercase letters, numbers, or hyphens; start and end with a letter or number.
     Description: Initial Pulumi organization name.
+  AdminSubjects:
+    Type: String
+    Default: ""
+    MaxLength: 4096
+    Description: Comma-separated exact OIDC identities in <issuer>:<subject> form. The value is passed to STATEDB_ADMIN_SUBJECTS and takes effect when application tasks restart.
   DbInstanceClass:
     Type: String
     Default: db.t4g.small
@@ -489,6 +497,8 @@ Resources:
               Value: !Ref AWS::Region
             - Name: STATEDB_BOOTSTRAP_ORG_NAME
               Value: !Ref OrganizationName
+            - Name: STATEDB_ADMIN_SUBJECTS
+              Value: !Ref AdminSubjects
             - Name: STATEDB_LOCAL_GLASS_ALLOW_REMOTE
               Value: "true"
             - Name: QUARKUS_HTTP_PROXY_PROXY_ADDRESS_FORWARDING

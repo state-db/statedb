@@ -33,6 +33,9 @@ contains "$template" 'BackupRetentionPeriod: !Ref DbBackupRetentionDays'
 contains "$template" 'Action: rds-db:connect'
 contains "$template" 'STATEDB_DB_AUTHENTICATION'
 contains "$template" 'Value: aws-iam'
+contains "$template" 'AdminSubjects:'
+contains "$template" 'Name: STATEDB_ADMIN_SUBJECTS'
+contains "$template" 'Value: !Ref AdminSubjects'
 contains "$template" 'ManageMasterUserPassword: true'
 contains "$template" 'Value: !Sub pulumi login https://${Service.Endpoint}/pulumi'
 contains "$template" ':__VERSION__@sha256:__IMAGE_DIGEST__'
@@ -118,6 +121,10 @@ grep -F 'DEFAULT_BOOTSTRAP_IMAGE=' deploy/aws/deploy.sh | grep -F 'sha256:4ef4db
   fail "guided deploy does not use the verified bootstrap image index"
 grep -F 'ParameterKey=BootstrapImageReference' deploy/aws/deploy.sh >/dev/null ||
   fail "guided deploy does not pass its bootstrap image override to CloudFormation"
+grep -F 'ParameterKey=AdminSubjects' deploy/aws/deploy.sh >/dev/null ||
+  fail "guided deploy does not pass OIDC administrator subjects to CloudFormation"
+grep -F 'ParameterKey=AdminSubjects,UsePreviousValue=true' deploy/aws/deploy.sh >/dev/null ||
+  fail "guided updates do not preserve OIDC administrator subjects by default"
 grep -F 'cloudformation execute-change-set' deploy/aws/deploy.sh >/dev/null ||
   fail "guided deploy does not execute its reviewed change set"
 grep -F 'cloudformation delete-stack' deploy/aws/teardown.sh >/dev/null ||

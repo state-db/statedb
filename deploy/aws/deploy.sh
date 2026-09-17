@@ -26,6 +26,7 @@ Common environment overrides:
   STATEDB_BOOTSTRAP_IMAGE_REFERENCE   immutable multi-platform PostgreSQL client image
   STATEDB_CPU_ARCHITECTURE            ARM64 or X86_64 (default: ARM64)
   STATEDB_ORGANIZATION_NAME           initial Pulumi organization (default: default)
+  STATEDB_ADMIN_SUBJECTS              comma-separated exact OIDC <issuer>:<subject> identities
   STATEDB_DB_INSTANCE_CLASS           RDS class (default: db.t4g.small)
   STATEDB_DB_ALLOCATED_STORAGE        initial gp3 GiB (default: 80)
   STATEDB_DB_BACKUP_RETENTION_DAYS    automated backup days (default: 1; 0 disables)
@@ -80,6 +81,7 @@ image_reference=${STATEDB_IMAGE_REFERENCE:-$DEFAULT_IMAGE}
 bootstrap_image_reference=${STATEDB_BOOTSTRAP_IMAGE_REFERENCE:-$DEFAULT_BOOTSTRAP_IMAGE}
 cpu_architecture=${STATEDB_CPU_ARCHITECTURE:-ARM64}
 organization_name=${STATEDB_ORGANIZATION_NAME:-default}
+admin_subjects=${STATEDB_ADMIN_SUBJECTS:-}
 db_instance_class=${STATEDB_DB_INSTANCE_CLASS:-db.t4g.small}
 db_storage=${STATEDB_DB_ALLOCATED_STORAGE:-80}
 db_backup_retention_days=${STATEDB_DB_BACKUP_RETENTION_DAYS:-1}
@@ -221,6 +223,15 @@ if stack_status=$(aws_cli cloudformation describe-stacks --stack-name "$stack_na
 else
   change_type=CREATE
   completion_waiter=stack-create-complete
+fi
+
+if [[ ${STATEDB_ADMIN_SUBJECTS+x} ]]; then
+  # AWS CLI shorthand uses commas between structure fields, so preserve list commas by escaping
+  # them before passing the complete allow-list as one ParameterValue.
+  parameters+=("ParameterKey=AdminSubjects,ParameterValue=${admin_subjects//,/\\,}")
+elif [[ $change_type == UPDATE ]]; then
+  # An ordinary image or infrastructure update must not silently remove every OIDC administrator.
+  parameters+=("ParameterKey=AdminSubjects,UsePreviousValue=true")
 fi
 change_set="guided-$(date -u +%Y%m%dT%H%M%SZ)-$$"
 
