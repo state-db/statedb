@@ -81,7 +81,7 @@ if [[ -n "${STATEDB_IMAGE:-}" ]]; then
   exit 0
 fi
 
-echo "==> Quarkus dev mode on :8080 (foreground — Ctrl-C stops this and the console; infra stays up)"
+echo "==> clean build + Quarkus dev mode on :8080 (foreground — Ctrl-C stops this and the console; infra stays up)"
 QUARKUS_HTTP_HOST=127.0.0.1 \
 QUARKUS_MANAGEMENT_HOST=127.0.0.1 \
 QUARKUS_DATASOURCE_DEVSERVICES_ENABLED=false \
@@ -93,4 +93,4 @@ STATEDB_OIDC_BOOTSTRAP_CLIENT_ID=console STATEDB_OIDC_BOOTSTRAP_CLIENT_SECRET=co
 STATEDB_OIDC_DEFAULT_PROVIDER=mock \
 STATEDB_SESSION_ENCRYPTION_SECRET=state-db-workbench-session-secret-32-bytes \
 STATEDB_ADMIN_SUBJECTS="$ISSUER:admin" \
-mise exec -- modules/mvnw -f modules/pom.xml -pl app -am -Dquarkus.test.continuous-testing=disabled quarkus:dev
+mise exec -- modules/mvnw -f modules/pom.xml -pl app -am -Dquarkus.test.continuous-testing=disabled clean quarkus:dev

@@ -9,7 +9,7 @@ DB, repeat. Everything here runs through the host-native workbench lifecycle.
 | Task | Command |
 | --- | --- |
 | Run everything (built image, default) | `make pulumi-workbench cmd=app` |
-| Run everything (hot reload) | `make pulumi-workbench cmd=app-dev` |
+| Run everything (clean build and hot reload) | `make pulumi-workbench cmd=app-dev` |
 | Rebuild the image after code changes | `make pulumi-workbench cmd=build-image` |
 | Populate fixtures | `make pulumi-workbench cmd=fixtures-up` |
 | Pulumi preview / up / destroy | `cmd=preview\|up\|destroy` |
@@ -42,6 +42,9 @@ The Make targets are the supported entry points. They stop stale processes,
 reuse healthy infrastructure, and run Java and Bun through the versions pinned
 by mise. `workbench/pulumi/dev-host.sh` is their internal supervisor; do not
 start Bun or Quarkus separately.
+
+`cmd=app-dev` cleans the Maven reactor before it starts Quarkus. This removes
+compiled classes for source files that were deleted since the prior run.
 
 Override with env vars: `ORG`, `CONSOLE_PORT` (5173), `IDP_UPSTREAM_PORT`
 (58081), `DB_PORT` (55432), `STATEDB_IMAGE` (default `state-db:workbench`).
