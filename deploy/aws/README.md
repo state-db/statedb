@@ -3,6 +3,8 @@
 See the standalone [AWS architecture guide](architecture.html) for a visual explanation of the
 request path, database bootstrap, IAM boundaries, and cost posture.
 
+For Microsoft Entra authentication, follow the [Microsoft Entra OIDC guide](microsoft-entra-oidc.md).
+
 This template deploys two state-db replicas behind Amazon ECS Express Mode's managed HTTPS
 Application Load Balancer. It creates an encrypted, private, Single-AZ PostgreSQL 17 RDS instance
 with 80 GiB of gp3 storage by default and storage autoscaling up to 500 GiB. You can deploy into a
