@@ -8,7 +8,7 @@ set -euo pipefail
 
 cd "$(dirname "$0")/../.."
 
-readonly DEFAULT_IMAGE='ghcr.io/state-db/statedb-candidates@sha256:987b2bfb1d2e233260f05f6e39dcf8558caff1fcf421fb3366a4c15f6bf953d6'
+readonly DEFAULT_IMAGE='ghcr.io/state-db/statedb-candidates@sha256:57eed59a4eb1c8006823290d4310579a33e5733dc35be6b02a7009f2486eb2e9'
 readonly DEFAULT_BOOTSTRAP_IMAGE='public.ecr.aws/docker/library/postgres:18@sha256:4ef4dbc939d61acea57712655ddb4b4ab27419c913f94cca0cd57cb3ea3c2280'
 readonly SOURCE_IMAGE='ghcr.io/state-db/statedb:__VERSION__@sha256:__IMAGE_DIGEST__'
 
