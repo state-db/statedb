@@ -744,7 +744,7 @@ live role is `owner`; site admins manage every org. The `Manage` sidebar group
 shows only this entry to owners and the full management set to site admins.
 Ordinary members cannot navigate to or call the inventory endpoint.
 
-**Layout.** `DataTable`: description | org | status | created by | created |
+**Layout.** `DataTable`: description + short stable credential id + access profile | org | status | created by | created |
 expires | last used | revoke. `Active / Inactive / All` `ToggleGroup`, default
 Active; Inactive includes expired and revoked rows. Active rows sort by soonest
 expiry. More than seven days is a normal timestamp, seven days or less is amber,
@@ -758,13 +758,18 @@ hint "one per service — e.g. github-actions/deploy", org `Select`, and mandato
 expiry `Select` (30/90/365 days, default 90). Only those three expiry values are
 accepted server-side. Prefer the shell's selected manageable org, otherwise the
 sole manageable org; a site admin with several orgs must select explicitly.
-The form repeats the org scope and explains that the service role deploys
-existing stacks but cannot create/delete/rename/retag stacks. Success uses S9's
+The form repeats the org scope and has an unchecked "Allow this token to create
+and delete stacks" checkbox. The default `deploy` profile operates existing
+stacks; the immutable `stack-lifecycle` profile adds exactly create/delete for
+migrations and bootstrap, not rename/retag/org administration. Success uses S9's
 shared one-time-token `Dialog`: raw value in memory only, copy feedback, and
 "I've copied it." The value never enters a URL, storage, analytics, or logs.
 
 **Lifecycle and audit.** Minting creates one `local:service` machine user, one
 `service` membership, and one org-pinned `kind=service_account` credential.
+The credential stores immutable `access_profile = deploy|stack_lifecycle`; changing it means
+minting a replacement and revoking the old credential rather than silently changing a deployed
+secret.
 `api_tokens.created_by_user_id` records the console actor. Revocation is
 idempotent soft revocation: set token `revoked_at` / `revoked_by_user_id` and
 user `deactivated_at` / `deactivated_by_user_id` in one transaction. Never
@@ -773,6 +778,9 @@ revoking the old account. Human and machine identities are not hard-deleted by
 application APIs; a future human removal is deactivation. Service-token audit
 rows are exempt from the 30-day expired-personal-token purge and retained
 indefinitely for now.
+Names are reusable display labels, never identifiers. Update activity carries the stable machine
+user id plus exact token id and marks revoked actors, so overlapping or later same-name rotations
+remain distinguishable.
 
 Revocation rejects subsequent `Authorization: token ...` authentication
 immediately. It does not implicitly cancel an update that already exchanged the
@@ -787,7 +795,8 @@ and all orgs for site admins. Mutations stay tenant-explicit: `POST
 `GET /api/tokens` or add a site-admin-only tokens API.
 
 **Acceptance.** Minted raw value is shown exactly once, authenticates `pulumi
-login`, and can deploy an existing stack in its selected org but is worth
+login`, and can deploy an existing stack in its selected org; a stack-lifecycle
+credential can additionally create/delete stacks but is worth
 nothing outside it. Unsupported/missing expiry is rejected. Revocation
 preserves creator/revoker/account history and causes new CLI token
 authentication to 401; an already-issued update lease may finish. Owners see

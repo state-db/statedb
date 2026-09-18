@@ -22,7 +22,7 @@ public class ApiTokenFinder {
     return em.createQuery(
             """
             SELECT new app.statedb.persistence.auth.AuthenticatedPrincipal(
-              t.userId, u.iss, u.sub, t.orgId, o.name, m.role, t.kind, t.id)
+              t.userId, u.iss, u.sub, t.orgId, o.name, m.role, t.kind, t.id, t.accessProfile)
               FROM ApiToken t
               JOIN User u ON u.id = t.userId
               LEFT JOIN Organization o ON o.id = t.orgId

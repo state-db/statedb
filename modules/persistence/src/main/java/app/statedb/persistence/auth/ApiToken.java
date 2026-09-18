@@ -1,6 +1,8 @@
 package app.statedb.persistence.auth;
 
 import app.statedb.persistence.BaseEntity;
+import com.fasterxml.jackson.annotation.JsonCreator;
+import com.fasterxml.jackson.annotation.JsonValue;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
@@ -16,6 +18,33 @@ public class ApiToken extends BaseEntity {
   public enum Kind {
     oidc,
     service_account
+  }
+
+  /** Immutable authority selected when a credential is minted. */
+  public enum AccessProfile {
+    deploy("deploy"),
+    stack_lifecycle("stack-lifecycle");
+
+    private final String wireValue;
+
+    AccessProfile(String wireValue) {
+      this.wireValue = wireValue;
+    }
+
+    @JsonValue
+    public String wireValue() {
+      return wireValue;
+    }
+
+    @JsonCreator
+    public static AccessProfile fromWireValue(String value) {
+      for (AccessProfile profile : values()) {
+        if (profile.wireValue.equals(value)) {
+          return profile;
+        }
+      }
+      throw new IllegalArgumentException("unknown service account token access profile: " + value);
+    }
   }
 
   @Column(name = "token_hash", nullable = false, unique = true)
@@ -35,6 +64,10 @@ public class ApiToken extends BaseEntity {
   @Enumerated(EnumType.STRING)
   @Column(nullable = false, columnDefinition = "text")
   public Kind kind;
+
+  @Enumerated(EnumType.STRING)
+  @Column(name = "access_profile", nullable = false, columnDefinition = "text")
+  public AccessProfile accessProfile = AccessProfile.deploy;
 
   @Column(name = "last_used_at")
   public Instant lastUsedAt;

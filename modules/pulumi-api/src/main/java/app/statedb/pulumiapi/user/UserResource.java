@@ -1,6 +1,7 @@
 package app.statedb.pulumiapi.user;
 
 import app.statedb.persistence.auth.AuthenticatedPrincipal;
+import app.statedb.persistence.auth.AuthenticatedPrincipal.CredentialKind;
 import app.statedb.persistence.authz.CurrentPrincipal;
 import app.statedb.persistence.identity.OrgMembershipFinder;
 import app.statedb.persistence.identity.User;
@@ -27,9 +28,18 @@ public class UserResource {
     AuthenticatedPrincipal p = currentPrincipal.get();
     User user = User.findById(p.userId());
     // Top-level githubLogin is what `pulumi whoami` prints — the user's account identity, not the
-    // org. Unqualified stack names target this personal namespace; org stacks should be addressed
-    // as <org>/<stack>.
-    return new UserDto(user.email, user.sub, user.displayName, organizations(p));
+    // org. Unqualified stack names target this personal namespace; service-account automation
+    // should create stacks with a fully qualified <org>/<project>/<stack> name.
+    return new UserDto(user.email, cliLogin(user, p), user.displayName, organizations(p));
+  }
+
+  private static String cliLogin(User user, AuthenticatedPrincipal principal) {
+    if (principal.credential().kind() == CredentialKind.service_account_token
+        && user.displayName != null
+        && !user.displayName.isBlank()) {
+      return user.displayName;
+    }
+    return user.sub;
   }
 
   // Single-org credentials report exactly their scoped org. All-current-memberships credentials

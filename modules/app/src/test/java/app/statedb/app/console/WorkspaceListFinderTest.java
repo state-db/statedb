@@ -1,10 +1,14 @@
 package app.statedb.app.console;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
 
+import app.statedb.persistence.auth.ApiToken;
 import app.statedb.persistence.identity.OrgMember;
 import app.statedb.persistence.identity.Organization;
+import app.statedb.persistence.identity.ServiceAccountCreator;
+import app.statedb.persistence.identity.ServiceAccountRevoker;
 import app.statedb.persistence.identity.User;
 import app.statedb.persistence.lock.StackLock;
 import app.statedb.persistence.stack.Project;
@@ -32,6 +36,10 @@ class WorkspaceListFinderTest {
   @Inject WorkspaceListFinder finder;
 
   @Inject EntityManager em;
+
+  @Inject ServiceAccountCreator serviceAccountCreator;
+
+  @Inject ServiceAccountRevoker serviceAccountRevoker;
 
   @Test
   @TestTransaction
@@ -202,6 +210,46 @@ class WorkspaceListFinderTest {
     assertEquals(1, overview.running());
   }
 
+  @Test
+  @TestTransaction
+  void retainsStableAttributionWhenAServiceTokenIsRevokedAndItsNameIsReused() {
+    Organization org = org("workspace-service-actor", "Workspace Service Actor");
+    User viewer = user("workspace-service-viewer");
+    membership(org, viewer);
+    Stack stack = stack(org, "migration", "dev");
+
+    var first =
+        serviceAccountCreator.create(
+            org.id, "migration-bot", 30, ApiToken.AccessProfile.stack_lifecycle, null);
+    ApiToken firstToken = ApiToken.find("userId", first.accountId()).singleResult();
+    StackUpdate update = new StackUpdate();
+    update.stackId = stack.id;
+    update.kind = StackUpdate.Kind.IMPORT;
+    update.status = StackUpdate.Status.SUCCEEDED;
+    update.version = 1;
+    update.startedAt = Instant.parse("2026-07-20T10:00:00Z");
+    update.startedByUserId = first.accountId();
+    update.startedByApiTokenId = firstToken.id;
+    update.dryRun = false;
+    update.persistAndFlush();
+    serviceAccountRevoker.revoke(org.id, first.accountId(), null);
+
+    var replacement = serviceAccountCreator.create(org.id, "migration-bot", 30, null);
+    ApiToken replacementToken = ApiToken.find("userId", replacement.accountId()).singleResult();
+    em.flush();
+    em.clear();
+
+    var actor = finder.detailsFor(stackSummary(stack)).lastUpdate().actor();
+    assertEquals("service", actor.kind());
+    assertEquals("migration-bot", actor.displayName());
+    assertEquals(first.accountId(), actor.principalId());
+    assertEquals(firstToken.id, actor.credentialId());
+    assertEquals("stack-lifecycle", actor.accessProfile());
+    assertEquals(true, actor.revoked());
+    assertNotEquals(replacement.accountId(), actor.principalId());
+    assertNotEquals(replacementToken.id, actor.credentialId());
+  }
+
   private static Organization org(String name, String displayName) {
     Organization org = new Organization();
     org.name = name;
@@ -258,6 +306,22 @@ class WorkspaceListFinderTest {
     state.stackId = stack.id;
     state.persist();
     return stack;
+  }
+
+  private static app.statedb.persistence.stack.StackSummary stackSummary(Stack stack) {
+    Project project = Project.findById(stack.projectId);
+    Organization org = Organization.findById(stack.orgId);
+    return new app.statedb.persistence.stack.StackSummary(
+        stack.id,
+        org.id,
+        org.name,
+        project.name,
+        project.createdAt,
+        stack.name,
+        Workspace.Kind.pulumi,
+        stack.version,
+        null,
+        null);
   }
 
   private static StackUpdate update(

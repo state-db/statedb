@@ -146,7 +146,7 @@ class TokenAuthFilterTest {
         .get("/pulumi/api/user")
         .then()
         .statusCode(200)
-        .body("githubLogin", equalTo("auth-filter"))
+        .body("githubLogin", equalTo("Auth Tester"))
         .body("email", equalTo("auth@example.com"))
         .body("name", equalTo("Auth Tester"))
         .body("organizations[0].name", equalTo(ORG_NAME));

@@ -41,6 +41,7 @@ class ApiTokenFinderTest {
     assertEquals(f.org.id, p.credentialScope().orgId());
     assertEquals(f.org.name, p.credentialScope().orgName());
     assertEquals(f.tokenId(), p.apiTokenId());
+    assertEquals(ApiToken.AccessProfile.deploy, p.credential().accessProfile());
   }
 
   @Test

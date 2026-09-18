@@ -79,6 +79,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import {
   api,
   NotFoundError,
+  type ActivityActor,
   type PulumiResource,
   type PulumiValue,
   type StackDetail,
@@ -553,6 +554,7 @@ function StackActivity({ org, project, stack }: { org: string; project: string; 
       },
       { accessorKey: "kind", header: "Kind", cell: ({ row }) => <KindBadge kind={row.original.kind} /> },
       { accessorKey: "status", header: "Status", cell: ({ row }) => <StatusBadge status={row.original.status} /> },
+      { id: "actor", header: "Actor", cell: ({ row }) => <ActivityActorCell actor={row.original.actor} /> },
       {
         accessorKey: "message",
         header: "Message",
@@ -725,7 +727,25 @@ export function defaultTreeBranchOpen(
 }
 
 export function lastUpdateActorLabel(actor: NonNullable<WorkspaceLastUpdate["actor"]>): string {
-  return actor.displayName ?? actor.email ?? actor.fallback;
+  const label = actor.displayName ?? actor.email ?? actor.fallback;
+  return actor.revoked ? `${label} (revoked)` : label;
+}
+
+function ActivityActorCell({ actor }: { actor: ActivityActor | null }) {
+  if (!actor) return <span className="text-muted-foreground">Unknown</span>;
+  const label = lastUpdateActorLabel(actor);
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild><span>{label}</span></TooltipTrigger>
+      <TooltipContent>
+        <div className="flex flex-col gap-1">
+          {actor.principalId && <span>Principal: {actor.principalId}</span>}
+          {actor.credentialId && <span>Credential: {actor.credentialId}</span>}
+          {actor.accessProfile && <span>Access: {actor.accessProfile}</span>}
+        </div>
+      </TooltipContent>
+    </Tooltip>
+  );
 }
 
 export function resourceTreeIndentRem(depth: number): number {

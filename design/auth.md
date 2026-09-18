@@ -281,15 +281,11 @@ User::"<users.id>"          (the global user UUID — matches policy_grants.prin
   parents:
     - Role::"owner" | Role::"member" | Role::"viewer" | Role::"guest"   (the role the user holds in
       THIS request's resource org, resolved per request — see "Role resolution"; absent if not a member)
+    - Role::"service"       (machine user with a service membership in this request's org)
+    - Role::"service_stack_lifecycle" (credential-derived, only after the service role resolves;
+                                        inherits service and adds Create/Delete)
     - Role::"admin"   (only if the principal is in STATEDB_ADMIN_SUBJECTS)
   attributes: (none)
-
-ServiceAccount::"service:<token_id>"
-  parents:
-    - Role::"service"      (single role per service account)
-  attributes:
-    description: String
-    owner_user: String     (the admin who minted it; advisory)
 
 Lease::"lease:<stack_id>:<update_id>"
   attributes:
@@ -318,12 +314,6 @@ Site::"statedb:site:root"
   attributes:
     id: String             (the singleton deployment targeted by global console administration)
 
-Token::"<token_id>"
-  attributes:
-    owner: User | ServiceAccount
-    org: Org
-    kind: String           ("oidc" | "service_account")
-
 ```
 
 The user is a **global identity** (`User::<users.id>`), not an org-scoped one — a user may belong to
@@ -343,6 +333,7 @@ a stored field — the name is for resource-pattern matching only.
 Role::"guest"   ←   Role::"viewer"   ←   Role::"member"   ←   Role::"owner"
 
 Role::"service"  (inherits from nothing — its own grant set)
+Role::"service_stack_lifecycle"  (inherits service; credential-derived Create/Delete opt-in)
 Role::"admin"    (inherits from nothing — uniformly allowed by the admin policy)
 ```
 
@@ -355,6 +346,12 @@ continues to exclude guests. See `design/stack-sharing.md`.
 `Role::"service"` inherits from nothing: service accounts get their own grant set so a viewer can't
 accidentally do what a CI token can or vice versa. `Role::"admin"` likewise stands alone and is the
 only role not bounded by org membership.
+
+The immutable service account token `access_profile` is adapted to an additional Cedar parent only after
+`PrincipalRoleResolver` has resolved `Role::"service"` for the target org. `deploy` attaches no
+extra parent. `stack_lifecycle` attaches `Role::"service_stack_lifecycle"`, whose static policy
+adds exactly `stack:Create` and `stack:Delete`. It does not add rename, tags, org administration,
+or cross-org authority, and guardrail forbids still override it.
 
 ### Role resolution
 
@@ -628,13 +625,14 @@ when { resource.id like "statedb:stack:*/prod" };
 ```
 
 Authoring a new role rule is mechanical: pick a role, grant the actions. Adding a finer grant — or a
-new guardrail Deny — is an additive file in the same shape. A future service-account grant set the
-model already supports:
+new guardrail Deny — is an additive file in the same shape. The opt-in service account token lifecycle
+profile uses the same model:
 
 ```cedar
-// service-account-scope: service accounts get their own grant set.
-@id("service-account-scope")
-permit(principal in Role::"service", action in [Action::"stack:Read", Action::"stack:Lock"], resource);
+@id("ServiceAccountStackLifecycle")
+permit(principal in Role::"service_stack_lifecycle",
+       action in [Action::"stack:Create", Action::"stack:Delete"],
+       resource);
 ```
 
 ### User and resource policies (templates + grants)

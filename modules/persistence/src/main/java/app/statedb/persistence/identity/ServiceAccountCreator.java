@@ -2,6 +2,7 @@ package app.statedb.persistence.identity;
 
 import app.statedb.persistence.RequestValidationException;
 import app.statedb.persistence.auth.ApiToken;
+import app.statedb.persistence.auth.ApiToken.AccessProfile;
 import app.statedb.persistence.auth.ApiTokenHasher;
 import app.statedb.persistence.auth.RawApiTokens;
 import jakarta.enterprise.context.ApplicationScoped;
@@ -35,7 +36,11 @@ public class ServiceAccountCreator {
 
   /** The raw token to display once, plus the account it belongs to. */
   public record MintedServiceAccount(
-      UUID accountId, String name, String rawToken, Instant expiresAt) {}
+      UUID accountId,
+      String name,
+      String rawToken,
+      Instant expiresAt,
+      AccessProfile accessProfile) {}
 
   /**
    * @param expiresInDays mandatory token lifetime, restricted to the console's supported choices
@@ -45,11 +50,24 @@ public class ServiceAccountCreator {
   @Transactional
   public MintedServiceAccount create(
       UUID orgId, String name, Integer expiresInDays, UUID createdByUserId) {
+    return create(orgId, name, expiresInDays, AccessProfile.deploy, createdByUserId);
+  }
+
+  @Transactional
+  public MintedServiceAccount create(
+      UUID orgId,
+      String name,
+      Integer expiresInDays,
+      AccessProfile accessProfile,
+      UUID createdByUserId) {
     if (name == null || name.isBlank() || name.strip().length() > 200) {
       throw new RequestValidationException("service account name must be 1-200 characters");
     }
     if (expiresInDays == null || !ALLOWED_TTLS.contains(expiresInDays)) {
       throw new RequestValidationException("expiresInDays must be one of 30, 90, or 365");
+    }
+    if (accessProfile == null) {
+      accessProfile = AccessProfile.deploy;
     }
 
     User account = new User();
@@ -73,10 +91,12 @@ public class ServiceAccountCreator {
     token.userId = account.id;
     token.orgId = orgId; // single_org credential scope: worth nothing outside this org
     token.kind = ApiToken.Kind.service_account;
+    token.accessProfile = accessProfile;
     token.expiresAt = expiresAt;
     token.createdByUserId = createdByUserId;
     token.persistAndFlush();
 
-    return new MintedServiceAccount(account.id, account.displayName, rawToken, expiresAt);
+    return new MintedServiceAccount(
+        account.id, account.displayName, rawToken, expiresAt, accessProfile);
   }
 }

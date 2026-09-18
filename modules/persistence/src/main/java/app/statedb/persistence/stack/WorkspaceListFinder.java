@@ -1,19 +1,15 @@
 package app.statedb.persistence.stack;
 
-import app.statedb.persistence.auth.ApiToken;
-import app.statedb.persistence.identity.User;
 import app.statedb.persistence.lock.StackLock;
 import app.statedb.persistence.update.StackUpdate;
+import app.statedb.persistence.update.UpdateActorAttribution;
+import app.statedb.persistence.update.UpdateActorAttributionFinder;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
-import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Objects;
 import java.util.UUID;
-import java.util.function.Function;
-import java.util.stream.Collectors;
 
 /**
  * Lists console workspace rows readable by a principal.
@@ -30,6 +26,8 @@ import java.util.stream.Collectors;
 public class WorkspaceListFinder {
 
   @Inject StackListFinder stackListFinder;
+
+  @Inject UpdateActorAttributionFinder actorAttributionFinder;
 
   public List<WorkspaceSummary> findVisibleToUser(UUID userId) {
     return findVisibleToUser(userId, null, null);
@@ -120,8 +118,7 @@ public class WorkspaceListFinder {
                     candidate.createdAt.isAfter(existing.createdAt) ? candidate : existing));
 
     Map<UUID, WorkspaceSummary.LastUpdate> latest = new HashMap<>();
-    Map<UUID, User> users = usersById(updates);
-    Map<UUID, ApiToken> tokens = tokensById(updates);
+    Map<UUID, UpdateActorAttribution> actors = actorAttributionFinder.forUpdates(updates);
     latestRows
         .values()
         .forEach(
@@ -133,42 +130,8 @@ public class WorkspaceListFinder {
                         statusWireValue(u.status),
                         u.startedAt,
                         u.version,
-                        actorFor(
-                            users.get(u.startedByUserId), tokens.get(u.startedByApiTokenId)))));
+                        actors.get(u.id))));
     return latest;
-  }
-
-  private Map<UUID, User> usersById(List<StackUpdate> updates) {
-    List<UUID> userIds =
-        updates.stream().map(u -> u.startedByUserId).filter(Objects::nonNull).distinct().toList();
-    if (userIds.isEmpty()) {
-      return Collections.emptyMap();
-    }
-    return User.<User>list("id in ?1", userIds).stream()
-        .collect(Collectors.toMap(user -> user.id, Function.identity()));
-  }
-
-  private Map<UUID, ApiToken> tokensById(List<StackUpdate> updates) {
-    List<UUID> tokenIds =
-        updates.stream()
-            .map(u -> u.startedByApiTokenId)
-            .filter(Objects::nonNull)
-            .distinct()
-            .toList();
-    if (tokenIds.isEmpty()) {
-      return Collections.emptyMap();
-    }
-    return ApiToken.<ApiToken>list("id in ?1", tokenIds).stream()
-        .collect(Collectors.toMap(token -> token.id, Function.identity()));
-  }
-
-  private WorkspaceSummary.Actor actorFor(User user, ApiToken token) {
-    if (user == null && token == null) {
-      return null;
-    }
-    String fallback = user != null ? user.iss + ":" + user.sub : "unknown actor";
-    return new WorkspaceSummary.Actor(
-        user != null ? user.displayName : null, user != null ? user.email : null, fallback);
   }
 
   private Map<UUID, WorkspaceSummary.Lock> liveLocks(List<UUID> stackIds) {

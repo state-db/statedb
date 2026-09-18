@@ -1,5 +1,6 @@
 package app.statedb.persistence.stack;
 
+import app.statedb.persistence.update.UpdateActorAttribution;
 import java.time.Instant;
 import java.util.UUID;
 
@@ -17,9 +18,7 @@ public record WorkspaceSummary(
     Lock lock) {
 
   public record LastUpdate(
-      String kind, String status, Instant startedAt, int version, Actor actor) {}
-
-  public record Actor(String displayName, String email, String fallback) {}
+      String kind, String status, Instant startedAt, int version, UpdateActorAttribution actor) {}
 
   public record Lock(UUID id, String lockedBy, Instant lockedAt) {}
 }

@@ -170,6 +170,7 @@ export interface ServiceAccount {
   id: string;
   tokenId: string;
   name: string;
+  accessProfile: ServiceAccountTokenAccessProfile;
   org: string;
   orgDisplayName: string;
   createdAt: string;
@@ -190,6 +191,20 @@ export interface MintedServiceAccount {
   name: string;
   token: string;
   expiresAt: string;
+  accessProfile: ServiceAccountTokenAccessProfile;
+}
+
+export type ServiceAccountTokenAccessProfile = "deploy" | "stack-lifecycle";
+
+export interface ActivityActor {
+  kind: "human" | "service";
+  principalId: string | null;
+  credentialId: string | null;
+  displayName: string | null;
+  email: string | null;
+  fallback: string;
+  accessProfile: ServiceAccountTokenAccessProfile | null;
+  revoked: boolean;
 }
 
 export interface WorkspaceLastUpdate {
@@ -197,11 +212,7 @@ export interface WorkspaceLastUpdate {
   status: "succeeded" | "failed" | "in-progress" | "cancelled" | string;
   startedAt: string;
   version: number;
-  actor: {
-    displayName: string | null;
-    email: string | null;
-    fallback: string;
-  } | null;
+  actor: ActivityActor | null;
 }
 
 export interface WorkspaceLock {
@@ -321,6 +332,7 @@ export interface UpdateHistoryRow {
   status: string;
   message: string | null;
   summary: { resourceChanges?: Record<string, number> } | null;
+  actor: ActivityActor | null;
   startedAt: string;
   endedAt: string | null;
 }
@@ -403,7 +415,14 @@ export const api = {
   serviceAccounts: {
     list: (status: "active" | "inactive" | "all") =>
       request<ServiceAccount[]>(`/service-accounts?status=${status}`),
-    create: (org: string, input: { name: string; expiresInDays: 30 | 90 | 365 }) =>
+    create: (
+      org: string,
+      input: {
+        name: string;
+        expiresInDays: 30 | 90 | 365;
+  accessProfile?: ServiceAccountTokenAccessProfile;
+      },
+    ) =>
       request<MintedServiceAccount>(
         `/orgs/${encodeURIComponent(org)}/service-accounts`,
         { method: "POST", body: JSON.stringify(input) },

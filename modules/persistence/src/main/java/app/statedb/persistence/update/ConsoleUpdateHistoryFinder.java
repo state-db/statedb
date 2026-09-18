@@ -5,6 +5,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import io.quarkus.hibernate.orm.panache.PanacheQuery;
 import io.quarkus.panache.common.Page;
 import jakarta.enterprise.context.ApplicationScoped;
+import jakarta.inject.Inject;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -14,6 +15,8 @@ import java.util.UUID;
 /** Loads the console audit history, including previews and their summary events. */
 @ApplicationScoped
 public class ConsoleUpdateHistoryFinder {
+
+  @Inject UpdateActorAttributionFinder actorAttributionFinder;
 
   public Optional<StackUpdate> findUpdate(UUID stackId, int version) {
     return StackUpdate.<StackUpdate>find(
@@ -54,8 +57,12 @@ public class ConsoleUpdateHistoryFinder {
       UpdateEvent.<UpdateEvent>list("kind = ?1 and updateId in ?2", "summary", ids)
           .forEach(event -> summaries.put(event.updateId, event.payload.path("summaryEvent")));
     }
-    return new HistoryPage(updates, summaries, total);
+    return new HistoryPage(updates, summaries, actorAttributionFinder.forUpdates(updates), total);
   }
 
-  public record HistoryPage(List<StackUpdate> updates, Map<UUID, JsonNode> summaries, long total) {}
+  public record HistoryPage(
+      List<StackUpdate> updates,
+      Map<UUID, JsonNode> summaries,
+      Map<UUID, UpdateActorAttribution> actors,
+      long total) {}
 }

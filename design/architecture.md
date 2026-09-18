@@ -325,10 +325,16 @@ state-db /api/auth/cli-mint/callback
 Non-interactive callers cannot run an OIDC flow. They are served by a separate path:
 
 - Minted by an org owner or site admin via `POST /api/orgs/{org}/service-accounts`.
-- Minting creates a dedicated `local:service` machine user, `service` membership, and org-pinned `api_tokens.kind = 'service_account'` credential. `expires_at` is mandatory and restricted to 30/90/365 days; creator attribution is stored separately.
+- Minting creates a dedicated `local:service` machine user, `service` membership, and org-pinned `api_tokens.kind = 'service_account'` credential. `expires_at` is mandatory and restricted to 30/90/365 days; creator attribution is stored separately. The immutable `access_profile` is `deploy` by default or `stack_lifecycle` when an owner/site admin explicitly allows that credential to create and delete stacks. Changing authority uses replacement-token rotation, never mutation of a live secret.
 - Revocation is manual and soft: the token is revoked and machine identity deactivated while both remain for audit. Convention: one token per service, narrowly described (`description = "github-actions/state-db-deploy"`).
+- Names are display labels and may be reused for overlapping rotation. Historical updates retain both the machine-user id and exact API-token id, so same-name credentials remain distinguishable after revocation.
 
 Both kinds share the wire format (`Authorization: token <tok>`) and the same `TokenAuthFilter`. The discriminator only affects mint policy and operational expectations, not protocol.
+For `GET /pulumi/api/user`, service credentials present the machine user's display name as the
+top-level `githubLogin` consumed by `pulumi whoami`; the random `sub` remains the immutable internal
+identity. Pulumi also treats `githubLogin` as the implicit organization for unqualified stack
+creation. Because the display label is not the organization slug, service account automation must
+use a fully qualified `<org>/<project>/<stack>` name when it creates a stack.
 
 ### Admin
 

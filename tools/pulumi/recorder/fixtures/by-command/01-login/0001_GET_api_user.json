@@ -14,7 +14,7 @@
   "status_code": 200,
   "response": {
     "email": "test@example.com",
-    "githubLogin": "testorg",
+    "githubLogin": "Test User",
     "name": "Test User",
     "organizations": [
       {

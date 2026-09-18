@@ -1,5 +1,6 @@
 package app.statedb.persistence.identity;
 
+import app.statedb.persistence.auth.ApiToken.AccessProfile;
 import java.time.Instant;
 import java.util.UUID;
 
@@ -8,6 +9,7 @@ public record ServiceAccountView(
     UUID id,
     UUID tokenId,
     String name,
+    AccessProfile accessProfile,
     String orgName,
     String orgDisplayName,
     Instant createdAt,

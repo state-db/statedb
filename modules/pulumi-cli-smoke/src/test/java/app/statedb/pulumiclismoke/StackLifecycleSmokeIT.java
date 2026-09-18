@@ -22,6 +22,12 @@ import org.junit.jupiter.api.Test;
 class StackLifecycleSmokeIT extends PulumiSmokeBase {
 
   private static final String PET_TYPE = "random:index/randomPet:RandomPet";
+  private static final String QUALIFIED_STACK = ORG + "/recorder-test/" + STACK;
+
+  @Override
+  protected boolean useServiceAccountLifecycleCredential() {
+    return true;
+  }
 
   @Test
   void createsListsAndRemovesAnEmptyStack() throws Exception {
@@ -30,19 +36,20 @@ class StackLifecycleSmokeIT extends PulumiSmokeBase {
     pulumi.start();
 
     execResult("pulumi login " + backendUrl);
-    execResult("pulumi stack init " + STACK);
+    assertEquals("Acme Test User", execResult("pulumi whoami").getStdout().trim());
+    execResult("pulumi stack init " + QUALIFIED_STACK);
 
     JsonNode stacksAfterInit = execJson("pulumi stack ls --json");
     assertTrue(
-        stackNames(stacksAfterInit).contains(STACK),
-        () -> "stack ls should include " + STACK + ":\n" + stacksAfterInit);
+        stackNames(stacksAfterInit).contains(ORG + "/" + STACK),
+        () -> "stack ls should include " + ORG + "/" + STACK + ":\n" + stacksAfterInit);
 
-    execResult("pulumi stack rm " + STACK + " --yes");
+    execResult("pulumi stack rm " + QUALIFIED_STACK + " --yes");
 
     JsonNode stacksAfterRemove = execJson("pulumi stack ls --json");
     assertFalse(
-        stackNames(stacksAfterRemove).contains(STACK),
-        () -> "stack ls should not include " + STACK + ":\n" + stacksAfterRemove);
+        stackNames(stacksAfterRemove).contains(ORG + "/" + STACK),
+        () -> "stack ls should not include " + ORG + "/" + STACK + ":\n" + stacksAfterRemove);
   }
 
   @Test
@@ -52,7 +59,7 @@ class StackLifecycleSmokeIT extends PulumiSmokeBase {
     pulumi.start();
 
     execResult("pulumi login " + backendUrl);
-    execResult("pulumi stack init " + STACK);
+    execResult("pulumi stack init " + QUALIFIED_STACK);
     execResult("pulumi stack export --file /workspace/import.json");
     JsonNode before = execJson("cat /workspace/import.json");
 
@@ -75,7 +82,7 @@ class StackLifecycleSmokeIT extends PulumiSmokeBase {
     pulumi.start();
 
     execResult("pulumi login " + backendUrl);
-    execResult("pulumi stack init " + STACK);
+    execResult("pulumi stack init " + QUALIFIED_STACK);
     execResult("pulumi up --yes --non-interactive --skip-preview");
 
     JsonNode atVersionOne = execJson("pulumi stack export --version 1");

@@ -4,6 +4,7 @@ import {
   canManageServiceTokens,
   expiryState,
   serviceAccountStatus,
+  serviceTokenShortId,
 } from "@/routes/admin-service-tokens";
 
 const active = {
@@ -43,5 +44,10 @@ describe("service token lifecycle", () => {
     const now = Date.parse("2026-07-21T00:00:00Z");
     expect(expiryState("2026-07-28T00:00:00Z", now)).toBe("expiring");
     expect(expiryState("2026-07-28T00:00:01Z", now)).toBe("healthy");
+  });
+
+  test("same-name rotation can be distinguished by stable credential id", () => {
+    expect(serviceTokenShortId("12345678-aaaa-bbbb-cccc-1234567890ab")).toBe("12345678");
+    expect(serviceTokenShortId("87654321-aaaa-bbbb-cccc-1234567890ab")).toBe("87654321");
   });
 });

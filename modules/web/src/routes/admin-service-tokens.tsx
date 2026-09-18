@@ -22,6 +22,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   Dialog,
   DialogContent,
@@ -30,7 +31,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Field, FieldDescription, FieldError, FieldGroup, FieldLabel } from "@/components/ui/field";
+import { Field, FieldContent, FieldDescription, FieldError, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import {
   Select,
@@ -78,6 +79,10 @@ function actor(name: string | null, email: string | null, fallback: string) {
   return name ?? email ?? fallback;
 }
 
+export function serviceTokenShortId(tokenId: string): string {
+  return tokenId.slice(0, 8);
+}
+
 export function AdminServiceTokensPage() {
   const { user, selectedOrg } = useShell();
   const queryClient = useQueryClient();
@@ -118,7 +123,15 @@ export function AdminServiceTokensPage() {
         id: "description",
         accessorFn: (account) => `${account.name} ${account.org} ${account.orgDisplayName}`,
         header: sortableHeader("Description"),
-        cell: ({ row }) => <span className="font-medium">{row.original.name}</span>,
+        cell: ({ row }) => (
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="font-medium">{row.original.name}</span>
+            <Badge variant="outline">#{serviceTokenShortId(row.original.tokenId)}</Badge>
+            {row.original.accessProfile === "stack-lifecycle" && (
+              <Badge variant="secondary">Create &amp; delete</Badge>
+            )}
+          </div>
+        ),
       },
       {
         accessorKey: "org",
@@ -308,6 +321,7 @@ function MintDialog({
   const [name, setName] = useState("");
   const [org, setOrg] = useState(initialOrg);
   const [expiry, setExpiry] = useState<30 | 90 | 365>(90);
+  const [stackLifecycle, setStackLifecycle] = useState(false);
   const [submitted, setSubmitted] = useState(false);
   // Repopulates the org field when the dialog reopens after the user cleared
   // it. Belongs in a remount keyed by `open`; left as an effect for now because
@@ -319,10 +333,15 @@ function MintDialog({
     }
   }, [initialOrg, open, org]);
   const mint = useMutation({
-    mutationFn: () => api.serviceAccounts.create(org, { name: name.trim(), expiresInDays: expiry }),
+    mutationFn: () => api.serviceAccounts.create(org, {
+      name: name.trim(),
+      expiresInDays: expiry,
+      accessProfile: stackLifecycle ? "stack-lifecycle" : "deploy",
+    }),
     onSuccess: (value) => {
       setName("");
       setExpiry(90);
+      setStackLifecycle(false);
       setSubmitted(false);
       onMinted(value);
     },
@@ -345,8 +364,7 @@ function MintDialog({
         <DialogHeader>
           <DialogTitle>Mint service token</DialogTitle>
           <DialogDescription>
-            Creates an org-scoped CI identity. It can deploy existing stacks but cannot create,
-            delete, rename, or retag stacks.
+            Creates an org-scoped CI identity. Choose whether it can manage stack lifecycle.
           </DialogDescription>
         </DialogHeader>
         <form id="mint-service-token" onSubmit={submit}>
@@ -396,6 +414,22 @@ function MintDialog({
                   </SelectGroup>
                 </SelectContent>
               </Select>
+            </Field>
+            <Field orientation="horizontal">
+              <Checkbox
+                id="service-token-stack-lifecycle"
+                checked={stackLifecycle}
+                onCheckedChange={(checked) => setStackLifecycle(checked === true)}
+              />
+              <FieldContent>
+                <FieldLabel htmlFor="service-token-stack-lifecycle">
+                  Allow this token to create and delete stacks
+                </FieldLabel>
+                <FieldDescription>
+                  Intended for migrations and stack bootstrap. It still cannot rename or retag
+                  stacks, manage the organization, or act outside the selected organization.
+                </FieldDescription>
+              </FieldContent>
             </Field>
           </FieldGroup>
         </form>

@@ -7,6 +7,7 @@ import static org.junit.jupiter.api.Assertions.fail;
 import app.statedb.persistence.auth.ApiToken;
 import app.statedb.persistence.identity.OrgMember;
 import app.statedb.persistence.identity.Organization;
+import app.statedb.persistence.identity.ServiceAccountCreator;
 import app.statedb.persistence.identity.User;
 import app.statedb.testsupport.PulumiProject;
 import app.statedb.testsupport.RepoRoot;
@@ -22,6 +23,7 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
+import java.util.UUID;
 import java.util.concurrent.Callable;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -63,7 +65,15 @@ public abstract class PulumiSmokeBase {
 
   @Inject EntityManager em;
 
+  @Inject ServiceAccountCreator serviceAccountCreator;
+
   protected GenericContainer<?> pulumi;
+  protected String rawToken = RAW_TOKEN;
+  private UUID serviceAccountId;
+
+  protected boolean useServiceAccountLifecycleCredential() {
+    return false;
+  }
 
   // Protected (not package-private) so JUnit still discovers these lifecycle methods from
   // subclasses in the faults subpackage.
@@ -94,7 +104,7 @@ public abstract class PulumiSmokeBase {
         // Testcontainers re-download it for every test container and exhausted the old 90-minute
         // hosted job without ever starting a test.
         .withImagePullPolicy(imageName -> false)
-        .withEnv("PULUMI_ACCESS_TOKEN", RAW_TOKEN)
+        .withEnv("PULUMI_ACCESS_TOKEN", rawToken)
         .withEnv("PULUMI_CONFIG_PASSPHRASE", "test")
         .withEnv("PULUMI_HOME", "/tmp/pulumi-home")
         .withEnv("PULUMI_SKIP_CONFIRMATIONS", "true")
@@ -205,6 +215,15 @@ public abstract class PulumiSmokeBase {
               org.displayName = ORG;
               org.persistAndFlush();
 
+              if (useServiceAccountLifecycleCredential()) {
+                ServiceAccountCreator.MintedServiceAccount account =
+                    serviceAccountCreator.create(
+                        org.id, "Acme Test User", 30, ApiToken.AccessProfile.stack_lifecycle, null);
+                serviceAccountId = account.accountId();
+                rawToken = account.rawToken();
+                return;
+              }
+
               User user = new User();
               user.iss = "local:pulumi-cli-smoke";
               user.sub = ORG;
@@ -221,8 +240,8 @@ public abstract class PulumiSmokeBase {
               ApiToken token = new ApiToken();
               token.tokenHash = TestIdentity.sha256Hex(RAW_TOKEN);
               token.userId = user.id;
-              token.orgId = org.id;
-              token.kind = ApiToken.Kind.service_account;
+              token.kind = ApiToken.Kind.oidc;
+              token.orgId = null;
               token.expiresAt = java.time.Instant.now().plusSeconds(60 * 60);
               token.description = "pulumi cli smoke fixture";
               token.persistAndFlush();
@@ -230,6 +249,7 @@ public abstract class PulumiSmokeBase {
   }
 
   private void cleanupAcmeIdentity() {
+    UUID accountId = serviceAccountId;
     QuarkusTransaction.requiringNew()
         .run(
             () -> {
@@ -240,6 +260,11 @@ public abstract class PulumiSmokeBase {
                   .setParameter(1, "local:pulumi-cli-smoke")
                   .setParameter(2, ORG)
                   .executeUpdate();
+              if (accountId != null) {
+                User.deleteById(accountId);
+              }
             });
+    serviceAccountId = null;
+    rawToken = RAW_TOKEN;
   }
 }

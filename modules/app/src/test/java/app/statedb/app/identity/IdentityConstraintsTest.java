@@ -187,6 +187,22 @@ class IdentityConstraintsTest {
 
   @Test
   @TestTransaction
+  void oidcTokenCannotCarryServiceAccountAccessProfile() {
+    User user = newUser();
+    user.persistAndFlush();
+
+    ApiToken token = new ApiToken();
+    token.tokenHash = "sha256:" + "p".repeat(64);
+    token.userId = user.id;
+    token.kind = ApiToken.Kind.oidc;
+    token.accessProfile = ApiToken.AccessProfile.stack_lifecycle;
+    token.expiresAt = futureExpiry();
+
+    assertThrows(Exception.class, token::persistAndFlush);
+  }
+
+  @Test
+  @TestTransaction
   void orgMemberRoleIsConstrainedToKnownValues() {
     Organization org = newOrg("acme-role-check");
     org.persistAndFlush();

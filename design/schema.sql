@@ -40,6 +40,8 @@ CREATE TABLE public.api_tokens (
     created_by_user_id uuid,
     revoked_at timestamp with time zone,
     revoked_by_user_id uuid,
+    access_profile text DEFAULT 'deploy'::text NOT NULL,
+    CONSTRAINT api_tokens_access_profile_check CHECK ((((kind = 'oidc'::text) AND (access_profile = 'deploy'::text)) OR ((kind = 'service_account'::text) AND (access_profile = ANY (ARRAY['deploy'::text, 'stack_lifecycle'::text]))))),
     CONSTRAINT api_tokens_kind_check CHECK ((kind = ANY (ARRAY['oidc'::text, 'service_account'::text]))),
     CONSTRAINT api_tokens_org_scope CHECK ((((kind = 'service_account'::text) AND (org_id IS NOT NULL)) OR ((kind = 'oidc'::text) AND (org_id IS NULL))))
 );

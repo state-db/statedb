@@ -659,7 +659,7 @@ DELETE /api/stacks/{org}/{project}/{stack}?force=false
 ```json
 {
   "email": "test@example.com",
-  "githubLogin": "testorg",
+  "githubLogin": "Test User",
   "name": "Test User",
   "organizations": [
     {
@@ -1981,4 +1981,3 @@ null
 ```
 
 ---
-

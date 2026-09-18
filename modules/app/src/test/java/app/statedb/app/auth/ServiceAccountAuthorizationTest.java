@@ -4,6 +4,7 @@ import static io.restassured.RestAssured.given;
 import static org.hamcrest.Matchers.notNullValue;
 
 import app.statedb.persistence.auth.ApiToken;
+import app.statedb.persistence.auth.ApiToken.AccessProfile;
 import app.statedb.persistence.identity.Organization;
 import app.statedb.persistence.identity.ServiceAccountCreator;
 import app.statedb.persistence.identity.ServiceAccountRevoker;
@@ -20,8 +21,8 @@ import org.junit.jupiter.api.Test;
 
 /**
  * Pins the service role's grant set on the Pulumi surface: a CI token can run the deploy loop
- * (read, export, lock, encrypt) but holds no stack-lifecycle powers (create, delete, tags) and
- * nothing outside its org.
+ * (read, export, lock, encrypt); stack lifecycle is an explicit credential profile and neither
+ * profile grants anything outside its org.
  */
 @QuarkusTest
 class ServiceAccountAuthorizationTest {
@@ -132,6 +133,73 @@ class ServiceAccountAuthorizationTest {
   }
 
   @Test
+  void optedInStackLifecycleIsAllowedWithoutRenameOrTagAuthority() {
+    String lifecycleToken =
+        QuarkusTransaction.requiringNew()
+            .call(
+                () ->
+                    creator
+                        .create(orgId, "migration-bot", 30, AccessProfile.stack_lifecycle, null)
+                        .rawToken());
+
+    asToken(lifecycleToken)
+        .contentType("application/json")
+        .body(Map.of("stackName", "migrated", "tags", Map.of()))
+        .post("/pulumi/api/stacks/" + ORG + "/" + PROJECT)
+        .then()
+        .statusCode(200);
+
+    asToken(lifecycleToken)
+        .delete("/pulumi/api/stacks/" + ORG + "/" + PROJECT + "/migrated")
+        .then()
+        .statusCode(200);
+
+    asToken(lifecycleToken)
+        .contentType("application/json")
+        .body(Map.of("k", "v"))
+        .patch(BASE + "/tags")
+        .then()
+        .statusCode(403);
+
+    asToken(lifecycleToken)
+        .contentType("application/json")
+        .body(Map.of("newName", "renamed", "newProject", PROJECT))
+        .post(BASE + "/rename")
+        .then()
+        .statusCode(403);
+
+    asToken(lifecycleToken)
+        .contentType("application/json")
+        .body(Map.of("stackName", "outside", "tags", Map.of()))
+        .post("/pulumi/api/stacks/" + OTHER_ORG + "/" + PROJECT)
+        .then()
+        .statusCode(403);
+  }
+
+  @Test
+  void lifecycleProfileDoesNotOverrideProtectedStackGuardrail() {
+    String lifecycleToken =
+        QuarkusTransaction.requiringNew()
+            .call(
+                () ->
+                    creator
+                        .create(
+                            orgId, "migration-protected", 30, AccessProfile.stack_lifecycle, null)
+                        .rawToken());
+
+    asToken(lifecycleToken)
+        .contentType("application/json")
+        .body(Map.of("stackName", "prod", "tags", Map.of()))
+        .post("/pulumi/api/stacks/" + ORG + "/" + PROJECT)
+        .then()
+        .statusCode(200);
+    asToken(lifecycleToken)
+        .delete("/pulumi/api/stacks/" + ORG + "/" + PROJECT + "/prod")
+        .then()
+        .statusCode(403);
+  }
+
+  @Test
   void crossOrgCollapsesTo404() {
     // single_org credential scope: the other org's stack is invisible, not forbidden.
     asService()
@@ -162,6 +230,10 @@ class ServiceAccountAuthorizationTest {
   }
 
   private io.restassured.specification.RequestSpecification asService() {
-    return given().header("Authorization", "token " + rawToken).when();
+    return asToken(rawToken);
+  }
+
+  private io.restassured.specification.RequestSpecification asToken(String token) {
+    return given().header("Authorization", "token " + token).when();
   }
 }

@@ -2,6 +2,7 @@ package app.statedb.consoleapi.serviceaccount;
 
 import app.statedb.consoleapi.auth.SessionPrincipal;
 import app.statedb.persistence.RequestValidationException;
+import app.statedb.persistence.auth.ApiToken.AccessProfile;
 import app.statedb.persistence.authz.Authorize;
 import app.statedb.persistence.authz.AuthorizedResource;
 import app.statedb.persistence.authz.CurrentPrincipal;
@@ -58,9 +59,18 @@ public class ServiceAccountsResource {
     }
     Organization target = authorized.subject(Organization.class);
     MintedServiceAccount minted =
-        creator.create(target.id, body.name, body.expiresInDays, currentPrincipal.get().userId());
+        creator.create(
+            target.id,
+            body.name,
+            body.expiresInDays,
+            body.accessProfile,
+            currentPrincipal.get().userId());
     return new CreatedServiceAccountDto(
-        minted.accountId(), minted.name(), minted.rawToken(), minted.expiresAt());
+        minted.accountId(),
+        minted.name(),
+        minted.rawToken(),
+        minted.expiresAt(),
+        minted.accessProfile());
   }
 
   @GET
@@ -97,6 +107,9 @@ public class ServiceAccountsResource {
 
     @JsonProperty("expiresInDays")
     public Integer expiresInDays;
+
+    @JsonProperty("accessProfile")
+    public AccessProfile accessProfile;
   }
 
   /** The one-time create response — the only place the raw token ever appears. */
@@ -104,12 +117,14 @@ public class ServiceAccountsResource {
       @JsonProperty("id") UUID id,
       @JsonProperty("name") String name,
       @JsonProperty("token") String token,
-      @JsonProperty("expiresAt") Instant expiresAt) {}
+      @JsonProperty("expiresAt") Instant expiresAt,
+      @JsonProperty("accessProfile") AccessProfile accessProfile) {}
 
   public record ServiceAccountDto(
       @JsonProperty("id") UUID id,
       @JsonProperty("tokenId") UUID tokenId,
       @JsonProperty("name") String name,
+      @JsonProperty("accessProfile") AccessProfile accessProfile,
       @JsonProperty("org") String org,
       @JsonProperty("orgDisplayName") String orgDisplayName,
       @JsonProperty("createdAt") Instant createdAt,
@@ -129,6 +144,7 @@ public class ServiceAccountsResource {
           v.id(),
           v.tokenId(),
           v.name(),
+          v.accessProfile(),
           v.orgName(),
           v.orgDisplayName(),
           v.createdAt(),

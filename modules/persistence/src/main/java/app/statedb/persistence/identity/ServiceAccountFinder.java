@@ -23,7 +23,7 @@ public class ServiceAccountFinder {
     return em.createQuery(
             """
             SELECT new app.statedb.persistence.identity.ServiceAccountView(
-              u.id, t.id, u.displayName, o.name, o.displayName, t.createdAt,
+              u.id, t.id, u.displayName, t.accessProfile, o.name, o.displayName, t.createdAt,
               t.expiresAt, t.lastUsedAt, t.revokedAt, u.deactivatedAt,
               t.createdByUserId, creator.displayName, creator.email,
               t.revokedByUserId, revoker.displayName, revoker.email)
@@ -53,7 +53,7 @@ public class ServiceAccountFinder {
         em.createQuery(
                 """
             SELECT new app.statedb.persistence.identity.ServiceAccountView(
-              u.id, t.id, u.displayName, o.name, o.displayName, t.createdAt,
+              u.id, t.id, u.displayName, t.accessProfile, o.name, o.displayName, t.createdAt,
               t.expiresAt, t.lastUsedAt, t.revokedAt, u.deactivatedAt,
               t.createdByUserId, creator.displayName, creator.email,
               t.revokedByUserId, revoker.displayName, revoker.email)

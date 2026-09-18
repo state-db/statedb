@@ -12,6 +12,7 @@ import app.statedb.persistence.stack.WorkspaceListFinder;
 import app.statedb.persistence.stack.WorkspaceSummary;
 import app.statedb.persistence.update.ConsoleUpdateHistoryFinder;
 import app.statedb.persistence.update.StackUpdate;
+import app.statedb.persistence.update.UpdateActorAttribution;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.node.JsonNodeFactory;
 import jakarta.inject.Inject;
@@ -184,6 +185,7 @@ public class WorkspacesResource {
                         update.status.wireValue(),
                         update.message != null ? update.message : update.description,
                         history.summaries().get(update.id),
+                        toActorResponse(history.actors().get(update.id)),
                         update.startedAt,
                         update.endedAt))
             .toList();
@@ -231,10 +233,18 @@ public class WorkspacesResource {
                 summary.lock().id(), summary.lock().lockedBy(), summary.lock().lockedAt()));
   }
 
-  private static ActorResponse toActorResponse(WorkspaceSummary.Actor actor) {
+  private static ActorResponse toActorResponse(UpdateActorAttribution actor) {
     return actor == null
         ? null
-        : new ActorResponse(actor.displayName(), actor.email(), actor.fallback());
+        : new ActorResponse(
+            actor.kind(),
+            actor.principalId(),
+            actor.credentialId(),
+            actor.displayName(),
+            actor.email(),
+            actor.fallback(),
+            actor.accessProfile(),
+            actor.revoked());
   }
 
   public record WorkspaceResponse(
@@ -252,7 +262,15 @@ public class WorkspacesResource {
   public record LastUpdateResponse(
       String kind, String status, Instant startedAt, int version, ActorResponse actor) {}
 
-  public record ActorResponse(String displayName, String email, String fallback) {}
+  public record ActorResponse(
+      String kind,
+      UUID principalId,
+      UUID credentialId,
+      String displayName,
+      String email,
+      String fallback,
+      String accessProfile,
+      boolean revoked) {}
 
   public record LockResponse(UUID lockId, String lockedBy, Instant lockedAt) {}
 
@@ -291,6 +309,7 @@ public class WorkspacesResource {
       String status,
       String message,
       JsonNode summary,
+      ActorResponse actor,
       Instant startedAt,
       Instant endedAt) {}
 }

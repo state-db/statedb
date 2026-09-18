@@ -173,15 +173,28 @@ describe("stack resource presentation", () => {
   });
 
   test("labels the last update actor from the richest available identity field", () => {
+    const actor = {
+      kind: "service" as const,
+      principalId: "principal-id",
+      credentialId: "credential-id",
+      accessProfile: "deploy" as const,
+    };
     expect(
-      lastUpdateActorLabel({ displayName: "Deploy Bot", email: null, fallback: "opaque" }),
+      lastUpdateActorLabel({ ...actor, displayName: "Deploy Bot", email: null, fallback: "opaque", revoked: false }),
     ).toBe("Deploy Bot");
     expect(
-      lastUpdateActorLabel({ displayName: null, email: "ops@example.test", fallback: "opaque" }),
+      lastUpdateActorLabel({ ...actor, displayName: null, email: "ops@example.test", fallback: "opaque", revoked: false }),
     ).toBe("ops@example.test");
     expect(
-      lastUpdateActorLabel({ displayName: null, email: null, fallback: "opaque" }),
+      lastUpdateActorLabel({ ...actor, displayName: null, email: null, fallback: "opaque", revoked: false }),
     ).toBe("opaque");
+    expect(lastUpdateActorLabel({
+      ...actor,
+      displayName: "Deploy Bot",
+      email: null,
+      fallback: "opaque",
+      revoked: true,
+    })).toBe("Deploy Bot (revoked)");
   });
 
   test("ranks well-known identity keys ahead of everything else", () => {

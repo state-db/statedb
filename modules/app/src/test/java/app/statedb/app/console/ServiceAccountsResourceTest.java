@@ -65,13 +65,21 @@ class ServiceAccountsResourceTest {
         given()
             .cookie(session.getName(), session.getValue())
             .contentType("application/json")
-            .body(Map.of("name", "GitHub Actions deploy", "expiresInDays", 90))
+            .body(
+                Map.of(
+                    "name",
+                    "GitHub Actions deploy",
+                    "expiresInDays",
+                    90,
+                    "accessProfile",
+                    "stack-lifecycle"))
             .when()
             .post(SA_PATH);
     created.then().statusCode(200);
     String accountId = created.path("id");
     String token = created.path("token");
     assertNotNull(token, "create response carries the raw token");
+    created.then().body("accessProfile", org.hamcrest.Matchers.equalTo("stack-lifecycle"));
 
     // The minted token drives the Pulumi surface.
     given()
@@ -79,7 +87,8 @@ class ServiceAccountsResourceTest {
         .when()
         .get("/pulumi/api/user")
         .then()
-        .statusCode(200);
+        .statusCode(200)
+        .body("githubLogin", org.hamcrest.Matchers.equalTo("GitHub Actions deploy"));
 
     given()
         .cookie(session.getName(), session.getValue())
@@ -90,6 +99,7 @@ class ServiceAccountsResourceTest {
         .body("size()", org.hamcrest.Matchers.is(1))
         .body("[0].id", org.hamcrest.Matchers.equalTo(accountId))
         .body("[0].name", org.hamcrest.Matchers.equalTo("GitHub Actions deploy"))
+        .body("[0].accessProfile", org.hamcrest.Matchers.equalTo("stack-lifecycle"))
         .body("[0].token", org.hamcrest.Matchers.nullValue())
         .body("[0].createdByName", org.hamcrest.Matchers.equalTo("Alice Example"));
 
@@ -185,6 +195,35 @@ class ServiceAccountsResourceTest {
         .post(SA_PATH)
         .then()
         .statusCode(400);
+  }
+
+  @Test
+  void omittedProfileDefaultsToDeployAndDuplicateActiveNamesAreAllowed() {
+    Cookie session = establishSession(OrgMember.Role.owner);
+    Map<String, Object> request = Map.of("name", "rotation-name", "expiresInDays", 30);
+
+    for (int i = 0; i < 2; i++) {
+      given()
+          .cookie(session.getName(), session.getValue())
+          .contentType("application/json")
+          .body(request)
+          .when()
+          .post(SA_PATH)
+          .then()
+          .statusCode(200)
+          .body("accessProfile", org.hamcrest.Matchers.equalTo("deploy"));
+    }
+
+    given()
+        .cookie(session.getName(), session.getValue())
+        .when()
+        .get(SA_PATH)
+        .then()
+        .statusCode(200)
+        .body("size()", org.hamcrest.Matchers.is(2))
+        .body(
+            "name",
+            org.hamcrest.Matchers.everyItem(org.hamcrest.Matchers.equalTo("rotation-name")));
   }
 
   @Test

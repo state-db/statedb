@@ -25,12 +25,35 @@ public record AuthenticatedPrincipal(UUID userId, String iss, String sub, Creden
         userId,
         iss,
         sub,
+        tokenOrgId,
+        tokenOrgName,
+        tokenOrgRole,
+        tokenKind,
+        apiTokenId,
+        ApiToken.AccessProfile.deploy);
+  }
+
+  public AuthenticatedPrincipal(
+      UUID userId,
+      String iss,
+      String sub,
+      UUID tokenOrgId,
+      String tokenOrgName,
+      OrgMember.Role tokenOrgRole,
+      ApiToken.Kind tokenKind,
+      UUID apiTokenId,
+      ApiToken.AccessProfile accessProfile) {
+    this(
+        userId,
+        iss,
+        sub,
         new Credential(
             switch (tokenKind) {
               case oidc -> CredentialKind.oidc_cli_token;
               case service_account -> CredentialKind.service_account_token;
             },
             apiTokenId,
+            accessProfile,
             tokenOrgId == null
                 ? CredentialScope.allCurrentMemberships()
                 : CredentialScope.singleOrg(tokenOrgId, tokenOrgName, tokenOrgRole)));
@@ -42,7 +65,10 @@ public record AuthenticatedPrincipal(UUID userId, String iss, String sub, Creden
         iss,
         sub,
         new Credential(
-            CredentialKind.console_session, null, CredentialScope.allCurrentMemberships()));
+            CredentialKind.console_session,
+            null,
+            ApiToken.AccessProfile.deploy,
+            CredentialScope.allCurrentMemberships()));
   }
 
   public UUID apiTokenId() {
@@ -60,7 +86,8 @@ public record AuthenticatedPrincipal(UUID userId, String iss, String sub, Creden
   }
 
   /** How the request authenticated, and which orgs that credential may be used against. */
-  public record Credential(CredentialKind kind, UUID id, CredentialScope scope) {}
+  public record Credential(
+      CredentialKind kind, UUID id, ApiToken.AccessProfile accessProfile, CredentialScope scope) {}
 
   public enum CredentialScopeKind {
     all_current_memberships,

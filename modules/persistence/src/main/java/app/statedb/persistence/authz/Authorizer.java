@@ -1,5 +1,6 @@
 package app.statedb.persistence.authz;
 
+import app.statedb.persistence.auth.ApiToken;
 import app.statedb.persistence.auth.AuthenticatedPrincipal;
 import app.statedb.persistence.identity.AdminAllowList;
 import app.statedb.persistence.identity.OrgMember;
@@ -23,6 +24,7 @@ import java.util.Set;
 public class Authorizer {
 
   static final EntityUID ADMIN = CedarEntities.role("admin");
+  static final EntityUID SERVICE_STACK_LIFECYCLE = CedarEntities.role("service_stack_lifecycle");
 
   private static final Set<Entity> ROLE_HIERARCHY = roleHierarchy();
 
@@ -69,6 +71,12 @@ public class Authorizer {
     if (role != null) {
       parents.add(CedarEntities.role(role.name()));
     }
+    if (role == OrgMember.Role.service
+        && principal.credential().kind()
+            == AuthenticatedPrincipal.CredentialKind.service_account_token
+        && principal.credential().accessProfile() == ApiToken.AccessProfile.stack_lifecycle) {
+      parents.add(SERVICE_STACK_LIFECYCLE);
+    }
     if (adminAllowList.isAdmin(principal.iss(), principal.sub())) {
       parents.add(ADMIN);
     }
@@ -91,6 +99,7 @@ public class Authorizer {
         new Entity(member, Set.of(viewer)),
         new Entity(owner, Set.of(member)),
         new Entity(CedarEntities.role("service")),
+        new Entity(SERVICE_STACK_LIFECYCLE, Set.of(CedarEntities.role("service"))),
         new Entity(ADMIN));
   }
 }

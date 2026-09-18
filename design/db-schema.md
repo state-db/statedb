@@ -28,6 +28,7 @@ Forward compatibility for OpenTofu: the `workspaces` parent table provides type-
 | 12 | **`update_events` first-class** | Event payloads from `events/batch` are decoded and queryable per update; BRIN index on `created_at` enables cheap time-bounded vacuum |
 | 13 | **OIDC users + `org_members`** | Console authn via configurable OIDC providers; org membership decoupled from token ownership; admin set is env-driven, not stored in DB |
 | 14 | **Surrogate UUIDv7 PK on every mutable entity** | All mutable entities carry their own `id UUID PRIMARY KEY` and extend `BaseEntity` / `TimestampedEntity`. 1:1 lifecycle binding to a parent is expressed via `UNIQUE FK + ON DELETE CASCADE`, never a shared PK. Keeps the entity layer uniform (no `@MapsId` edge cases) at the cost of one extra UUID column on `stack_state` / `stack_locks`. `org_members` remains the only exception — composite-PK association tables fit nothing else. |
+| 15 | **Immutable service account token access profile** | `api_tokens.access_profile` belongs to the credential rather than `org_members`: `deploy` preserves least-privilege CI access, while `stack_lifecycle` adds only stack create/delete for migrations and bootstrap. Existing and omitted values default to `deploy`; OIDC credentials are constrained to `deploy`. Elevation/de-elevation requires mint-and-revoke rotation so a deployed secret never changes authority silently. |
 
 ---
 
@@ -38,7 +39,7 @@ Forward compatibility for OpenTofu: the `workspaces` parent table provides type-
 | `organizations` | Top-level tenant boundary |
 | `projects` | Belongs to org, renameable |
 | `stacks` | Belongs to project, renameable |
-| `api_tokens` | Authenticates Pulumi CLI requests (hashed); `kind` separates short-lived OIDC tokens from long-lived service-account tokens |
+| `api_tokens` | Authenticates Pulumi CLI requests (hashed); `kind` separates short-lived OIDC tokens from long-lived service-account tokens, and immutable `access_profile` selects the service credential's reviewed authority set |
 | `snapshots` | Full DeploymentV3 checkpoint at compaction points |
 | `stack_state` | Per-stack pointer to the current snapshot and journal position |
 | `stack_updates` | One row per operation (preview/update/destroy/refresh/import) |

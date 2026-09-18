@@ -16,3 +16,13 @@ permit(
   ],
   resource
 );
+
+@id("ServiceAccountStackLifecycle")
+// Opt-in migration/bootstrap authority. The credential profile is adapted to
+// this role only after the ordinary service membership resolves in the target
+// org, so it cannot widen the token's single-org scope.
+permit(
+  principal in Role::"service_stack_lifecycle",
+  action in [Action::"stack:Create", Action::"stack:Delete"],
+  resource
+);
