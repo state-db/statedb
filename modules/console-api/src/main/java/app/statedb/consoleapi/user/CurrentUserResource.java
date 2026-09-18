@@ -41,6 +41,8 @@ public class CurrentUserResource {
 
     return new UserResponse(
         user.id,
+        principal.iss(),
+        principal.sub(),
         user.email,
         user.displayName,
         adminAllowList.isAdmin(principal.iss(), principal.sub()),
@@ -49,6 +51,8 @@ public class CurrentUserResource {
 
   public record UserResponse(
       UUID id,
+      String iss,
+      String sub,
       String email,
       String name,
       boolean siteAdmin,

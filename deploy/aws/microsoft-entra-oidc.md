@@ -152,7 +152,9 @@ The reliable first-admin procedure is:
 
 1. Configure the provider and let the intended administrator sign in once.
    This creates a non-admin `users` row even if the allow-list is not ready.
-2. Read the exact `iss` and `sub` from PostgreSQL:
+2. While signed in, open `https://<state-db-host>/api/user` in the browser and
+   copy the exact `iss` and `sub` values from the JSON response. If the browser
+   session is unavailable, read the same values from PostgreSQL:
 
    ```sql
    SELECT iss, sub, email, last_login_at

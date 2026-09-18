@@ -65,6 +65,8 @@ export interface OrgMembership {
 
 export interface CurrentUser {
   id: string;
+  iss: string;
+  sub: string;
   email: string | null;
   name: string | null;
   siteAdmin: boolean;

@@ -183,6 +183,8 @@ class OidcLoginFlowTest {
         .then()
         .statusCode(200)
         .body("id", not(emptyOrNullString()))
+        .body("iss", equalTo("https://server.example.com"))
+        .body("sub", equalTo("123456"))
         .body("siteAdmin", equalTo(false))
         .body("organizations", hasSize(0));
   }
