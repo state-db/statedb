@@ -5,6 +5,7 @@ import {
   changeSummary,
   formatEventLine,
   formatRunDuration,
+  jsonDiffLines,
   maskConfig,
   propertyChanges,
   resourceChanges,
@@ -145,6 +146,46 @@ describe("run detail presentation", () => {
       severity: null,
       payload: { resOutputsEvent: { metadata: { op: "same", type: "pulumi:pulumi:Stack", new: { outputs: { endpoint: "https://example.test" } } } } },
     }])).toEqual({ endpoint: "https://example.test" });
+  });
+
+  test("renders coarse diffs from inputs without treating provider-only outputs as deletions", () => {
+    const metadata = {
+      op: "update",
+      old: {
+        inputs: { settings: { configured: "old" } },
+        outputs: { settings: { configured: "old", providerOnly: "computed" } },
+      },
+      new: { inputs: { settings: { configured: "new" } } },
+      diffs: ["settings"],
+      detailedDiff: null,
+    };
+
+    expect(jsonDiffLines(propertyChanges(metadata)).map((line) => line.text)).toEqual([
+      "settings: {",
+      "configured: \"old\" → \"new\"",
+      "}",
+    ]);
+  });
+
+  test("preserves Pulumi's distinction between absent and empty detailed diffs", () => {
+    const state = {
+      old: { inputs: { setting: "old" }, outputs: { setting: "old" } },
+      new: { inputs: { setting: "new" } },
+      diffs: ["setting"],
+    };
+
+    expect(propertyChanges({ ...state, detailedDiff: null })).toHaveLength(1);
+    expect(propertyChanges({ ...state, detailedDiff: {} })).toEqual([]);
+  });
+
+  test("uses old outputs only for an explicitly state-aware detailed diff", () => {
+    expect(propertyChanges({
+      old: { inputs: { setting: "input" }, outputs: { setting: "provider-state" } },
+      new: { inputs: { setting: "desired" } },
+      detailedDiff: { setting: { diffKind: "update", inputDiff: false } },
+    })).toEqual([
+      { path: "setting", kind: "update", oldValue: "provider-state", newValue: "desired", internal: false },
+    ]);
   });
 
   test("masks the engine's unknown-value sentinel in preview outputs", () => {

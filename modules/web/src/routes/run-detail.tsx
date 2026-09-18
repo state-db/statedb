@@ -858,14 +858,18 @@ export function propertyChanges(metadata: Record<string, unknown>): PropertyChan
   const oldInputs = isRecord(oldState.inputs) ? oldState.inputs : {};
   const oldOutputs = isRecord(oldState.outputs) ? oldState.outputs : {};
   const newInputs = isRecord(newState.inputs) ? newState.inputs : {};
-  const detailed = isRecord(metadata.detailedDiff) ? metadata.detailedDiff : {};
+  const detailed = isRecord(metadata.detailedDiff) ? metadata.detailedDiff : null;
   const hidden = Array.isArray(newState.hideDiffs) ? newState.hideDiffs.map(String) : [];
-  const paths = Object.keys(detailed).length > 0
+  const paths = detailed !== null
     ? Object.keys(detailed)
     : Array.isArray(metadata.diffs) ? metadata.diffs.map(String) : changedTopLevelKeys(oldInputs, newInputs);
   return paths.filter((path) => !hidden.some((hiddenPath) => path === hiddenPath || path.startsWith(`${hiddenPath}.`) || path.startsWith(`${hiddenPath}[`))).sort().map((path) => {
-    const diff = isRecord(detailed[path]) ? detailed[path] : {};
-    const oldValues = diff.inputDiff === true ? oldInputs : oldOutputs;
+    const diff = detailed !== null && isRecord(detailed[path]) ? detailed[path] : {};
+    // inputDiff selects old inputs or old provider state only for a detailed provider diff.
+    // Pulumi's coarse preview/update fallback compares old and new inputs, with `diffs` as
+    // a top-level inclusion filter; treating a missing inputDiff as false invents deletions
+    // for provider-computed fields that exist only in old outputs.
+    const oldValues = detailed === null || diff.inputDiff === true ? oldInputs : oldOutputs;
     return {
       path,
       kind: asText(diff.diffKind, inferDiffKind(readPropertyPath(oldValues, path), readPropertyPath(newInputs, path))),
