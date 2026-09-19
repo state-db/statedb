@@ -573,7 +573,15 @@ acme / networking / prod  ·  Update v14        ✓ succeeded · 2m 14s
   stripping escape codes (util in foundation if needed).
 - **Changes tab**: derived from `resourcePre`/`resOutputs`/`resOpFailed` events:
   op → colored badge (create green, update amber, delete red, replace purple,
-  same hidden by default with a "show unchanged" `Checkbox`).
+  same hidden by default. No-diff `refresh` rows describe resources visited by
+  a refresh phase, including `preview --refresh` and `up --refresh`; they are
+  activity, not evidence of a state change. Actual changes render first.
+  Unchanged resources and no-diff refresh activity are summarized by count and
+  available behind one `Checkbox`, so they cannot bury a meaningful change.
+  A completed refresh with no actual changes shows "No drift detected"; a live
+  run reports that more results may arrive. A meaningful operation without a
+  displayable property diff remains visible and explains that Pulumi supplied
+  the operation without property-level details.
 - **Configuration tab**: from `stack_updates.config/options/metadata` — config
   keys with `secret: true` masked.
 

@@ -3,9 +3,11 @@ import {
   ArrowDown,
   ChevronDown,
   CircleAlert,
+  CircleCheck,
   EyeOff,
   GitBranch,
   Monitor,
+  RefreshCw,
   Settings2,
 } from "lucide-react";
 import { Fragment, useEffect, useMemo, useRef, useState } from "react";
@@ -44,7 +46,7 @@ import { cn } from "@/lib/utils";
 
 type RunLocator = { version: number } | { previewId: string };
 type RunFetcher = typeof api.workspaces.run;
-type ResourceChange = { sequence: number; op: string; type: string; name: string; detail: unknown };
+type ResourceChange = { sequence: number; urn: string; op: string; type: string; name: string; detail: unknown };
 type ResourceDisplayRow = ResourceChange & {
   urn: string;
   parent: string;
@@ -228,7 +230,13 @@ function RunView({
           <RunLog events={events} error={eventsError} live={run.status === "in-progress"} preview={run.version === null} />
         </TabsContent>
         <TabsContent value="changes" className="mt-4">
-          <RunChanges events={events} collapseReplacements={run.version === null || run.status !== "in-progress"} live={live} preview={run.version === null} />
+          <RunChanges
+            events={events}
+            collapseReplacements={run.version === null || run.status !== "in-progress"}
+            live={live}
+            preview={run.version === null}
+            refresh={run.kind === "refresh"}
+          />
         </TabsContent>
         <TabsContent value="configuration" className="mt-4">
           <Configuration run={run} events={events} />
@@ -450,82 +458,149 @@ function SummaryLogLine({ event, preview }: { event: RunEvent; preview: boolean 
   return <div className="mt-5 border-t border-shelf pt-4"><LogLine event={event} preview={preview} /></div>;
 }
 
-function RunChanges({ events, collapseReplacements, live, preview }: { events: RunEvent[]; collapseReplacements: boolean; live: boolean; preview: boolean }) {
-  const [showUnchanged, setShowUnchanged] = useState(false);
+function RunChanges({ events, collapseReplacements, live, preview, refresh }: {
+  events: RunEvent[];
+  collapseReplacements: boolean;
+  live: boolean;
+  preview: boolean;
+  refresh: boolean;
+}) {
+  const [showActivity, setShowActivity] = useState(false);
   const [showInternal, setShowInternal] = useState(false);
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
-  const changes = useMemo(() => resourceChanges(events, collapseReplacements), [events, collapseReplacements]);
-  const visible = showUnchanged ? changes : changes.filter((change) => change.op !== "same");
-  const rows = useMemo(() => visible.map((change) => ({ change, allProperties: resourcePropertyChanges(change) })), [visible]);
+  const groups = useMemo(() => resourceChangeGroups(events, collapseReplacements), [events, collapseReplacements]);
+  const backgroundActivity = useMemo(() => [...groups.unchanged, ...groups.activity], [groups]);
+  // Actual changes always lead. Resource visits and no-op outcomes are
+  // available on demand, but can never bury a meaningful change.
+  const rows = useMemo(() => {
+    const visible = showActivity ? [...groups.changed, ...backgroundActivity] : groups.changed;
+    return visible.map((change) => ({ change, allProperties: resourcePropertyChanges(change) }));
+  }, [backgroundActivity, groups, showActivity]);
   const internalCount = useMemo(() => rows.reduce((sum, row) => sum + row.allProperties.filter((p) => p.internal).length, 0), [rows]);
+  const empty = changesEmptyState(refresh, live, groups);
   return (
     <div className="flex flex-col gap-3">
-      <div className="flex items-center gap-4">
-        <div className="flex items-center gap-2"><Checkbox id="show-unchanged" checked={showUnchanged} onCheckedChange={(value) => setShowUnchanged(value === true)} /><Label htmlFor="show-unchanged">Show unchanged</Label></div>
-        {internalCount > 0 && (
-          <div className="flex items-center gap-2">
-            <Checkbox id="show-internal" checked={showInternal} onCheckedChange={(value) => setShowInternal(value === true)} />
-            <Label htmlFor="show-internal">Show internal properties ({internalCount})</Label>
-          </div>
-        )}
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <p className="text-sm text-muted-foreground" aria-live={live ? "polite" : undefined}>
+          {formatChangeCounts(groups, live)}
+        </p>
+        <div className="flex flex-wrap items-center gap-4">
+          {backgroundActivity.length > 0 && (
+            <div className="flex items-center gap-2">
+              <Checkbox id="show-change-activity" checked={showActivity} onCheckedChange={(value) => setShowActivity(value === true)} />
+              <Label htmlFor="show-change-activity">Show unchanged and refresh activity ({backgroundActivity.length})</Label>
+            </div>
+          )}
+          {internalCount > 0 && (
+            <div className="flex items-center gap-2">
+              <Checkbox id="show-internal" checked={showInternal} onCheckedChange={(value) => setShowInternal(value === true)} />
+              <Label htmlFor="show-internal">Show internal properties ({internalCount})</Label>
+            </div>
+          )}
+        </div>
       </div>
-      <div className="rounded-lg border bg-card">
-        <Table>
-          <TableHeader><TableRow><TableHead>Operation</TableHead><TableHead>Type</TableHead><TableHead>Name</TableHead><TableHead><span className="sr-only">Toggle diff</span></TableHead></TableRow></TableHeader>
-          <TableBody>
-            {rows.length === 0 ? <TableRow><TableCell colSpan={4} className="h-24 text-center text-muted-foreground">No resource changes recorded.</TableCell></TableRow> : rows.map(({ change, allProperties }) => {
+      {rows.length === 0 ? (
+        <EmptyState
+          icon={refresh && live ? RefreshCw : CircleCheck}
+          title={empty.title}
+          description={empty.description}
+          className="min-h-56"
+        />
+      ) : (
+        <div className="rounded-lg border bg-card">
+          <Table>
+            <TableHeader><TableRow><TableHead>Operation</TableHead><TableHead>Type</TableHead><TableHead>Name</TableHead><TableHead><span className="sr-only">Property details</span></TableHead></TableRow></TableHeader>
+            <TableBody>
+              {rows.map(({ change, allProperties }) => {
               const key = `${change.sequence}-${change.name}`;
               const properties = allProperties.filter((p) => showInternal || !p.internal);
               const hiddenInternal = allProperties.length - properties.length;
               const lineCount = jsonDiffLines(properties).length;
               const autoExpanded = properties.length > 0 && properties.length <= 6 && lineCount <= 12;
               const open = expanded[key] ?? autoExpanded;
+              const detailId = `change-detail-${change.sequence}`;
               const toggle = () => setExpanded((current) => ({ ...current, [key]: !open }));
               return (
                 <Fragment key={key}>
-                  <TableRow
-                    className="cursor-pointer"
-                    tabIndex={0}
-                    aria-expanded={open}
-                    onClick={toggle}
-                    onKeyDown={(event) => {
-                      if (event.key === "Enter" || event.key === " ") {
-                        event.preventDefault();
-                        toggle();
-                      }
-                    }}
-                  >
+                  <TableRow>
                     <TableCell><OperationBadge op={change.op} /></TableCell>
                     <TableCell className="font-mono text-xs">{change.type}</TableCell>
                     <TableCell>{change.name}</TableCell>
                     <TableCell className="text-right text-xs text-muted-foreground">
                       <span className="inline-flex items-center gap-2 whitespace-nowrap">
-                        {properties.length > 0 ? `${properties.length} ${properties.length === 1 ? "property" : "properties"}` : "No property details"}
-                        <ChevronDown className={cn("transition-transform", open && "rotate-180")} aria-hidden="true" />
+                        {propertyDetailLabel(properties.length, hiddenInternal)}
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          aria-label={`${open ? "Hide" : "Show"} details for ${change.name}`}
+                          aria-expanded={open}
+                          aria-controls={detailId}
+                          onClick={toggle}
+                        >
+                          <ChevronDown className={cn("transition-transform", open && "rotate-180")} />
+                        </Button>
                       </span>
                     </TableCell>
                   </TableRow>
                   {open && (
                     <TableRow>
                       <TableCell colSpan={4} className="p-0">
-                        <InlineJsonDiff properties={properties} hiddenInternal={hiddenInternal} />
+                        <div id={detailId}>
+                          <InlineJsonDiff properties={properties} hiddenInternal={hiddenInternal} operation={change.op} refresh={refresh} />
+                        </div>
                       </TableCell>
                     </TableRow>
                   )}
                 </Fragment>
               );
-            })}
-          </TableBody>
-        </Table>
-      </div>
+              })}
+            </TableBody>
+          </Table>
+        </div>
+      )}
       {live && (
         <p className="flex items-center gap-2 text-sm text-muted-foreground">
           <LiveDot className="text-primary" />
-          {preview ? "Preview" : "Update"} in progress · more changes may still arrive
+          {refresh ? "Refresh" : preview ? "Preview" : "Update"} in progress · more changes may still arrive
         </p>
       )}
     </div>
   );
+}
+
+function changesEmptyState(refresh: boolean, live: boolean, groups: ReturnType<typeof resourceChangeGroups>) {
+  if (live) {
+    return refresh
+      ? { title: "Checking for drift", description: "No state changes found yet. Refresh results will appear here as they arrive." }
+      : { title: "No changes yet", description: "No state changes have arrived yet. This view updates while the run is in progress." };
+  }
+  if (refresh && groups.activity.length === 0 && groups.unchanged.length > 0) {
+    return { title: "No drift detected", description: `Pulumi checked ${resourceCount(groups.unchanged.length)} and found no state changes.` };
+  }
+  if (groups.activity.length > 0 || groups.unchanged.length > 0) {
+    return {
+      title: "No state changes",
+      description: `${resourceCount(groups.activity.length + groups.unchanged.length)} were checked without a displayable state change.`,
+    };
+  }
+  return { title: "No resource changes recorded", description: "This run did not record any resource changes." };
+}
+
+function formatChangeCounts(groups: ReturnType<typeof resourceChangeGroups>, live: boolean) {
+  const changes = `${groups.changed.length} ${groups.changed.length === 1 ? "state change" : "state changes"}${live ? " so far" : ""}`;
+  const parts = [changes, `${groups.unchanged.length} unchanged`];
+  if (groups.activity.length > 0) parts.push(`${groups.activity.length} refresh ${groups.activity.length === 1 ? "visit" : "visits"}`);
+  return parts.join(" · ");
+}
+
+function resourceCount(count: number) {
+  return `${count} ${count === 1 ? "resource" : "resources"}`;
+}
+
+function propertyDetailLabel(propertyCount: number, hiddenInternal: number) {
+  if (propertyCount > 0) return `${propertyCount} ${propertyCount === 1 ? "property" : "properties"}`;
+  if (hiddenInternal > 0) return `${hiddenInternal} internal ${hiddenInternal === 1 ? "property" : "properties"} hidden`;
+  return "No property-level diff";
 }
 
 function LiveDot({ className }: { className?: string }) {
@@ -552,7 +627,12 @@ function resourcePropertyChanges(change: ResourceChange) {
   return propertyChanges(isRecord(envelope.metadata) ? envelope.metadata : envelope);
 }
 
-function InlineJsonDiff({ properties, hiddenInternal }: { properties: PropertyChange[]; hiddenInternal: number }) {
+function InlineJsonDiff({ properties, hiddenInternal, operation, refresh }: {
+  properties: PropertyChange[];
+  hiddenInternal: number;
+  operation: string;
+  refresh: boolean;
+}) {
   if (properties.length === 0) {
     if (hiddenInternal > 0) {
       return (
@@ -567,7 +647,12 @@ function InlineJsonDiff({ properties, hiddenInternal }: { properties: PropertyCh
         </div>
       );
     }
-    return <div className="p-4"><Alert><CircleAlert /><AlertTitle>No property-level diff</AlertTitle><AlertDescription>Pulumi recorded the resource operation without changed property details.</AlertDescription></Alert></div>;
+    const description = refresh
+      ? operation === "delete"
+        ? "Pulumi reported this resource missing during refresh without property-level details."
+        : "Pulumi reported a state change during refresh without displayable property-level details."
+      : "Pulumi recorded the resource operation without changed property details.";
+    return <div className="p-4"><Alert><CircleAlert /><AlertTitle>No property-level diff</AlertTitle><AlertDescription>{description}</AlertDescription></Alert></div>;
   }
   return (
     <ScrollArea className="max-h-[30rem] border-y bg-muted/20">
@@ -801,9 +886,41 @@ export function resourceChanges(events: RunEvent[], collapseReplacements = false
     const urnParts = urn.split("::");
     const rawOp = asText(metadata.op, "read");
     const op = collapseReplacements && isReplacementOperation(rawOp) ? "replace" : rawOp;
-    changes.set(`${urn}\0${op}`, { sequence: event.sequence, op, type: asText(metadata.type, urnType(urn)), name: urnParts[urnParts.length - 1] ?? urn, detail: envelope ?? event.payload });
+    changes.set(`${urn}\0${op}`, { sequence: event.sequence, urn, op, type: asText(metadata.type, urnType(urn)), name: urnParts[urnParts.length - 1] ?? urn, detail: envelope ?? event.payload });
   });
   return [...changes.values()].sort((a, b) => a.sequence - b.sequence);
+}
+
+export function resourceChangeGroups(events: RunEvent[], collapseReplacements = false) {
+  const changes = resourceChanges(events, collapseReplacements);
+  const terminalUrns = new Set(changes.filter((change) => change.op !== "refresh").map((change) => change.urn));
+  const changed: ResourceChange[] = [];
+  const unchanged: ResourceChange[] = [];
+  const activity: ResourceChange[] = [];
+  for (const change of changes) {
+    if (change.op === "same") {
+      unchanged.push(change);
+      continue;
+    }
+    if (change.op !== "refresh" || hasRefreshDiff(change)) {
+      changed.push(change);
+      continue;
+    }
+    // A standalone refresh emits an initial `refresh` visit followed by its
+    // terminal `same`/`update`/`delete` result. Do not count both. During a
+    // preview/update refresh phase, unchanged visits can remain `refresh` all
+    // the way through; retain those as optional activity.
+    if (!terminalUrns.has(change.urn)) activity.push(change);
+  }
+  return { changed, unchanged, activity };
+}
+
+function hasRefreshDiff(change: ResourceChange) {
+  const envelope = isRecord(change.detail) ? change.detail : {};
+  const metadata = isRecord(envelope.metadata) ? envelope.metadata : envelope;
+  if (Array.isArray(metadata.diffs) && metadata.diffs.length > 0) return true;
+  if (isRecord(metadata.detailedDiff) && Object.keys(metadata.detailedDiff).length > 0) return true;
+  return propertyChanges(metadata).length > 0;
 }
 
 export function resourceRows(events: RunEvent[], preview: boolean): ResourceDisplayRow[] {

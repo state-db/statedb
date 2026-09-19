@@ -8,6 +8,7 @@ import {
   jsonDiffLines,
   maskConfig,
   propertyChanges,
+  resourceChangeGroups,
   resourceChanges,
   resourceRows,
   stackOutputsDiff,
@@ -236,6 +237,74 @@ describe("run detail presentation", () => {
       type: "aws:s3/bucket:Bucket",
       name: "assets",
     });
+  });
+
+  test("keeps a preview change ahead of no-diff refresh activity", () => {
+    const refreshVisits: RunEvent[] = Array.from({ length: 100 }, (_, index) => ({
+      sequence: index + 1,
+      kind: "resOutputs",
+      severity: null,
+      payload: { resOutputsEvent: { metadata: {
+        op: "refresh",
+        urn: `urn:pulumi:prod::app::test:index:Resource::unchanged-${index}`,
+        type: "test:index:Resource",
+        old: { inputs: { value: index } },
+        new: { inputs: { value: index } },
+        diffs: [],
+      } } },
+    }));
+    const events: RunEvent[] = [...refreshVisits, {
+      sequence: 101,
+      kind: "resourcePre",
+      severity: null,
+      payload: { resourcePreEvent: { metadata: {
+        op: "update",
+        urn: "urn:pulumi:prod::app::test:index:Resource::actual-change",
+        type: "test:index:Resource",
+        old: { inputs: { value: "old" } },
+        new: { inputs: { value: "new" } },
+        diffs: ["value"],
+      } } },
+    }];
+
+    const groups = resourceChangeGroups(events, false);
+
+    expect(groups.changed.map((change) => [change.name, change.op])).toEqual([["actual-change", "update"]]);
+    expect(groups.unchanged).toEqual([]);
+    expect(groups.activity).toHaveLength(100);
+  });
+
+  test("keeps refresh diffs and meaningful operations without property details visible", () => {
+    const events: RunEvent[] = [
+      {
+        sequence: 1,
+        kind: "resOutputs",
+        severity: null,
+        payload: { resOutputsEvent: { metadata: {
+          op: "refresh",
+          urn: "urn:pulumi:prod::app::test:index:Resource::drifted",
+          type: "test:index:Resource",
+          old: { inputs: { value: "old" } },
+          new: { inputs: { value: "new" } },
+          diffs: ["value"],
+        } } },
+      },
+      {
+        sequence: 2,
+        kind: "resourcePre",
+        severity: null,
+        payload: { resourcePreEvent: { metadata: {
+          op: "delete",
+          urn: "urn:pulumi:prod::app::test:index:Resource::missing",
+          type: "test:index:Resource",
+        } } },
+      },
+    ];
+
+    expect(resourceChangeGroups(events).changed.map((change) => [change.name, change.op])).toEqual([
+      ["drifted", "refresh"],
+      ["missing", "delete"],
+    ]);
   });
 
   test("formats live and historical durations", () => {
