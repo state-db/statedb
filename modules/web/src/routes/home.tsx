@@ -528,8 +528,6 @@ function StackRow({ row, showKind }: { row: Workspace; showKind: boolean }) {
 }
 
 function RunningIndicator({ row }: { row: Workspace }) {
-  const lock = row.lock;
-  const lockedAtLabel = lock ? formatLockTimestamp(lock.lockedAt) : null;
   return (
     <Tooltip>
       <TooltipTrigger asChild>
@@ -538,13 +536,19 @@ function RunningIndicator({ row }: { row: Workspace }) {
           running
         </Badge>
       </TooltipTrigger>
-      <TooltipContent>
-        {lock
-          ? `Update lease held by ${lock.lockedBy} since ${lockedAtLabel}`
-          : "Update in progress"}
-      </TooltipContent>
+      <TooltipContent>{runningIndicatorLabel(row)}</TooltipContent>
     </Tooltip>
   );
+}
+
+export function runningIndicatorLabel(row: Workspace): string {
+  const actor = row.lastUpdate?.actor;
+  const actorLabel = actor?.displayName ?? actor?.email ?? null;
+  const lockedAtLabel = row.lock ? formatLockTimestamp(row.lock.lockedAt) : null;
+  if (actorLabel && lockedAtLabel) return `${actorLabel} started this run · active since ${lockedAtLabel}`;
+  if (actorLabel) return `${actorLabel} started this run`;
+  if (lockedAtLabel) return `Update in progress since ${lockedAtLabel}`;
+  return "Update in progress";
 }
 
 function LastUpdateVersion({ update }: { update: WorkspaceLastUpdate }) {

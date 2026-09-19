@@ -9,7 +9,6 @@ import {
   Download,
   EyeOff,
   List,
-  Lock,
   Network,
   Search,
   Trash2,
@@ -200,22 +199,21 @@ export function StackDetailPage({
             <TooltipContent>Download the raw Pulumi checkpoint JSON.</TooltipContent>
           </Tooltip>
         </div>
-        {detail.lock && (
-          <Alert>
-            <Lock />
-            <AlertTitle>Stack locked by {detail.lock.lockedBy}</AlertTitle>
-            <AlertDescription>
-              Locked <Timestamp value={detail.lock.lockedAt} />. Force unlock is available from
-              Operations.
-            </AlertDescription>
-          </Alert>
-        )}
         {updateInProgress && detail.lastUpdate && (
           <Alert>
             <Network />
             <AlertTitle>{activeRunTitle(detail.lastUpdate)}</AlertTitle>
             <AlertDescription>
-              Resources shown are from v{detail.version}.{" "}
+              {activeRunActorLabel(detail.lastUpdate) ? (
+                <>
+                  <span className="font-medium">{activeRunActorLabel(detail.lastUpdate)}</span>
+                  {" started this run "}
+                </>
+              ) : (
+                <>Started </>
+              )}
+              <Timestamp value={detail.lastUpdate.startedAt} />. Resources shown are from v
+              {detail.version}.{" "}
               {detail.lastUpdate.version === null ? (
                 <Link
                   className="underline underline-offset-4"
@@ -446,7 +444,13 @@ function StackSettings({ detail, isAdmin }: { detail: StackDetail; isAdmin: bool
         </CardHeader>
         <CardContent>
           {detail.lock ? (
-            <p className="text-sm">Locked by <span className="font-medium">{detail.lock.lockedBy}</span> <Timestamp value={detail.lock.lockedAt} />.</p>
+            <p className="text-sm">
+              Active since <Timestamp value={detail.lock.lockedAt} />
+              {detail.lastUpdate?.actor && (
+                <> · Started by <span className="font-medium">{lastUpdateActorLabel(detail.lastUpdate.actor)}</span></>
+              )}
+              .
+            </p>
           ) : (
             <p className="text-sm text-muted-foreground">This stack is not locked.</p>
           )}
@@ -747,6 +751,10 @@ export function lastRunLabel(update: WorkspaceLastUpdate): string {
 
 export function activeRunTitle(update: WorkspaceLastUpdate): string {
   return update.version === null ? "Preview in progress" : `Update v${update.version} in progress`;
+}
+
+export function activeRunActorLabel(update: WorkspaceLastUpdate): string | null {
+  return update.actor ? lastUpdateActorLabel(update.actor) : null;
 }
 
 function ActivityActorCell({ actor }: { actor: ActivityActor | null }) {

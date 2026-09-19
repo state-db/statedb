@@ -5,6 +5,7 @@ import {
   isFailedUpdate,
   lastUpdateVersionLabel,
   matchesFilter,
+  runningIndicatorLabel,
   summarizeStacks,
 } from "@/routes/home";
 import type { Workspace } from "@/lib/api";
@@ -48,6 +49,28 @@ describe("home stack summary", () => {
     const preview = workspace("preview", { status: "succeeded", version: null });
 
     expect(lastUpdateVersionLabel(preview.lastUpdate!)).toBeNull();
+  });
+
+  test("uses the resolved service account name in the running tooltip", () => {
+    const running = workspace("running", { status: "in-progress" });
+    running.lastUpdate!.actor = {
+      kind: "service",
+      principalId: "service-account-id",
+      credentialId: "token-id",
+      displayName: "Deploy Bot",
+      email: null,
+      fallback: "user:service-account-id",
+      accessProfile: "deploy",
+      revoked: false,
+    };
+    running.lock = {
+      lockId: "lease",
+      lockedBy: "user:service-account-id",
+      lockedAt: "2026-07-26T00:00:00Z",
+    };
+
+    expect(runningIndicatorLabel(running)).toContain("Deploy Bot");
+    expect(runningIndicatorLabel(running)).not.toContain("service-account-id");
   });
 });
 

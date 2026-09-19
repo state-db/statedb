@@ -12,6 +12,7 @@ import {
   filterAndSortResources,
   maskSecrets,
   lastUpdateActorLabel,
+  activeRunActorLabel,
   lastRunLabel,
   activeRunTitle,
   pageResources,
@@ -37,6 +38,28 @@ describe("stack resource presentation", () => {
 
     expect(lastRunLabel(preview)).toBe("Last run Preview");
     expect(activeRunTitle(preview)).toBe("Preview in progress");
+  });
+
+  test("labels an active run with the resolved service account name", () => {
+    const update = {
+      id: "preview-id",
+      kind: "preview",
+      status: "in-progress",
+      startedAt: "2026-07-18T10:00:00Z",
+      version: null,
+      actor: {
+        kind: "service" as const,
+        principalId: "service-account-id",
+        credentialId: "token-id",
+        displayName: "Deploy Bot",
+        email: null,
+        fallback: "user:service-account-id",
+        accessProfile: "deploy" as const,
+        revoked: false,
+      },
+    };
+
+    expect(activeRunActorLabel(update)).toBe("Deploy Bot");
   });
 
   test("derives the resource name and type from a URN", () => {
