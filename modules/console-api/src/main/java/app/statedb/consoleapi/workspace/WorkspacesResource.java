@@ -127,6 +127,7 @@ public class WorkspacesResource {
         summary.lastUpdate() == null
             ? null
             : new LastUpdateResponse(
+                summary.lastUpdate().id(),
                 summary.lastUpdate().kind(),
                 summary.lastUpdate().status(),
                 summary.lastUpdate().startedAt(),
@@ -222,6 +223,7 @@ public class WorkspacesResource {
         summary.lastUpdate() == null
             ? null
             : new LastUpdateResponse(
+                summary.lastUpdate().id(),
                 summary.lastUpdate().kind(),
                 summary.lastUpdate().status(),
                 summary.lastUpdate().startedAt(),
@@ -260,7 +262,12 @@ public class WorkspacesResource {
       LockResponse lock) {}
 
   public record LastUpdateResponse(
-      String kind, String status, Instant startedAt, int version, ActorResponse actor) {}
+      UUID id,
+      String kind,
+      String status,
+      Instant startedAt,
+      Integer version,
+      ActorResponse actor) {}
 
   public record ActorResponse(
       String kind,

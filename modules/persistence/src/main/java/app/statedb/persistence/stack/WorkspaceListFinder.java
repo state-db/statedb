@@ -126,10 +126,11 @@ public class WorkspaceListFinder {
                 latest.put(
                     u.stackId,
                     new WorkspaceSummary.LastUpdate(
+                        u.id,
                         u.kind.wireValue(),
                         statusWireValue(u.status),
                         u.startedAt,
-                        u.version,
+                        u.dryRun ? null : u.version,
                         actors.get(u.id))));
     return latest;
   }

@@ -3,6 +3,7 @@ import { describe, expect, test } from "bun:test";
 import {
   isActiveUpdate,
   isFailedUpdate,
+  lastUpdateVersionLabel,
   matchesFilter,
   summarizeStacks,
 } from "@/routes/home";
@@ -42,12 +43,19 @@ describe("home stack summary", () => {
     expect(matchesFilter(running, "failed")).toBe(false);
     expect(matchesFilter(failed, "failed")).toBe(true);
   });
+
+  test("does not present a preview as applied version zero", () => {
+    const preview = workspace("preview", { status: "succeeded", version: null });
+
+    expect(lastUpdateVersionLabel(preview.lastUpdate!)).toBeNull();
+  });
 });
 
 function workspace(
   stack: string,
   overrides: {
     status?: NonNullable<Workspace["lastUpdate"]>["status"];
+    version?: number | null;
     lock?: Workspace["lock"];
   } = {},
 ): Workspace {
@@ -62,7 +70,8 @@ function workspace(
     resourceCount: 0,
     lastUpdate: overrides.status
       ? {
-          version: 1,
+          id: `${stack}-run`,
+          version: overrides.version === undefined ? 1 : overrides.version,
           kind: "update",
           status: overrides.status,
           startedAt: "2026-07-26T00:00:00Z",

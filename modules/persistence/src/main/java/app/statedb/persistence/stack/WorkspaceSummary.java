@@ -18,7 +18,12 @@ public record WorkspaceSummary(
     Lock lock) {
 
   public record LastUpdate(
-      String kind, String status, Instant startedAt, int version, UpdateActorAttribution actor) {}
+      UUID id,
+      String kind,
+      String status,
+      Instant startedAt,
+      Integer version,
+      UpdateActorAttribution actor) {}
 
   public record Lock(UUID id, String lockedBy, Instant lockedAt) {}
 }

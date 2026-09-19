@@ -35,7 +35,7 @@ import {
 } from "@/components/ui/tooltip";
 import { useUnauthorizedRedirect } from "@/hooks/useUnauthorizedRedirect";
 import { cn } from "@/lib/utils";
-import { api, NotFoundError, type Workspace, type WorkspaceOverview } from "@/lib/api";
+import { api, NotFoundError, type Workspace, type WorkspaceLastUpdate, type WorkspaceOverview } from "@/lib/api";
 
 type StackFilter = "all" | "running" | "failed";
 
@@ -426,9 +426,7 @@ function MobileStackCard({ row, showKind }: { row: Workspace; showKind: boolean 
             <StatusBadge status={row.lastUpdate.status} />
             <KindBadge kind={row.lastUpdate.kind} />
             <Timestamp value={row.lastUpdate.startedAt} />
-            <span className="font-mono text-xs text-muted-foreground">
-              v{row.lastUpdate.version}
-            </span>
+            <LastUpdateVersion update={row.lastUpdate} />
           </>
         ) : (
           <span className="text-sm text-muted-foreground">No updates</span>
@@ -507,9 +505,7 @@ function StackRow({ row, showKind }: { row: Workspace; showKind: boolean }) {
             <StatusBadge status={row.lastUpdate.status} />
             <KindBadge kind={row.lastUpdate.kind} />
             <Timestamp value={row.lastUpdate.startedAt} />
-            <span className="font-mono text-xs text-muted-foreground">
-              v{row.lastUpdate.version}
-            </span>
+            <LastUpdateVersion update={row.lastUpdate} />
           </div>
         ) : (
           <span className="text-muted-foreground">No updates</span>
@@ -549,6 +545,15 @@ function RunningIndicator({ row }: { row: Workspace }) {
       </TooltipContent>
     </Tooltip>
   );
+}
+
+function LastUpdateVersion({ update }: { update: WorkspaceLastUpdate }) {
+  const label = lastUpdateVersionLabel(update);
+  return label ? <span className="font-mono text-xs text-muted-foreground">{label}</span> : null;
+}
+
+export function lastUpdateVersionLabel(update: WorkspaceLastUpdate): string | null {
+  return update.version === null ? null : `v${update.version}`;
 }
 
 function formatLockTimestamp(value: string) {

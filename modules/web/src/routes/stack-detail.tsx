@@ -213,16 +213,26 @@ export function StackDetailPage({
         {updateInProgress && detail.lastUpdate && (
           <Alert>
             <Network />
-            <AlertTitle>Update v{detail.lastUpdate.version} in progress</AlertTitle>
+            <AlertTitle>{activeRunTitle(detail.lastUpdate)}</AlertTitle>
             <AlertDescription>
               Resources shown are from v{detail.version}.{" "}
-              <Link
-                className="underline underline-offset-4"
-                to="/console/$org/$project/$stack/updates/$version"
-                params={{ org, project, stack, version: String(detail.lastUpdate.version) }}
-              >
-                View live run
-              </Link>
+              {detail.lastUpdate.version === null ? (
+                <Link
+                  className="underline underline-offset-4"
+                  to="/console/$org/$project/$stack/previews/$updateId"
+                  params={{ org, project, stack, updateId: detail.lastUpdate.id }}
+                >
+                  View live run
+                </Link>
+              ) : (
+                <Link
+                  className="underline underline-offset-4"
+                  to="/console/$org/$project/$stack/updates/$version"
+                  params={{ org, project, stack, version: String(detail.lastUpdate.version) }}
+                >
+                  View live run
+                </Link>
+              )}
             </AlertDescription>
           </Alert>
         )}
@@ -363,7 +373,7 @@ function StackInsightStrip({
       )}
       {lastUpdate ? (
         <div className="flex flex-wrap items-center gap-2 text-muted-foreground">
-          <span>Last run v{lastUpdate.version}</span>
+          <span>{lastRunLabel(lastUpdate)}</span>
           {lastUpdate.actor && <span>by {lastUpdateActorLabel(lastUpdate.actor)}</span>}
           <KindBadge kind={lastUpdate.kind} />
           <StatusBadge status={lastUpdate.status} />
@@ -729,6 +739,14 @@ export function defaultTreeBranchOpen(
 export function lastUpdateActorLabel(actor: NonNullable<WorkspaceLastUpdate["actor"]>): string {
   const label = actor.displayName ?? actor.email ?? actor.fallback;
   return actor.revoked ? `${label} (revoked)` : label;
+}
+
+export function lastRunLabel(update: WorkspaceLastUpdate): string {
+  return update.version === null ? "Last run Preview" : `Last run v${update.version}`;
+}
+
+export function activeRunTitle(update: WorkspaceLastUpdate): string {
+  return update.version === null ? "Preview in progress" : `Update v${update.version} in progress`;
 }
 
 function ActivityActorCell({ actor }: { actor: ActivityActor | null }) {

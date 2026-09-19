@@ -137,6 +137,40 @@ class WorkspaceListFinderTest {
 
   @Test
   @TestTransaction
+  void previewHasAnIdButNoAppliedVersion() {
+    Organization org = org("workspace-preview-version", "Workspace Preview Version");
+    User user = user("workspace-preview-version-user");
+    membership(org, user);
+    Stack stack = stack(org, "infra", "dev");
+
+    update(
+        stack,
+        StackUpdate.Kind.IMPORT,
+        StackUpdate.Status.SUCCEEDED,
+        1,
+        Instant.parse("2026-07-17T10:00:00Z"),
+        user);
+    StackUpdate preview = new StackUpdate();
+    preview.stackId = stack.id;
+    preview.kind = StackUpdate.Kind.PREVIEW;
+    preview.status = StackUpdate.Status.SUCCEEDED;
+    preview.version = 0;
+    preview.dryRun = true;
+    preview.startedAt = Instant.parse("2026-07-17T11:00:00Z");
+    preview.startedByUserId = user.id;
+    preview.persist();
+    em.flush();
+    em.clear();
+
+    WorkspaceSummary row = finder.findVisibleToUser(user.id).get(0);
+
+    assertEquals("preview", row.lastUpdate().kind());
+    assertEquals(preview.id, row.lastUpdate().id());
+    assertNull(row.lastUpdate().version());
+  }
+
+  @Test
+  @TestTransaction
   void paginatesSearchesAndFiltersByStatus() {
     Organization org = org("workspace-page-org", "Workspace Page Org");
     User user = user("workspace-page-user");

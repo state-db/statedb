@@ -12,6 +12,8 @@ import {
   filterAndSortResources,
   maskSecrets,
   lastUpdateActorLabel,
+  lastRunLabel,
+  activeRunTitle,
   pageResources,
   propertyPriorityRank,
   resourceTreeIndentRem,
@@ -23,6 +25,20 @@ import {
 } from "@/routes/stack-detail";
 
 describe("stack resource presentation", () => {
+  test("labels previews without an applied version", () => {
+    const preview = {
+      id: "preview-id",
+      kind: "preview",
+      status: "in-progress",
+      startedAt: "2026-07-18T10:00:00Z",
+      version: null,
+      actor: null,
+    };
+
+    expect(lastRunLabel(preview)).toBe("Last run Preview");
+    expect(activeRunTitle(preview)).toBe("Preview in progress");
+  });
+
   test("derives the resource name and type from a URN", () => {
     const resource = {
       urn: "urn:pulumi:prod::networking::aws:s3/bucket:Bucket::site-assets",

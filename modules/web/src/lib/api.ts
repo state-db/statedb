@@ -208,10 +208,11 @@ export interface ActivityActor {
 }
 
 export interface WorkspaceLastUpdate {
+  id: string;
   kind: string;
   status: "succeeded" | "failed" | "in-progress" | "cancelled" | string;
   startedAt: string;
-  version: number;
+  version: number | null;
   actor: ActivityActor | null;
 }
 
