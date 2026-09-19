@@ -42,6 +42,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { api, NotFoundError, type RunDetail, type RunEvent } from "@/lib/api";
 import { jsonDiffLines as computeJsonDiffLines, type JsonDiffLine } from "@/lib/json-diff";
+import { isPulumiSecret } from "@/lib/pulumi-secrets";
 import { cn } from "@/lib/utils";
 
 type RunLocator = { version: number } | { previewId: string };
@@ -1164,11 +1165,11 @@ function inferDiffKind(oldValue: unknown, newValue: unknown) { return oldValue =
 // The engine's stand-in for values it cannot know during a preview (computed
 // outputs, to-be-created secrets): plugin.UnknownStringValue in pulumi/pulumi.
 const PULUMI_UNKNOWN_VALUE = "04da6b54-80e4-46f7-96ec-b56ff0331ba9";
-function maskPulumiSecrets(value: unknown): unknown {
+export function maskPulumiSecrets(value: unknown): unknown {
   if (value === PULUMI_UNKNOWN_VALUE) return "[unknown]";
   if (Array.isArray(value)) return value.map(maskPulumiSecrets);
   if (!isRecord(value)) return value;
-  if ("secure" in value || "ciphertext" in value || value["4dabf18193072939515e22adb298388d"] === "1") return "[secret]";
+  if (isPulumiSecret(value)) return "[secret]";
   return Object.fromEntries(Object.entries(value).map(([key, entry]) => [key, maskPulumiSecrets(entry)]));
 }
 function formatSeconds(seconds: number) { const minutes = Math.floor(seconds / 60); const rest = seconds % 60; return minutes > 0 ? `${minutes}m ${rest}s` : `${seconds}s`; }

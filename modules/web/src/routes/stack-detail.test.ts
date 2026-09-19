@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 
-import { PULUMI_SECRET_SIG } from "@/components/console/SecretBadge";
+import { PULUMI_SECRET_SIG, PULUMI_SIG_KEY } from "@/components/console/SecretBadge";
 import {
   buildPropertyRows,
   buildResourceRows,
@@ -75,7 +75,7 @@ describe("stack resource presentation", () => {
     const value = {
       public: "visible",
       nested: {
-        [PULUMI_SECRET_SIG]: "1",
+        [PULUMI_SIG_KEY]: PULUMI_SECRET_SIG,
         ciphertext: "do-not-render",
       },
     };

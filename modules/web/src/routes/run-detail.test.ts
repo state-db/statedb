@@ -2,11 +2,18 @@ import { describe, expect, test } from "bun:test";
 
 import type { RunEvent } from "@/lib/api";
 import {
+  PULUMI_ASSET_SIG,
+  PULUMI_OUTPUT_VALUE_SIG,
+  PULUMI_SECRET_SIG,
+  PULUMI_SIG_KEY,
+} from "@/lib/pulumi-secrets";
+import {
   changeSummary,
   formatEventLine,
   formatRunDuration,
   jsonDiffLines,
   maskConfig,
+  maskPulumiSecrets,
   propertyChanges,
   resourceChangeGroups,
   resourceChanges,
@@ -320,5 +327,40 @@ describe("run detail presentation", () => {
   test("derives replacement count from create-replacement / delete-replaced substeps", () => {
     const run = { summary: { resourceChanges: { "create-replacement": 1, "delete-replaced": 1, create: 1 } } } as never;
     expect(changeSummary(run)).toMatchObject({ created: 1, replaced: 1 });
+  });
+
+  test("masks the encrypted secret wrapper without leaking its ciphertext", () => {
+    const value = { password: { [PULUMI_SIG_KEY]: PULUMI_SECRET_SIG, ciphertext: "do-not-render" } };
+
+    expect(maskPulumiSecrets(value)).toEqual({ password: "[secret]" });
+    expect(JSON.stringify(maskPulumiSecrets(value))).not.toContain("do-not-render");
+  });
+
+  // The IsOutput wrapper has no `secure` and no `ciphertext` key, so only the
+  // signature gives it away.
+  test("masks a secret output value whose payload is plaintext", () => {
+    const secret = { [PULUMI_SIG_KEY]: PULUMI_OUTPUT_VALUE_SIG, secret: true, value: "do-not-render" };
+    const known = { [PULUMI_SIG_KEY]: PULUMI_OUTPUT_VALUE_SIG, secret: false, value: "visible" };
+
+    expect(maskPulumiSecrets({ password: secret, host: known })).toEqual({
+      password: "[secret]",
+      host: { [PULUMI_SIG_KEY]: PULUMI_OUTPUT_VALUE_SIG, secret: false, value: "visible" },
+    });
+  });
+
+  test("leaves the non-secret special types walkable", () => {
+    const asset = { [PULUMI_SIG_KEY]: PULUMI_ASSET_SIG, path: "./site.zip" };
+
+    expect(maskPulumiSecrets({ source: asset })).toEqual({ source: asset });
+  });
+
+  test("treats a non-string signature as an ordinary object", () => {
+    const value = { [PULUMI_SIG_KEY]: 1, label: "visible" };
+
+    expect(maskPulumiSecrets(value)).toEqual(value);
+  });
+
+  test("masks an unrecognised signature", () => {
+    expect(maskPulumiSecrets({ odd: { [PULUMI_SIG_KEY]: "1", value: "do-not-render" } })).toEqual({ odd: "[secret]" });
   });
 });
