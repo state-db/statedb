@@ -6,6 +6,9 @@ import app.statedb.persistence.authz.AuthorizedResource;
 import app.statedb.persistence.authz.StackEntityLoader;
 import app.statedb.persistence.events.UpdateEvent;
 import app.statedb.persistence.events.UpdateEventReader;
+import app.statedb.persistence.report.ReportLimits;
+import app.statedb.persistence.report.RunChangeDeriver;
+import app.statedb.persistence.report.RunChanges;
 import app.statedb.persistence.stack.StackRef;
 import app.statedb.persistence.update.ConsoleUpdateHistoryFinder;
 import app.statedb.persistence.update.StackUpdate;
@@ -31,10 +34,12 @@ import java.util.UUID;
 public class ConsoleRunsResource {
 
   private static final int EVENT_PAGE_SIZE = 500;
+  private static final int MAX_CHANGE_EVENTS = 50_000;
 
   @Inject AuthorizedResource authorized;
   @Inject ConsoleUpdateHistoryFinder finder;
   @Inject UpdateEventReader eventReader;
+  @Inject RunChangeDeriver changeDeriver;
 
   @GET
   @Path("/updates/{version}")
@@ -84,6 +89,13 @@ public class ConsoleRunsResource {
             .firstResultOptional()
             .map(event -> event.payload.path("summaryEvent"))
             .orElse(null);
+    UpdateEventReader.EventStream stream =
+        eventReader.stream(update.stackId, update.id, MAX_CHANGE_EVENTS);
+    RunChanges changes =
+        changeDeriver.derive(
+            stream.events(),
+            ReportLimits.defaults().maxSecretScanDepth(),
+            update.kind == StackUpdate.Kind.REFRESH);
     return new RunResponse(
         update.id,
         update.dryRun ? null : update.version,
@@ -95,6 +107,8 @@ public class ConsoleRunsResource {
         update.startedAt,
         update.endedAt,
         summary,
+        changes,
+        stream.truncated(),
         update.config == null ? Map.of() : update.config,
         update.options == null ? Map.of() : update.options,
         update.metadata == null ? Map.of() : update.metadata);
@@ -119,6 +133,8 @@ public class ConsoleRunsResource {
       Instant startedAt,
       Instant endedAt,
       JsonNode summary,
+      RunChanges changes,
+      boolean changesTruncated,
       Map<String, Object> config,
       Map<String, Object> options,
       Map<String, Object> metadata) {}

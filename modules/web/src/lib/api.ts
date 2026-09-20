@@ -356,9 +356,47 @@ export interface RunDetail {
   startedAt: string;
   endedAt: string | null;
   summary: { resourceChanges?: Record<string, number> } | null;
+  changes: RunChanges;
+  changesTruncated: boolean;
   config: Record<string, unknown>;
   options: Record<string, unknown>;
   metadata: Record<string, unknown>;
+}
+
+export interface RunChanges {
+  changed: RunResourceChange[];
+  unchanged: RunResourceChange[];
+  activity: RunResourceChange[];
+  outputs: RunOutputChange[];
+}
+
+export interface RunResourceChange {
+  sequence: number;
+  urn: string;
+  type: string;
+  name: string;
+  op: string;
+  properties: RunPropertyChange[];
+}
+
+export interface RunPropertyChange {
+  path: string;
+  kind: string;
+  internal: boolean;
+  secret: boolean;
+  oldPresent: boolean;
+  oldValue: unknown;
+  newPresent: boolean;
+  newValue: unknown;
+}
+
+export interface RunOutputChange {
+  key: string;
+  kind: "add" | "remove" | "update" | "same";
+  oldPresent: boolean;
+  oldValue: unknown;
+  newPresent: boolean;
+  newValue: unknown;
 }
 
 export interface RunEvent {

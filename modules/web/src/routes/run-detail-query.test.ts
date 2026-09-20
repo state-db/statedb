@@ -15,6 +15,8 @@ const run: RunDetail = {
   startedAt: "2026-09-07T19:00:00Z",
   endedAt: "2026-09-07T19:01:00Z",
   summary: null,
+  changes: { changed: [], unchanged: [], activity: [], outputs: [] },
+  changesTruncated: false,
   config: {},
   options: {},
   metadata: {},

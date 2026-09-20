@@ -1,6 +1,9 @@
 package app.statedb.persistence.report;
 
 import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.node.ArrayNode;
+import com.fasterxml.jackson.databind.node.JsonNodeFactory;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 
 /**
  * Recognises Pulumi's structural markers for special property values, and in particular the two
@@ -126,6 +129,34 @@ public final class SecretSentinel {
       }
     }
     return false;
+  }
+
+  /** Returns a detached tree with every secret-bearing subtree replaced by {@code "[secret]"}. */
+  public static JsonNode redact(JsonNode node, int maxDepth) {
+    if (node == null) {
+      return null;
+    }
+    if (maxDepth <= 0 || isSecret(node)) {
+      return JsonNodeFactory.instance.textNode("[secret]");
+    }
+    if (node.isTextual() && "04da6b54-80e4-46f7-96ec-b56ff0331ba9".equals(node.textValue())) {
+      return JsonNodeFactory.instance.textNode("[unknown]");
+    }
+    if (node.isArray()) {
+      ArrayNode copy = JsonNodeFactory.instance.arrayNode();
+      for (JsonNode child : node) {
+        copy.add(redact(child, maxDepth - 1));
+      }
+      return copy;
+    }
+    if (node.isObject()) {
+      ObjectNode copy = JsonNodeFactory.instance.objectNode();
+      node.fields()
+          .forEachRemaining(
+              field -> copy.set(field.getKey(), redact(field.getValue(), maxDepth - 1)));
+      return copy;
+    }
+    return node.deepCopy();
   }
 
   private SecretSentinel() {}

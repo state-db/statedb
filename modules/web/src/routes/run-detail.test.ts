@@ -1,34 +1,20 @@
 import { describe, expect, test } from "bun:test";
 
-import type { RunEvent } from "@/lib/api";
-import {
-  PULUMI_ASSET_SIG,
-  PULUMI_OUTPUT_VALUE_SIG,
-  PULUMI_SECRET_SIG,
-  PULUMI_SIG_KEY,
-} from "@/lib/pulumi-secrets";
 import {
   changeSummary,
   formatEventLine,
   formatRunDuration,
-  jsonDiffLines,
   maskConfig,
-  maskPulumiSecrets,
-  propertyChanges,
-  resourceChangeGroups,
-  resourceChanges,
   resourceRows,
-  stackOutputsDiff,
-  stackOutputsFromEvents,
   stripAnsi,
 } from "@/routes/run-detail";
+import type { RunChanges } from "@/lib/api";
+
+const emptyChanges: RunChanges = { changed: [], unchanged: [], activity: [], outputs: [] };
 
 describe("run detail presentation", () => {
-  test("strips terminal escape sequences without changing whitespace", () => {
+  test("strips terminal and Pulumi color sequences without changing whitespace", () => {
     expect(stripAnsi("\u001b[31merror\u001b[0m\n  detail")).toBe("error\n  detail");
-  });
-
-  test("strips pulumi colorization tokens from diagnostics", () => {
     expect(stripAnsi('<{%fg 3%}>warning: <{%reset%}>property "number" is deprecated'))
       .toBe('warning: property "number" is deprecated');
   });
@@ -61,13 +47,6 @@ describe("run detail presentation", () => {
     }, false)).toEqual({ marker: "+ ", text: "aws:s3/bucket:Bucket assets creating" });
 
     expect(formatEventLine({
-      sequence: 4,
-      kind: "resourcePre",
-      severity: null,
-      payload: { resourcePreEvent: { metadata: { op: "create", urn: "urn:pulumi:prod::p::t::n", type: "t" } } },
-    }, true)).toEqual({ marker: "+ ", text: "t n create" });
-
-    expect(formatEventLine({
       sequence: 9,
       kind: "summary",
       severity: null,
@@ -78,308 +57,43 @@ describe("run detail presentation", () => {
         },
       },
     }, false)).toEqual({ marker: "✓ ", text: "Update complete · 1 created · 6 unchanged · 7s" });
-
-    expect(formatEventLine({
-      sequence: 10,
-      kind: "diagnostic",
-      severity: "warning",
-      payload: { diagnosticEvent: { prefix: "aws:s3/bucket:Bucket (assets): ", message: "deprecated" } },
-    }, false)).toEqual({ marker: "! ", text: "aws:s3/bucket:Bucket (assets): deprecated" });
   });
 
-  test("folds resource lifecycle events and hides unchanged resources", () => {
+  test("folds resource lifecycle events for the log", () => {
     const metadata = {
       op: "update",
       urn: "urn:pulumi:prod::app::aws:lambda/function:Function::worker",
       type: "aws:lambda/function:Function",
       new: { parent: "urn:pulumi:prod::app::pulumi:pulumi:Stack::app-prod" },
-    };
-    const rows = resourceRows([
-      { sequence: 1, kind: "resourcePre", severity: null, payload: { resourcePreEvent: { metadata } } },
-      { sequence: 2, kind: "resOutputs", severity: null, payload: { resOutputsEvent: { metadata } } },
-      { sequence: 3, kind: "resourcePre", severity: null, payload: { resourcePreEvent: { metadata: { ...metadata, op: "same", urn: `${metadata.urn}-same` } } } },
-    ], false);
-    expect(rows).toHaveLength(1);
-    expect(rows[0]).toMatchObject({ marker: "~ ", name: "worker", status: "updated", done: true });
-  });
-
-  test("times a resource operation from its pre-event to its completion event and surfaces changed keys", () => {
-    const metadata = {
-      op: "update",
-      urn: "urn:pulumi:prod::app::aws:lambda/function:Function::worker",
-      type: "aws:lambda/function:Function",
-      new: { parent: "" },
       diffs: ["environment", "timeout"],
     };
     const rows = resourceRows([
       { sequence: 1, kind: "resourcePre", severity: null, payload: { timestamp: 1000, resourcePreEvent: { metadata } } },
       { sequence: 2, kind: "resOutputs", severity: null, payload: { timestamp: 1006, resOutputsEvent: { metadata } } },
-    ], false);
-    expect(rows[0]).toMatchObject({ seconds: 6, diffs: ["environment", "timeout"] });
-  });
-
-  test("diffs stack outputs against the prior run, treating a first-ever run as unchanged", () => {
-    const outputsEvent = (old: Record<string, unknown>, current: Record<string, unknown>): RunEvent => ({
-      sequence: 1,
-      kind: "resOutputs",
-      severity: null,
-      payload: { resOutputsEvent: { metadata: { type: "pulumi:pulumi:Stack", old: { outputs: old }, new: { outputs: current } } } },
-    });
-    expect(stackOutputsDiff([outputsEvent({}, { endpoint: "https://a.test" })]))
-      .toEqual([{ key: "endpoint", kind: "same", oldValue: undefined, newValue: "https://a.test" }]);
-    expect(stackOutputsDiff([outputsEvent({ endpoint: "https://a.test" }, { endpoint: "https://b.test" })]))
-      .toEqual([{ key: "endpoint", kind: "update", oldValue: "https://a.test", newValue: "https://b.test" }]);
-    expect(stackOutputsDiff([outputsEvent({ endpoint: "https://a.test" }, { endpoint: "https://a.test", region: "us-east-1" })]))
-      .toEqual([
-        { key: "endpoint", kind: "same", oldValue: "https://a.test", newValue: "https://a.test" },
-        { key: "region", kind: "add", oldValue: undefined, newValue: "us-east-1" },
-      ]);
-  });
-
-  test("derives property changes and final stack outputs", () => {
-    const metadata = {
-      op: "update",
-      urn: "urn:pulumi:prod::app::aws:s3/bucket:Bucket::assets",
-      type: "aws:s3/bucket:Bucket",
-      old: { inputs: { versioning: false } },
-      new: { inputs: { versioning: true } },
-      detailedDiff: { versioning: { diffKind: "update", inputDiff: true } },
-    };
-    expect(propertyChanges(metadata)).toEqual([
-      { path: "versioning", kind: "update", oldValue: false, newValue: true, internal: false },
-    ]);
-    expect(stackOutputsFromEvents([{
-      sequence: 9,
-      kind: "resOutputs",
-      severity: null,
-      payload: { resOutputsEvent: { metadata: { op: "same", type: "pulumi:pulumi:Stack", new: { outputs: { endpoint: "https://example.test" } } } } },
-    }])).toEqual({ endpoint: "https://example.test" });
-  });
-
-  test("renders coarse diffs from inputs without treating provider-only outputs as deletions", () => {
-    const metadata = {
-      op: "update",
-      old: {
-        inputs: { settings: { configured: "old" } },
-        outputs: { settings: { configured: "old", providerOnly: "computed" } },
-      },
-      new: { inputs: { settings: { configured: "new" } } },
-      diffs: ["settings"],
-      detailedDiff: null,
-    };
-
-    expect(jsonDiffLines(propertyChanges(metadata)).map((line) => line.text)).toEqual([
-      "settings: {",
-      "configured: \"old\" → \"new\"",
-      "}",
-    ]);
-  });
-
-  test("preserves Pulumi's distinction between absent and empty detailed diffs", () => {
-    const state = {
-      old: { inputs: { setting: "old" }, outputs: { setting: "old" } },
-      new: { inputs: { setting: "new" } },
-      diffs: ["setting"],
-    };
-
-    expect(propertyChanges({ ...state, detailedDiff: null })).toHaveLength(1);
-    expect(propertyChanges({ ...state, detailedDiff: {} })).toEqual([]);
-  });
-
-  test("uses old outputs only for an explicitly state-aware detailed diff", () => {
-    expect(propertyChanges({
-      old: { inputs: { setting: "input" }, outputs: { setting: "provider-state" } },
-      new: { inputs: { setting: "desired" } },
-      detailedDiff: { setting: { diffKind: "update", inputDiff: false } },
-    })).toEqual([
-      { path: "setting", kind: "update", oldValue: "provider-state", newValue: "desired", internal: false },
-    ]);
-  });
-
-  test("masks the engine's unknown-value sentinel in preview outputs", () => {
-    expect(stackOutputsFromEvents([{
-      sequence: 9,
-      kind: "resOutputs",
-      severity: null,
-      payload: { resOutputsEvent: { metadata: { type: "pulumi:pulumi:Stack", new: { outputs: {
-        token: "04da6b54-80e4-46f7-96ec-b56ff0331ba9",
-        nested: { report: "04da6b54-80e4-46f7-96ec-b56ff0331ba9" },
-        plain: "kept",
-      } } } } },
-    }])).toEqual({ token: "[unknown]", nested: { report: "[unknown]" }, plain: "kept" });
-  });
-
-  test("flags Pulumi's dunder-prefixed bookkeeping paths as internal", () => {
-    const metadata = {
-      op: "create",
-      urn: "urn:pulumi:prod::app::pulumi:providers:tls::tls-provider",
-      type: "pulumi:providers:tls",
-      old: {},
-      new: { inputs: { __internal: {}, version: "5.4.0" } },
-    };
-    expect(propertyChanges(metadata).map((p) => ({ path: p.path, internal: p.internal }))).toEqual([
-      { path: "__internal", internal: true },
-      { path: "version", internal: false },
-    ]);
-  });
-
-  test("derives resource changes from engine event metadata", () => {
-    const events: RunEvent[] = [{
-      sequence: 3,
-      kind: "resourcePre",
-      severity: null,
-      payload: {
-        resourcePreEvent: {
-          metadata: {
-            op: "create",
-            urn: "urn:pulumi:prod::networking::aws:s3/bucket:Bucket::assets",
-            type: "aws:s3/bucket:Bucket",
-          },
-        },
-      },
-    }];
-    expect(resourceChanges(events)[0]).toMatchObject({
-      sequence: 3,
-      op: "create",
-      type: "aws:s3/bucket:Bucket",
-      name: "assets",
-    });
-  });
-
-  test("keeps a preview change ahead of no-diff refresh activity", () => {
-    const refreshVisits: RunEvent[] = Array.from({ length: 100 }, (_, index) => ({
-      sequence: index + 1,
-      kind: "resOutputs",
-      severity: null,
-      payload: { resOutputsEvent: { metadata: {
-        op: "refresh",
-        urn: `urn:pulumi:prod::app::test:index:Resource::unchanged-${index}`,
-        type: "test:index:Resource",
-        old: { inputs: { value: index } },
-        new: { inputs: { value: index } },
-        diffs: [],
-      } } },
-    }));
-    const events: RunEvent[] = [...refreshVisits, {
-      sequence: 101,
-      kind: "resourcePre",
-      severity: null,
-      payload: { resourcePreEvent: { metadata: {
+      { sequence: 3, kind: "resourcePre", severity: null, payload: { resourcePreEvent: { metadata: { ...metadata, op: "same", urn: `${metadata.urn}-same` } } } },
+    ], false, {
+      ...emptyChanges,
+      changed: [{
+        sequence: 1,
+        urn: metadata.urn,
+        type: metadata.type,
+        name: "worker",
         op: "update",
-        urn: "urn:pulumi:prod::app::test:index:Resource::actual-change",
-        type: "test:index:Resource",
-        old: { inputs: { value: "old" } },
-        new: { inputs: { value: "new" } },
-        diffs: ["value"],
-      } } },
-    }];
-
-    const groups = resourceChangeGroups(events, false);
-
-    expect(groups.changed.map((change) => [change.name, change.op])).toEqual([["actual-change", "update"]]);
-    expect(groups.unchanged).toEqual([]);
-    expect(groups.activity).toHaveLength(100);
-  });
-
-  test("keeps refresh as the activity operation during a preview refresh phase", () => {
-    const urn = "urn:pulumi:prod::app::test:index:Resource::unchanged";
-    const events: RunEvent[] = [
-      {
-        sequence: 1,
-        kind: "resourcePre",
-        severity: null,
-        payload: { resourcePreEvent: { metadata: {
-          op: "refresh",
-          urn,
-          type: "test:index:Resource",
-          old: { inputs: { value: "same" } },
-          new: { inputs: { value: "same" } },
-          diffs: [],
-        } } },
-      },
-      {
-        sequence: 2,
-        kind: "resOutputs",
-        severity: null,
-        payload: { resOutputsEvent: { metadata: {
-          op: "same",
-          urn,
-          type: "test:index:Resource",
-          old: { inputs: { value: "same" } },
-          new: { inputs: { value: "same" } },
-          diffs: [],
-        } } },
-      },
-    ];
-
-    const groups = resourceChangeGroups(events, false, false);
-
-    expect(groups.unchanged).toEqual([]);
-    expect(groups.activity.map((change) => change.op)).toEqual(["refresh"]);
-  });
-
-  test("uses the terminal result operation for a standalone refresh", () => {
-    const urn = "urn:pulumi:prod::app::test:index:Resource::unchanged";
-    const events: RunEvent[] = [
-      {
-        sequence: 1,
-        kind: "resourcePre",
-        severity: null,
-        payload: { resourcePreEvent: { metadata: {
-          op: "refresh",
-          urn,
-          type: "test:index:Resource",
-        } } },
-      },
-      {
-        sequence: 2,
-        kind: "resOutputs",
-        severity: null,
-        payload: { resOutputsEvent: { metadata: {
-          op: "same",
-          urn,
-          type: "test:index:Resource",
-        } } },
-      },
-    ];
-
-    const groups = resourceChangeGroups(events, false, true);
-
-    expect(groups.unchanged.map((change) => change.op)).toEqual(["same"]);
-    expect(groups.activity).toEqual([]);
-  });
-
-  test("keeps refresh diffs and meaningful operations without property details visible", () => {
-    const events: RunEvent[] = [
-      {
-        sequence: 1,
-        kind: "resOutputs",
-        severity: null,
-        payload: { resOutputsEvent: { metadata: {
-          op: "refresh",
-          urn: "urn:pulumi:prod::app::test:index:Resource::drifted",
-          type: "test:index:Resource",
-          old: { inputs: { value: "old" } },
-          new: { inputs: { value: "new" } },
-          diffs: ["value"],
-        } } },
-      },
-      {
-        sequence: 2,
-        kind: "resourcePre",
-        severity: null,
-        payload: { resourcePreEvent: { metadata: {
-          op: "delete",
-          urn: "urn:pulumi:prod::app::test:index:Resource::missing",
-          type: "test:index:Resource",
-        } } },
-      },
-    ];
-
-    expect(resourceChangeGroups(events).changed.map((change) => [change.name, change.op])).toEqual([
-      ["drifted", "refresh"],
-      ["missing", "delete"],
-    ]);
+        properties: [
+          { path: "environment", kind: "update", internal: false, secret: false, oldPresent: false, oldValue: null, newPresent: false, newValue: null },
+          { path: "timeout", kind: "update", internal: false, secret: false, oldPresent: false, oldValue: null, newPresent: false, newValue: null },
+        ],
+      }],
+    });
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({
+      marker: "~ ",
+      name: "worker",
+      status: "updated",
+      done: true,
+      seconds: 6,
+      diffs: ["environment", "timeout"],
+    });
   });
 
   test("formats live and historical durations", () => {
@@ -388,47 +102,18 @@ describe("run detail presentation", () => {
   });
 
   test("counts replacements without folding them into create or delete", () => {
-    const run = { summary: { resourceChanges: { replace: 2, same: 3 } } } as never;
-    expect(changeSummary(run)).toEqual({ created: 0, updated: 0, deleted: 0, replaced: 2, unchanged: 3 });
-  });
+    const direct = { summary: { resourceChanges: { replace: 2, same: 3 } } } as never;
+    expect(changeSummary(direct)).toEqual({ created: 0, updated: 0, deleted: 0, replaced: 2, unchanged: 3 });
 
-  test("derives replacement count from create-replacement / delete-replaced substeps", () => {
-    const run = { summary: { resourceChanges: { "create-replacement": 1, "delete-replaced": 1, create: 1 } } } as never;
-    expect(changeSummary(run)).toMatchObject({ created: 1, replaced: 1 });
-  });
-
-  test("masks the encrypted secret wrapper without leaking its ciphertext", () => {
-    const value = { password: { [PULUMI_SIG_KEY]: PULUMI_SECRET_SIG, ciphertext: "do-not-render" } };
-
-    expect(maskPulumiSecrets(value)).toEqual({ password: "[secret]" });
-    expect(JSON.stringify(maskPulumiSecrets(value))).not.toContain("do-not-render");
-  });
-
-  // The IsOutput wrapper has no `secure` and no `ciphertext` key, so only the
-  // signature gives it away.
-  test("masks a secret output value whose payload is plaintext", () => {
-    const secret = { [PULUMI_SIG_KEY]: PULUMI_OUTPUT_VALUE_SIG, secret: true, value: "do-not-render" };
-    const known = { [PULUMI_SIG_KEY]: PULUMI_OUTPUT_VALUE_SIG, secret: false, value: "visible" };
-
-    expect(maskPulumiSecrets({ password: secret, host: known })).toEqual({
-      password: "[secret]",
-      host: { [PULUMI_SIG_KEY]: PULUMI_OUTPUT_VALUE_SIG, secret: false, value: "visible" },
-    });
-  });
-
-  test("leaves the non-secret special types walkable", () => {
-    const asset = { [PULUMI_SIG_KEY]: PULUMI_ASSET_SIG, path: "./site.zip" };
-
-    expect(maskPulumiSecrets({ source: asset })).toEqual({ source: asset });
-  });
-
-  test("treats a non-string signature as an ordinary object", () => {
-    const value = { [PULUMI_SIG_KEY]: 1, label: "visible" };
-
-    expect(maskPulumiSecrets(value)).toEqual(value);
-  });
-
-  test("masks an unrecognised signature", () => {
-    expect(maskPulumiSecrets({ odd: { [PULUMI_SIG_KEY]: "1", value: "do-not-render" } })).toEqual({ odd: "[secret]" });
+    const decomposed = {
+      summary: {
+        resourceChanges: {
+          "create-replacement": 1,
+          "delete-replaced": 1,
+          create: 1,
+        },
+      },
+    } as never;
+    expect(changeSummary(decomposed)).toMatchObject({ created: 1, replaced: 1 });
   });
 });

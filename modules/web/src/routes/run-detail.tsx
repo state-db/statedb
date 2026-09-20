@@ -40,9 +40,15 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
-import { api, NotFoundError, type RunDetail, type RunEvent } from "@/lib/api";
+import {
+  api,
+  NotFoundError,
+  type RunChanges as RunChangeSet,
+  type RunDetail,
+  type RunEvent,
+  type RunPropertyChange,
+} from "@/lib/api";
 import { jsonDiffLines as computeJsonDiffLines, type JsonDiffLine } from "@/lib/json-diff";
-import { isPulumiSecret } from "@/lib/pulumi-secrets";
 import { cn } from "@/lib/utils";
 
 type RunLocator = { version: number } | { previewId: string };
@@ -60,7 +66,6 @@ type ResourceDisplayRow = ResourceChange & {
   seconds?: number;
   diffs: string[];
 };
-type PropertyChange = { path: string; kind: string; oldValue: unknown; newValue: unknown; internal: boolean };
 
 export function RunDetailPage({
   org,
@@ -228,31 +233,31 @@ function RunView({
           <TabsTrigger value="configuration">Configuration</TabsTrigger>
         </TabsList>
         <TabsContent value="log" className="mt-4">
-          <RunLog events={events} error={eventsError} live={run.status === "in-progress"} preview={run.version === null} />
+          <RunLog events={events} changes={run.changes} error={eventsError} live={run.status === "in-progress"} preview={run.version === null} />
         </TabsContent>
         <TabsContent value="changes" className="mt-4">
           <RunChanges
-            events={events}
-            collapseReplacements={run.version === null || run.status !== "in-progress"}
+            changes={run.changes}
+            truncated={run.changesTruncated}
             live={live}
             preview={run.version === null}
             refresh={run.kind === "refresh"}
           />
         </TabsContent>
         <TabsContent value="configuration" className="mt-4">
-          <Configuration run={run} events={events} />
+          <Configuration run={run} />
         </TabsContent>
       </Tabs>
     </div>
   );
 }
 
-function RunLog({ events, error, live, preview }: { events: RunEvent[]; error: unknown; live: boolean; preview: boolean }) {
+function RunLog({ events, changes, error, live, preview }: { events: RunEvent[]; changes: RunChangeSet; error: unknown; live: boolean; preview: boolean }) {
   const [filter, setFilter] = useState("all");
   const [expandedRows, setExpandedRows] = useState<Record<string, boolean>>({});
   const viewport = useRef<HTMLDivElement>(null);
   const follow = useRef(true);
-  const rows = useMemo(() => resourceRows(events, preview), [events, preview]);
+  const rows = useMemo(() => resourceRows(events, preview, changes), [changes, events, preview]);
   const messages = events.filter((event) => {
     if (event.kind === "stdout" || event.kind === "error") return true;
     if (event.kind !== "diagnostic") return false;
@@ -344,7 +349,7 @@ function RunLog({ events, error, live, preview }: { events: RunEvent[]; error: u
               <DiagnosticOutput events={sectionMessages} rows={rows} preview={preview} />
             </section>
           )}
-          {filter === "all" && <OutputsSection events={events} />}
+          {filter === "all" && <OutputsSection outputs={changes.outputs} />}
           {filter === "all" && summary && <SummaryLogLine event={summary} preview={preview} />}
           {rows.length === 0 && visibleMessages.length === 0 && !summary && !live && <p className="text-haze-lit">No events recorded for this run.</p>}
           {live && (
@@ -387,13 +392,12 @@ function DiagnosticOutput({ events, rows, preview }: { events: RunEvent[]; rows:
   );
 }
 
-function OutputsSection({ events }: { events: RunEvent[] }) {
-  const diff = useMemo(() => stackOutputsDiff(events), [events]);
-  if (diff.length === 0) return null;
+function OutputsSection({ outputs }: { outputs: RunChangeSet["outputs"] }) {
+  if (outputs.length === 0) return null;
   return (
     <section className="mt-5 flex flex-col border-t border-shelf pt-4">
       <h3 className="mb-2 font-sans text-xs font-medium uppercase tracking-wide text-haze-lit">Outputs</h3>
-      {diff.map((entry) => {
+      {outputs.map((entry) => {
         const marker = entry.kind === "add" ? "+ " : entry.kind === "remove" ? "- " : entry.kind === "update" ? "~ " : "  ";
         return (
           <div className="grid grid-cols-[1.25rem_minmax(0,1fr)] gap-2 py-0.5" key={entry.key}>
@@ -459,9 +463,9 @@ function SummaryLogLine({ event, preview }: { event: RunEvent; preview: boolean 
   return <div className="mt-5 border-t border-shelf pt-4"><LogLine event={event} preview={preview} /></div>;
 }
 
-function RunChanges({ events, collapseReplacements, live, preview, refresh }: {
-  events: RunEvent[];
-  collapseReplacements: boolean;
+function RunChanges({ changes, truncated, live, preview, refresh }: {
+  changes: RunChangeSet;
+  truncated: boolean;
   live: boolean;
   preview: boolean;
   refresh: boolean;
@@ -469,21 +473,25 @@ function RunChanges({ events, collapseReplacements, live, preview, refresh }: {
   const [showActivity, setShowActivity] = useState(false);
   const [showInternal, setShowInternal] = useState(false);
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
-  const groups = useMemo(
-    () => resourceChangeGroups(events, collapseReplacements, refresh),
-    [events, collapseReplacements, refresh],
-  );
+  const groups = changes;
   const backgroundActivity = useMemo(() => [...groups.unchanged, ...groups.activity], [groups]);
   // Actual changes always lead. Resource visits and no-op outcomes are
   // available on demand, but can never bury a meaningful change.
   const rows = useMemo(() => {
     const visible = showActivity ? [...groups.changed, ...backgroundActivity] : groups.changed;
-    return visible.map((change) => ({ change, allProperties: resourcePropertyChanges(change) }));
+    return visible.map((change) => ({ change, allProperties: change.properties }));
   }, [backgroundActivity, groups, showActivity]);
   const internalCount = useMemo(() => rows.reduce((sum, row) => sum + row.allProperties.filter((p) => p.internal).length, 0), [rows]);
   const empty = changesEmptyState(refresh, live, groups);
   return (
     <div className="flex flex-col gap-3">
+      {truncated && (
+        <Alert>
+          <CircleAlert />
+          <AlertTitle>Change list truncated</AlertTitle>
+          <AlertDescription>This run exceeded the event limit. The changes shown here are incomplete.</AlertDescription>
+        </Alert>
+      )}
       <div className="flex flex-wrap items-center justify-between gap-3">
         <p className="text-sm text-muted-foreground" aria-live={live ? "polite" : undefined}>
           {formatChangeCounts(groups, live)}
@@ -572,7 +580,7 @@ function RunChanges({ events, collapseReplacements, live, preview, refresh }: {
   );
 }
 
-function changesEmptyState(refresh: boolean, live: boolean, groups: ReturnType<typeof resourceChangeGroups>) {
+function changesEmptyState(refresh: boolean, live: boolean, groups: RunChangeSet) {
   if (live) {
     return refresh
       ? { title: "Checking for drift", description: "No state changes found yet. Refresh results will appear here as they arrive." }
@@ -590,7 +598,7 @@ function changesEmptyState(refresh: boolean, live: boolean, groups: ReturnType<t
   return { title: "No resource changes recorded", description: "This run did not record any resource changes." };
 }
 
-function formatChangeCounts(groups: ReturnType<typeof resourceChangeGroups>, live: boolean) {
+function formatChangeCounts(groups: RunChangeSet, live: boolean) {
   const changes = `${groups.changed.length} ${groups.changed.length === 1 ? "state change" : "state changes"}${live ? " so far" : ""}`;
   const parts = [changes, `${groups.unchanged.length} unchanged`];
   if (groups.activity.length > 0) parts.push(`${groups.activity.length} refresh ${groups.activity.length === 1 ? "visit" : "visits"}`);
@@ -626,13 +634,8 @@ function useNow(active: boolean) {
   return now;
 }
 
-function resourcePropertyChanges(change: ResourceChange) {
-  const envelope = isRecord(change.detail) ? change.detail : {};
-  return propertyChanges(isRecord(envelope.metadata) ? envelope.metadata : envelope);
-}
-
 function InlineJsonDiff({ properties, hiddenInternal, operation, refresh }: {
-  properties: PropertyChange[];
+  properties: RunPropertyChange[];
   hiddenInternal: number;
   operation: string;
   refresh: boolean;
@@ -682,8 +685,12 @@ function InlineJsonDiff({ properties, hiddenInternal, operation, refresh }: {
   );
 }
 
-function Configuration({ run, events }: { run: RunDetail; events: RunEvent[] }) {
-  const outputs = stackOutputsFromEvents(events);
+function Configuration({ run }: { run: RunDetail }) {
+  const outputs = Object.fromEntries(
+    run.changes.outputs
+      .filter((output) => output.newPresent)
+      .map((output) => [output.key, output.newValue]),
+  );
   return (
     <div className="grid gap-4 xl:grid-cols-2">
       <KeyValueCard
@@ -881,62 +888,16 @@ export function formatEventLine(event: RunEvent, preview: boolean): { marker: st
 function diagnosticClass(event: RunEvent) { return cn(event.severity === "error" && "text-coral-lit", event.severity === "warning" && "text-gold-lit"); }
 function mergeEvents(current: RunEvent[], incoming: RunEvent[]) { return [...new Map([...current, ...incoming].map((event) => [event.sequence, event])).values()].sort((a, b) => a.sequence - b.sequence); }
 
-export function resourceChanges(events: RunEvent[], collapseReplacements = false): ResourceChange[] {
-  const changes = new Map<string, ResourceChange>();
-  events.filter((event) => ["resourcePre", "resOutputs", "resOpFailed"].includes(event.kind)).forEach((event) => {
-    const envelope = event.payload[`${event.kind}Event`] as Record<string, unknown> | undefined;
-    const metadata = (envelope?.metadata ?? {}) as Record<string, unknown>;
-    const urn = asText(metadata.urn);
-    const urnParts = urn.split("::");
-    const rawOp = asText(metadata.op, "read");
-    const op = collapseReplacements && isReplacementOperation(rawOp) ? "replace" : rawOp;
-    changes.set(`${urn}\0${op}`, { sequence: event.sequence, urn, op, type: asText(metadata.type, urnType(urn)), name: urnParts[urnParts.length - 1] ?? urn, detail: envelope ?? event.payload });
-  });
-  return [...changes.values()].sort((a, b) => a.sequence - b.sequence);
-}
-
-export function resourceChangeGroups(events: RunEvent[], collapseReplacements = false, standaloneRefresh = false) {
-  const changes = resourceChanges(events, collapseReplacements);
-  const terminalUrns = new Set(changes.filter((change) => change.op !== "refresh").map((change) => change.urn));
-  const refreshUrns = new Set(changes.filter((change) => change.op === "refresh").map((change) => change.urn));
-  const changedUrns = new Set(changes.filter((change) => change.op !== "refresh" && change.op !== "same").map((change) => change.urn));
-  const changed: ResourceChange[] = [];
-  const unchanged: ResourceChange[] = [];
-  const activity: ResourceChange[] = [];
-  for (const change of changes) {
-    if (change.op === "same") {
-      // During preview/up --refresh, `refresh` is a preliminary phase and a
-      // later `same` is the program diff result. Keep the refresh visit as the
-      // single background row instead of relabeling it as `same`.
-      if (!standaloneRefresh && refreshUrns.has(change.urn)) continue;
-      unchanged.push(change);
-      continue;
-    }
-    if (change.op !== "refresh" || hasRefreshDiff(change)) {
-      changed.push(change);
-      continue;
-    }
-    // A standalone refresh rewrites its completion event to the terminal
-    // `same`/`update`/`delete` ResultOp. For preview/up --refresh, refresh is a
-    // phase rather than the whole operation, so preserve it as activity unless
-    // the same resource already has a meaningful planned change.
-    if (standaloneRefresh && terminalUrns.has(change.urn)) continue;
-    if (!standaloneRefresh && changedUrns.has(change.urn)) continue;
-    activity.push(change);
-  }
-  return { changed, unchanged, activity };
-}
-
-function hasRefreshDiff(change: ResourceChange) {
-  const envelope = isRecord(change.detail) ? change.detail : {};
-  const metadata = isRecord(envelope.metadata) ? envelope.metadata : envelope;
-  if (Array.isArray(metadata.diffs) && metadata.diffs.length > 0) return true;
-  if (isRecord(metadata.detailedDiff) && Object.keys(metadata.detailedDiff).length > 0) return true;
-  return propertyChanges(metadata).length > 0;
-}
-
-export function resourceRows(events: RunEvent[], preview: boolean): ResourceDisplayRow[] {
+export function resourceRows(
+  events: RunEvent[],
+  preview: boolean,
+  changes: RunChangeSet,
+): ResourceDisplayRow[] {
   const rows = new Map<string, ResourceDisplayRow>();
+  const propertyPaths = new Map(
+    [...changes.changed, ...changes.unchanged, ...changes.activity]
+      .map((change) => [change.urn, change.properties.map((property) => property.path)]),
+  );
   const diagnostics = diagnosticCounts(events);
   const collapseReplacements = preview || events.some((event) => event.kind === "summary");
   for (const event of events) {
@@ -959,7 +920,7 @@ export function resourceRows(events: RunEvent[], preview: boolean): ResourceDisp
     const nameParts = urn.split("::");
     const timestamp = typeof event.payload.timestamp === "number" ? event.payload.timestamp : undefined;
     const startTimestamp = event.kind === "resourcePre" ? timestamp : current?.startTimestamp;
-    const diffs = Array.isArray(metadata.diffs) ? metadata.diffs.map(String) : Object.keys(isRecord(metadata.detailedDiff) ? metadata.detailedDiff : {});
+    const diffs = propertyPaths.get(urn) ?? [];
     rows.set(urn, {
       sequence: current?.sequence ?? event.sequence,
       urn,
@@ -981,87 +942,14 @@ export function resourceRows(events: RunEvent[], preview: boolean): ResourceDisp
   return [...rows.values()].sort((a, b) => a.sequence - b.sequence);
 }
 
-export function propertyChanges(metadata: Record<string, unknown>): PropertyChange[] {
-  const oldState = isRecord(metadata.old) ? metadata.old : {};
-  const newState = isRecord(metadata.new) ? metadata.new : {};
-  const oldInputs = isRecord(oldState.inputs) ? oldState.inputs : {};
-  const oldOutputs = isRecord(oldState.outputs) ? oldState.outputs : {};
-  const newInputs = isRecord(newState.inputs) ? newState.inputs : {};
-  const detailed = isRecord(metadata.detailedDiff) ? metadata.detailedDiff : null;
-  const hidden = Array.isArray(newState.hideDiffs) ? newState.hideDiffs.map(String) : [];
-  const paths = detailed !== null
-    ? Object.keys(detailed)
-    : Array.isArray(metadata.diffs) ? metadata.diffs.map(String) : changedTopLevelKeys(oldInputs, newInputs);
-  return paths.filter((path) => !hidden.some((hiddenPath) => path === hiddenPath || path.startsWith(`${hiddenPath}.`) || path.startsWith(`${hiddenPath}[`))).sort().map((path) => {
-    const diff = detailed !== null && isRecord(detailed[path]) ? detailed[path] : {};
-    // inputDiff selects old inputs or old provider state only for a detailed provider diff.
-    // Pulumi's coarse preview/update fallback compares old and new inputs, with `diffs` as
-    // a top-level inclusion filter; treating a missing inputDiff as false invents deletions
-    // for provider-computed fields that exist only in old outputs.
-    const oldValues = detailed === null || diff.inputDiff === true ? oldInputs : oldOutputs;
-    return {
-      path,
-      kind: asText(diff.diffKind, inferDiffKind(readPropertyPath(oldValues, path), readPropertyPath(newInputs, path))),
-      oldValue: readPropertyPath(oldValues, path),
-      newValue: readPropertyPath(newInputs, path),
-      internal: isInternalPath(path),
-    };
-  });
-}
-
-// Pulumi's engine/providers mark bookkeeping fields with a leading "__" (e.g. "__internal").
-function isInternalPath(path: string): boolean {
-  return path.split(/[.[]/).some((segment) => segment.startsWith("__"));
-}
-
-export function jsonDiffLines(properties: PropertyChange[]): JsonDiffLine[] {
+export function jsonDiffLines(properties: RunPropertyChange[]): JsonDiffLine[] {
   return computeJsonDiffLines(properties.map((property) => ({
     path: property.path,
-    oldValue: maskPulumiSecrets(property.oldValue),
-    newValue: maskPulumiSecrets(property.newValue),
+    oldValue: property.oldPresent ? property.oldValue : undefined,
+    newValue: property.newPresent ? property.newValue : undefined,
   })));
 }
 
-export function stackOutputsFromEvents(events: RunEvent[]): Record<string, unknown> {
-  for (let index = events.length - 1; index >= 0; index--) {
-    const event = events[index];
-    if (event.kind !== "resOutputs") continue;
-    const body = isRecord(event.payload.resOutputsEvent) ? event.payload.resOutputsEvent : {};
-    const metadata = isRecord(body.metadata) ? body.metadata : {};
-    if (metadata.type !== "pulumi:pulumi:Stack") continue;
-    const state = isRecord(metadata.new) ? metadata.new : {};
-    return isRecord(state.outputs) ? maskPulumiSecrets(state.outputs) as Record<string, unknown> : {};
-  }
-  return {};
-}
-
-type OutputDiffEntry = { key: string; kind: "add" | "remove" | "update" | "same"; oldValue: unknown; newValue: unknown };
-
-// Top-level-only diff of the stack's final outputs, mirroring the CLI's closing
-// `Outputs:` block. Nested object/array changes are not diffed field-by-field —
-// a changed nested value is shown whole, which is enough to spot that it moved.
-export function stackOutputsDiff(events: RunEvent[]): OutputDiffEntry[] {
-  for (let index = events.length - 1; index >= 0; index--) {
-    const event = events[index];
-    if (event.kind !== "resOutputs") continue;
-    const body = isRecord(event.payload.resOutputsEvent) ? event.payload.resOutputsEvent : {};
-    const metadata = isRecord(body.metadata) ? body.metadata : {};
-    if (metadata.type !== "pulumi:pulumi:Stack") continue;
-    const oldOutputs = isRecord(metadata.old) && isRecord(metadata.old.outputs) ? metadata.old.outputs : {};
-    const newOutputs = isRecord(metadata.new) && isRecord(metadata.new.outputs) ? metadata.new.outputs : {};
-    const hadPriorOutputs = Object.keys(oldOutputs).length > 0;
-    const keys = [...new Set([...Object.keys(oldOutputs), ...Object.keys(newOutputs)])].sort();
-    return keys.map((key) => {
-      const oldValue = maskPulumiSecrets(oldOutputs[key]);
-      const newValue = maskPulumiSecrets(newOutputs[key]);
-      const kind: OutputDiffEntry["kind"] = !hadPriorOutputs || JSON.stringify(oldValue) === JSON.stringify(newValue)
-        ? "same"
-        : !(key in oldOutputs) ? "add" : !(key in newOutputs) ? "remove" : "update";
-      return { key, kind, oldValue, newValue };
-    });
-  }
-  return [];
-}
 function urnType(urn: string) { const parts = urn.split("::"); const types = parts[parts.length - 2]?.split("$") ?? []; return types[types.length - 1] ?? "unknown"; }
 function isRecord(value: unknown): value is Record<string, unknown> { return typeof value === "object" && value !== null && !Array.isArray(value); }
 // Event payloads are untyped JSON from the CLI, so a field that is normally a
@@ -1160,28 +1048,6 @@ function diagnosticInfo(count?: { errors: number; warnings: number; messages: nu
     .filter(([value]) => Number(value) > 0)
     .map(([value, label]) => `${value} ${label}${value === 1 ? "" : "s"}`)
     .join(", ");
-}
-function changedTopLevelKeys(oldValues: Record<string, unknown>, newValues: Record<string, unknown>) {
-  return [...new Set([...Object.keys(oldValues), ...Object.keys(newValues)])]
-    .filter((key) => JSON.stringify(oldValues[key]) !== JSON.stringify(newValues[key]));
-}
-function readPropertyPath(value: unknown, path: string): unknown {
-  const segments = path.replace(/\["([^"\]]+)"\]/g, ".$1").replace(/\[(\d+)\]/g, ".$1").split(".").filter(Boolean);
-  return segments.reduce<unknown>((current, segment) => {
-    if (Array.isArray(current)) return current[Number(segment)];
-    return isRecord(current) ? current[segment] : undefined;
-  }, value);
-}
-function inferDiffKind(oldValue: unknown, newValue: unknown) { return oldValue === undefined ? "add" : newValue === undefined ? "delete" : "update"; }
-// The engine's stand-in for values it cannot know during a preview (computed
-// outputs, to-be-created secrets): plugin.UnknownStringValue in pulumi/pulumi.
-const PULUMI_UNKNOWN_VALUE = "04da6b54-80e4-46f7-96ec-b56ff0331ba9";
-export function maskPulumiSecrets(value: unknown): unknown {
-  if (value === PULUMI_UNKNOWN_VALUE) return "[unknown]";
-  if (Array.isArray(value)) return value.map(maskPulumiSecrets);
-  if (!isRecord(value)) return value;
-  if (isPulumiSecret(value)) return "[secret]";
-  return Object.fromEntries(Object.entries(value).map(([key, entry]) => [key, maskPulumiSecrets(entry)]));
 }
 function formatSeconds(seconds: number) { const minutes = Math.floor(seconds / 60); const rest = seconds % 60; return minutes > 0 ? `${minutes}m ${rest}s` : `${seconds}s`; }
 function OperationBadge({ op }: { op: string }) { const variant: BadgeProps["variant"] = op.includes("create") ? "success" : op.includes("delete") ? "destructive" : op.includes("update") ? "warning" : op.includes("replace") ? "info" : "muted"; return <Badge variant={variant}>{op}</Badge>; }
