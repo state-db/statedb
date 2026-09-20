@@ -1,0 +1,165 @@
+[
+  {
+    "sequence": 0,
+    "timestamp": 0,
+    "resourcePreEvent": {
+      "metadata": {
+        "op": "update",
+        "urn": "urn:pulumi:dev::shop::pkg:index:Thing::@everyone #1 [click](https://evil.invalid) `code` <img src=x onerror=alert(1)> a|b",
+        "type": "pkg:index:Thing",
+        "old": {
+          "inputs": {
+            "x": 1
+          },
+          "outputs": {
+            "x": 1
+          }
+        },
+        "new": {
+          "inputs": {
+            "x": 2
+          }
+        },
+        "detailedDiff": {
+          "x": {
+            "diffKind": "update",
+            "inputDiff": true
+          },
+          "tags[\"@channel|evil\"]": {
+            "diffKind": "update",
+            "inputDiff": true
+          },
+          "futureShape": {
+            "diffKind": "update",
+            "inputDiff": true
+          }
+        }
+      }
+    }
+  },
+  {
+    "sequence": 1,
+    "timestamp": 0,
+    "resourcePreEvent": {
+      "metadata": {
+        "op": "update",
+        "urn": "urn:pulumi:dev::shop::pkg:index:Thing::unknownSecretShape",
+        "type": "pkg:index:Thing",
+        "old": {
+          "inputs": {
+            "wrapped": {
+              "4dabf18193072939515e22adb298388d": "ffffffffffffffffffffffffffffffff",
+              "value": "who knows"
+            }
+          },
+          "outputs": {}
+        },
+        "new": {
+          "inputs": {
+            "wrapped": "plain"
+          }
+        },
+        "detailedDiff": {
+          "wrapped": {
+            "diffKind": "update",
+            "inputDiff": true
+          }
+        }
+      }
+    }
+  },
+  {
+    "sequence": 2,
+    "timestamp": 0,
+    "resourcePreEvent": {
+      "metadata": {
+        "op": "update",
+        "urn": "urn:pulumi:dev::shop::pkg:index:Thing::outputValueSecret",
+        "type": "pkg:index:Thing",
+        "old": {
+          "inputs": {},
+          "outputs": {}
+        },
+        "new": {
+          "inputs": {
+            "token": {
+              "4dabf18193072939515e22adb298388d": "d0e6a833031e9bbcd3f4e8bde6ca49a4",
+              "secret": true,
+              "value": "plaintext-token-do-not-emit"
+            }
+          }
+        },
+        "detailedDiff": {
+          "token": {
+            "diffKind": "add",
+            "inputDiff": true
+          }
+        }
+      }
+    }
+  },
+  {
+    "sequence": 3,
+    "timestamp": 0,
+    "resourcePreEvent": {
+      "metadata": {
+        "op": "update",
+        "urn": "urn:pulumi:dev::shop::pkg:index:Thing::hiddenDiffs",
+        "type": "pkg:index:Thing",
+        "old": {
+          "inputs": {
+            "credentials": {
+              "token": "a"
+            },
+            "credentialsPublic": "x",
+            "shown": 1
+          },
+          "outputs": {}
+        },
+        "new": {
+          "inputs": {
+            "credentials": {
+              "token": "b"
+            },
+            "credentialsPublic": "y",
+            "shown": 2
+          },
+          "hideDiffs": [
+            "credentials"
+          ]
+        },
+        "detailedDiff": {
+          "credentials": {
+            "diffKind": "update",
+            "inputDiff": true
+          },
+          "credentials.token": {
+            "diffKind": "update",
+            "inputDiff": true
+          },
+          "credentialsPublic": {
+            "diffKind": "update",
+            "inputDiff": true
+          },
+          "shown": {
+            "diffKind": "update",
+            "inputDiff": true
+          }
+        }
+      }
+    }
+  },
+  {
+    "sequence": 4,
+    "timestamp": 0,
+    "summaryEvent": {
+      "durationSeconds": 0,
+      "isPreview": true,
+      "maybeCorrupt": false,
+      "resourceChanges": {
+        "update": 4
+      },
+      "result": "succeeded"
+    }
+  }
+]

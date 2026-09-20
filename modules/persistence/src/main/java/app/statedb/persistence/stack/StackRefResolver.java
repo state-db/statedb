@@ -6,6 +6,7 @@ import jakarta.persistence.EntityManager;
 import jakarta.persistence.NoResultException;
 import jakarta.persistence.NonUniqueResultException;
 import java.util.Optional;
+import java.util.UUID;
 
 /**
  * Resolves a {@code (org, project, stack)} path triple to a {@link StackRef}. Lives here, not in
@@ -57,6 +58,41 @@ public class StackRefResolver {
               + "). UNIQUE constraints on organizations.name, projects(org_id,name),"
               + " stacks(project_id,name) must have been bypassed.",
           e);
+    }
+  }
+
+  /**
+   * The same {@link StackRef}, resolved from the stack's primary key instead of its name triple.
+   *
+   * <p>For routes addressed by something that already carries a {@code stack_id} — an update id,
+   * for instance — where re-deriving the name triple only to look it back up would be a round trip
+   * that can also disagree with itself after a rename. Lives beside {@link #resolve} because it is
+   * the same projection and must stay the same projection; two copies that drift would be a tenancy
+   * bug, which is the reason this class exists at all.
+   */
+  @SuppressWarnings("null") // JPA TypedQuery generics lack nullability annotations
+  public Optional<StackRef> resolveByStackId(UUID stackId) {
+    if (stackId == null) {
+      return Optional.empty();
+    }
+    try {
+      StackRef ref =
+          em.createQuery(
+                  """
+                  SELECT new app.statedb.persistence.stack.StackRef(
+                      s.id, s.workspaceId, s.orgId, o.name, p.name, s.name, s.version,
+                      s.activeUpdateId, s.visibility)
+                  FROM Stack s
+                  JOIN Project p ON p.id = s.projectId
+                  JOIN Organization o ON o.id = s.orgId
+                  WHERE s.id = :stackId
+                  """,
+                  StackRef.class)
+              .setParameter("stackId", stackId)
+              .getSingleResult();
+      return Optional.of(ref);
+    } catch (NoResultException e) {
+      return Optional.empty();
     }
   }
 }

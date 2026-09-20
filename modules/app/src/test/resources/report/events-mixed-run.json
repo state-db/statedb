@@ -1,0 +1,187 @@
+[
+  {
+    "sequence": 0,
+    "timestamp": 0,
+    "preludeEvent": { "config": {} }
+  },
+
+  {
+    "sequence": 1,
+    "timestamp": 0,
+    "resourcePreEvent": {
+      "metadata": {
+        "op": "create",
+        "urn": "urn:pulumi:dev::shop::aws:s3/bucket:Bucket::assets",
+        "type": "aws:s3/bucket:Bucket",
+        "new": { "inputs": { "acl": "private" } },
+        "detailedDiff": null
+      }
+    }
+  },
+  {
+    "sequence": 2,
+    "timestamp": 0,
+    "resOutputsEvent": {
+      "metadata": {
+        "op": "create",
+        "urn": "urn:pulumi:dev::shop::aws:s3/bucket:Bucket::assets",
+        "type": "aws:s3/bucket:Bucket",
+        "new": { "inputs": { "acl": "private" }, "outputs": { "arn": "arn:aws:s3:::assets" } },
+        "detailedDiff": null
+      }
+    }
+  },
+
+  {
+    "sequence": 3,
+    "timestamp": 0,
+    "resourcePreEvent": {
+      "metadata": {
+        "op": "update",
+        "urn": "urn:pulumi:dev::shop::aws:rds/instance:Instance::db",
+        "type": "aws:rds/instance:Instance",
+        "old": {
+          "inputs": { "tags": { "env": "staging" }, "instanceClass": "db.t3.micro" },
+          "outputs": {
+            "instanceClass": "db.t3.micro",
+            "password": {
+              "4dabf18193072939515e22adb298388d": "1b47061264138c4ac30d75fd1eb44270",
+              "ciphertext": "v1:opaque:ciphertext"
+            }
+          }
+        },
+        "new": {
+          "inputs": {
+            "tags": { "env": "production" },
+            "instanceClass": "db.t3.small",
+            "password": {
+              "4dabf18193072939515e22adb298388d": "1b47061264138c4ac30d75fd1eb44270",
+              "ciphertext": "v1:opaque:rotated"
+            }
+          }
+        },
+        "detailedDiff": {
+          "tags.env": { "kind": "UPDATE", "diffKind": "update", "inputDiff": true },
+          "instanceClass": { "diffKind": "update-replace", "inputDiff": true },
+          "password": { "diffKind": "update" }
+        }
+      }
+    }
+  },
+  {
+    "sequence": 4,
+    "timestamp": 0,
+    "resOutputsEvent": {
+      "metadata": {
+        "op": "update",
+        "urn": "urn:pulumi:dev::shop::aws:rds/instance:Instance::db",
+        "type": "aws:rds/instance:Instance",
+        "new": { "inputs": {}, "outputs": {} },
+        "detailedDiff": null
+      }
+    }
+  },
+
+  {
+    "sequence": 5,
+    "timestamp": 0,
+    "resourcePreEvent": {
+      "metadata": {
+        "op": "update",
+        "urn": "urn:pulumi:dev::shop::aws:elasticache/cluster:Cluster::cache",
+        "type": "aws:elasticache/cluster:Cluster",
+        "old": { "inputs": { "size": "small" }, "outputs": { "size": "small" } },
+        "new": { "inputs": { "size": "large" } },
+        "diffs": ["size"],
+        "detailedDiff": null
+      }
+    }
+  },
+
+  {
+    "sequence": 6,
+    "timestamp": 0,
+    "resourcePreEvent": {
+      "metadata": {
+        "op": "delete",
+        "urn": "urn:pulumi:dev::shop::aws:sns/topic:Topic::legacy",
+        "type": "aws:sns/topic:Topic",
+        "old": { "inputs": {}, "outputs": {} },
+        "detailedDiff": null
+      }
+    }
+  },
+
+  {
+    "sequence": 7,
+    "timestamp": 0,
+    "resourcePreEvent": {
+      "metadata": {
+        "op": "create-replacement",
+        "urn": "urn:pulumi:dev::shop::aws:sqs/queue:Queue::jobs",
+        "type": "aws:sqs/queue:Queue",
+        "new": { "inputs": { "fifoQueue": true } },
+        "detailedDiff": {
+          "fifoQueue": { "diffKind": "update-replace", "inputDiff": true }
+        }
+      }
+    }
+  },
+  {
+    "sequence": 8,
+    "timestamp": 0,
+    "resourcePreEvent": {
+      "metadata": {
+        "op": "delete-replaced",
+        "urn": "urn:pulumi:dev::shop::aws:sqs/queue:Queue::jobs",
+        "type": "aws:sqs/queue:Queue",
+        "old": { "inputs": { "fifoQueue": false }, "outputs": {} },
+        "detailedDiff": null
+      }
+    }
+  },
+
+  {
+    "sequence": 9,
+    "timestamp": 0,
+    "resourcePreEvent": {
+      "metadata": {
+        "op": "same",
+        "urn": "urn:pulumi:dev::shop::aws:ec2/vpc:Vpc::net",
+        "type": "aws:ec2/vpc:Vpc",
+        "old": { "inputs": {}, "outputs": {} },
+        "new": { "inputs": {} },
+        "detailedDiff": null
+      }
+    }
+  },
+
+  {
+    "sequence": 10,
+    "timestamp": 0,
+    "diagnosticEvent": {
+      "severity": "warning",
+      "message": "provider is deprecated",
+      "urn": "urn:pulumi:dev::shop::aws:rds/instance:Instance::db"
+    }
+  },
+
+  {
+    "sequence": 11,
+    "timestamp": 0,
+    "summaryEvent": {
+      "durationSeconds": 0,
+      "isPreview": true,
+      "maybeCorrupt": false,
+      "resourceChanges": {
+        "create": 1,
+        "update": 2,
+        "delete": 1,
+        "create-replacement": 1,
+        "delete-replaced": 1,
+        "same": 1
+      },
+      "result": "succeeded"
+    }
+  }
+]

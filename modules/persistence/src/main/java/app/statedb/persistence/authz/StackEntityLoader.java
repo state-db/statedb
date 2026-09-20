@@ -1,9 +1,6 @@
 package app.statedb.persistence.authz;
 
 import app.statedb.persistence.auth.AuthenticatedPrincipal;
-import app.statedb.persistence.identity.AdminAllowList;
-import app.statedb.persistence.identity.OrgMember;
-import app.statedb.persistence.policy.PolicyGrant;
 import app.statedb.persistence.stack.StackNotFoundException;
 import app.statedb.persistence.stack.StackRef;
 import app.statedb.persistence.stack.StackRefResolver;
@@ -22,9 +19,7 @@ public class StackEntityLoader implements EntityLoader<StackRef> {
 
   @Inject StackRefResolver resolver;
 
-  @Inject PrincipalRoleResolver roleResolver;
-
-  @Inject AdminAllowList adminAllowList;
+  @Inject StackReadAuthorizer readAuthorizer;
 
   private String org;
   private String project;
@@ -39,23 +34,12 @@ public class StackEntityLoader implements EntityLoader<StackRef> {
     if (ref.isEmpty()) {
       return Optional.empty();
     }
-    StackRef r = ref.get();
-    Optional<OrgMember.Role> role = roleResolver.resolve(principal, r.orgId());
     // Read-visibility boundary: a stack the principal cannot READ does not resolve — the denial
     // collapses to 404, not 403 (a 403 would confirm the hidden stack exists). This applies the
     // same predicate as the list finders (design/stack-sharing.md §3/§9): non-members see nothing;
     // guests see only granted stacks; members/viewers additionally lose private stacks unless
     // granted. 403 stays reserved for within-visible-scope denials on non-read actions.
-    boolean admin = adminAllowList.isAdmin(principal.iss(), principal.sub());
-    if (!admin
-        && (role.isEmpty()
-            || !StackReadVisibility.canRead(
-                role.get(),
-                r.visibility(),
-                () -> PolicyGrant.hasStackReadShare(principal.userId(), r.stackId())))) {
-      return Optional.empty();
-    }
-    return Optional.of(new LoadedResource(stackResource(r), role.orElse(null), r));
+    return readAuthorizer.visibleResource(ref.get(), principal);
   }
 
   @Override

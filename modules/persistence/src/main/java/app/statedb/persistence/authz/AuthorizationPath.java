@@ -39,6 +39,15 @@ public final class AuthorizationPath {
     return required("stack");
   }
 
+  /**
+   * A URI variable this route binds, for loaders keyed on something other than the stack triple.
+   * Fails the same way {@link #org()} and friends do — an absent or ambiguous variable is a route
+   * binding bug, not a client error, and surfaces as one.
+   */
+  public String value(String variable) {
+    return required(variable);
+  }
+
   private String required(String variable) {
     List<String> values = parameters.get(variable);
     if (values == null || values.isEmpty()) {

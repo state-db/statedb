@@ -93,6 +93,44 @@ public class UpdateEventReader {
     return new EventPage(events, false);
   }
 
+  /**
+   * The whole event stream for one update, ascending, at most {@code maxEvents} of them.
+   *
+   * <p>For a consumer that wants the stream rather than a window: a report derived from a run needs
+   * every step event at once, and {@link #page} is the wrong shape for that. Paging an archived run
+   * re-inflates and re-tokenizes the blob on every call, so walking a run page by page is
+   * superlinear in the number of pages — the measurement is in {@link
+   * EventArchiveCodec#decodePage}. This reads it once.
+   *
+   * <p><b>The event-count bound is explicit and mandatory</b> rather than defaulted or unbounded:
+   * every returned event materializes its payload as a tree, and a run can have hundreds of
+   * thousands of them. Passing the bound down to the codec means an archive is inflated only
+   * through the probe event, not inflated whole and then trimmed.
+   *
+   * <p>This is not a byte-level heap bound. JDBC materializes the compressed archive {@code bytea}
+   * before decoding, and an individual payload has no separate byte limit. A hard byte guarantee
+   * needs chunked archive storage or another bounded streaming representation.
+   *
+   * <p>Shares {@link #page}'s single statement, and therefore its single-snapshot guarantee: an
+   * archived run and a live one answer from exactly one source even when folding commits
+   * underneath. That guarantee is the reason this method delegates rather than repeating the SQL.
+   */
+  public EventStream stream(UUID stackId, UUID updateId, int maxEvents) {
+    if (maxEvents <= 0) {
+      throw new IllegalArgumentException("maxEvents must be positive, got " + maxEvents);
+    }
+    // One past the bound, so a stream that exactly fills it is not reported as truncated, and one
+    // that overflows is — without a second read to find out.
+    int probe = maxEvents == Integer.MAX_VALUE ? maxEvents : maxEvents + 1;
+    EventPage page = page(stackId, updateId, -1, probe);
+    List<StoredEvent> events = page.events();
+    boolean truncated = events.size() > maxEvents;
+    return new EventStream(
+        truncated ? List.copyOf(events.subList(0, maxEvents)) : List.copyOf(events),
+        page.archived(),
+        truncated);
+  }
+
   private JsonNode payload(Object value) {
     try {
       return mapper.readTree((String) value);
@@ -107,4 +145,18 @@ public class UpdateEventReader {
    * worked from one that silently served the summary rows the fold left behind.
    */
   public record EventPage(List<StoredEvent> events, boolean archived) {}
+
+  /**
+   * A whole event stream plus which source answered and whether the bound cut it.
+   *
+   * <p>{@code archived} is here for the same reason it is on {@link EventPage}: it is how a test
+   * tells a fold that worked from one that silently served the summary rows the fold left behind. A
+   * report built over a folded run must be indistinguishable from one built over live rows, and
+   * asserting that needs both cases to be reachable and distinguishable in the test, not in the
+   * output.
+   *
+   * <p>{@code truncated} is not an error. A caller propagates it into whatever it builds so a
+   * reader is told the run was larger than the report.
+   */
+  public record EventStream(List<StoredEvent> events, boolean archived, boolean truncated) {}
 }

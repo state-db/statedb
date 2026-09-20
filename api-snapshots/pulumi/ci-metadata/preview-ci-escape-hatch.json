@@ -1,0 +1,72 @@
+{
+  "seq": 444,
+  "command": "35-preview-ci-escape-hatch",
+  "cmd_seq": 6,
+  "method": "POST",
+  "path": "/api/stacks/testorg/recorder-test/dev/preview",
+  "headers": {
+    "Accept": "application/vnd.pulumi+9",
+    "Accept-Encoding": "gzip",
+    "Authorization": "REDACTED",
+    "Content-Length": "1414",
+    "Content-Type": "application/json",
+    "User-Agent": "pulumi-cli/1 ([cli-version]; linux; cmd=preview)"
+  },
+  "body": {
+    "config": {},
+    "description": "Minimal Pulumi project for API recording. Uses the `random` provider so `pulumi up`/`destroy` exercise the journal/checkpoint write paths with real resource state.",
+    "main": "",
+    "metadata": {
+      "environment": {
+        "ci.build.id": "recorder-build-7",
+        "ci.build.number": "7",
+        "ci.build.type": "pull_request",
+        "ci.build.url": "https://ci.invalid/builds/7",
+        "ci.pr.headSHA": "0123456789abcdef0123456789abcdef01234567",
+        "ci.pr.number": "4242",
+        "ci.system": "statedb-recorder",
+        "exec.kind": "cli",
+        "pulumi.arch": "arm64",
+        "pulumi.env.PULUMI_ACCESS_TOKEN": "set",
+        "pulumi.env.PULUMI_BACKEND_URL": "set",
+        "pulumi.env.PULUMI_CI_BUILD_ID": "set",
+        "pulumi.env.PULUMI_CI_BUILD_NUMBER": "set",
+        "pulumi.env.PULUMI_CI_BUILD_TYPE": "set",
+        "pulumi.env.PULUMI_CI_BUILD_URL": "set",
+        "pulumi.env.PULUMI_CI_PULL_REQUEST_SHA": "set",
+        "pulumi.env.PULUMI_CI_SYSTEM": "set",
+        "pulumi.env.PULUMI_CONFIG_PASSPHRASE": "set",
+        "pulumi.env.PULUMI_HOME": "set",
+        "pulumi.env.PULUMI_PR_NUMBER": "set",
+        "pulumi.env.PULUMI_SKIP_CONFIRMATIONS": "true",
+        "pulumi.env.PULUMI_SKIP_UPDATE_CHECK": "true",
+        "pulumi.flag.parallel": "set",
+        "pulumi.os": "linux",
+        "pulumi.version": "[cli-version]",
+        "runtime.name": "yaml",
+        "stack.environments": "[]",
+        "updatePlan": "false"
+      },
+      "message": ""
+    },
+    "name": "recorder-test",
+    "options": {
+      "color": "raw",
+      "debug": false,
+      "dryRun": true,
+      "localPolicyPackPaths": [],
+      "parallel": 1,
+      "showConfig": false,
+      "showNames": false,
+      "showReplacementSteps": false,
+      "summary": false
+    },
+    "runtime": "yaml"
+  },
+  "body_b64": "eyJjb25maWciOnt9LCJkZXNjcmlwdGlvbiI6Ik1pbmltYWwgUHVsdW1pIHByb2plY3QgZm9yIEFQSSByZWNvcmRpbmcuIFVzZXMgdGhlIGByYW5kb21gIHByb3ZpZGVyIHNvIGBwdWx1bWkgdXBgL2BkZXN0cm95YCBleGVyY2lzZSB0aGUgam91cm5hbC9jaGVja3BvaW50IHdyaXRlIHBhdGhzIHdpdGggcmVhbCByZXNvdXJjZSBzdGF0ZS4iLCJtYWluIjoiIiwibWV0YWRhdGEiOnsiZW52aXJvbm1lbnQiOnsiY2kuYnVpbGQuaWQiOiJyZWNvcmRlci1idWlsZC03IiwiY2kuYnVpbGQubnVtYmVyIjoiNyIsImNpLmJ1aWxkLnR5cGUiOiJwdWxsX3JlcXVlc3QiLCJjaS5idWlsZC51cmwiOiJodHRwczovL2NpLmludmFsaWQvYnVpbGRzLzciLCJjaS5wci5oZWFkU0hBIjoiMDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWYwMTIzNDU2NyIsImNpLnByLm51bWJlciI6IjQyNDIiLCJjaS5zeXN0ZW0iOiJzdGF0ZWRiLXJlY29yZGVyIiwiZXhlYy5raW5kIjoiY2xpIiwicHVsdW1pLmFyY2giOiJhcm02NCIsInB1bHVtaS5lbnYuUFVMVU1JX0FDQ0VTU19UT0tFTiI6InNldCIsInB1bHVtaS5lbnYuUFVMVU1JX0JBQ0tFTkRfVVJMIjoic2V0IiwicHVsdW1pLmVudi5QVUxVTUlfQ0lfQlVJTERfSUQiOiJzZXQiLCJwdWx1bWkuZW52LlBVTFVNSV9DSV9CVUlMRF9OVU1CRVIiOiJzZXQiLCJwdWx1bWkuZW52LlBVTFVNSV9DSV9CVUlMRF9UWVBFIjoic2V0IiwicHVsdW1pLmVudi5QVUxVTUlfQ0lfQlVJTERfVVJMIjoic2V0IiwicHVsdW1pLmVudi5QVUxVTUlfQ0lfUFVMTF9SRVFVRVNUX1NIQSI6InNldCIsInB1bHVtaS5lbnYuUFVMVU1JX0NJX1NZU1RFTSI6InNldCIsInB1bHVtaS5lbnYuUFVMVU1JX0NPTkZJR19QQVNTUEhSQVNFIjoic2V0IiwicHVsdW1pLmVudi5QVUxVTUlfSE9NRSI6InNldCIsInB1bHVtaS5lbnYuUFVMVU1JX1BSX05VTUJFUiI6InNldCIsInB1bHVtaS5lbnYuUFVMVU1JX1NLSVBfQ09ORklSTUFUSU9OUyI6InRydWUiLCJwdWx1bWkuZW52LlBVTFVNSV9TS0lQX1VQREFURV9DSEVDSyI6InRydWUiLCJwdWx1bWkuZmxhZy5wYXJhbGxlbCI6InNldCIsInB1bHVtaS5vcyI6ImxpbnV4IiwicHVsdW1pLnZlcnNpb24iOiJbY2xpLXZlcnNpb25dIiwicnVudGltZS5uYW1lIjoieWFtbCIsInN0YWNrLmVudmlyb25tZW50cyI6IltdIiwidXBkYXRlUGxhbiI6ImZhbHNlIn0sIm1lc3NhZ2UiOiIifSwibmFtZSI6InJlY29yZGVyLXRlc3QiLCJvcHRpb25zIjp7ImNvbG9yIjoicmF3IiwiZGVidWciOmZhbHNlLCJkcnlSdW4iOnRydWUsImxvY2FsUG9saWN5UGFja1BhdGhzIjpbXSwicGFyYWxsZWwiOjEsInNob3dDb25maWciOmZhbHNlLCJzaG93TmFtZXMiOmZhbHNlLCJzaG93UmVwbGFjZW1lbnRTdGVwcyI6ZmFsc2UsInN1bW1hcnkiOmZhbHNlfSwicnVudGltZSI6InlhbWwifQ==",
+  "status_code": 200,
+  "response": {
+    "updateID": "preview-0017",
+    "version": 1
+  }
+}

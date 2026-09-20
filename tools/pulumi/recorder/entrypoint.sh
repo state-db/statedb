@@ -209,6 +209,36 @@ run pulumi cancel --yes
 signal "33-stack-rm-after-cancel"
 run pulumi stack rm dev --yes
 
+# --- CI metadata via the PULUMI_CI_SYSTEM escape hatch (design/pr-enrichment.md).
+#
+# ciutil's generic detector sits first in the detector list and matches only on
+# PULUMI_CI_SYSTEM. When it matches, the sibling PULUMI_CI_* / PULUMI_PR_NUMBER
+# variables populate `ci.pr.*` and `ci.build.*` in metadata.environment. Every
+# other detection tier either finds no CI at all (a bare `pulumi preview`, which
+# commands 04 and 12 already record) or — for the bare `baseCI` systems, Drone
+# among them — sets `ci.system` and nothing else.
+#
+# Recorded so that a CLI bump which renames a key or drops the generic detector
+# fails a fixture diff, rather than silently disabling PR linkage. The values are
+# deliberately synthetic and are not normalized away, so the fixture pins the key
+# names and the value passthrough together.
+
+signal "34-stack-init-for-ci-metadata"
+run pulumi stack init dev
+
+signal "35-preview-ci-escape-hatch"
+run env PULUMI_CI_SYSTEM=statedb-recorder \
+        PULUMI_PR_NUMBER=4242 \
+        PULUMI_CI_PULL_REQUEST_SHA=0123456789abcdef0123456789abcdef01234567 \
+        PULUMI_CI_BUILD_ID=recorder-build-7 \
+        PULUMI_CI_BUILD_NUMBER=7 \
+        PULUMI_CI_BUILD_TYPE=pull_request \
+        PULUMI_CI_BUILD_URL=https://ci.invalid/builds/7 \
+        pulumi preview --parallel 1
+
+signal "36-stack-rm-after-ci-metadata"
+run pulumi stack rm dev --yes
+
 echo ""
 echo "==> all commands completed"
 echo "==> $(find "$FIXTURE_DIR/by-command" -name '*.json' 2>/dev/null | wc -l | tr -d ' ') fixtures written"
