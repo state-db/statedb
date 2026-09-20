@@ -70,7 +70,9 @@ refresh-before-preview, refresh-before-update, a standalone refresh,
 targeted destroy/restore, and a full destroy/rebuild on
 `application-fleet/dev`). Re-running converges to the final revision and adds
 fresh refresh-before-preview and refresh-before-update runs to each existing
-`shared-foundation` stack. First run: ~35 real Pulumi ops, a few minutes.
+`shared-foundation` stack. A fresh `shared-foundation` fixture follows the
+first-creation choreography and uses the same refresh-display messages. First
+run: ~35 real Pulumi ops, a few minutes.
 
 On a `shared-foundation` fixture, use these messages to verify refresh display
 semantics in the console:
@@ -83,7 +85,9 @@ semantics in the console:
   are `same` and the page reports no drift.
 
 `fixtures-up` creates the first two runs on both new and existing stacks. The
-standalone `Scheduled drift check` is part of the first-creation choreography.
+standalone `Scheduled drift check` is part of the first-creation choreography,
+and existing stacks take the convergence path and do not acquire these three
+historical runs.
 
 `cmd=fixtures-destroy` tears down resources, keeps the empty stacks.
 `cmd=force-unlock` clears a stuck lock after an interrupted run.
