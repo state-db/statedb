@@ -61,11 +61,16 @@ public class MarkdownReportRenderer {
     String link =
         Markdown.isEmittableLink(consoleLink) ? Markdown.link(LINK_LABEL, consoleLink) : null;
 
+    boolean linkOmitted =
+        link != null && byteLength(TRUNCATION_NOTE) + byteLength(link) + 4 > limits.maxBodyBytes();
+    if (linkOmitted) {
+      link = null;
+    }
     int reserved = byteLength(TRUNCATION_NOTE) + (link == null ? 0 : byteLength(link)) + 4;
     int budget = Math.max(0, limits.maxBodyBytes() - reserved);
 
     Body body = new Body();
-    boolean truncated = report.truncated();
+    boolean truncated = report.truncated() || linkOmitted;
     truncated |= !body.append(heading(report), budget);
     truncated |= !body.append("**" + summaryLine + "** · " + Markdown.code(state(report)), budget);
 
@@ -81,10 +86,10 @@ public class MarkdownReportRenderer {
     }
 
     if (truncated) {
-      body.appendUnbounded(TRUNCATION_NOTE);
+      body.append(TRUNCATION_NOTE, limits.maxBodyBytes());
     }
     if (link != null) {
-      body.appendUnbounded(link);
+      truncated |= !body.append(link, limits.maxBodyBytes());
     }
 
     return new RenderedReport(title, summaryLine, body.toString(), truncated);
@@ -182,8 +187,7 @@ public class MarkdownReportRenderer {
   }
 
   private boolean appendTable(Body body, ChangeReport report, int budget) {
-    if (!body.append("| | Resource | Changed properties |", budget)
-        || !body.append("| --- | --- | --- |", budget)) {
+    if (!body.append("| | Resource | Changed properties |\n| --- | --- | --- |", budget)) {
       return false;
     }
     for (ResourceChange resource : report.resources()) {
@@ -200,7 +204,7 @@ public class MarkdownReportRenderer {
       if (properties.length() > 0) {
         properties.append(", ");
       }
-      properties.append(Markdown.code(property.path()));
+      properties.append(Markdown.tableCode(property.path()));
       if (property.kind().forcesReplacement()) {
         properties.append(" (replaces)");
       }
@@ -213,11 +217,11 @@ public class MarkdownReportRenderer {
     }
     String cell = properties.length() == 0 ? NO_PROPERTIES : properties.toString();
     return "| "
-        + Markdown.code(marker(resource.op()))
+        + Markdown.tableCode(marker(resource.op()))
         + " | "
-        + Markdown.code(resource.type())
+        + Markdown.tableCode(resource.type())
         + " "
-        + Markdown.code(resource.name())
+        + Markdown.tableCode(resource.name())
         + " | "
         + cell
         + " |";

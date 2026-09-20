@@ -4,7 +4,7 @@
 
 | | Resource | Changed properties |
 | --- | --- | --- |
-| `+` | `aws:s3/bucket:Bucket` `assets` | — |
+| `+` | `aws:s3/bucket:Bucket` `assets` | `acl` |
 | `~` | `aws:rds/instance:Instance` `db` | `instanceClass` (replaces), `password` (secret), `tags.env` |
 | `~` | `aws:elasticache/cluster:Cluster` `cache` | `size` |
 | `-` | `aws:sns/topic:Topic` `legacy` | — |

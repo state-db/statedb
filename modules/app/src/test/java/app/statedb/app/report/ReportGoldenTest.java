@@ -152,7 +152,7 @@ class ReportGoldenTest {
     assertEquals(ChangeReport.DiffKind.UPDATE_REPLACE, property(db, "instanceClass").kind());
     assertTrue(property(db, "instanceClass").kind().forcesReplacement());
 
-    // A coarse `diffs` list is a top-level inclusion filter and carries no kind of its own.
+    // A coarse `diffs` list names top-level changed inputs and carries no kind of its own.
     ChangeReport.ResourceChange cache = resource(report, "cache");
     assertEquals(List.of("size"), cache.properties().stream().map(p -> p.path()).toList());
     assertEquals(ChangeReport.DiffKind.UNKNOWN, property(cache, "size").kind());

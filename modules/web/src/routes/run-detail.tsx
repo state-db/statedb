@@ -894,12 +894,11 @@ export function resourceRows(
   changes: RunChangeSet,
 ): ResourceDisplayRow[] {
   const rows = new Map<string, ResourceDisplayRow>();
-  const propertyPaths = new Map(
+  const canonicalChanges = new Map(
     [...changes.changed, ...changes.unchanged, ...changes.activity]
-      .map((change) => [change.urn, change.properties.map((property) => property.path)]),
+      .map((change) => [change.urn, change]),
   );
   const diagnostics = diagnosticCounts(events);
-  const collapseReplacements = preview || events.some((event) => event.kind === "summary");
   for (const event of events) {
     if (!["resourcePre", "resOutputs", "resOpFailed"].includes(event.kind)) continue;
     const body = isRecord(event.payload[`${event.kind}Event`]) ? event.payload[`${event.kind}Event`] as Record<string, unknown> : {};
@@ -909,7 +908,8 @@ export function resourceRows(
     const urn = asText(metadata.urn);
     const root = type === "pulumi:pulumi:Stack";
     if (!root && !diagnostics.has(urn) && (rawOp === "same" || isReadOperation(rawOp))) continue;
-    const op = collapseReplacements && isReplacementOperation(rawOp) ? "replace" : rawOp;
+    const canonical = canonicalChanges.get(urn);
+    const op = canonical?.op ?? rawOp;
     const current = rows.get(urn);
     const done = event.kind !== "resourcePre";
     const failed = event.kind === "resOpFailed";
@@ -920,7 +920,7 @@ export function resourceRows(
     const nameParts = urn.split("::");
     const timestamp = typeof event.payload.timestamp === "number" ? event.payload.timestamp : undefined;
     const startTimestamp = event.kind === "resourcePre" ? timestamp : current?.startTimestamp;
-    const diffs = propertyPaths.get(urn) ?? [];
+    const diffs = canonical?.properties.map((property) => property.path) ?? [];
     rows.set(urn, {
       sequence: current?.sequence ?? event.sequence,
       urn,
@@ -1012,7 +1012,6 @@ function conceptualSummaryCounts(changes: Record<string, unknown>) {
   };
 }
 function isReadOperation(op: string) { return op === "read" || op.includes("read-"); }
-function isReplacementOperation(op: string) { return op === "replace" || op.includes("replacement") || op.includes("replaced"); }
 function resourceDepth(row: ResourceDisplayRow, rows: ResourceDisplayRow[]) {
   const byUrn = new Map(rows.map((candidate) => [candidate.urn, candidate]));
   let parent = row.parent;

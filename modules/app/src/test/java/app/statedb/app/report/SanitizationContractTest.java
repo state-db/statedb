@@ -65,6 +65,14 @@ class SanitizationContractTest {
       assertEquals(
           "\"unknown\"", MAPPER.writeValueAsString(ChangeReport.DiagnosticSeverity.UNKNOWN));
     }
+
+    @Test
+    void operationsAndDiffKindsSerializeWithTheirPulumiWireValues() throws Exception {
+      assertEquals(
+          "\"create-replacement\"", MAPPER.writeValueAsString(ChangeReport.Op.CREATE_REPLACEMENT));
+      assertEquals(
+          "\"update-replace\"", MAPPER.writeValueAsString(ChangeReport.DiffKind.UPDATE_REPLACE));
+    }
   }
 
   @Nested
@@ -406,11 +414,8 @@ class SanitizationContractTest {
     }
 
     @Test
-    void aPipeIsEscapedSoItCannotSplitATableRow() {
-      // GFM splits a row on pipes before it parses cells, so a code span alone does not save it.
-      String emitted = Markdown.code("a|b");
-      assertTrue(emitted.contains("\\|"));
-      assertFalse(emitted.replace("\\|", "").contains("|"));
+    void aPipeOutsideATableDoesNotGainAVisibleBackslash() {
+      assertEquals("`a|b`", Markdown.code("a|b"));
     }
 
     @Test

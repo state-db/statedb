@@ -98,6 +98,27 @@ class ConsoleRunEventsArchiveTest {
     assertEquals(beforeFold, pageThrough(session, updateId), "pages differ once unfolded");
   }
 
+  @Test
+  void inProgressRunDetailIncludesBackendDerivedChanges() {
+    Cookie session = ownerSession();
+    UUID stackId = createStack();
+    seedUpdate(stackId, StackUpdate.Status.IN_PROGRESS);
+
+    Response response =
+        given()
+            .cookie(session.getName(), session.getValue())
+            .when()
+            .get("/api/pulumi/stacks/%s/%s/%s/updates/1".formatted(ORG, PROJECT, STACK));
+
+    response.then().statusCode(200);
+    int derivedChanges =
+        response.jsonPath().getList("changes.changed").size()
+            + response.jsonPath().getList("changes.unchanged").size()
+            + response.jsonPath().getList("changes.activity").size()
+            + response.jsonPath().getList("changes.outputs").size();
+    assertTrue(derivedChanges > 0, "live responses must carry the canonical backend model");
+  }
+
   /** Walks the endpoint the way the console does, collecting each raw response body. */
   private List<String> pageThrough(Cookie session, UUID updateId) {
     List<String> bodies = new ArrayList<>();
@@ -143,6 +164,10 @@ class ConsoleRunEventsArchiveTest {
   }
 
   private UUID seedUpdate(UUID stackId) {
+    return seedUpdate(stackId, StackUpdate.Status.SUCCEEDED);
+  }
+
+  private UUID seedUpdate(UUID stackId, StackUpdate.Status status) {
     List<JsonNode> corpus = EventArchiveFixture.recordedEvents();
     return QuarkusTransaction.requiringNew()
         .call(
@@ -150,7 +175,7 @@ class ConsoleRunEventsArchiveTest {
               StackUpdate update = new StackUpdate();
               update.stackId = stackId;
               update.kind = StackUpdate.Kind.UPDATE;
-              update.status = StackUpdate.Status.SUCCEEDED;
+              update.status = status;
               update.version = 1;
               update.startedAt = LONG_AGO;
               update.endedAt = LONG_AGO;

@@ -12,6 +12,7 @@ import app.statedb.persistence.report.ChangeReportDeriver;
 import app.statedb.persistence.report.MarkdownReportRenderer;
 import app.statedb.persistence.report.RenderedReport;
 import app.statedb.persistence.report.ReportLimits;
+import app.statedb.persistence.report.RunChangeDeriver;
 import app.statedb.persistence.stack.StackRef;
 import app.statedb.persistence.update.StackUpdate;
 import com.fasterxml.jackson.databind.JsonNode;
@@ -43,7 +44,7 @@ class HostileReportTest {
   private static final ObjectMapper MAPPER = new ObjectMapper().findAndRegisterModules();
   private static final URI CONSOLE = URI.create("https://statedb.example.invalid/o/p/s/previews/r");
 
-  private final ChangeReportDeriver deriver = new ChangeReportDeriver();
+  private final ChangeReportDeriver deriver = new ChangeReportDeriver(new RunChangeDeriver());
   private final MarkdownReportRenderer renderer = new MarkdownReportRenderer();
 
   @Test
@@ -127,6 +128,30 @@ class HostileReportTest {
   }
 
   @Test
+  void internalPropertyPathsDoNotEnterThePullRequestReport() throws Exception {
+    JsonNode metadata =
+        MAPPER.readTree(
+            """
+            {"op":"update","urn":"urn:pulumi:dev::shop::pkg:index:Thing::bookkeeping",
+             "type":"pkg:index:Thing",
+             "old":{"inputs":{"shown":1,"__internal":"old"}},
+             "new":{"inputs":{"shown":2,"__internal":"new"}},
+             "detailedDiff":{
+               "shown":{"diffKind":"update","inputDiff":true},
+               "__internal":{"diffKind":"update","inputDiff":true}
+             }}
+            """);
+
+    ChangeReport report = derive(List.of(step(0, metadata), summary(1)), ReportLimits.defaults());
+
+    assertEquals(
+        List.of("shown"),
+        report.resources().getFirst().properties().stream()
+            .map(ChangeReport.PropertyChange::path)
+            .toList());
+  }
+
+  @Test
   void bidiAndInvisibleCodepointsInAUrnDoNotReachTheBody() throws Exception {
     // A right-to-left override would make the rendered name read as something other than the URN.
     String rtlOverride = new String(Character.toChars(0x202e));
@@ -182,6 +207,40 @@ class HostileReportTest {
     // And it must be stable: the same run always produces the same comment, so a re-delivery is
     // not a spurious edit.
     assertEquals(rendered.body(), render(events, limits).body());
+  }
+
+  @Test
+  void aPathologicalConsoleLinkCannotExceedTheBodyBudget() throws Exception {
+    ReportLimits limits = new ReportLimits(200, 25, 256, 32, 256);
+    ChangeReport report =
+        derive(
+            List.of(
+                step(0, "urn:pulumi:dev::shop::pkg:index:Thing::changed", "update"), summary(1)),
+            limits);
+    URI pathological = URI.create("https://statedb.example.invalid/" + "x".repeat(1_000));
+
+    RenderedReport rendered = renderer.render(report, pathological, limits);
+
+    assertTrue(rendered.truncated());
+    assertTrue(rendered.body().getBytes(StandardCharsets.UTF_8).length <= limits.maxBodyBytes());
+  }
+
+  @Test
+  void aTableHeaderIsNeverEmittedWithoutItsDelimiter() throws Exception {
+    ChangeReport report =
+        derive(
+            List.of(
+                step(0, "urn:pulumi:dev::shop::pkg:index:Thing::changed", "update"), summary(1)),
+            ReportLimits.defaults());
+
+    for (int budget = 1; budget <= 1_000; budget++) {
+      ReportLimits limits = new ReportLimits(200, 25, 256, 32, budget);
+      String body = renderer.render(report, null, limits).body();
+      assertFalse(
+          body.contains("| | Resource | Changed properties |")
+              && !body.contains("| --- | --- | --- |"),
+          "orphan table header at byte budget " + budget + ":\n" + body);
+    }
   }
 
   @Test
@@ -263,6 +322,13 @@ class HostileReportTest {
     metadata.put("op", op);
     metadata.put("urn", urn);
     metadata.put("type", "pkg:index:Thing");
+    ObjectNode event = MAPPER.createObjectNode();
+    event.put("sequence", sequence);
+    event.putObject("resourcePreEvent").set("metadata", metadata);
+    return view(event);
+  }
+
+  private static StoredEvent step(int sequence, JsonNode metadata) {
     ObjectNode event = MAPPER.createObjectNode();
     event.put("sequence", sequence);
     event.putObject("resourcePreEvent").set("metadata", metadata);

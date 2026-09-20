@@ -104,6 +104,8 @@ class UpdateReportResourceTest {
     assertEquals("succeeded", json.jsonPath().getString("result"));
     assertEquals(5, json.jsonPath().getList("resources").size());
     assertEquals("preview", json.jsonPath().getString("kind"));
+    assertEquals("create", json.jsonPath().getString("resources[0].op"));
+    assertEquals("update-replace", json.jsonPath().getString("resources[1].properties[0].kind"));
 
     // The JSON form is the sanitized model, not the events: no values on it anywhere.
     String raw = json.asString();
@@ -142,6 +144,21 @@ class UpdateReportResourceTest {
 
     // 404 rather than 403: a 403 would confirm that this update id exists somewhere.
     report(session, foreignUpdate, null).then().statusCode(404);
+  }
+
+  @Test
+  void refusesAPrivateStackInTheCallersOrgWithoutAReadGrant() {
+    Cookie session = session(ORG, OrgMember.Role.member);
+    UUID stackId = createStack(ORG);
+    QuarkusTransaction.requiringNew()
+        .run(
+            () -> {
+              Stack stack = Stack.findById(stackId);
+              stack.visibility = Stack.VISIBILITY_PRIVATE;
+            });
+    UUID updateId = seedRun(stackId);
+
+    report(session, updateId, null).then().statusCode(404);
   }
 
   @Test
@@ -238,6 +255,10 @@ class UpdateReportResourceTest {
   }
 
   private static Cookie ownerSession(String orgName) {
+    return session(orgName, OrgMember.Role.owner);
+  }
+
+  private static Cookie session(String orgName, OrgMember.Role role) {
     QuarkusTransaction.requiringNew()
         .run(
             () -> {
@@ -265,7 +286,7 @@ class UpdateReportResourceTest {
                 OrgMember membership = new OrgMember();
                 membership.orgId = org.id;
                 membership.userId = user.id;
-                membership.role = OrgMember.Role.owner;
+                membership.role = role;
                 membership.persistAndFlush();
               }
             });

@@ -11,6 +11,7 @@ import app.statedb.persistence.stack.StackRef;
 import app.statedb.persistence.update.StackUpdate;
 import com.fasterxml.jackson.databind.JsonNode;
 import jakarta.enterprise.context.ApplicationScoped;
+import jakarta.inject.Inject;
 import java.util.ArrayList;
 import java.util.EnumMap;
 import java.util.Iterator;
@@ -26,7 +27,12 @@ import java.util.Map;
 @ApplicationScoped
 public class ChangeReportDeriver {
 
-  private final RunChangeDeriver changeDeriver = new RunChangeDeriver();
+  private final RunChangeDeriver changeDeriver;
+
+  @Inject
+  public ChangeReportDeriver(RunChangeDeriver changeDeriver) {
+    this.changeDeriver = changeDeriver;
+  }
 
   public ChangeReport derive(
       StackRef ref, StackUpdate update, List<StoredEvent> events, ReportLimits limits) {
@@ -96,6 +102,9 @@ public class ChangeReportDeriver {
     List<PropertyChange> properties = new ArrayList<>();
     boolean propertiesTruncated = false;
     for (RunChanges.PropertyChange rawProperty : raw.properties()) {
+      if (rawProperty.internal()) {
+        continue;
+      }
       if (properties.size() == limits.maxPropertiesPerResource()) {
         propertiesTruncated = true;
         break;

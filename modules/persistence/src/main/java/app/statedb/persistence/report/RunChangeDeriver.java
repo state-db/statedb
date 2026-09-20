@@ -194,6 +194,21 @@ public class RunChangeDeriver {
         for (JsonNode path : coarse) {
           properties.add(new RawProperty(path.asText(""), DiffKind.UNKNOWN, true, false));
         }
+      } else {
+        JsonNode oldInputs = metadata.path("old").path("inputs");
+        JsonNode newInputs = metadata.path("new").path("inputs");
+        Set<String> keys = new TreeSet<>();
+        if (oldInputs.isObject()) {
+          oldInputs.fieldNames().forEachRemaining(keys::add);
+        }
+        if (newInputs.isObject()) {
+          newInputs.fieldNames().forEachRemaining(keys::add);
+        }
+        for (String key : keys) {
+          if (!java.util.Objects.equals(oldInputs.get(key), newInputs.get(key))) {
+            properties.add(new RawProperty(key, DiffKind.UNKNOWN, true, false));
+          }
+        }
       }
     }
     List<String> hidden = hiddenPaths(metadata);

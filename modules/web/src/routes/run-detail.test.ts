@@ -96,6 +96,35 @@ describe("run detail presentation", () => {
     });
   });
 
+  test("takes replacement operations from the canonical backend model", () => {
+    const urn = "urn:pulumi:prod::app::aws:s3/bucket:Bucket::assets";
+    const rows = resourceRows([
+      {
+        sequence: 1,
+        kind: "resourcePre",
+        severity: null,
+        payload: {
+          resourcePreEvent: {
+            metadata: { op: "create-replacement", urn, type: "aws:s3/bucket:Bucket" },
+          },
+        },
+      },
+    ], false, {
+      ...emptyChanges,
+      changed: [{
+        sequence: 1,
+        urn,
+        type: "aws:s3/bucket:Bucket",
+        name: "assets",
+        op: "replace",
+        properties: [],
+      }],
+    });
+
+    expect(rows[0]?.op).toBe("replace");
+    expect(rows[0]?.marker).toBe("+-");
+  });
+
   test("formats live and historical durations", () => {
     expect(formatRunDuration("2026-07-19T10:00:00Z", "2026-07-19T10:02:14Z")).toBe("2m 14s");
     expect(formatRunDuration("2026-07-19T10:00:00Z", null, Date.parse("2026-07-19T10:00:09Z"))).toBe("9s");

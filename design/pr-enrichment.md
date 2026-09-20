@@ -551,10 +551,13 @@ Derivation therefore takes `List<StoredEvent>` as a parameter and stays pure.
 `RunChangeDeriver` is the sole owner of Pulumi event-to-change semantics. It
 produces one redacted `RunChanges` model for both the console and report code.
 The console renders that model; `ChangeReportDeriver` projects it into the
-smaller value-free report model. Neither presentation surface independently
+smaller value-free report model. Neither change presentation independently
 interprets `detailedDiff`, `diffs`, `hideDiffs`, replacement substeps, or secret
-wrappers. Raw events remain available only for the chronological log, whose
-lifecycle and diagnostic formatting is not a second change derivation.
+wrappers. The run-detail endpoint derives and returns this canonical model on
+every poll, including while an update is in progress. Raw events remain
+available for the chronological log, but its resource rows use the canonical
+operation and property paths whenever the resource is in that model. Lifecycle
+and diagnostic formatting are not a second change derivation.
 
 The reader needs a **report-oriented read method** alongside the existing
 `page(stackId, updateId, after, limit)`: paging an archived run re-decodes the

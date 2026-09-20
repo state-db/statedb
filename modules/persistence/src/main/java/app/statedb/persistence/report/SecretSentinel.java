@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.JsonNodeFactory;
 import com.fasterxml.jackson.databind.node.ObjectNode;
+import java.util.Set;
 
 /**
  * Recognises Pulumi's structural markers for special property values, and in particular the two
@@ -31,6 +32,17 @@ import com.fasterxml.jackson.databind.node.ObjectNode;
  * may be sensitive.
  */
 public final class SecretSentinel {
+
+  // Pulumi's seven typed unknown sentinels, pinned against sdk/go/common/resource/plugin/rpc.go.
+  private static final Set<String> UNKNOWN_VALUES =
+      Set.of(
+          "1c4a061d-8072-4f0a-a4cb-0ff528b18fe7",
+          "3eeb2bf0-c639-47a8-9e75-3b44932eb421",
+          "04da6b54-80e4-46f7-96ec-b56ff0331ba9",
+          "6a19a0b0-7e62-4c92-b797-7f8e31da9cc2",
+          "030794c1-ac77-496b-92df-f27374a8bd58",
+          "e48ece36-62e2-4504-bad9-02848725956a",
+          "dd056dcd-154b-4c76-9bd3-c8f88648b5ff");
 
   /**
    * The reserved key under which every special value carries its type signature. {@code
@@ -139,7 +151,7 @@ public final class SecretSentinel {
     if (maxDepth <= 0 || isSecret(node)) {
       return JsonNodeFactory.instance.textNode("[secret]");
     }
-    if (node.isTextual() && "04da6b54-80e4-46f7-96ec-b56ff0331ba9".equals(node.textValue())) {
+    if (node.isTextual() && UNKNOWN_VALUES.contains(node.textValue())) {
       return JsonNodeFactory.instance.textNode("[unknown]");
     }
     if (node.isArray()) {

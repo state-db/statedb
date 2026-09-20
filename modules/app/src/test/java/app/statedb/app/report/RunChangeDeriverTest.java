@@ -174,6 +174,58 @@ class RunChangeDeriverTest {
     assertEquals("\"[secret]\"", output(changes, "password").newValue().toString());
   }
 
+  @Test
+  void derivesChangedTopLevelInputsWhenTheProviderSuppliesNoDiffMetadata() throws Exception {
+    JsonNode metadata =
+        mapper.readTree(
+            """
+            {"op":"create","urn":"urn:pulumi:dev::app::pkg:index:Thing::main",
+             "type":"pkg:index:Thing","old":{"inputs":{}},
+             "new":{"inputs":{"name":"main","__defaults":["name"]}}}
+            """);
+
+    RunChanges.ResourceChange resource =
+        deriver.derive(List.of(event(1, "resourcePre", metadata)), 32, false).changed().getFirst();
+
+    assertEquals(
+        List.of("__defaults", "name"),
+        resource.properties().stream().map(RunChanges.PropertyChange::path).toList());
+    assertTrue(property(resource, "__defaults").internal());
+    assertEquals("unknown", property(resource, "name").kind());
+  }
+
+  @Test
+  void anExplicitlyEmptyDetailedDiffSuppressesTheFallback() throws Exception {
+    JsonNode metadata =
+        mapper.readTree(
+            """
+            {"op":"update","urn":"urn:pulumi:dev::app::pkg:index:Thing::main",
+             "type":"pkg:index:Thing","old":{"inputs":{"name":"old"}},
+             "new":{"inputs":{"name":"new"}},"detailedDiff":{}}
+            """);
+
+    RunChanges.ResourceChange resource =
+        deriver.derive(List.of(event(1, "resourcePre", metadata)), 32, false).changed().getFirst();
+
+    assertTrue(resource.properties().isEmpty());
+  }
+
+  @Test
+  void masksEveryUnknownValueSentinelFromPulumiRpc() {
+    for (String unknown :
+        List.of(
+            "1c4a061d-8072-4f0a-a4cb-0ff528b18fe7",
+            "3eeb2bf0-c639-47a8-9e75-3b44932eb421",
+            "04da6b54-80e4-46f7-96ec-b56ff0331ba9",
+            "6a19a0b0-7e62-4c92-b797-7f8e31da9cc2",
+            "030794c1-ac77-496b-92df-f27374a8bd58",
+            "e48ece36-62e2-4504-bad9-02848725956a",
+            "dd056dcd-154b-4c76-9bd3-c8f88648b5ff")) {
+      assertEquals(
+          "\"[unknown]\"", SecretSentinel.redact(mapper.valueToTree(unknown), 32).toString());
+    }
+  }
+
   private StoredEvent event(int sequence, String kind, JsonNode metadata) {
     ObjectNode payload = mapper.createObjectNode();
     payload.set(kind + "Event", mapper.createObjectNode().set("metadata", metadata));

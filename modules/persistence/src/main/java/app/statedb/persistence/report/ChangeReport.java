@@ -211,6 +211,7 @@ public record ChangeReport(
       this.wireValue = wireValue;
     }
 
+    @JsonValue
     public String wireValue() {
       return wireValue;
     }
@@ -269,6 +270,7 @@ public record ChangeReport(
       this.wireValue = wireValue;
     }
 
+    @JsonValue
     public String wireValue() {
       return wireValue;
     }

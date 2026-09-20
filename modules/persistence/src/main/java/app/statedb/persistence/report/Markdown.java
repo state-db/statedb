@@ -27,8 +27,8 @@ import java.net.URI;
  *       #code(String)} picks one longer than any run inside, and pads with spaces when the content
  *       starts or ends with a backtick, which CommonMark strips on render.
  *   <li><b>A pipe inside a table cell.</b> GFM splits table rows on {@code |} <em>before</em> it
- *       parses cell contents, so a literal pipe breaks the row even inside a code span. It must be
- *       backslash-escaped, which GFM then unescapes back to a pipe.
+ *       parses cell contents, so a literal pipe breaks the row even inside a code span. {@link
+ *       #tableCode(String)} adds the table-only backslash escape, which GFM then removes.
  * </ul>
  *
  * <h2>Links</h2>
@@ -42,8 +42,7 @@ public final class Markdown {
   private static final char BACKTICK = '`';
 
   /**
-   * {@code content} as an inline code span, safe to place anywhere in a body including a table
-   * cell.
+   * {@code content} as an inline code span outside a table cell.
    *
    * <p>{@code content} is expected to have been through {@link ReportText#neutralize}; this method
    * assumes it is single-line and does not re-check.
@@ -52,15 +51,19 @@ public final class Markdown {
     if (content == null || content.isEmpty()) {
       return "";
     }
-    String escaped = content.replace("|", "\\|");
-    String fence = String.valueOf(BACKTICK).repeat(longestBacktickRun(escaped) + 1);
+    String fence = String.valueOf(BACKTICK).repeat(longestBacktickRun(content) + 1);
     // CommonMark strips one leading and one trailing space from a code span, so pad when the
     // content would otherwise abut the fence and either merge with it or lose a character.
     String pad =
-        escaped.charAt(0) == BACKTICK || escaped.charAt(escaped.length() - 1) == BACKTICK
+        content.charAt(0) == BACKTICK || content.charAt(content.length() - 1) == BACKTICK
             ? " "
             : "";
-    return fence + pad + escaped + pad + fence;
+    return fence + pad + content + pad + fence;
+  }
+
+  /** A code span whose pipes cannot split a GitHub-flavoured Markdown table row. */
+  public static String tableCode(String content) {
+    return code(content == null ? null : content.replace("|", "\\|"));
   }
 
   /** A markdown link. {@code target} must have passed {@link #isEmittableLink(URI)}. */
