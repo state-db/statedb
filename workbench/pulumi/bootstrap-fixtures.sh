@@ -73,6 +73,10 @@ history_shared_foundation() {
   configure 3
   deploy "Rotate environment id and database password"
   refresh_display_history
+  echo "[fixtures] preview --refresh $ORG/$project/$stack"
+  pulumi preview --refresh --stack "$stack_ref" --message "Preview with refresh activity"
+  echo "[fixtures] up --refresh $ORG/$project/$stack"
+  pulumi up --refresh --yes --skip-preview --stack "$stack_ref" --message "Update with refresh activity"
   echo "[fixtures] refresh $ORG/$project/$stack"
   pulumi refresh --yes --skip-preview --stack "$stack_ref" --message "Scheduled drift check"
   # Record a preview of the next rotation without ever applying it.
