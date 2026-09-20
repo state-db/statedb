@@ -573,8 +573,10 @@ acme / networking / prod  ·  Update v14        ✓ succeeded · 2m 14s
   stripping escape codes (util in foundation if needed).
 - **Changes tab**: derived from `resourcePre`/`resOutputs`/`resOpFailed` events:
   op → colored badge (create green, update amber, delete red, replace purple,
-  same hidden by default. No-diff `refresh` rows describe resources visited by
-  a refresh phase, including `preview --refresh` and `up --refresh`; they are
+  same hidden by default). For a standalone refresh, Pulumi's terminal
+  `same`/`update`/`delete` result supersedes its initial `refresh` event. For
+  `preview --refresh` and `up --refresh`, `refresh` describes a preliminary
+  phase; a later `same` must not relabel that visit. No-diff refresh visits are
   activity, not evidence of a state change. Actual changes render first.
   Unchanged resources and no-diff refresh activity are summarized by count and
   available behind one `Checkbox`, so they cannot bury a meaningful change.

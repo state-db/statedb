@@ -469,7 +469,10 @@ function RunChanges({ events, collapseReplacements, live, preview, refresh }: {
   const [showActivity, setShowActivity] = useState(false);
   const [showInternal, setShowInternal] = useState(false);
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
-  const groups = useMemo(() => resourceChangeGroups(events, collapseReplacements), [events, collapseReplacements]);
+  const groups = useMemo(
+    () => resourceChangeGroups(events, collapseReplacements, refresh),
+    [events, collapseReplacements, refresh],
+  );
   const backgroundActivity = useMemo(() => [...groups.unchanged, ...groups.activity], [groups]);
   // Actual changes always lead. Resource visits and no-op outcomes are
   // available on demand, but can never bury a meaningful change.
@@ -892,14 +895,20 @@ export function resourceChanges(events: RunEvent[], collapseReplacements = false
   return [...changes.values()].sort((a, b) => a.sequence - b.sequence);
 }
 
-export function resourceChangeGroups(events: RunEvent[], collapseReplacements = false) {
+export function resourceChangeGroups(events: RunEvent[], collapseReplacements = false, standaloneRefresh = false) {
   const changes = resourceChanges(events, collapseReplacements);
   const terminalUrns = new Set(changes.filter((change) => change.op !== "refresh").map((change) => change.urn));
+  const refreshUrns = new Set(changes.filter((change) => change.op === "refresh").map((change) => change.urn));
+  const changedUrns = new Set(changes.filter((change) => change.op !== "refresh" && change.op !== "same").map((change) => change.urn));
   const changed: ResourceChange[] = [];
   const unchanged: ResourceChange[] = [];
   const activity: ResourceChange[] = [];
   for (const change of changes) {
     if (change.op === "same") {
+      // During preview/up --refresh, `refresh` is a preliminary phase and a
+      // later `same` is the program diff result. Keep the refresh visit as the
+      // single background row instead of relabeling it as `same`.
+      if (!standaloneRefresh && refreshUrns.has(change.urn)) continue;
       unchanged.push(change);
       continue;
     }
@@ -907,11 +916,13 @@ export function resourceChangeGroups(events: RunEvent[], collapseReplacements = 
       changed.push(change);
       continue;
     }
-    // A standalone refresh emits an initial `refresh` visit followed by its
-    // terminal `same`/`update`/`delete` result. Do not count both. During a
-    // preview/update refresh phase, unchanged visits can remain `refresh` all
-    // the way through; retain those as optional activity.
-    if (!terminalUrns.has(change.urn)) activity.push(change);
+    // A standalone refresh rewrites its completion event to the terminal
+    // `same`/`update`/`delete` ResultOp. For preview/up --refresh, refresh is a
+    // phase rather than the whole operation, so preserve it as activity unless
+    // the same resource already has a meaningful planned change.
+    if (standaloneRefresh && terminalUrns.has(change.urn)) continue;
+    if (!standaloneRefresh && changedUrns.has(change.urn)) continue;
+    activity.push(change);
   }
   return { changed, unchanged, activity };
 }

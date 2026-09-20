@@ -281,6 +281,74 @@ describe("run detail presentation", () => {
     expect(groups.activity).toHaveLength(100);
   });
 
+  test("keeps refresh as the activity operation during a preview refresh phase", () => {
+    const urn = "urn:pulumi:prod::app::test:index:Resource::unchanged";
+    const events: RunEvent[] = [
+      {
+        sequence: 1,
+        kind: "resourcePre",
+        severity: null,
+        payload: { resourcePreEvent: { metadata: {
+          op: "refresh",
+          urn,
+          type: "test:index:Resource",
+          old: { inputs: { value: "same" } },
+          new: { inputs: { value: "same" } },
+          diffs: [],
+        } } },
+      },
+      {
+        sequence: 2,
+        kind: "resOutputs",
+        severity: null,
+        payload: { resOutputsEvent: { metadata: {
+          op: "same",
+          urn,
+          type: "test:index:Resource",
+          old: { inputs: { value: "same" } },
+          new: { inputs: { value: "same" } },
+          diffs: [],
+        } } },
+      },
+    ];
+
+    const groups = resourceChangeGroups(events, false, false);
+
+    expect(groups.unchanged).toEqual([]);
+    expect(groups.activity.map((change) => change.op)).toEqual(["refresh"]);
+  });
+
+  test("uses the terminal result operation for a standalone refresh", () => {
+    const urn = "urn:pulumi:prod::app::test:index:Resource::unchanged";
+    const events: RunEvent[] = [
+      {
+        sequence: 1,
+        kind: "resourcePre",
+        severity: null,
+        payload: { resourcePreEvent: { metadata: {
+          op: "refresh",
+          urn,
+          type: "test:index:Resource",
+        } } },
+      },
+      {
+        sequence: 2,
+        kind: "resOutputs",
+        severity: null,
+        payload: { resOutputsEvent: { metadata: {
+          op: "same",
+          urn,
+          type: "test:index:Resource",
+        } } },
+      },
+    ];
+
+    const groups = resourceChangeGroups(events, false, true);
+
+    expect(groups.unchanged.map((change) => change.op)).toEqual(["same"]);
+    expect(groups.activity).toEqual([]);
+  });
+
   test("keeps refresh diffs and meaningful operations without property details visible", () => {
     const events: RunEvent[] = [
       {
