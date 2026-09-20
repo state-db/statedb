@@ -64,11 +64,26 @@ Override with env vars: `ORG`, `CONSOLE_PORT` (5173), `IDP_UPSTREAM_PORT`
 | `application-fleet` | dev, staging, prod | app-shaped resources, refs to `shared-foundation` |
 | `deploy-simulator` | dev | chained sleeping commands, drives churn runs |
 
-Each stack gets real update history (creates, config updates, a rotation +
-refresh, `artifact-pipeline/nightly`'s release gate failing on purpose then
-retrying, a targeted destroy/restore, a full destroy/rebuild on
-`application-fleet/dev`). Re-running converges to the final revision with no
-changes. First run: ~30 real Pulumi ops, a few minutes.
+Each stack gets real update history (creates, config updates, a rotation,
+refresh-before-preview, refresh-before-update, a standalone refresh,
+`artifact-pipeline/nightly`'s release gate failing on purpose then retrying, a
+targeted destroy/restore, and a full destroy/rebuild on
+`application-fleet/dev`). Re-running converges to the final revision and adds
+fresh refresh-before-preview and refresh-before-update runs to each existing
+`shared-foundation` stack. First run: ~35 real Pulumi ops, a few minutes.
+
+On a `shared-foundation` fixture, use these messages to verify refresh display
+semantics in the console:
+
+- `Preview with refresh activity`: the summary remains unchanged, while the
+  Changes tab exposes `refresh` rows behind its activity checkbox.
+- `Update with refresh activity`: the applied `up --refresh` has the same
+  two-phase display.
+- `Scheduled drift check`: this is a standalone refresh, so its terminal rows
+  are `same` and the page reports no drift.
+
+`fixtures-up` creates the first two runs on both new and existing stacks. The
+standalone `Scheduled drift check` is part of the first-creation choreography.
 
 `cmd=fixtures-destroy` tears down resources, keeps the empty stacks.
 `cmd=force-unlock` clears a stuck lock after an interrupted run.

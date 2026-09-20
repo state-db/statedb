@@ -6,7 +6,8 @@
 # replacements, a refresh, a recorded-but-unapplied preview, an intentionally failed
 # release-gate update with a retry, a targeted delete with a restore, and a full
 # destroy/rebuild. Re-running the script converges existing stacks to the final
-# revision instead of replaying the history.
+# revision and records fresh refresh-before-preview/update examples on the
+# shared-foundation stacks.
 set -eu
 
 : "${ORG:?}" "${BACKEND_URL:?}" "${TOKEN:?}" "${PULUMI_HOME:?}" "${PULUMI_CONFIG_PASSPHRASE:?}"
@@ -55,6 +56,13 @@ deploy() {
   pulumi up --yes --skip-preview --stack "$stack_ref" --message "$1"
 }
 
+refresh_display_history() {
+  echo "[fixtures] preview --refresh $ORG/$project/$stack"
+  pulumi preview --refresh --stack "$stack_ref" --message "Preview with refresh activity"
+  echo "[fixtures] up --refresh $ORG/$project/$stack"
+  pulumi up --refresh --yes --skip-preview --stack "$stack_ref" --message "Update with refresh activity"
+}
+
 history_shared_foundation() {
   pulumi config set rotation 1 --stack "$stack_ref"
   configure 1
@@ -64,6 +72,7 @@ history_shared_foundation() {
   pulumi config set rotation 2 --stack "$stack_ref"
   configure 3
   deploy "Rotate environment id and database password"
+  refresh_display_history
   echo "[fixtures] refresh $ORG/$project/$stack"
   pulumi refresh --yes --skip-preview --stack "$stack_ref" --message "Scheduled drift check"
   # Record a preview of the next rotation without ever applying it.
@@ -134,6 +143,9 @@ converge() {
     deploy-simulator) configure 1 ;;
   esac
   deploy "Converge fixtures"
+  if [ "$project" = shared-foundation ]; then
+    refresh_display_history
+  fi
 }
 
 while IFS='|' read -r project stacks owner; do

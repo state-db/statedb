@@ -17,6 +17,7 @@ import app.statedb.persistence.stack.Stack;
 import app.statedb.persistence.stack.StackCreator;
 import app.statedb.persistence.update.StackUpdate;
 import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import io.quarkus.narayana.jta.QuarkusTransaction;
 import io.quarkus.test.common.QuarkusTestResource;
 import io.quarkus.test.junit.QuarkusTest;
@@ -50,6 +51,7 @@ class ConsoleRunEventsArchiveTest {
   private static final Instant LONG_AGO = Instant.parse("2026-01-01T00:00:00Z");
   // Past the endpoint's 500-event page size, so the parity check covers a cursor handoff.
   private static final int EVENT_COUNT = 600;
+  private static final ObjectMapper MAPPER = new ObjectMapper();
 
   @Inject StackCreator stackCreator;
   @Inject EventArchiveFolder folder;
@@ -119,6 +121,52 @@ class ConsoleRunEventsArchiveTest {
     assertTrue(derivedChanges > 0, "live responses must carry the canonical backend model");
   }
 
+  @Test
+  void refreshBeforePreviewAndUpdateRemainsActivityAcrossFolding() throws Exception {
+    Cookie session = ownerSession();
+    UUID stackId = createStack();
+    UUID previewId = seedRefreshRun(stackId, StackUpdate.Kind.PREVIEW, true, 0, true);
+    UUID updateId = seedRefreshRun(stackId, StackUpdate.Kind.UPDATE, false, 1, true);
+
+    assertRefreshActivity(
+        session,
+        "/api/pulumi/stacks/%s/%s/%s/previews/%s".formatted(ORG, PROJECT, STACK, previewId));
+    assertRefreshActivity(
+        session, "/api/pulumi/stacks/%s/%s/%s/updates/1".formatted(ORG, PROJECT, STACK));
+
+    QuarkusTransaction.requiringNew()
+        .run(
+            () -> {
+              assertTrue(folder.fold(previewId, Instant.now()));
+              assertTrue(folder.fold(updateId, Instant.now()));
+            });
+
+    assertRefreshActivity(
+        session,
+        "/api/pulumi/stacks/%s/%s/%s/previews/%s".formatted(ORG, PROJECT, STACK, previewId));
+    assertRefreshActivity(
+        session, "/api/pulumi/stacks/%s/%s/%s/updates/1".formatted(ORG, PROJECT, STACK));
+  }
+
+  @Test
+  void standaloneRefreshPreviewUsesItsTerminalSameResult() throws Exception {
+    Cookie session = ownerSession();
+    UUID stackId = createStack();
+    UUID previewId = seedRefreshRun(stackId, StackUpdate.Kind.REFRESH, true, 0, false);
+
+    Response response =
+        given()
+            .cookie(session.getName(), session.getValue())
+            .when()
+            .get(
+                "/api/pulumi/stacks/%s/%s/%s/previews/%s"
+                    .formatted(ORG, PROJECT, STACK, previewId));
+
+    response.then().statusCode(200);
+    assertEquals(List.of("same"), response.jsonPath().getList("changes.unchanged.op"));
+    assertTrue(response.jsonPath().getList("changes.activity").isEmpty());
+  }
+
   /** Walks the endpoint the way the console does, collecting each raw response body. */
   private List<String> pageThrough(Cookie session, UUID updateId) {
     List<String> bodies = new ArrayList<>();
@@ -183,6 +231,100 @@ class ConsoleRunEventsArchiveTest {
               EventArchiveFixture.persistEvents(stackId, update.id, corpus, EVENT_COUNT);
               return update.id;
             });
+  }
+
+  private UUID seedRefreshRun(
+      UUID stackId,
+      StackUpdate.Kind kind,
+      boolean dryRun,
+      int version,
+      boolean followedByProgramPlan)
+      throws Exception {
+    // Pulumi v3.259.0 engine golden TestViews_RefreshBeforeUpdate_Same emits refresh
+    // pre/output events followed by the program's same pre/output events. A standalone refresh
+    // instead completes its refresh pre-event with a terminal same output event.
+    String urn = "urn:pulumi:dev::project::test:index:Resource::unchanged";
+    return QuarkusTransaction.requiringNew()
+        .call(
+            () -> {
+              StackUpdate update = new StackUpdate();
+              update.stackId = stackId;
+              update.kind = kind;
+              update.status = StackUpdate.Status.SUCCEEDED;
+              update.dryRun = dryRun;
+              update.version = version;
+              update.startedAt = LONG_AGO;
+              update.endedAt = LONG_AGO;
+              update.persistAndFlush();
+
+              int sequence = 1;
+              persistEvent(
+                  stackId,
+                  update.id,
+                  sequence++,
+                  "resourcePre",
+                  resourceEvent("resourcePre", "refresh", urn));
+              persistEvent(
+                  stackId,
+                  update.id,
+                  sequence++,
+                  "resOutputs",
+                  resourceEvent("resOutputs", followedByProgramPlan ? "refresh" : "same", urn));
+              if (followedByProgramPlan) {
+                persistEvent(
+                    stackId,
+                    update.id,
+                    sequence++,
+                    "resourcePre",
+                    resourceEvent("resourcePre", "same", urn));
+                persistEvent(
+                    stackId,
+                    update.id,
+                    sequence++,
+                    "resOutputs",
+                    resourceEvent("resOutputs", "same", urn));
+              }
+              persistEvent(
+                  stackId,
+                  update.id,
+                  sequence,
+                  UpdateEvent.SUMMARY_KIND,
+                  MAPPER.readTree(
+                      """
+                      {"summaryEvent":{"isPreview":%s,"resourceChanges":{"same":1},
+                       "result":"succeeded"}}
+                      """
+                          .formatted(dryRun)));
+              return update.id;
+            });
+  }
+
+  private static JsonNode resourceEvent(String kind, String op, String urn) throws Exception {
+    return MAPPER.readTree(
+        """
+        {"%sEvent":{"metadata":{"op":"%s","urn":"%s","type":"test:index:Resource",
+         "old":{"inputs":{"value":"same"}},"new":{"inputs":{"value":"same"}},
+         "detailedDiff":null},"planning":true}}
+        """
+            .formatted(kind, op, urn));
+  }
+
+  private static void persistEvent(
+      UUID stackId, UUID updateId, int sequence, String kind, JsonNode payload) {
+    UpdateEvent event = new UpdateEvent();
+    event.stackId = stackId;
+    event.updateId = updateId;
+    event.sequence = sequence;
+    event.kind = kind;
+    event.payload = payload;
+    event.persist();
+  }
+
+  private static void assertRefreshActivity(Cookie session, String path) {
+    Response response = given().cookie(session.getName(), session.getValue()).when().get(path);
+    response.then().statusCode(200);
+    assertEquals(List.of("refresh"), response.jsonPath().getList("changes.activity.op"));
+    assertTrue(response.jsonPath().getList("changes.unchanged").isEmpty());
   }
 
   private static Cookie ownerSession() {
