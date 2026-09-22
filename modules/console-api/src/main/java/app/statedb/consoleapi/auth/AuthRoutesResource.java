@@ -146,10 +146,11 @@ public class AuthRoutesResource {
    *
    * <p>Both console credentials are stateless encrypted cookies with no server-side record, so this
    * only instructs the browser to drop them: the quarkus-oidc session cookie (any tenant suffix or
-   * chunk, scoped to {@code /api/}) and the break-glass form-auth cookie ({@code state-db-glass},
-   * scoped to {@code /}). It cannot revoke a cookie value already copied elsewhere — that is a
-   * property of the stateless BFF session. Local sign-out only: the IdP session is left intact, so
-   * re-signing in is a silent SSO round trip.
+   * chunk, scoped to {@code /api/}), its {@code q_auth_*} / {@code q_post_logout_*} code-flow state
+   * cookies, which an abandoned flow otherwise leaves behind for good, and the break-glass
+   * form-auth cookie ({@code state-db-glass}, scoped to {@code /}). It cannot revoke a cookie value
+   * already copied elsewhere — that is a property of the stateless BFF session. Local sign-out
+   * only: the IdP session is left intact, so re-signing in is a silent SSO round trip.
    */
   @GET
   @Path("/logout")
@@ -157,7 +158,9 @@ public class AuthRoutesResource {
     Response.ResponseBuilder response =
         Response.seeOther(URI.create("/console/login")).header("Cache-Control", "no-store");
     for (String name : headers.getCookies().keySet()) {
-      if (name.startsWith("q_session")) {
+      if (name.startsWith("q_session")
+          || name.startsWith("q_auth")
+          || name.startsWith("q_post_logout")) {
         response.cookie(expire(name, "/api/"));
       } else if (name.equals(GLASS_COOKIE)) {
         response.cookie(expire(name, "/"));

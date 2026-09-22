@@ -63,6 +63,32 @@ class ConsoleLogoutTest {
   }
 
   @Test
+  void logoutExpiresAbandonedCodeFlowStateCookies() {
+    // Nothing else ever clears these, so an abandoned flow leaves one behind for good.
+    Response logout =
+        given()
+            .redirects()
+            .follow(false)
+            .cookie("q_auth_okta", "stale-state")
+            .cookie("q_post_logout_okta", "stale-state")
+            .accept("text/html")
+            .when()
+            .get("/api/auth/logout");
+
+    logout.then().statusCode(303);
+    for (String name : new String[] {"q_auth_okta", "q_post_logout_okta"}) {
+      Cookie cleared =
+          logout.getDetailedCookies().asList().stream()
+              .filter(cookie -> cookie.getName().equals(name))
+              .findFirst()
+              .orElse(null);
+      assertNotNull(cleared, name + " is re-set to delete it");
+      assertEquals(0, cleared.getMaxAge(), name + " expired (Max-Age=0)");
+      assertEquals("/api/", cleared.getPath(), name + " deletion targets the /api/ cookie path");
+    }
+  }
+
+  @Test
   void logoutIsIdempotentForAnonymousCaller() {
     Response logout =
         given().redirects().follow(false).accept("text/html").when().get("/api/auth/logout");

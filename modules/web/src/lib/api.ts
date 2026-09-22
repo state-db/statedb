@@ -31,6 +31,9 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   if (!headers.has("Content-Type")) {
     headers.set("Content-Type", "application/json");
   }
+  // Marks this as a fetch() so quarkus-oidc answers an expired session with 499
+  // instead of a redirect to the IdP that this cross-origin fetch can't follow.
+  headers.set("X-Requested-With", "XMLHttpRequest");
 
   try {
     const res = await fetch(`${BASE}${path}`, {
@@ -38,7 +41,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
       headers,
       signal: init?.signal ?? controller?.signal,
     });
-    if (res.status === 401) {
+    if (res.status === 401 || res.status === 499) {
       throw new UnauthorizedError();
     }
     if (res.status === 404) {

@@ -105,6 +105,9 @@ public class ProviderTenantConfigResolver implements TenantConfigResolver {
             // After the callback, return to the URL that started the flow (/api/auth/flow/{name}),
             // whose handler only bounces the authenticated browser to the SPA.
             .restorePathAfterRedirect()
+            // An expired session on a fetch() would otherwise get a 302 the SPA follows into a
+            // CORS failure; 499 lets it redirect the page itself.
+            .javaScriptAutoRedirect(false)
             .cookiePath("/api/")
             .cookieSameSite(CookieSameSite.LAX)
             // Reuse one state cookie per tenant instead of minting a new q_auth_<uuid> cookie for
