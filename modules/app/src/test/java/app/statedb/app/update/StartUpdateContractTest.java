@@ -253,6 +253,31 @@ class StartUpdateContractTest {
         .body("message", containsString("stackName must match the stack path"));
   }
 
+  @Test
+  void oldPulumiVersionIsRejectedBeforeAnyUpdateRowOrLockExists() {
+    given()
+        .header("Authorization", "token " + RAW_TOKEN)
+        .contentType("application/json")
+        .body(programBody(PROJECT, true, "v3.100.0"))
+        .when()
+        .post("/pulumi/api/stacks/" + ORG + "/" + PROJECT + "/" + STACK + "/preview")
+        .then()
+        .statusCode(400)
+        .body("message", containsString("does not support journaling"))
+        .body("message", containsString("3.100.0"));
+
+    QuarkusTransaction.requiringNew()
+        .run(
+            () -> {
+              Number n =
+                  (Number)
+                      em.createNativeQuery("SELECT count(*) FROM stack_updates WHERE stack_id = ?1")
+                          .setParameter(1, stackId(ORG))
+                          .getSingleResult();
+              assertEquals(0L, n.longValue());
+            });
+  }
+
   private UUID stackId(String orgName) {
     return (UUID)
         em.createNativeQuery(
@@ -279,6 +304,11 @@ class StartUpdateContractTest {
   }
 
   private static Map<String, Object> programBody(String projectName, boolean dryRun) {
+    return programBody(projectName, dryRun, "v3.234.0");
+  }
+
+  private static Map<String, Object> programBody(
+      String projectName, boolean dryRun, String pulumiVersion) {
     return Map.of(
         "config",
         Map.of(),
@@ -293,7 +323,7 @@ class StartUpdateContractTest {
                 "exec.kind", "cli",
                 "pulumi.arch", "arm64",
                 "pulumi.os", "linux",
-                "pulumi.version", "v3.234.0",
+                "pulumi.version", pulumiVersion,
                 "runtime.name", "yaml"),
             "message",
             ""),

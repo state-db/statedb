@@ -205,6 +205,8 @@ public class UpdateResource {
 
     UpdateProgramRequest safe = body != null ? body : new UpdateProgramRequest();
     validateStartRequest(org, project, stack, safe);
+    String pulumiVersion = pulumiVersion(safe.metadata);
+    requireJournalingSupport(pulumiVersion);
     StartUpdateRequest req =
         new StartUpdateRequest(
             safe.config,
@@ -212,7 +214,7 @@ public class UpdateResource {
             safe.options,
             safe.description,
             safe.runtime,
-            pulumiVersion(safe.metadata),
+            pulumiVersion,
             message(safe.metadata));
 
     StartedUpdate started =
@@ -247,6 +249,45 @@ public class UpdateResource {
       throw new RequestValidationException(
           field + " must match the stack path; expected '" + expected + "', got '" + actual + "'");
     }
+  }
+
+  // Journaling is required (LeaseResource 501s the checkpoint fallback) and became the CLI default
+  // in 3.225.0: https://www.pulumi.com/blog/journaling-ga/. Rejecting here, before the update row
+  // and lock exist, keeps an older CLI from wedging the stack until its lease expires.
+  private static final int[] MIN_JOURNALING_PULUMI_VERSION = {3, 225, 0};
+
+  private static void requireJournalingSupport(String pulumiVersion) {
+    int[] parsed = parseVersion(pulumiVersion);
+    if (parsed != null && compareVersions(parsed, MIN_JOURNALING_PULUMI_VERSION) < 0) {
+      throw new RequestValidationException(
+          "pulumi CLI "
+              + pulumiVersion
+              + " does not support journaling, which this server requires; upgrade to pulumi >= "
+              + "3.225.0");
+    }
+  }
+
+  private static int[] parseVersion(String version) {
+    if (version == null) return null;
+    String core = version.startsWith("v") ? version.substring(1) : version;
+    String[] parts = core.split("[-+]", 2)[0].split("\\.");
+    if (parts.length < 2) return null;
+    try {
+      int major = Integer.parseInt(parts[0]);
+      int minor = Integer.parseInt(parts[1]);
+      int patch = parts.length > 2 ? Integer.parseInt(parts[2]) : 0;
+      return new int[] {major, minor, patch};
+    } catch (NumberFormatException e) {
+      return null;
+    }
+  }
+
+  private static int compareVersions(int[] a, int[] b) {
+    for (int i = 0; i < a.length; i++) {
+      int cmp = Integer.compare(a[i], b[i]);
+      if (cmp != 0) return cmp;
+    }
+    return 0;
   }
 
   @SuppressWarnings("unchecked")
