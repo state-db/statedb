@@ -106,6 +106,36 @@ class LoginContractTest {
         .body("organizations[0].name", equalTo(ORG_NAME));
   }
 
+  @Test
+  void apiUserReportsADisplayNameForConsoleMintedTokensToo() {
+    // `pulumi login` mints an oidc-kind token, whose sub is whatever the IdP issued — usually a
+    // UUID. whoami must not print that.
+    String rawOidcToken = "login-contract-oidc-token";
+    QuarkusTransaction.requiringNew()
+        .run(
+            () -> {
+              User user =
+                  User.find("iss = ?1 and sub = ?2", "local:test", "login-contract").firstResult();
+              ApiToken t = new ApiToken();
+              t.tokenHash = sha256Hex(rawOidcToken);
+              t.userId = user.id;
+              t.kind = ApiToken.Kind.oidc;
+              t.expiresAt = java.time.Instant.now().plusSeconds(60 * 60);
+              t.description = "login-contract-oidc";
+              t.persistAndFlush();
+            });
+
+    given()
+        .header("Authorization", "token " + rawOidcToken)
+        .header("Accept", "application/vnd.pulumi+9")
+        .when()
+        .get("/pulumi/api/user")
+        .then()
+        .statusCode(200)
+        .body("githubLogin", equalTo("Contract Tester"))
+        .body("name", equalTo("Contract Tester"));
+  }
+
   /** Mirrors {@code fixtures/.../0002_GET_api_user_organizations_default.json}. */
   @Test
   void apiUserOrganizationsDefaultShape() {

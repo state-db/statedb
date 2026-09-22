@@ -1,7 +1,6 @@
 package app.statedb.pulumiapi.user;
 
 import app.statedb.persistence.auth.AuthenticatedPrincipal;
-import app.statedb.persistence.auth.AuthenticatedPrincipal.CredentialKind;
 import app.statedb.persistence.authz.CurrentPrincipal;
 import app.statedb.persistence.identity.OrgMembershipFinder;
 import app.statedb.persistence.identity.User;
@@ -30,14 +29,17 @@ public class UserResource {
     // Top-level githubLogin is what `pulumi whoami` prints — the user's account identity, not the
     // org. Unqualified stack names target this personal namespace; service-account automation
     // should create stacks with a fully qualified <org>/<project>/<stack> name.
-    return new UserDto(user.email, cliLogin(user, p), user.displayName, organizations(p));
+    return new UserDto(user.email, cliLogin(user), user.displayName, organizations(p));
   }
 
-  private static String cliLogin(User user, AuthenticatedPrincipal principal) {
-    if (principal.credential().kind() == CredentialKind.service_account_token
-        && user.displayName != null
-        && !user.displayName.isBlank()) {
+  // `sub` is an opaque IdP identifier — a bare UUID on most providers — so prefer anything a person
+  // would recognize. The recorded fixture reports the display name here too.
+  private static String cliLogin(User user) {
+    if (user.displayName != null && !user.displayName.isBlank()) {
       return user.displayName;
+    }
+    if (user.email != null && !user.email.isBlank()) {
+      return user.email;
     }
     return user.sub;
   }
