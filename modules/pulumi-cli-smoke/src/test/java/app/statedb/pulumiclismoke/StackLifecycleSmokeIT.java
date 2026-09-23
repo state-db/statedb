@@ -39,17 +39,18 @@ class StackLifecycleSmokeIT extends PulumiSmokeBase {
     assertEquals("Acme Test User", execResult("pulumi whoami").getStdout().trim());
     execResult("pulumi stack init " + QUALIFIED_STACK);
 
-    JsonNode stacksAfterInit = execJson("pulumi stack ls --json");
+    // The CLI elides the default org from listed names; qualify them so the owner is asserted.
+    JsonNode stacksAfterInit = execJson("pulumi stack ls --json --fully-qualify-stack-names");
     assertTrue(
-        stackNames(stacksAfterInit).contains(ORG + "/" + STACK),
-        () -> "stack ls should include " + ORG + "/" + STACK + ":\n" + stacksAfterInit);
+        stackNames(stacksAfterInit).contains(QUALIFIED_STACK),
+        () -> "stack ls should include " + QUALIFIED_STACK + ":\n" + stacksAfterInit);
 
     execResult("pulumi stack rm " + QUALIFIED_STACK + " --yes");
 
-    JsonNode stacksAfterRemove = execJson("pulumi stack ls --json");
+    JsonNode stacksAfterRemove = execJson("pulumi stack ls --json --fully-qualify-stack-names");
     assertFalse(
-        stackNames(stacksAfterRemove).contains(ORG + "/" + STACK),
-        () -> "stack ls should not include " + ORG + "/" + STACK + ":\n" + stacksAfterRemove);
+        stackNames(stacksAfterRemove).contains(QUALIFIED_STACK),
+        () -> "stack ls should not include " + QUALIFIED_STACK + ":\n" + stacksAfterRemove);
   }
 
   @Test

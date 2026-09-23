@@ -5,6 +5,7 @@ import static org.hamcrest.Matchers.equalTo;
 import static org.hamcrest.Matchers.hasKey;
 import static org.hamcrest.Matchers.hasSize;
 import static org.hamcrest.Matchers.is;
+import static org.hamcrest.Matchers.not;
 
 import app.statedb.persistence.auth.ApiToken;
 import app.statedb.persistence.identity.OrgMember;
@@ -136,9 +137,13 @@ class LoginContractTest {
         .body("name", equalTo("Contract Tester"));
   }
 
-  /** Mirrors {@code fixtures/.../0002_GET_api_user_organizations_default.json}. */
+  /**
+   * The CLI assigns unqualified stack names ({@code pulumi stack init dev}) to this org, and only
+   * reads it from a top-level {@code GitHubLogin}; otherwise it falls back to the {@code whoami}
+   * display name, which is not an org.
+   */
   @Test
-  void apiUserOrganizationsDefaultShape() {
+  void apiUserOrganizationsDefaultNamesTheMemberOrgNotTheDisplayName() {
     given()
         .header("Authorization", "token " + RAW_TOKEN)
         .header("Accept", "application/vnd.pulumi+9")
@@ -146,9 +151,8 @@ class LoginContractTest {
         .get("/pulumi/api/user/organizations/default")
         .then()
         .statusCode(200)
-        .body("$", hasKey("organization"))
-        .body("organization.githubLogin", equalTo(ORG_NAME))
-        .body("organization.name", equalTo(ORG_NAME));
+        .body("GitHubLogin", equalTo(ORG_NAME))
+        .body("$", not(hasKey("organization")));
   }
 
   @Test

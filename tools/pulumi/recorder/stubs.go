@@ -103,7 +103,7 @@ func (rt *router) routeUser(method string, parts []string, n int) (int, interfac
 	switch {
 	case n == 2 && method == "GET":
 		return 200, map[string]interface{}{
-			"githubLogin": "testorg",
+			"githubLogin": "Test User",
 			"name":        "Test User",
 			"email":       "test@example.com",
 			"organizations": []map[string]interface{}{
@@ -113,12 +113,8 @@ func (rt *router) routeUser(method string, parts []string, n int) (int, interfac
 	case n == 3 && parts[2] == "stacks" && method == "GET":
 		return 200, map[string]interface{}{"stacks": []interface{}{}}
 	case n == 4 && parts[2] == "organizations" && parts[3] == "default" && method == "GET":
-		return 200, map[string]interface{}{
-			"organization": map[string]interface{}{
-				"githubLogin": "testorg",
-				"name":        "testorg",
-			},
-		}
+		// apitype.GetDefaultOrganizationResponse is untagged: the CLI reads top-level GitHubLogin.
+		return 200, map[string]interface{}{"GitHubLogin": "testorg"}
 	}
 	return 404, errBody("unhandled user path", strings.Join(parts, "/"))
 }

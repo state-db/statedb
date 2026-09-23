@@ -699,10 +699,7 @@ DELETE /api/stacks/{org}/{project}/{stack}?force=false
 
 ```json
 {
-  "organization": {
-    "githubLogin": "testorg",
-    "name": "testorg"
-  }
+  "GitHubLogin": "testorg"
 }
 ```
 

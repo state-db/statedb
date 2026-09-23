@@ -13,9 +13,6 @@
   },
   "status_code": 200,
   "response": {
-    "organization": {
-      "githubLogin": "testorg",
-      "name": "testorg"
-    }
+    "GitHubLogin": "testorg"
   }
 }

@@ -27,8 +27,7 @@ public class UserResource {
     AuthenticatedPrincipal p = currentPrincipal.get();
     User user = User.findById(p.userId());
     // Top-level githubLogin is what `pulumi whoami` prints — the user's account identity, not the
-    // org. Unqualified stack names target this personal namespace; service-account automation
-    // should create stacks with a fully qualified <org>/<project>/<stack> name.
+    // org. Unqualified stack names target UserDefaultOrgResource's org, not this.
     return new UserDto(user.email, cliLogin(user), user.displayName, organizations(p));
   }
 

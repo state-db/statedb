@@ -56,7 +56,7 @@ class BackendInspectionSmokeIT extends PulumiSmokeBase {
     JsonNode about = execJson("pulumi about --json");
     JsonNode backend = about.required("backend");
     assertContains(backend.required("name").asText(), "host.testcontainers.internal");
-    assertEquals(ORG, backend.required("user").asText());
+    assertEquals("Acme Test User", backend.required("user").asText());
     assertEquals(ORG, backend.required("organizations").get(0).asText());
 
     JsonNode currentStack = about.required("currentStack");
