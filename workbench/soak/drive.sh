@@ -20,6 +20,12 @@ CREATE_DELAY_MS="${SOAK_CREATE_DELAY_MS:-40}"
 CREATE_JITTER_MS="${SOAK_CREATE_JITTER_MS:-80}"
 DURATION_HOURS="${SOAK_DURATION_HOURS:-48}"
 
+# `burst` models N CI jobs landing at once instead of cycle's steady one-at-a-time churn.
+MODE="${SOAK_MODE:-cycle}"
+BURST_STACKS="${SOAK_BURST_STACKS:-$STACKS}"
+BURST_ROUNDS="${SOAK_BURST_ROUNDS:-0}"
+BURST_LOG="$ARTIFACTS/burst.tsv"
+
 # Cadences in iterations, kept coprime-ish so the special operations do not always coincide.
 DESTROY_EVERY="${SOAK_DESTROY_EVERY:-5}"
 FAULT_EVERY="${SOAK_FAULT_EVERY:-7}"
@@ -39,6 +45,9 @@ ITERATION=0
 
 if [[ ! -s "$OPS_LOG" ]]; then
   printf 'ts\telapsed_s\titeration\tstack\top\texit_code\tduration_s\texpected_failure\n' >"$OPS_LOG"
+fi
+if [[ ! -s "$BURST_LOG" ]]; then
+  printf 'ts\telapsed_s\tround\tstack\texit_code\tduration_s\thttp_status\terror\n' >"$BURST_LOG"
 fi
 
 log() { echo "[drive $(date -u +%H:%M:%S)] $*"; }
@@ -107,6 +116,73 @@ select_stack() {
     ( cd "$dir" && pulumi stack init "$ref" >/dev/null 2>&1 )
 }
 
+burst_seed() {
+  log "burst: seeding $BURST_STACKS stacks x $RESOURCES resources"
+  for (( i = 1; i <= BURST_STACKS; i++ )); do
+    stack="$(stack_name "$i")"
+    dir="$WORK/$stack"
+    generate "$dir" 0
+    select_stack "$dir" "$ORG/$stack"
+    run_op "$stack" seed 0 "$dir" \
+      pulumi up --yes --skip-preview --parallel "$PARALLEL" --message "soak burst seed"
+  done
+}
+
+# One log per run so concurrent CLIs never interleave.
+burst_run_one() {
+  local stack="$1" dir="$2" round="$3"
+  local out="$ARTIFACTS/burst-${stack}-round${round}.log"
+  local began ended rc errline http_status
+  began="$(date +%s)"
+  ( cd "$dir" && pulumi up --refresh --yes --skip-preview --parallel "$PARALLEL" \
+      --message "soak burst round=$round" ) >"$out" 2>&1
+  rc=$?
+  ended="$(date +%s)"
+  errline="$(grep -m1 -Ei 'error:|code = [A-Za-z]+ desc =|Bad Gateway|Gateway Timeout|Service Unavailable|Too Many Requests' "$out" \
+    | head -c 300 | tr '\t\n' '  ')"
+  # Anchored to a status phrase so line numbers like `Pulumi.yaml line 429` don't match.
+  http_status="$(grep -m1 -Eio 'HTTP(/[0-9.]+)? (error )?(429|499|502|503|504)\b|status ?code[: ]+(429|499|502|503|504)\b|\b(429|499|502|503|504)\b[[:space:]]+(Too Many Requests|Client Closed Request|Bad Gateway|Service Unavailable|Gateway Timeout)' "$out" \
+    | grep -Eo '429|499|502|503|504' | head -1)"
+  printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \
+    "$ended" "$((ended - START_EPOCH))" "$round" "$stack" "$rc" "$((ended - began))" \
+    "${http_status:-}" "$errline" \
+    >>"$BURST_LOG"
+  return "$rc"
+}
+
+burst_loop() {
+  burst_seed
+  local round=0 elapsed_h
+  while true; do
+    round=$((round + 1))
+    elapsed_h=$(( ($(date +%s) - START_EPOCH) / 3600 ))
+    if (( DURATION_HOURS > 0 )) && (( elapsed_h >= DURATION_HOURS )); then
+      log "burst: duration reached (${elapsed_h}h); stopping"
+      break
+    fi
+    if (( BURST_ROUNDS > 0 )) && (( round > BURST_ROUNDS )); then
+      log "burst: completed $BURST_ROUNDS round(s); stopping"
+      break
+    fi
+
+    log "burst round $round: firing $BURST_STACKS concurrent 'pulumi up --refresh' (elapsed ${elapsed_h}h)"
+    local pids=()
+    for (( i = 1; i <= BURST_STACKS; i++ )); do
+      stack="$(stack_name "$i")"
+      dir="$WORK/$stack"
+      # A new revision gives every resource a diff, so the round exercises the write path.
+      generate "$dir" "$round"
+      burst_run_one "$stack" "$dir" "$round" &
+      pids+=($!)
+    done
+    local failed=0
+    for pid in "${pids[@]}"; do
+      wait "$pid" || failed=$((failed + 1))
+    done
+    log "burst round $round: $failed/$BURST_STACKS run(s) failed"
+  done
+}
+
 # Console reads hit different tables and query shapes than the write path, and concurrent reads
 # are what turn a slow connection leak into visible pool starvation.
 console_reads() {
@@ -138,12 +214,21 @@ until curl -fsS --max-time 5 -H "Authorization: token $PULUMI_ACCESS_TOKEN" \
 done
 
 pulumi login "$BACKEND_URL" >/dev/null 2>&1 || { log "pulumi login failed"; exit 1; }
-log "logged in; churning $STACKS stacks x $RESOURCES resources"
 
 if [[ "$CONSOLE_READS" == "1" ]]; then
   console_reads &
   log "console read traffic started (pid $!)"
 fi
+
+if [[ "$MODE" == "burst" ]]; then
+  log "logged in; burst mode, $BURST_STACKS stacks x $RESOURCES resources"
+  burst_loop
+  log "burst load finished"
+  date +%s >"$ARTIFACTS/load-finished"
+  sleep infinity
+fi
+
+log "logged in; churning $STACKS stacks x $RESOURCES resources"
 
 while true; do
   ITERATION=$((ITERATION + 1))

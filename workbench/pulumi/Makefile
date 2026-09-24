@@ -39,6 +39,7 @@ SIM_PROVIDER_BUILDER_IMAGE ?= golang:1.26-bookworm
 ## container default would install a Linux binary. Tests still run natively in the container.
 SIM_PROVIDER_GOOS          ?= $(shell uname -s | tr 'A-Z' 'a-z')
 SIM_PROVIDER_GOARCH        ?= $(shell uname -m | sed -e 's/^x86_64$$/amd64/' -e 's/^aarch64$$/arm64/')
+SIM_PROVIDER_OUT           ?= bin/pulumi-resource-statedbsim
 SCALE_STACK                ?= scale
 SCALE_STACK_REF            ?= $(ORG)/$(SCALE_STACK)
 SCALE_RESOURCES            ?= 250
@@ -264,7 +265,7 @@ scale-provider-test:
 
 ## Build the local-only statedbsim provider binary and write the plugin binary back into the worktree.
 scale-provider-build:
-	$(call go-builder-run,mkdir -p bin && GOOS=$(SIM_PROVIDER_GOOS) GOARCH=$(SIM_PROVIDER_GOARCH) CGO_ENABLED=0 /usr/local/go/bin/go build -o bin/pulumi-resource-statedbsim .)
+	$(call go-builder-run,mkdir -p $(dir $(SIM_PROVIDER_OUT)) && GOOS=$(SIM_PROVIDER_GOOS) GOARCH=$(SIM_PROVIDER_GOARCH) CGO_ENABLED=0 /usr/local/go/bin/go build -o $(SIM_PROVIDER_OUT) .)
 
 ## Install the locally built statedbsim provider into the workbench-local Pulumi plugin cache.
 scale-provider-install: scale-provider-build

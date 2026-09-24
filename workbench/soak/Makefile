@@ -8,6 +8,10 @@ COMPOSE_DIR  := workbench/soak
 ## remain alive for the run.
 
 APP_IMAGE ?= state-db:dev
+## Set to 0 to reuse an existing APP_IMAGE instead of running the native build.
+SOAK_BUILD_APP ?= 1
+DOCKER_ARCH   ?= $(shell docker version --format '{{.Server.Arch}}')
+PROVIDER_OUT  = bin/linux-$(DOCKER_ARCH)/pulumi-resource-statedbsim
 ORG       ?= soak
 DB_USER   ?= statedb
 DB_NAME   ?= statedb
@@ -32,6 +36,11 @@ SOAK_FAULT_EVERY     ?= 7
 SOAK_CONTENTION_EVERY ?= 3
 SOAK_PREVIEW_EVERY   ?= 2
 
+## `burst` fires `pulumi up --refresh` at all stacks at once; SOAK_BURST_ROUNDS=0 runs until the duration.
+SOAK_MODE            ?= cycle
+SOAK_BURST_STACKS    ?= $(SOAK_STACKS)
+SOAK_BURST_ROUNDS    ?= 0
+
 ## No DOCKER_CONFIG override here: these run on the host, where clearing it hides
 ## ~/.docker/cli-plugins and `docker compose` stops resolving.
 
@@ -46,23 +55,29 @@ COMPOSE = export APP_IMAGE=$(APP_IMAGE) ORG=$(ORG) \
 		SOAK_PAYLOAD_BYTES=$(SOAK_PAYLOAD_BYTES) SOAK_CONSOLE_READS=$(SOAK_CONSOLE_READS) \
 		SOAK_SAMPLE_INTERVAL=$(SOAK_SAMPLE_INTERVAL) \
 		SOAK_DESTROY_EVERY=$(SOAK_DESTROY_EVERY) SOAK_FAULT_EVERY=$(SOAK_FAULT_EVERY) \
-		SOAK_CONTENTION_EVERY=$(SOAK_CONTENTION_EVERY) SOAK_PREVIEW_EVERY=$(SOAK_PREVIEW_EVERY) && \
+		SOAK_CONTENTION_EVERY=$(SOAK_CONTENTION_EVERY) SOAK_PREVIEW_EVERY=$(SOAK_PREVIEW_EVERY) \
+		SOAK_MODE=$(SOAK_MODE) SOAK_BURST_STACKS=$(SOAK_BURST_STACKS) \
+		SOAK_BURST_ROUNDS=$(SOAK_BURST_ROUNDS) && \
 	docker compose
 
 ## Build the statedbsim provider binary via the workbench's Go builder container.
+## The load container execs it, so target the Docker daemon's platform, not the host's.
 provider:
-	$(MAKE) -C $(REPO_ROOT)/workbench/pulumi scale-provider-build
+	$(MAKE) -C $(REPO_ROOT)/workbench/pulumi scale-provider-build \
+		SIM_PROVIDER_GOOS=linux SIM_PROVIDER_GOARCH=$(DOCKER_ARCH) SIM_PROVIDER_OUT=$(PROVIDER_OUT)
 
 ## Stage build inputs; the repo root as context would drag in workbench/.generated.
 stage: provider
 	@mkdir -p .build
-	@cp $(REPO_ROOT)/workbench/pulumi/providers/statedbsim/bin/pulumi-resource-statedbsim .build/
+	@cp $(REPO_ROOT)/workbench/pulumi/providers/statedbsim/$(PROVIDER_OUT) .build/
 	@cp $(REPO_ROOT)/workbench/pulumi/projects/scale-simulator/generate.sh .build/
 	@chmod +x .build/generate.sh
 
 ## Build the app image and the load/sampler image.
 build: stage
-	$(MAKE) -C $(REPO_ROOT) app-image APP_IMAGE=$(APP_IMAGE)
+ifneq ($(SOAK_BUILD_APP),0)
+	$(REPO_ROOT)/bin/build-native-app-image '$(APP_IMAGE)'
+endif
 	@sh -c '$(COMPOSE) build'
 
 ## Start the stack. Runs SOAK_DURATION_HOURS then idles so the quiesce window is recorded.

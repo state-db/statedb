@@ -42,6 +42,18 @@ make soak cmd=up args="SOAK_MEMORY=1g SOAK_CPUS=1.0"     # model a smaller deplo
 make soak cmd=up args="SOAK_CONSOLE_READS=0"             # Pulumi write path only
 ```
 
+`SOAK_MODE=burst` models concurrent CI instead of steady churn: it seeds `SOAK_BURST_STACKS`
+stacks, then runs `pulumi up --refresh` on all of them at the same moment, `SOAK_BURST_ROUNDS`
+times. Each run's exit status and first error land in `burst.tsv`. This reproduces the
+out-of-memory crash loop described in `design/load-resilience.md`:
+
+```bash
+make soak cmd=up args="SOAK_MODE=burst SOAK_BURST_STACKS=12 SOAK_BURST_ROUNDS=6 \
+  SOAK_STACKS=12 SOAK_RESOURCES=800 SOAK_PAYLOAD_BYTES=16384 SOAK_MEMORY=512m SOAK_CPUS=0.25"
+```
+
+`SOAK_BUILD_APP=0` reuses an existing `APP_IMAGE` instead of running the native build.
+
 `SOAK_DURATION_HOURS=0` runs until stopped. When the duration expires the driver idles rather than
 exiting, so the sampler keeps recording through a quiet window — the lock checks are only
 meaningful once load has stopped.
