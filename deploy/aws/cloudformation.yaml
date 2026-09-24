@@ -31,6 +31,12 @@ Metadata:
           - OrganizationName
           - AdminSubjects
       - Label:
+          default: Application task sizing
+        Parameters:
+          - AppTaskSize
+          - MinTaskCount
+          - MaxTaskCount
+      - Label:
           default: Database
         Parameters:
           - DbInstanceClass
@@ -49,6 +55,12 @@ Metadata:
         default: Application subnet routing
       AdminSubjects:
         default: OIDC site administrator subjects
+      AppTaskSize:
+        default: Application task CPU / memory
+      MinTaskCount:
+        default: Minimum application tasks
+      MaxTaskCount:
+        default: Maximum application tasks
 
 Parameters:
   NetworkMode:
@@ -127,6 +139,26 @@ Parameters:
     Default: ""
     MaxLength: 4096
     Description: Comma-separated exact OIDC identities in <issuer>:<subject> form. The value is passed to STATEDB_ADMIN_SUBJECTS and takes effect when application tasks restart.
+  AppTaskSize:
+    Type: String
+    Default: 1vCPU-2GB
+    AllowedValues:
+      - 0.25vCPU-512MB
+      - 0.5vCPU-1GB
+      - 1vCPU-2GB
+      - 2vCPU-4GB
+      - 4vCPU-8GB
+    Description: Fargate CPU/memory pair for each application task. Sizes below 1vCPU-2GB can run out of memory when many large stacks deploy at once.
+  MinTaskCount:
+    Type: Number
+    Default: 2
+    MinValue: 1
+    Description: Minimum running application tasks. Keep at least 2 so one task can restart without an outage.
+  MaxTaskCount:
+    Type: Number
+    Default: 4
+    MinValue: 1
+    Description: Maximum running application tasks the auto-scaler can reach. Must be at least MinTaskCount.
   DbInstanceClass:
     Type: String
     Default: db.t4g.small
@@ -171,6 +203,24 @@ Parameters:
     AllowedPattern: '^.+@sha256:[0-9a-f]{64}$'
     ConstraintDescription: Supply an immutable image reference ending in @sha256:<64 lowercase hex characters>.
     Description: PostgreSQL client image used by a one-off bootstrap task. Operators can supply an approved regional ECR copy.
+
+Mappings:
+  AppTaskSizes:
+    0.25vCPU-512MB:
+      Cpu: "256"
+      Memory: "512"
+    0.5vCPU-1GB:
+      Cpu: "512"
+      Memory: "1024"
+    1vCPU-2GB:
+      Cpu: "1024"
+      Memory: "2048"
+    2vCPU-4GB:
+      Cpu: "2048"
+      Memory: "4096"
+    4vCPU-8GB:
+      Cpu: "4096"
+      Memory: "8192"
 
 Rules:
   ExistingNetworkRequiresIdentifiers:
@@ -456,8 +506,8 @@ Resources:
   AppTaskDefinition:
     Type: AWS::ECS::TaskDefinition
     Properties:
-      Cpu: "256"
-      Memory: "512"
+      Cpu: !FindInMap [AppTaskSizes, !Ref AppTaskSize, Cpu]
+      Memory: !FindInMap [AppTaskSizes, !Ref AppTaskSize, Memory]
       NetworkMode: awsvpc
       RequiresCompatibilities:
         - FARGATE
@@ -470,6 +520,8 @@ Resources:
         - Name: Main
           Image: !Ref ImageReference
           Essential: true
+          # Outlasts the app's 30s shutdown drain so in-flight writes finish before SIGKILL.
+          StopTimeout: 45
           PortMappings:
             - Name: http
               ContainerPort: 8080
@@ -807,7 +859,7 @@ Resources:
     Properties:
       Cluster: !Ref Cluster
       InfrastructureRoleArn: !GetAtt EcsInfrastructureRole.Arn
-      HealthCheckPath: /api/auth/providers
+      HealthCheckPath: /health/live
       TaskDefinitionArn: !Ref AppTaskDefinition
       NetworkConfiguration:
         Subnets:
@@ -816,8 +868,8 @@ Resources:
         SecurityGroups:
           - !Ref TaskSecurityGroup
       ScalingTarget:
-        MinTaskCount: 2
-        MaxTaskCount: 4
+        MinTaskCount: !Ref MinTaskCount
+        MaxTaskCount: !Ref MaxTaskCount
 
 Outputs:
   ConsoleUrl:

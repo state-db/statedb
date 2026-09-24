@@ -110,6 +110,12 @@ only in an isolated evaluation environment, never in production.
 | User traffic | `8080` | `/` and `/pulumi` |
 | Readiness | `9000` | `/q/health/ready` |
 | Liveness | `9000` | `/q/health/live` |
+| Liveness (public, for a load balancer that can't reach `9000`) | `8080` | `/health/live` |
+
+Prefer the management-port `/q/health/live` when your platform can target it.
+`/health/live` exists for a platform whose health check can only reach the
+public port; it never touches the database or a worker thread, so a task busy
+with Pulumi writes never looks dead to it.
 
 Allow at least 600 seconds of health-check grace for a new task. A database cold
 start, or a wait behind another replica's migration lock, can legitimately take
@@ -123,6 +129,13 @@ database and a session-encryption secret.
 
 Migrations are safe under this model too. Flyway takes a database lock, one
 replica applies the schema change, and the rest wait and then verify the result.
+
+## Sizing for concurrent deploys
+
+0.25 vCPU / 512 MB is not enough for concurrent deploys of stacks with
+hundreds of resources. Size for at least 1 vCPU / 2 GB per task, and keep
+enough tasks running that one task's worth of concurrent deploys stays within
+what its memory and CPU can hold.
 
 ## Write-path tuning
 

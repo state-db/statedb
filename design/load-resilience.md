@@ -7,8 +7,11 @@ hypothesis.
 
 ## Incident
 
-- A CI job ran `pulumi up` on 12 stacks at once against the AWS CloudFormation
-  deployment (`deploy/aws/cloudformation.yaml`), which had 2 tasks.
+- A CI job ran `pulumi up` on 12 stacks at once against a deployment with 2
+  ECS tasks sized like `deploy/aws/cloudformation.yaml`'s defaults, backed by
+  Aurora Serverless (not the CloudFormation installer's `db.t4g.small` RDS
+  instance — this plan's ECS/application changes are scoped to the task, not
+  the database).
 - Every run failed with a 502 during the refresh phase.
 - Task A was `OOMKilled`.
 - Task B failed its health check (timeout) and ECS replaced it.
@@ -28,8 +31,9 @@ hypothesis.
    off-heap memory (Cedar JNI, zstd, thread stacks) together pass 512 MB, and
    ECS kills task A.
 3. Task A's runs retry onto task B. Its pool connections are held by
-   transactions that wait on row locks and on a slow burstable database
-   (`db.t4g.small`). The health check `/api/auth/providers`
+   transactions that wait on row locks and on a database (Aurora Serverless,
+   not the CloudFormation installer's RDS instance) whose slow-query cause is
+   unmeasured. The health check `/api/auth/providers`
    (`cloudformation.yaml:810`) is a `@Blocking` route that runs a DB query, so
    it waits in the same queue. It times out, and ECS replaces task B.
 4. The CLI retries each request 4 times with a 1 s, 2 s, 4 s backoff
@@ -122,13 +126,45 @@ after the run):
 
 | Change | Why | Status |
 |---|---|---|
-| Change the health check to a route that needs no DB connection and no worker thread, such as `/q/health/live` | Today the health check waits in the same queue as Pulumi writes, so a busy task looks dead | Verified: `HealthCheckPath: /api/auth/providers`. Open question: can `ExpressGatewayService` check port 9000? If not, add a cheap liveness route on 8080. |
-| Increase the default task size, for example to 1 vCPU / 2 GB, and make it a parameter | 512 MB leaves too little headroom above the heap. 0.25 vCPU makes Serial GC pauses long. | Verified: size is hard-coded |
-| Set an explicit heap limit, `-Xmx` at about 60% of task memory, in the container `Command` | Keeps the GC working before the container reaches its memory limit | Verify the native-image default of about 80% of container memory in the Mandrel docs before choosing the value |
-| Make `MinTaskCount` a parameter with a documented minimum for CI bursts | The incident went away at 4 tasks | Verified: `MinTaskCount: 2` |
-| Document `db.t4g.small` as unsuitable for concurrent deploys, or change the default | Burstable CPU and credit depletion fit the 150-600 ms statements | Confirm with RDS CPU and credit metrics from the incident |
+| Change the health check to a route that needs no DB connection and no worker thread | Today the health check waits in the same queue as Pulumi writes, so a busy task looks dead | Done. `AWS::ECS::ExpressGatewayService`'s `HealthCheckPath` has no separate health-check-port property (AWS CloudFormation resource reference), so it can only reach the primary container port. Added a public `GET /health/live` route on 8080 (`LivenessRoute`, registered on the Vert.x router, never touches the database or a worker thread) and pointed `HealthCheckPath` at it. |
+| Increase the default task size, for example to 1 vCPU / 2 GB, and make it a parameter | 512 MB leaves too little headroom above the heap. 0.25 vCPU makes Serial GC pauses long. | Done: `AppTaskSize` parameter, default `1vCPU-2GB`, mapped to Fargate `Cpu`/`Memory` via the `AppTaskSizes` mapping. |
+| Set an explicit heap limit in the image `ENTRYPOINT` | Keeps the GC working before the container reaches its memory limit | Done: `-XX:MaximumHeapSizePercent=60`. GraalVM native-image memory management docs: Serial GC defaults the max heap to 80% of physical memory when unset, and `-XX:MaximumHeapSizePercent`/`-Xmx` are both accepted at runtime by a native executable. |
+| Make `MinTaskCount` a parameter with a documented minimum for CI bursts | The incident went away at 4 tasks | Done: `MinTaskCount` (default 2) and `MaxTaskCount` (default 4) are both parameters now, with a `Rules` entry rejecting `MaxTaskCount < MinTaskCount`. |
+| Add `StopTimeout` to the app container | Let the 30s `quarkus.shutdown.timeout` drain finish before Fargate's SIGKILL | Done: `StopTimeout: 45`. |
 
 Also update `site/src/content/docs/docs/deployment.md` sizing guidance.
+
+**Results** (measured, same burst as section 0: `SOAK_MODE=burst SOAK_BURST_STACKS=12
+SOAK_BURST_ROUNDS=4 SOAK_STACKS=12 SOAK_RESOURCES=800 SOAK_PAYLOAD_BYTES=16384`, one container,
+single run at each size, `docker events`/`docker inspect` and `/health/live` +
+`/api/auth/providers` polled about once a second from the host throughout):
+
+| | `SOAK_MEMORY=512m SOAK_CPUS=0.25` | `SOAK_MEMORY=2g SOAK_CPUS=1.0` (new default) |
+|---|---|---|
+| Burst failures | 33/48 | 0/48 |
+| Container OOM kills (`docker events`, `RestartCount`) | 7 | 0 |
+| In-process `OutOfMemoryError: Garbage-collected heap size exceeded` (app log) | 3 | 0 |
+| `/health/live` responses | 285×200, 6 timeouts | 482×200, 0 timeouts |
+| `/api/auth/providers` responses | 284×200, 7 timeouts | 482×200, 0 timeouts |
+| `/health/live` latency mean / max | 66.7 ms / 1088 ms | 13.8 ms / 251 ms |
+| `/api/auth/providers` latency mean / max | 71.5 ms / 698 ms | 17.1 ms / 235 ms |
+| Peak RSS (sampler `series.tsv`) | not captured (container cycling) | ~715 MB |
+
+At 512 MB, `-XX:MaximumHeapSizePercent=60` changed the failure mode partway, as expected: 3 of the
+crashes surfaced as a catchable in-process `OutOfMemoryError` on a request or compaction thread
+(app log, `04:06:05`/`04:10:56`/`04:11:13`) rather than only a silent container kill, but the
+container's cgroup memory (heap + off-heap JNI/thread-stack pressure) still exceeded 512 MB 7
+times and ECS-equivalent `docker events` still shows `oom`/`die`. The heap limit alone does not
+fix 512 MB / 0.25 vCPU; 1 vCPU / 2 GB is still the smallest size that ran this burst clean, which
+is why it is now the template default.
+
+All timeouts on both health routes landed in the same few-second windows as a restart (both routes
+were unreachable together, because the whole process was down) — this single-container harness
+does not reproduce the ECS scenario where a *second*, still-healthy task's health check queues
+behind another task's retry storm; that needs two app containers behind a load balancer and is
+still unmeasured (see section 0). What this run does show: `/health/live` never has to touch the
+database or a worker thread, so nothing about its own design can make a busy-but-alive task look
+dead the way `/api/auth/providers`'s `@Blocking` DB query could.
 
 ## 2. Backpressure (application)
 

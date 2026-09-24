@@ -18,9 +18,8 @@ contains() {
 template=deploy/aws/cloudformation.yaml
 contains "$template" "$IMAGE_REPOSITORY"
 contains "$template" "ContainerPort: $APP_PORT"
-contains "$template" "Memory: \"$MEMORY_MIB\""
-contains "$template" "MinTaskCount: $MIN_REPLICAS"
-contains "$template" "MaxTaskCount: $MAX_REPLICAS"
+contains "$template" 'MinTaskCount: !Ref MinTaskCount'
+contains "$template" 'MaxTaskCount: !Ref MaxTaskCount'
 contains "$template" "HealthCheckPath: $HEALTH_PATH"
 contains "$template" 'Type: AWS::ECS::ExpressGatewayService'
 contains "$template" 'Type: AWS::ECS::TaskDefinition'
@@ -77,6 +76,19 @@ block() {
   awk -v name="  $1:" '$0 == name {found = 1; next} found && /^  [A-Za-z]/ {exit} found' "$2" |
     grep -v '^[[:space:]]*#'
 }
+
+if ! block AppTaskSize "$template" | grep -F "Default: $APP_TASK_SIZE" >/dev/null; then
+  fail "$template does not default AppTaskSize to $APP_TASK_SIZE"
+fi
+if ! block AppTaskSizes "$template" | grep -F "Memory: \"$APP_TASK_MEMORY_MIB\"" >/dev/null; then
+  fail "$template AppTaskSizes mapping is missing the $APP_TASK_MEMORY_MIB MiB entry"
+fi
+if ! block MinTaskCount "$template" | grep -F "Default: $MIN_REPLICAS" >/dev/null; then
+  fail "$template does not default MinTaskCount to $MIN_REPLICAS"
+fi
+if ! block MaxTaskCount "$template" | grep -F "Default: $MAX_REPLICAS" >/dev/null; then
+  fail "$template does not default MaxTaskCount to $MAX_REPLICAS"
+fi
 
 if block BreakGlassPassword "$template" | grep -E '(SecretString|GenerateSecretString):' >/dev/null; then
   fail "$template gives the break-glass secret a template-supplied value instead of generating it"
