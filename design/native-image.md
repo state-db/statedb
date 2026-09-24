@@ -107,6 +107,7 @@ central files register those). Four runtime boundaries cover the rest:
 | --- | --- |
 | `--exact-reachability-metadata=com.cedarpolicy,app.statedb` | Unregistered access in those packages, at build time where analysis can prove it |
 | `-XX:MissingRegistrationReportingMode=Exit` in the image `ENTRYPOINT` | Unregistered access at runtime; exits rather than degrading. In `ENTRYPOINT` because a `CMD` is silently replaced by `docker run <image> <args>` or a Kubernetes `args:` |
+| `-XX:MaximumHeapSizePercent=60` in the image `ENTRYPOINT` | The Serial GC default heap of 80% of container memory, which leaves too little room for off-heap JNI, zstd, and thread stacks. A runtime percentage scales with each deployment's memory limit |
 | Negative metadata build | A required Cedar registration removed from otherwise valid JSON. Compilation still succeeds because the target is dynamic, so `bin/verify-native-metadata-negative` requires the image to fail the Cedar readiness contract |
 | `CedarAuthorizationReadinessCheck` | Libraries such as Jackson that surface absent metadata as their own functional exception rather than a GraalVM registration error |
 

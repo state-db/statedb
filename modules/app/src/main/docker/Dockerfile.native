@@ -145,4 +145,5 @@ EXPOSE 8080 9000
 # The fail-closed flag belongs in ENTRYPOINT: as CMD, any `docker run <image> <args>` or
 # Kubernetes `args:` would silently drop it and turn a missing registration back into a
 # per-request failure.
-ENTRYPOINT ["/work/application", "-XX:MissingRegistrationReportingMode=Exit"]
+# The 80% default heap leaves no room for off-heap memory; a percentage scales with any limit.
+ENTRYPOINT ["/work/application", "-XX:MissingRegistrationReportingMode=Exit", "-XX:MaximumHeapSizePercent=60"]
