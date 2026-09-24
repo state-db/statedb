@@ -56,6 +56,9 @@ quarkus:
       metrics:
         # Agroal pool gauges; saturation is otherwise invisible until requests time out.
         enabled: true
+      additional-jdbc-properties:
+        # pgjdbc: turns Hibernate's insert batches into multi-row statements on the wire.
+        reWriteBatchedInserts: "${statedb.db.rewrite-batched-inserts:true}"
   flyway:
     # StateDbFlywayConfiguration rejects attempts to disable this startup path
     # or weaken the migration safety settings below.
@@ -88,6 +91,9 @@ quarkus:
     # Schema is owned by Flyway; Hibernate must never touch DDL.
     database:
       generation: none
+    # Quarkus fixes jdbc.statement-batch-size at build time; Hibernate reads this at startup.
+    unsupported-properties:
+      "hibernate.jdbc.batch_size": "${statedb.db.insert-batch-size:50}"
     log:
       # Add the SQL statement when a request is slow but pool acquisition was not the cause.
       # The console's normal queries are well below this threshold.

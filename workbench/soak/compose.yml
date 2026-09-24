@@ -60,6 +60,8 @@ services:
       # No OIDC provider is bootstrapped, so break-glass is live; reached from the compose network.
       STATEDB_LOCAL_GLASS_PASSWORD_HASH: ${GLASS_PASSWORD_HASH:-$$2a$$10$$T56PF8UE80K1VeLu6iMJjOLW68rR.xHzHUppcyvcd2ZAudpNUgn9O}
       STATEDB_LOCAL_GLASS_ALLOW_REMOTE: "true"
+      STATEDB_DB_REWRITE_BATCHED_INSERTS: ${SOAK_DB_REWRITE_BATCHED_INSERTS:-true}
+      STATEDB_DB_INSERT_BATCH_SIZE: ${SOAK_DB_INSERT_BATCH_SIZE:-50}
     volumes:
       - artifacts:/soak/artifacts
     ports:

@@ -41,6 +41,10 @@ SOAK_MODE            ?= cycle
 SOAK_BURST_STACKS    ?= $(SOAK_STACKS)
 SOAK_BURST_ROUNDS    ?= 0
 
+## Pass-through for the app's JDBC insert-batching flags; see design/load-resilience.md §3.
+SOAK_DB_REWRITE_BATCHED_INSERTS ?= true
+SOAK_DB_INSERT_BATCH_SIZE       ?= 50
+
 ## No DOCKER_CONFIG override here: these run on the host, where clearing it hides
 ## ~/.docker/cli-plugins and `docker compose` stops resolving.
 
@@ -57,7 +61,9 @@ COMPOSE = export APP_IMAGE=$(APP_IMAGE) ORG=$(ORG) \
 		SOAK_DESTROY_EVERY=$(SOAK_DESTROY_EVERY) SOAK_FAULT_EVERY=$(SOAK_FAULT_EVERY) \
 		SOAK_CONTENTION_EVERY=$(SOAK_CONTENTION_EVERY) SOAK_PREVIEW_EVERY=$(SOAK_PREVIEW_EVERY) \
 		SOAK_MODE=$(SOAK_MODE) SOAK_BURST_STACKS=$(SOAK_BURST_STACKS) \
-		SOAK_BURST_ROUNDS=$(SOAK_BURST_ROUNDS) && \
+		SOAK_BURST_ROUNDS=$(SOAK_BURST_ROUNDS) \
+		SOAK_DB_REWRITE_BATCHED_INSERTS=$(SOAK_DB_REWRITE_BATCHED_INSERTS) \
+		SOAK_DB_INSERT_BATCH_SIZE=$(SOAK_DB_INSERT_BATCH_SIZE) && \
 	docker compose
 
 ## Build the statedbsim provider binary via the workbench's Go builder container.

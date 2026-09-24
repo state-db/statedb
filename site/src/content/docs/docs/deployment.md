@@ -124,6 +124,17 @@ database and a session-encryption secret.
 Migrations are safe under this model too. Flyway takes a database lock, one
 replica applies the schema change, and the rest wait and then verify the result.
 
+## Write-path tuning
+
+| Variable | Meaning |
+| --- | --- |
+| `STATEDB_DB_REWRITE_BATCHED_INSERTS` | pgjdbc multi-row insert rewriting; `true` by default |
+| `STATEDB_DB_INSERT_BATCH_SIZE` | Hibernate JDBC insert batch size; `50` by default |
+
+These speed up journal and event writes under concurrent load. Rewriting only
+applies to batches, so an insert batch size of `0` also turns it off and falls
+back to one statement per row.
+
 ## Upgrades
 
 Replacing the application image is the entire upgrade procedure. Every Flyway

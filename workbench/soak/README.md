@@ -52,6 +52,9 @@ make soak cmd=up args="SOAK_MODE=burst SOAK_BURST_STACKS=12 SOAK_BURST_ROUNDS=6 
   SOAK_STACKS=12 SOAK_RESOURCES=800 SOAK_PAYLOAD_BYTES=16384 SOAK_MEMORY=512m SOAK_CPUS=0.25"
 ```
 
+`SOAK_DB_REWRITE_BATCHED_INSERTS=false` and `SOAK_DB_INSERT_BATCH_SIZE=0` turn off pgjdbc rewriting
+and Hibernate insert batching respectively, for an apples-to-apples write-path comparison.
+
 `SOAK_BUILD_APP=0` reuses an existing `APP_IMAGE` instead of running the native build.
 
 `SOAK_DURATION_HOURS=0` runs until stopped. When the duration expires the driver idles rather than

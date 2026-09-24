@@ -165,10 +165,56 @@ to be saved (Pulumi `journal/snapshot.go`, `AddJournalEntry`), and a run sends
 its journal batches one at a time.
 
 - **JDBC batching.** `JournalAppender` (`:150`) and `EventBatchAppender` (`:63`)
-  persist one row at a time. Set `quarkus.hibernate-orm.jdbc.statement-batch-size`
-  and pgjdbc `reWriteBatchedInserts=true`. Confirm that `BaseEntity` IDs are
-  assigned by the application, which batching needs. Measure the change with
-  the reproduction.
+  persist one row at a time. Set pgjdbc `reWriteBatchedInserts` and the
+  Hibernate batch size. `BaseEntity` IDs are app-assigned (UUIDv7), which
+  batching needs. Done: both are operator flags,
+  `STATEDB_DB_REWRITE_BATCHED_INSERTS` (default `true`, via
+  `quarkus.datasource.jdbc.additional-jdbc-properties.reWriteBatchedInserts`,
+  a runtime Agroal property) and `STATEDB_DB_INSERT_BATCH_SIZE` (default `50`).
+  `quarkus.hibernate-orm.jdbc.statement-batch-size` turned out to be
+  build-time-fixed in Quarkus 3.38 (`phase: BUILD_TIME` in its
+  `quarkus-config-model.json`, and the config class only exists in the
+  `-deployment` jar) — an env var would silently do nothing in the native
+  image — so batch size instead goes through Hibernate's own runtime
+  `hibernate.jdbc.batch_size` via `quarkus.hibernate-orm.unsupported-properties`,
+  confirmed genuinely runtime by decompiling `HibernateOrmRecorder`: it applies
+  the whole map to `RuntimeSettings.Builder` at Hibernate bootstrap, which runs
+  at application start, not image build. Proved against the driver in
+  `RewriteBatchedInsertsEnabledTest`/`RewriteBatchedInsertsDisabledTest`
+  (`modules/app/src/test/java/app/statedb/app/ops/`): a raw `executeBatch()` of
+  8 identical prepared INSERTs reports `Statement.SUCCESS_NO_INFO` (-2) per row
+  with rewrite on, and `1` per row with it off.
+
+  **Results** (measured, `SOAK_MEMORY=2g SOAK_CPUS=1.0`, `SOAK_MODE=burst
+  SOAK_BURST_STACKS=12 SOAK_BURST_ROUNDS=4 SOAK_STACKS=12 SOAK_RESOURCES=800
+  SOAK_PAYLOAD_BYTES=16384`, three runs, each 48 burst operations, `/q/metrics`
+  and the slow-query log read before `make soak cmd=destroy`):
+
+  | Run | journalentries mean / max | events/batch mean / max | burst failures | slow single-row journal/event `INSERT`s |
+  |---|---|---|---|---|
+  | (a) rewrite on, batch 50 (defaults) | 41.5 ms / 512.6 ms | 155.3 ms / 1033.0 ms | 0/48 | 0 |
+  | (b) rewrite off, batch 50 | 44.8 ms / 780.6 ms | 168.9 ms / 1404.0 ms | 0/48 | 0 |
+  | (c) rewrite on, batch 0 (Hibernate batching off) | 47.8 ms / 405.1 ms | 215.4 ms / 902.1 ms | 0/48 | 210 |
+
+  At this burst size (2 GB / 1 vCPU, the shape that survived the section-0
+  reproduction), all three configurations completed all 48 operations with no
+  failures — this burst does not by itself reproduce the incident's overload,
+  so it isolates write-path cost rather than crash behavior. Mean latency
+  differences between (a) and (b) are small (~3 ms journal, ~14 ms events) and
+  close to run-to-run noise at this scale; the max columns are noisy in the
+  same way and don't order cleanly by configuration. The clean signal is the
+  slow-query count: 0 in (a) and (b), 210 in (c). With `insert-batch-size=0`,
+  Hibernate never calls `addBatch()`, so pgjdbc's rewrite never gets a batch to
+  rewrite either — `STATEDB_DB_REWRITE_BATCHED_INSERTS=true` alone does nothing
+  without Hibernate-side batching to feed it. Turning off Hibernate batching
+  reproduces the original incident's signature (`journal_entries` and
+  `update_events` inserts individually crossing the 100 ms slow-query
+  threshold), which run (c)'s log confirms directly. Not confirmed in this run:
+  a Postgres-side statement count showing the multi-row rewrite in flight
+  (`pg_stat_statements` was not preloaded in the soak Postgres image); the
+  `-2` update-count behavior from the Step 1 test is the direct evidence that
+  the rewrite itself works, and is why it's `reWriteBatchedInserts` reaching
+  the driver.
 - **Lock mode in `LeaseRevalidator`** (`:33`). Change `FOR UPDATE` to
   `FOR SHARE`. `FOR SHARE` still blocks the `DELETE` and `UPDATE` from cancel,
   complete, and renew, which is the guarantee we need. It also lets the event
