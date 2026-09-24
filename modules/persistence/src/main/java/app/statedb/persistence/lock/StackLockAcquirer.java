@@ -25,8 +25,9 @@ import org.jboss.logging.Logger;
  * {@code RETURNING} empty (caller maps to 409), an expired lock is stolen in place. Native SQL is
  * the justified escape hatch — {@code ON CONFLICT} is not expressible in HQL.
  *
- * <p>The same transaction also advances {@code stacks.active_update_id} and persists the
- * acquire-body fields onto the corresponding {@code stack_updates} row.
+ * <p>The same transaction also advances {@code stacks.active_update_id}, fails any update it
+ * displaces on a takeover, and persists the acquire-body fields onto the corresponding {@code
+ * stack_updates} row.
  *
  * <p>Ordered against compaction: a queued compaction finishes first, and this transaction takes the
  * {@code stack_state} row lock {@link app.statedb.persistence.stack.CompactionWorker} holds while
@@ -170,7 +171,19 @@ public class StackLockAcquirer {
     UUID returnedLeaseId = (UUID) row[0];
     Instant expiresAt = toInstant(row[1]);
 
-    Stack.update("activeUpdateId = ?1 where id = ?2", updateId, stackId);
+    Stack stack = Stack.findById(stackId);
+    UUID abandonedUpdateId = stack.activeUpdateId;
+    if (abandonedUpdateId != null && !abandonedUpdateId.equals(updateId)) {
+      // Nothing else ever terminates an update whose lease expired mid-run.
+      StackUpdate.update(
+          "status = ?1, endedAt = current_timestamp"
+              + " where id = ?2 and stackId = ?3 and status = ?4",
+          StackUpdate.Status.FAILED,
+          abandonedUpdateId,
+          stackId,
+          StackUpdate.Status.IN_PROGRESS);
+    }
+    stack.activeUpdateId = updateId;
 
     if (journalVersion != null || tags != null) {
       StackUpdate u = StackUpdate.findById(updateId);

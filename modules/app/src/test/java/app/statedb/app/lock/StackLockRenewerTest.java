@@ -8,6 +8,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import app.statedb.persistence.identity.Organization;
 import app.statedb.persistence.lock.Lease;
 import app.statedb.persistence.lock.LeaseExpiredException;
+import app.statedb.persistence.lock.LockConfig;
 import app.statedb.persistence.lock.StackLockAcquirer;
 import app.statedb.persistence.lock.StackLockRenewer;
 import app.statedb.persistence.stack.StackCreator;
@@ -19,6 +20,7 @@ import io.quarkus.narayana.jta.QuarkusTransaction;
 import io.quarkus.test.junit.QuarkusTest;
 import jakarta.inject.Inject;
 import jakarta.persistence.EntityManager;
+import java.time.Duration;
 import java.time.Instant;
 import java.util.Map;
 import java.util.UUID;
@@ -35,6 +37,7 @@ class StackLockRenewerTest {
   @Inject StackUpdateStarter starter;
   @Inject StackLockAcquirer acquirer;
   @Inject StackLockRenewer renewer;
+  @Inject LockConfig lockConfig;
   @Inject EntityManager em;
 
   private UUID stackId;
@@ -99,7 +102,7 @@ class StackLockRenewerTest {
     Instant beforeExpires = readExpiresAt();
     Instant beforeHeartbeat = readHeartbeatAt();
 
-    Lease renewed = renewer.renew(leaseId);
+    Lease renewed = renewer.renew(leaseId, null);
 
     Instant afterExpires = readExpiresAt();
     Instant afterHeartbeat = readHeartbeatAt();
@@ -128,7 +131,7 @@ class StackLockRenewerTest {
                     .setParameter(1, leaseId)
                     .executeUpdate());
 
-    assertThrows(LeaseExpiredException.class, () -> renewer.renew(leaseId));
+    assertThrows(LeaseExpiredException.class, () -> renewer.renew(leaseId, null));
   }
 
   @Test
@@ -147,7 +150,7 @@ class StackLockRenewerTest {
                     .executeUpdate());
 
     Instant maxBefore = readMaxExpiresAt();
-    Lease renewed = renewer.renew(leaseId);
+    Lease renewed = renewer.renew(leaseId, null);
     Instant clamped = readExpiresAt();
     assertTrue(
         !clamped.isAfter(maxBefore), "expires_at must not exceed max_expires_at after renew");
@@ -165,7 +168,30 @@ class StackLockRenewerTest {
                     .setParameter(1, leaseId)
                     .executeUpdate());
 
-    assertThrows(LeaseExpiredException.class, () -> renewer.renew(leaseId));
+    assertThrows(LeaseExpiredException.class, () -> renewer.renew(leaseId, null));
+  }
+
+  @Test
+  void requestedDurationIsHonoredWithinBounds() {
+    assertEquals(Duration.ofSeconds(300), renewer.renew(leaseId, 300L).duration());
+  }
+
+  @Test
+  void requestedDurationBelowFloorIsClampedUp() {
+    assertEquals(Duration.ofSeconds(30), renewer.renew(leaseId, 1L).duration());
+  }
+
+  @Test
+  void requestedDurationAboveLeaseTtlIsClampedDown() {
+    Duration day = Duration.ofDays(1);
+    assertEquals(lockConfig.leaseTtl(), renewer.renew(leaseId, day.toSeconds()).duration());
+  }
+
+  @Test
+  void invalidRequestedDurationFallsBackToLeaseTtl() {
+    assertEquals(lockConfig.leaseTtl(), renewer.renew(leaseId, 0L).duration());
+    assertEquals(lockConfig.leaseTtl(), renewer.renew(leaseId, -5L).duration());
+    assertEquals(lockConfig.leaseTtl(), renewer.renew(leaseId, null).duration());
   }
 
   @Test
@@ -177,7 +203,7 @@ class StackLockRenewerTest {
                     .setParameter(1, leaseId)
                     .executeUpdate());
 
-    assertThrows(LeaseExpiredException.class, () -> renewer.renew(leaseId));
+    assertThrows(LeaseExpiredException.class, () -> renewer.renew(leaseId, null));
   }
 
   private Instant readExpiresAt() {

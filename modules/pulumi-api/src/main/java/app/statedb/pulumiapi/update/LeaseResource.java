@@ -64,7 +64,7 @@ public class LeaseResource {
       }
     }
 
-    Lease renewed = lockRenewer.renew(ctx.leaseId());
+    Lease renewed = lockRenewer.renew(ctx.leaseId(), body != null ? body.duration : null);
     return new RenewLeaseResponse(
         renewed.plaintextToken().toString(), renewed.expiresAt().getEpochSecond());
   }

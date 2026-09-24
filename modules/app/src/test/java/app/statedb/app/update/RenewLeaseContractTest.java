@@ -12,6 +12,7 @@ import app.statedb.persistence.identity.OrgMember;
 import app.statedb.persistence.identity.Organization;
 import app.statedb.persistence.identity.User;
 import app.statedb.persistence.lock.LeaseTokenHasher;
+import app.statedb.persistence.lock.LockConfig;
 import app.statedb.persistence.stack.StackCreator;
 import io.quarkus.narayana.jta.QuarkusTransaction;
 import io.quarkus.test.junit.QuarkusTest;
@@ -37,6 +38,7 @@ class RenewLeaseContractTest {
 
   @Inject EntityManager em;
   @Inject StackCreator stackCreator;
+  @Inject LockConfig lockConfig;
 
   @BeforeEach
   void seed() {
@@ -133,6 +135,26 @@ class RenewLeaseContractTest {
     Instant after = readExpiresAt(rotated);
     assertTrue(after.isAfter(before), "expires_at should advance");
     assertTrue(tokenExpiration >= after.getEpochSecond() - 2, "response should pin to db row");
+  }
+
+  @Test
+  void renewHonorsTheCliRequestedDuration() {
+    String updateId = startPreview();
+    long now = Instant.now().getEpochSecond();
+
+    long expiration = renewExpiration(updateId, acquireLock(updateId), Map.of("duration", 120));
+
+    assertTrue(expiration < now + 180, "a request below lease-ttl must not be widened to it");
+  }
+
+  @Test
+  void renewWithMissingDurationFallsBackToLeaseTtl() {
+    String updateId = startPreview();
+    long now = Instant.now().getEpochSecond();
+
+    long expiration = renewExpiration(updateId, acquireLock(updateId), Map.of());
+
+    assertTrue(expiration >= now + lockConfig.leaseTtl().toSeconds() - 10);
   }
 
   @Test
@@ -240,6 +262,30 @@ class RenewLeaseContractTest {
         .statusCode(200)
         .extract()
         .path("token");
+  }
+
+  private long renewExpiration(String updateId, String token, Map<String, ?> body) {
+    Number expiration =
+        given()
+            .header("Authorization", "update-token " + token)
+            .contentType("application/json")
+            .body(body)
+            .when()
+            .post(
+                "/pulumi/api/stacks/"
+                    + ORG
+                    + "/"
+                    + PROJECT
+                    + "/"
+                    + STACK
+                    + "/update/"
+                    + updateId
+                    + "/renew_lease")
+            .then()
+            .statusCode(200)
+            .extract()
+            .path("tokenExpiration");
+    return expiration.longValue();
   }
 
   private Instant readExpiresAt(String token) {

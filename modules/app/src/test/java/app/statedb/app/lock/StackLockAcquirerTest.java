@@ -167,6 +167,30 @@ class StackLockAcquirerTest {
   }
 
   @Test
+  void takeoverFailsTheAbandonedUpdate() {
+    UUID firstUpdateId = startUpdate("k-abandoned");
+    acquirer.acquire(stackId, firstUpdateId, "user:a", null, null).orElseThrow();
+
+    QuarkusTransaction.requiringNew()
+        .run(
+            () -> {
+              StackLock lock = StackLock.find("stackId", stackId).<StackLock>singleResult();
+              lock.expiresAt = Instant.now().minusSeconds(1);
+            });
+
+    UUID secondUpdateId = startUpdate("k-taken-over");
+    acquirer.acquire(stackId, secondUpdateId, "user:b", null, null).orElseThrow();
+
+    Object[] row =
+        (Object[])
+            em.createNativeQuery("SELECT status, ended_at FROM stack_updates WHERE id = ?1")
+                .setParameter(1, firstUpdateId)
+                .getSingleResult();
+    assertEquals("failed", row[0]);
+    assertNotNull(row[1]);
+  }
+
+  @Test
   void oldLeaseCannotAppendAfterExpiredLockIsStolen() throws Exception {
     UUID firstUpdateId = startUpdate("k-old-append");
     Lease first = acquirer.acquire(stackId, firstUpdateId, "user:a", null, null).orElseThrow();

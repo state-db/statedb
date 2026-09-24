@@ -138,7 +138,8 @@ statedb:
       poll-interval: 5m
       per-tick-cap: 50
   lock:
-    lease-ttl: 1h
+    # The CLI assumes 5m and renews at 2.5m whatever we return; LeaseRenewalFaultIT guards this.
+    lease-ttl: 5m
     # Advisory; no server-side behavior keys off this today. Exposed so operators can tune the
     # CLI heartbeat cadence once the server starts surfacing it.
     heartbeat-interval: 30s

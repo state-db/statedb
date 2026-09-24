@@ -216,7 +216,7 @@ Per db-schema.md `stack_locks`. Lease lifecycle:
 - **Acquire** (`POST /update/{updateID}`): `INSERT … ON CONFLICT (stack_id) DO UPDATE SET … WHERE expires_at < now() RETURNING …`. Empty return = held by someone live → 409.
 - **Renew** (`POST /update/{updateID}/renew_lease`): `UPDATE stack_locks SET expires_at = now() + $1, heartbeat_at = now() WHERE stack_id = ? AND lock_token = ?`. Mismatch → 409.
 - **Release** (implicit on `complete` or explicit on cancel): delete row. Lock token validated.
-- **Stale recovery**: any acquire steals when `expires_at < now()`. TTL config `statedb.lock.lease-ttl=1h` (default), `statedb.lock.heartbeat-interval=30s` (advisory; CLI doesn't always renew).
+- **Stale recovery**: any acquire steals when `expires_at < now()`. TTL config `statedb.lock.lease-ttl=5m` (default, matching the CLI's own assumed lease — see `design/load-resilience.md` section 4), `statedb.lock.heartbeat-interval=30s` (advisory).
 - **Manual unlock**: admin-only console endpoint `DELETE /api/admin/stacks/{ref}/lock`. No CLI equivalent — Pulumi's `pulumi cancel` calls our `cancel_lease` endpoint which is the same thing scoped to the lease holder.
 
 ### Events

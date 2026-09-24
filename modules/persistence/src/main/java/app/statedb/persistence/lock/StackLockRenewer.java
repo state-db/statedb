@@ -4,6 +4,7 @@ import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 import jakarta.persistence.EntityManager;
 import jakarta.transaction.Transactional;
+import java.time.Duration;
 import java.time.Instant;
 import java.time.OffsetDateTime;
 import java.util.List;
@@ -19,13 +20,21 @@ import java.util.UUID;
 @ApplicationScoped
 public class StackLockRenewer {
 
+  // Pulumi requests 300s; the floor keeps a bogus tiny duration from forcing renewal storms.
+  private static final Duration MIN_RENEWAL = Duration.ofSeconds(30);
+
   @Inject EntityManager em;
 
   @Inject LockConfig lockConfig;
 
   @Transactional
-  public Lease renew(UUID leaseId) {
-    long ttlSeconds = lockConfig.leaseTtl().toSeconds();
+  public Lease renew(UUID leaseId, Long requestedDurationSeconds) {
+    Duration requested =
+        requestedDurationSeconds != null && requestedDurationSeconds > 0
+            ? Duration.ofSeconds(requestedDurationSeconds)
+            : lockConfig.leaseTtl();
+    Duration ttl = clamp(requested, MIN_RENEWAL, lockConfig.leaseTtl());
+    long ttlSeconds = ttl.toSeconds();
     // 122 random bits from SecureRandom; see StackLockAcquirer for the
     // entropy rationale.
     UUID newPlaintext = UUID.randomUUID();
@@ -62,7 +71,13 @@ public class StackLockRenewer {
     Object[] row = rows.get(0);
     UUID returnedLeaseId = (UUID) row[0];
     Instant expiresAt = toInstant(row[1]);
-    return new Lease(returnedLeaseId, newPlaintext, lockConfig.leaseTtl(), expiresAt);
+    return new Lease(returnedLeaseId, newPlaintext, ttl, expiresAt);
+  }
+
+  private static Duration clamp(Duration value, Duration min, Duration max) {
+    if (value.compareTo(min) < 0) return min;
+    if (value.compareTo(max) > 0) return max;
+    return value;
   }
 
   private static Instant toInstant(Object value) {
