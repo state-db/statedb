@@ -1,6 +1,9 @@
 quarkus:
   application:
     name: statedb
+  # Lets in-flight journal/event PATCHes finish on scale-in or rollout instead of being cut off.
+  shutdown:
+    timeout: 30s
   http:
     port: 8080
     # Pulumi's CLI gzips request bodies on `/batch-decrypt` (and may on other endpoints in
