@@ -19,18 +19,18 @@ public class LeaseRevalidator {
 
   /**
    * Throws {@link LeaseExpiredException} if the lock row is gone or has expired. The matched row is
-   * locked {@code FOR UPDATE} so a concurrent {@code DELETE} (cancel) or {@code UPDATE} (complete,
-   * renew) blocks until the caller commits. {@code clock_timestamp()} is used instead of {@code
-   * now()} so the expiry check evaluates at the actual query time, not at transaction start — a
-   * caller that started a transaction, blocked on its primary row, and then revalidated still sees
-   * the current wall clock.
+   * locked {@code FOR SHARE} so a concurrent {@code DELETE} (cancel) or {@code UPDATE} (complete,
+   * renew) blocks until the caller commits, while appenders sharing the lease don't block each
+   * other. {@code clock_timestamp()} is used instead of {@code now()} so the expiry check evaluates
+   * at the actual query time, not at transaction start — a caller that blocked on its primary row
+   * and then revalidated still sees the current wall clock.
    */
   public void requireLive(UUID leaseId) {
     var rows =
         em.createNativeQuery(
                 "SELECT 1 FROM stack_locks"
                     + " WHERE id = ?1 AND expires_at > clock_timestamp()"
-                    + " FOR UPDATE")
+                    + " FOR SHARE")
             .setParameter(1, leaseId)
             .getResultList();
     if (rows.isEmpty()) {
