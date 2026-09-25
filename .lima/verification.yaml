@@ -38,6 +38,9 @@ provision:
       EOF
       systemctl enable --now nftables
       nft list table inet state_db_verify >/dev/null
+      # Rootless Docker allocates published ports from 32768 up without seeing guest sockets.
+      echo 'net.ipv4.ip_local_reserved_ports = 32768-49151' >/etc/sysctl.d/60-state-db-ports.conf
+      sysctl --system
       systemctl disable --now docker.service docker.socket containerd.service containerd.socket || true
       systemctl mask docker.service docker.socket containerd.service containerd.socket || true
       ln -sf /usr/share/docker.io/contrib/dockerd-rootless.sh /usr/local/bin/dockerd-rootless.sh
