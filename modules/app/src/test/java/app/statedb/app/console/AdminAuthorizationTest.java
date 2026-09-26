@@ -56,6 +56,11 @@ class AdminAuthorizationTest {
     CedarResource org = org("any-org");
     assertTrue(authorizer.authorize(admin, null, "org:ManageMembers", org).allowed());
     assertFalse(authorizer.authorize(nonAdmin, null, "org:ManageMembers", org).allowed());
+    assertTrue(authorizer.authorize(admin, null, "vcs:Manage", org).allowed());
+    assertFalse(authorizer.authorize(nonAdmin, null, "vcs:Manage", org).allowed());
+    CedarResource site = site();
+    assertTrue(authorizer.authorize(admin, null, "vcs:ManageSite", site).allowed());
+    assertFalse(authorizer.authorize(nonAdmin, null, "vcs:ManageSite", site).allowed());
   }
 
   @Test
@@ -85,6 +90,11 @@ class AdminAuthorizationTest {
     EntityUID uid = uid("Org", ResourceName.org(name));
     return new CedarResource(
         uid, Set.of(new Entity(uid, idAttr(ResourceName.org(name)), Set.of())));
+  }
+
+  private static CedarResource site() {
+    EntityUID uid = uid("Site", ResourceName.site());
+    return new CedarResource(uid, Set.of(new Entity(uid, idAttr(ResourceName.site()), Set.of())));
   }
 
   private static EntityUID uid(String type, String id) {

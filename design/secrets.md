@@ -59,7 +59,9 @@ A consequence: when a stack is in service mode, our derived key protects its sec
 | `service` provider, journal/checkpoint payloads | No — payload bytes are ciphertext we produced. |
 | Any external provider | No, anywhere — the backend only sees ciphertext blobs inside payloads. |
 
-An exposure of `journal_entries` / `snapshots` / `update_events` *without* `service_secrets_keyset` (a partial dump, a leaked backup of a subset of tables, log payloads) does not reveal plaintext for any provider. A compromise that includes `service_secrets_keyset` reveals plaintext for `service`-provider stacks only — external providers remain protected by their respective KMS.
+An exposure of `journal_entries` / `snapshots` / `update_events` *without* `service_secrets_keyset` (a partial dump, a leaked backup of a subset of tables, log payloads) does not reveal plaintext for any provider. A compromise that includes `service_secrets_keyset` reveals plaintext for `service`-provider stacks and the GitHub App credentials in `vcs_app_registrations` — external providers remain protected by their respective KMS.
+
+The GitHub App private key and OAuth client secret use this keyset with `vcs-app:<host>[:oauth]:<version>` as associated data. That string's ninth byte starts the host, so it is ASCII or a UTF-8 lead byte, never a UUIDv7 variant byte (`0x80`–`0xBF`). Neither use can decrypt the other's ciphertext.
 
 ---
 

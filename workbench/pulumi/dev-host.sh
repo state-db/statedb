@@ -77,6 +77,7 @@ if [[ -n "${STATEDB_IMAGE:-}" ]]; then
     -e STATEDB_OIDC_DEFAULT_PROVIDER=mock \
     -e STATEDB_SESSION_ENCRYPTION_SECRET=state-db-workbench-session-secret-32-bytes \
     -e STATEDB_ADMIN_SUBJECTS="$ISSUER:admin" \
+    -e STATEDB_REPORTS_PUBLIC_BASE_URL="http://localhost:$CONSOLE_PORT/" \
     "$STATEDB_IMAGE"
   exit 0
 fi
@@ -93,4 +94,5 @@ STATEDB_OIDC_BOOTSTRAP_CLIENT_ID=console STATEDB_OIDC_BOOTSTRAP_CLIENT_SECRET=co
 STATEDB_OIDC_DEFAULT_PROVIDER=mock \
 STATEDB_SESSION_ENCRYPTION_SECRET=state-db-workbench-session-secret-32-bytes \
 STATEDB_ADMIN_SUBJECTS="$ISSUER:admin" \
+STATEDB_REPORTS_PUBLIC_BASE_URL="http://localhost:$CONSOLE_PORT/" \
 mise exec -- modules/mvnw -f modules/pom.xml -pl app -am -Dquarkus.test.continuous-testing=disabled clean quarkus:dev

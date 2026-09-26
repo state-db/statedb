@@ -3,6 +3,7 @@ import {
   Building2,
   ChevronDown,
   Database,
+  GitPullRequest,
   KeyRound,
   LogOut,
   Moon,
@@ -167,9 +168,17 @@ function AppSidebar({ user }: { user: CurrentUser }) {
     { label: "Operations", to: "/console/admin/operations", icon: ServerCog },
   ];
   const ownsOrganization = user.organizations.some((org) => org.role === "owner");
+  const integrations = {
+    label: "Integrations",
+    to: "/console/integrations",
+    icon: GitPullRequest,
+  };
   const managementItems = user.siteAdmin
-    ? admin
-    : admin.filter((item) => item.to === "/console/admin/tokens");
+    ? [integrations, ...admin]
+    : [
+        ...(ownsOrganization ? [integrations] : []),
+        ...admin.filter((item) => item.to === "/console/admin/tokens"),
+      ];
 
   return (
     <Sidebar>

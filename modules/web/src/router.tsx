@@ -28,6 +28,10 @@ import {
   OrganizationMembersPage,
 } from "@/routes/org-members";
 import { AccountTokensPage } from "@/routes/account-tokens";
+import {
+  canManageIntegrations,
+  IntegrationsPage,
+} from "@/routes/integrations";
 
 // Bare root renders an <Outlet />; the
 // shell wraps everything that needs the header/nav frame.
@@ -224,6 +228,26 @@ const accountTokensRoute = createRoute({
   component: AccountTokensPage,
 });
 
+const integrationsRoute = createRoute({
+  getParentRoute: () => shellRoute,
+  path: "integrations",
+  validateSearch: (search: Record<string, unknown>): { github?: string; org?: string } => ({
+    github: typeof search.github === "string" ? search.github : undefined,
+    org: typeof search.org === "string" ? search.org : undefined,
+  }),
+  component: IntegrationsRoute,
+});
+
+function IntegrationsRoute() {
+  const { user } = useShell();
+  const { github, org } = integrationsRoute.useSearch();
+  return canManageIntegrations(user) ? (
+    <IntegrationsPage github={github} org={org} />
+  ) : (
+    <Navigate to="/console" replace />
+  );
+}
+
 const adminRoute = createRoute({
   getParentRoute: () => shellRoute,
   id: "admin-only",
@@ -310,6 +334,7 @@ const routeTree = rootRoute.addChildren([
     updateRoute,
     previewRoute,
     accountTokensRoute,
+    integrationsRoute,
     adminOrgMembersRoute,
     adminTokensRoute,
     adminRoute.addChildren([

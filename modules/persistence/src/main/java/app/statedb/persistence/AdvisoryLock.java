@@ -41,6 +41,9 @@ public class AdvisoryLock {
    */
   public static final long OIDC_PROVIDER_BOOTSTRAP_KEY = 0x5354415444425F33L;
 
+  /** Two-int advisory lock namespace for optional report publication by stack. */
+  public static final int REPORT_STACK_NAMESPACE = 0x52505453;
+
   @Inject EntityManager em;
 
   /** Acquires {@code key} for the caller's current transaction. */

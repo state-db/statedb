@@ -1,15 +1,19 @@
 ### Pulumi `preview` — `shop-org/shop/dev`
 
-**+1 ~2 -1 ±1 =1** · `succeeded`
+**Succeeded**
 
-| | Resource | Changed properties |
-| --- | --- | --- |
-| `+` | `aws:s3/bucket:Bucket` `assets` | `acl` |
-| `~` | `aws:rds/instance:Instance` `db` | `instanceClass` (replaces), `password` (secret), `tags.env` |
-| `~` | `aws:elasticache/cluster:Cluster` `cache` | `size` |
-| `-` | `aws:sns/topic:Topic` `legacy` | — |
-| `±` | `aws:sqs/queue:Queue` `jobs` | `fifoQueue` (replaces) |
+**Resources:** `+1` create · `~2` update · `-1` delete · `±1` replace · `=1` unchanged
+
+**Plan:**
+
+```diff
+-  aws:sns/topic:Topic legacy
+@@ ±  aws:sqs/queue:Queue jobs  [fifoQueue (replaces)] @@
+! ~  aws:rds/instance:Instance db  [instanceClass (replaces), password (secret), tags.env]
+! ~  aws:elasticache/cluster:Cluster cache  [size]
++  aws:s3/bucket:Bucket assets  [acl]
+```
 
 **1 warning** — see the run log.
 
-[View this run in statedb](https://statedb.example.invalid/shop-org/shop/dev/previews/run)
+**[View full preview in state-db →](https://statedb.example.invalid/shop-org/shop/dev/previews/run)**

@@ -27,3 +27,10 @@ permit(
   action == Action::"org:ManageMembers",
   resource
 );
+
+@id("VcsConnectionAdmin")
+permit(
+  principal in Role::"owner",
+  action == Action::"vcs:Manage",
+  resource
+);

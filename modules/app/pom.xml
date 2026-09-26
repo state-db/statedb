@@ -27,6 +27,11 @@
         </dependency>
         <dependency>
             <groupId>app.statedb</groupId>
+            <artifactId>state-db-vcs</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>app.statedb</groupId>
             <artifactId>state-db-pulumi-api</artifactId>
             <version>${project.version}</version>
         </dependency>

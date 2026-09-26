@@ -157,6 +157,51 @@ CREATE TABLE public.projects (
 );
 
 --
+-- Name: report_deliveries; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.report_deliveries (
+    id uuid NOT NULL,
+    update_id uuid NOT NULL,
+    stack_id uuid NOT NULL,
+    connection_id uuid NOT NULL,
+    repository_owner text NOT NULL,
+    repository_name text NOT NULL,
+    head_sha text NOT NULL,
+    pr_number bigint,
+    generation bigint NOT NULL,
+    state text DEFAULT 'pending'::text NOT NULL,
+    target_repository_id text,
+    target_pr_number bigint,
+    body text,
+    attempts integer DEFAULT 0 NOT NULL,
+    next_attempt_at timestamp with time zone DEFAULT now() NOT NULL,
+    settled_at timestamp with time zone,
+    external_id text,
+    last_error text,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT report_deliveries_attempts_check CHECK ((attempts >= 0)),
+    CONSTRAINT report_deliveries_head_sha_check CHECK ((head_sha ~ '^[0-9a-f]{40,64}$'::text)),
+    CONSTRAINT report_deliveries_pr_number_check CHECK (((pr_number IS NULL) OR (pr_number > 0))),
+    CONSTRAINT report_deliveries_state_check CHECK ((state = ANY (ARRAY['pending'::text, 'delivered'::text, 'failed'::text]))),
+    CONSTRAINT report_deliveries_target_check CHECK ((((target_repository_id IS NULL) AND (target_pr_number IS NULL) AND (body IS NULL)) OR ((target_repository_id IS NOT NULL) AND (target_pr_number > 0) AND (body IS NOT NULL))))
+);
+
+--
+-- Name: report_deliveries_generation_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+ALTER TABLE public.report_deliveries ALTER COLUMN generation ADD GENERATED ALWAYS AS IDENTITY (
+    SEQUENCE NAME public.report_deliveries_generation_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1
+);
+
+--
 -- Name: service_secrets_keyset; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -317,6 +362,68 @@ CREATE TABLE public.users (
 );
 
 --
+-- Name: vcs_app_registrations; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.vcs_app_registrations (
+    id uuid NOT NULL,
+    host text NOT NULL,
+    app_id bigint NOT NULL,
+    slug text NOT NULL,
+    owner text NOT NULL,
+    html_url text NOT NULL,
+    private_key_ciphertext bytea NOT NULL,
+    client_id text NOT NULL,
+    client_secret_ciphertext bytea NOT NULL,
+    version integer DEFAULT 1 NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT vcs_app_registrations_app_id_positive CHECK ((app_id > 0)),
+    CONSTRAINT vcs_app_registrations_host_shape CHECK (((host = lower(host)) AND (host !~ '[/[:space:]]'::text))),
+    CONSTRAINT vcs_app_registrations_owner_nonempty CHECK ((owner <> ''::text)),
+    CONSTRAINT vcs_app_registrations_slug_nonempty CHECK ((slug <> ''::text)),
+    CONSTRAINT vcs_app_registrations_version_positive CHECK ((version > 0))
+);
+
+--
+-- Name: vcs_auth_flows; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.vcs_auth_flows (
+    state_hash bytea NOT NULL,
+    initiated_by_user_id uuid NOT NULL,
+    purpose text NOT NULL,
+    org_id uuid,
+    app_version integer,
+    installation_id bigint,
+    code_verifier text,
+    expires_at timestamp with time zone NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT vcs_auth_flows_context_check CHECK ((((purpose = 'manifest'::text) AND (org_id IS NULL) AND (app_version IS NULL) AND (installation_id IS NULL) AND (code_verifier IS NULL)) OR ((purpose = 'install'::text) AND (org_id IS NOT NULL) AND (app_version IS NOT NULL) AND (app_version > 0) AND (installation_id IS NULL) AND (code_verifier IS NULL)) OR ((purpose = 'oauth'::text) AND (org_id IS NOT NULL) AND (app_version IS NOT NULL) AND (app_version > 0) AND (installation_id IS NOT NULL) AND (installation_id > 0) AND (code_verifier IS NOT NULL)))),
+    CONSTRAINT vcs_auth_flows_purpose_check CHECK ((purpose = ANY (ARRAY['manifest'::text, 'install'::text, 'oauth'::text])))
+);
+
+--
+-- Name: vcs_connections; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.vcs_connections (
+    id uuid NOT NULL,
+    org_id uuid NOT NULL,
+    kind text NOT NULL,
+    host text NOT NULL,
+    installation_id bigint,
+    enabled boolean DEFAULT true NOT NULL,
+    version integer DEFAULT 1 NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT vcs_connections_host_shape CHECK (((host = lower(host)) AND (host !~ '[/[:space:]]'::text))),
+    CONSTRAINT vcs_connections_installation_id_positive CHECK (((installation_id IS NULL) OR (installation_id > 0))),
+    CONSTRAINT vcs_connections_kind_shape CHECK ((kind ~ '^[a-z][a-z0-9_-]{0,31}$'::text)),
+    CONSTRAINT vcs_connections_version_positive CHECK ((version > 0))
+);
+
+--
 -- Name: workspaces; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -442,6 +549,20 @@ ALTER TABLE ONLY public.projects
     ADD CONSTRAINT projects_pkey PRIMARY KEY (id);
 
 --
+-- Name: report_deliveries report_deliveries_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.report_deliveries
+    ADD CONSTRAINT report_deliveries_pkey PRIMARY KEY (id);
+
+--
+-- Name: report_deliveries report_deliveries_update_id_key; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.report_deliveries
+    ADD CONSTRAINT report_deliveries_update_id_key UNIQUE (update_id);
+
+--
 -- Name: service_secrets_keyset service_secrets_keyset_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -561,6 +682,41 @@ ALTER TABLE ONLY public.users
     ADD CONSTRAINT users_pkey PRIMARY KEY (id);
 
 --
+-- Name: vcs_app_registrations vcs_app_registrations_host_key; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.vcs_app_registrations
+    ADD CONSTRAINT vcs_app_registrations_host_key UNIQUE (host);
+
+--
+-- Name: vcs_app_registrations vcs_app_registrations_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.vcs_app_registrations
+    ADD CONSTRAINT vcs_app_registrations_pkey PRIMARY KEY (id);
+
+--
+-- Name: vcs_auth_flows vcs_auth_flows_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.vcs_auth_flows
+    ADD CONSTRAINT vcs_auth_flows_pkey PRIMARY KEY (state_hash);
+
+--
+-- Name: vcs_connections vcs_connections_org_id_host_key; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.vcs_connections
+    ADD CONSTRAINT vcs_connections_org_id_host_key UNIQUE (org_id, host);
+
+--
+-- Name: vcs_connections vcs_connections_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.vcs_connections
+    ADD CONSTRAINT vcs_connections_pkey PRIMARY KEY (id);
+
+--
 -- Name: workspaces workspaces_id_org_id_key; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -627,6 +783,18 @@ CREATE INDEX idx_journal_update ON public.journal_entries USING btree (update_id
 --
 
 CREATE INDEX idx_org_members_user ON public.org_members USING btree (user_id);
+
+--
+-- Name: idx_report_deliveries_pending; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_report_deliveries_pending ON public.report_deliveries USING btree (next_attempt_at, id) WHERE (state = 'pending'::text);
+
+--
+-- Name: idx_report_deliveries_retention; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_report_deliveries_retention ON public.report_deliveries USING btree (settled_at, id) WHERE (state <> 'pending'::text);
 
 --
 -- Name: idx_snapshots_stack_boundary; Type: INDEX; Schema: public; Owner: -
@@ -705,6 +873,18 @@ CREATE INDEX idx_updates_started_by_user ON public.stack_updates USING btree (st
 --
 
 CREATE INDEX idx_users_deactivated_by ON public.users USING btree (deactivated_by_user_id);
+
+--
+-- Name: idx_vcs_auth_flows_expiry; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_vcs_auth_flows_expiry ON public.vcs_auth_flows USING btree (expires_at);
+
+--
+-- Name: idx_vcs_auth_flows_org; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_vcs_auth_flows_org ON public.vcs_auth_flows USING btree (org_id);
 
 --
 -- Name: idx_workspaces_org_kind; Type: INDEX; Schema: public; Owner: -
@@ -854,6 +1034,13 @@ ALTER TABLE ONLY public.projects
     ADD CONSTRAINT projects_org_id_fkey FOREIGN KEY (org_id) REFERENCES public.organizations(id) ON DELETE CASCADE;
 
 --
+-- Name: report_deliveries report_deliveries_connection_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.report_deliveries
+    ADD CONSTRAINT report_deliveries_connection_id_fkey FOREIGN KEY (connection_id) REFERENCES public.vcs_connections(id) ON DELETE CASCADE;
+
+--
 -- Name: snapshots snapshots_stack_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -936,6 +1123,27 @@ ALTER TABLE ONLY public.update_events
 
 ALTER TABLE ONLY public.users
     ADD CONSTRAINT users_deactivated_by_user_id_fkey FOREIGN KEY (deactivated_by_user_id) REFERENCES public.users(id) ON DELETE SET NULL;
+
+--
+-- Name: vcs_auth_flows vcs_auth_flows_initiated_by_user_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.vcs_auth_flows
+    ADD CONSTRAINT vcs_auth_flows_initiated_by_user_id_fkey FOREIGN KEY (initiated_by_user_id) REFERENCES public.users(id) ON DELETE CASCADE;
+
+--
+-- Name: vcs_auth_flows vcs_auth_flows_org_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.vcs_auth_flows
+    ADD CONSTRAINT vcs_auth_flows_org_id_fkey FOREIGN KEY (org_id) REFERENCES public.organizations(id) ON DELETE CASCADE;
+
+--
+-- Name: vcs_connections vcs_connections_org_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.vcs_connections
+    ADD CONSTRAINT vcs_connections_org_id_fkey FOREIGN KEY (org_id) REFERENCES public.organizations(id) ON DELETE CASCADE;
 
 --
 -- Name: workspaces workspaces_org_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -

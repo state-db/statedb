@@ -22,7 +22,7 @@ package app.statedb.persistence.report;
  * <ul>
  *   <li><b>Cc (control)</b> — the ASCII whitespace members (tab, newline, vertical tab, form feed,
  *       carriage return) collapse to a space; the rest are dropped. A newline in a resource name
- *       would otherwise break out of a markdown table row.
+ *       would otherwise break out of its line in the report.
  *   <li><b>Cf (format)</b> — dropped entirely. This is the bidi class: the overrides {@code
  *       U+202A..U+202E} and isolates {@code U+2066..U+2069} that let a name render right-to-left
  *       and disguise what it says, and the zero-width characters {@code U+200B..U+200D}, {@code

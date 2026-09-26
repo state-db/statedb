@@ -39,6 +39,7 @@ public class ChangeReportDeriver {
     Map<Op, Integer> counts = new EnumMap<>(Op.class);
     Map<DiagnosticSeverity, Integer> diagnostics = new EnumMap<>(DiagnosticSeverity.class);
     String result = null;
+    boolean summarized = false;
     for (StoredEvent event : events == null ? List.<StoredEvent>of() : events) {
       JsonNode payload = event.payload();
       if (payload == null) {
@@ -46,6 +47,7 @@ public class ChangeReportDeriver {
       }
       if ("summary".equals(event.kind())) {
         JsonNode summary = payload.path("summaryEvent");
+        summarized = true;
         result = textOrNull(summary.path("result"));
         readCounts(summary.path("resourceChanges"), counts);
       } else if ("diagnostic".equals(event.kind())) {
@@ -77,6 +79,8 @@ public class ChangeReportDeriver {
     truncated |= org.truncated() || project.truncated() || stack.truncated();
     ReportText.Text engineResult = ReportText.neutralize(result, limits.maxFieldCodePoints());
 
+    Map<ChangeReport.Bucket, Integer> totals =
+        summarized ? ChangeReport.Bucket.fold(counts) : ChangeReport.Bucket.count(resources);
     return new ChangeReport(
         update.stackId,
         update.id,
@@ -87,6 +91,8 @@ public class ChangeReportDeriver {
         update.dryRun,
         engineResult.isEmpty() ? null : engineResult.value(),
         counts,
+        totals,
+        summarized ? ChangeReport.CountSource.ENGINE : ChangeReport.CountSource.ROWS,
         resources,
         diagnostics,
         update.startedAt,

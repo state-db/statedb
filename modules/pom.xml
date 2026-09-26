@@ -17,6 +17,7 @@
 
     <modules>
         <module>persistence</module>
+        <module>vcs</module>
         <module>pulumi-api</module>
         <module>console-api</module>
         <module>app</module>

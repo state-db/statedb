@@ -146,6 +146,18 @@ statedb:
       grace-period: 1h
       poll-interval: 5m
       per-tick-cap: 50
+  reports:
+    # The worker is inert until a site administrator creates an App and an organization owner
+    # installs it. Keeping it enabled lets runtime configuration take effect without a restart.
+    enabled: true
+    # public-base-url (STATEDB_REPORTS_PUBLIC_BASE_URL) enables GitHub setup; unset, reports omit the console link.
+    poll-interval: 5s
+    per-tick-cap: 50
+    max-age: 7d
+    retention: 30d
+    max-attempts: 5
+  github:
+    api-base: https://api.github.com
   lock:
     # The CLI assumes 5m and renews at 2.5m whatever we return; LeaseRenewalFaultIT guards this.
     lease-ttl: 5m
@@ -179,6 +191,9 @@ statedb:
       default-provider: wiremock
     session:
       encryption-secret: state-db-test-session-secret-32-bytes
+    reports:
+      enabled: true
+      public-base-url: http://statedb.test/
   quarkus:
     http:
       # Random free port keeps @QuarkusTest isolated from other local Quarkus processes.

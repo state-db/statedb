@@ -50,7 +50,7 @@ class HostileReportTest {
   @Test
   void aHostileUrnCannotEscapeIntoMarkdown() throws Exception {
     String body = render(corpus("/report/events-hostile-run.json"), ReportLimits.defaults()).body();
-    String outside = outsideCodeSpans(body);
+    String outside = outsideCodeLiterals(body);
 
     // Each of these is in the URN. None may be interpreted: a mention would notify, an issue
     // reference would cross-link, a link or an <img> would be live content on someone's PR.
@@ -68,17 +68,19 @@ class HostileReportTest {
   }
 
   @Test
-  void aPipeInAUrnOrPathCannotSplitTheTable() throws Exception {
+  void aPipeInAUrnOrPathStaysLiteralInThePlan() throws Exception {
     String body = render(corpus("/report/events-hostile-run.json"), ReportLimits.defaults()).body();
-    for (String line : body.split("\n")) {
-      if (!line.startsWith("|")) {
-        continue;
-      }
-      // Every row must have exactly the three cells the header declares. An unescaped pipe in a
-      // URN would add a cell and shift every column after it.
-      long cells = line.replace("\\|", "").chars().filter(c -> c == '|').count();
-      assertEquals(4, cells, "row has the wrong number of cell separators: " + line);
-    }
+    assertFalse(body.contains("| Change |"), body);
+    assertTrue(
+        body.lines()
+            .anyMatch(
+                line ->
+                    (line.startsWith("+")
+                            || line.startsWith("! ~")
+                            || line.startsWith("-")
+                            || line.startsWith("@@ ±"))
+                        && line.contains("|")),
+        body);
   }
 
   @Test
@@ -174,14 +176,88 @@ class HostileReportTest {
   }
 
   @Test
+  void namesAndKeysCannotImitateRowAnnotations() throws Exception {
+    JsonNode metadata =
+        MAPPER.readTree(
+            """
+            {"op":"update","urn":"urn:pulumi:dev::shop::pkg:index:Thing::logs  [acl (replaces)]",
+             "type":"pkg:index:Thing",
+             "old":{"inputs":{"size":1,"tags":{"a, password (secret)":"x"}}},
+             "new":{"inputs":{"size":2,"tags":{"a, password (secret)":"y"}}},
+             "detailedDiff":{
+               "size":{"diffKind":"update-replace","inputDiff":true},
+               "tags[\\"a, password (secret)\\"]":{"diffKind":"update","inputDiff":true}
+             }}
+            """);
+
+    String body = render(List.of(step(0, metadata), summary(1)), ReportLimits.defaults()).body();
+
+    // Anything that is not one plain word is quoted; only the renderer's own text sits outside.
+    assertTrue(
+        body.contains(
+            "! ~  pkg:index:Thing \"logs [acl (replaces)]\""
+                + "  [size (replaces), tags[\"a, password (secret)\"]]"),
+        body);
+  }
+
+  @Test
   void aNewlineInAUrnCannotBreakOutOfItsRow() throws Exception {
     List<StoredEvent> events =
         List.of(
             step(0, "urn:pulumi:dev::shop::pkg:index:Thing::a\nb\n| evil | row |", "update"),
             summary(1));
     String body = render(events, ReportLimits.defaults()).body();
-    long rows = body.lines().filter(line -> line.startsWith("| `")).count();
+    long rows = body.lines().filter(line -> line.startsWith("! ~  ")).count();
     assertEquals(1, rows, "a newline forged extra rows:\n" + body);
+  }
+
+  @Test
+  void aFortyResourceRunFitsAsCompactPlanLines() throws Exception {
+    List<StoredEvent> events = new ArrayList<>();
+    for (int i = 0; i < 40; i++) {
+      events.add(step(i, "urn:pulumi:dev::shop::pkg:index:Thing::resource-" + i, "update"));
+    }
+    events.add(summary(40, 40));
+
+    RenderedReport rendered = render(events, ReportLimits.defaults());
+    String body = rendered.body();
+
+    assertTrue(body.contains("**Resources:** `~40` update"), body);
+    assertFalse(body.contains("<details>"), body);
+    assertFalse(body.contains("🟡"), body);
+    assertTrue(body.contains("```diff"), body);
+    assertEquals(40, body.lines().filter(line -> line.startsWith("! ~  ")).count());
+    assertTrue(body.indexOf("resource-39") < body.indexOf(CONSOLE.toString()), body);
+    assertFalse(rendered.truncated(), body);
+  }
+
+  @Test
+  void aBudgetCutKeepsHighRiskResourcesAndReportsTruncation() throws Exception {
+    List<StoredEvent> events = new ArrayList<>();
+    for (int i = 0; i < 5; i++) {
+      events.add(step(i, "urn:pulumi:dev::shop::pkg:index:Thing::replacement-" + i, "replace"));
+    }
+    for (int i = 0; i < 6; i++) {
+      events.add(step(5 + i, "urn:pulumi:dev::shop::pkg:index:Thing::creation-" + i, "create"));
+    }
+    for (int i = 0; i < 3; i++) {
+      events.add(step(11 + i, "urn:pulumi:dev::shop::pkg:index:Thing::deletion-" + i, "delete"));
+    }
+    events.add(summary(14, 6, 0, 3, 5));
+
+    ReportLimits limits = new ReportLimits(200, 25, 256, 32, 700);
+    RenderedReport rendered = render(events, limits);
+    String body = rendered.body();
+
+    assertEquals(3, body.lines().filter(line -> line.startsWith("-  ")).count(), body);
+    assertEquals(5, body.lines().filter(line -> line.startsWith("@@ ±  ")).count(), body);
+    assertTrue(body.contains("deletion-0"), body);
+    assertTrue(body.contains("deletion-1"), body);
+    assertTrue(body.contains("deletion-2"), body);
+    assertTrue(body.indexOf("deletion-0") < body.indexOf("replacement-0"), body);
+    assertTrue(rendered.truncated(), "the byte budget dropped resource rows");
+    assertTrue(body.contains("_Truncated:"), body);
+    assertTrue(body.contains(CONSOLE.toString()), body);
   }
 
   @Test
@@ -210,6 +286,18 @@ class HostileReportTest {
   }
 
   @Test
+  void noBudgetProducesABodyOverItsLimit() throws Exception {
+    // Every budget boundary, not just the defaults: sections, separators and the reserved tail
+    // must add up to at most maxBodyBytes wherever the cut falls.
+    List<StoredEvent> events = corpus("/report/events-hostile-run.json");
+    for (int max = 1; max <= 3_000; max++) {
+      ReportLimits limits = new ReportLimits(200, 25, 256, 32, max);
+      String body = render(events, limits).body();
+      assertTrue(body.getBytes(StandardCharsets.UTF_8).length <= max, max + ":\n" + body);
+    }
+  }
+
+  @Test
   void aPathologicalConsoleLinkCannotExceedTheBodyBudget() throws Exception {
     ReportLimits limits = new ReportLimits(200, 25, 256, 32, 256);
     ChangeReport report =
@@ -226,7 +314,7 @@ class HostileReportTest {
   }
 
   @Test
-  void aTableHeaderIsNeverEmittedWithoutItsDelimiter() throws Exception {
+  void aPlanHeadingIsNeverEmittedWithoutAResourceLine() throws Exception {
     ChangeReport report =
         derive(
             List.of(
@@ -237,9 +325,8 @@ class HostileReportTest {
       ReportLimits limits = new ReportLimits(200, 25, 256, 32, budget);
       String body = renderer.render(report, null, limits).body();
       assertFalse(
-          body.contains("| | Resource | Changed properties |")
-              && !body.contains("| --- | --- | --- |"),
-          "orphan table header at byte budget " + budget + ":\n" + body);
+          body.contains("**Plan:**") && body.lines().noneMatch(line -> line.startsWith("! ~  ")),
+          "orphan plan heading at byte budget " + budget + ":\n" + body);
     }
   }
 
@@ -281,8 +368,14 @@ class HostileReportTest {
             ref(), update(StackUpdate.Status.CANCELLED), events, ReportLimits.defaults());
     assertEquals("cancelled", report.status());
     assertEquals(null, report.result());
+    RenderedReport rendered = renderer.render(report, CONSOLE, ReportLimits.defaults());
+    assertTrue(rendered.body().contains("**Cancelled**"));
+    // Without a summary both the one-line summary and the body count the rows, and say so.
+    assertEquals(ChangeReport.CountSource.ROWS, report.totalsSource());
+    assertEquals("+1", rendered.summaryLine());
     assertTrue(
-        renderer.render(report, CONSOLE, ReportLimits.defaults()).body().contains("cancelled"));
+        rendered.body().contains("**Resources:** `+1` create (counted from a partial run)"),
+        rendered.body());
   }
 
   private RenderedReport render(List<StoredEvent> events, ReportLimits limits) {
@@ -336,9 +429,22 @@ class HostileReportTest {
   }
 
   private static StoredEvent summary(int sequence) {
+    return summary(sequence, 1);
+  }
+
+  private static StoredEvent summary(int sequence, int updates) {
+    return summary(sequence, 0, updates, 0, 0);
+  }
+
+  private static StoredEvent summary(
+      int sequence, int creates, int updates, int deletes, int replaces) {
     ObjectNode summary = MAPPER.createObjectNode();
     summary.put("result", "succeeded");
-    summary.putObject("resourceChanges").put("update", 1);
+    ObjectNode changes = summary.putObject("resourceChanges");
+    changes.put("create", creates);
+    changes.put("update", updates);
+    changes.put("delete", deletes);
+    changes.put("replace", replaces);
     ObjectNode event = MAPPER.createObjectNode();
     event.put("sequence", sequence);
     event.set("summaryEvent", summary);
@@ -380,6 +486,24 @@ class HostileReportTest {
       count++;
       from = at + needle.length();
     }
+  }
+
+  /** See the identically named helper in {@code SanitizationContractTest} for why. */
+  private static String outsideCodeLiterals(String markdown) {
+    StringBuilder withoutFencedCode = new StringBuilder();
+    String closingFence = null;
+    for (String line : markdown.lines().toList()) {
+      if (closingFence == null && line.matches("`{3,}diff")) {
+        closingFence = line.substring(0, line.length() - "diff".length());
+      } else if (closingFence != null) {
+        if (line.equals(closingFence)) {
+          closingFence = null;
+        }
+      } else {
+        withoutFencedCode.append(line).append('\n');
+      }
+    }
+    return outsideCodeSpans(withoutFencedCode.toString());
   }
 
   /** See the identically named helper in {@code SanitizationContractTest} for why. */

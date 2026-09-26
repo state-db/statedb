@@ -2,7 +2,9 @@ package app.statedb.persistence.lock;
 
 import app.statedb.persistence.stack.Stack;
 import app.statedb.persistence.update.StackUpdate;
+import app.statedb.persistence.vcs.ReportDeliveryWorker;
 import jakarta.enterprise.context.ApplicationScoped;
+import jakarta.inject.Inject;
 import jakarta.transaction.Transactional;
 import java.time.Instant;
 import java.util.UUID;
@@ -17,6 +19,8 @@ import java.util.UUID;
  */
 @ApplicationScoped
 public class StackLockCanceller {
+
+  @Inject ReportDeliveryWorker reportDeliveryWorker;
 
   @Transactional
   public void gracefulCancel(UUID leaseId, UUID stackId, UUID updateId) {
@@ -67,6 +71,7 @@ public class StackLockCanceller {
     if (u.status == StackUpdate.Status.IN_PROGRESS) {
       u.status = StackUpdate.Status.CANCELLED;
       u.endedAt = Instant.now();
+      reportDeliveryWorker.enqueue(u);
     }
     Stack.update("activeUpdateId = null where id = ?1 and activeUpdateId = ?2", stackId, updateId);
   }

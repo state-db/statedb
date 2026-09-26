@@ -103,6 +103,29 @@ public final class PropertyPath {
   }
 
   /**
+   * This path re-serialized for the report: simple keys stay dotted, and any other key is quoted in
+   * Pulumi's {@code ["..."]} form, so a key cannot imitate the renderer's own annotations.
+   */
+  public String display() {
+    StringBuilder out = new StringBuilder();
+    for (Object segment : segments) {
+      if (segment instanceof Integer index) {
+        out.append('[').append(index).append(']');
+      } else if ("*".equals(segment)) {
+        out.append("[*]");
+      } else {
+        String key = (String) segment;
+        if (!key.isEmpty() && key.indexOf('.') < 0 && Markdown.isBareToken(key)) {
+          out.append(out.length() == 0 ? "" : ".").append(key);
+        } else {
+          out.append('[').append(Markdown.quote(key)).append(']');
+        }
+      }
+    }
+    return out.toString();
+  }
+
+  /**
    * The node this path names inside {@code root}, or null when any segment misses.
    *
    * <p>Mirrors {@code PropertyPath.Get}: a string segment indexes an object, an integer segment

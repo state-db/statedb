@@ -42,6 +42,12 @@ public record ReportLimits(
     return new ReportLimits(200, 25, MAX_FIELD_CODE_POINTS, 32, 48_000);
   }
 
+  /** These limits with a smaller body budget, for a publisher that wraps the body. */
+  public ReportLimits withMaxBodyBytes(int value) {
+    return new ReportLimits(
+        maxResources, maxPropertiesPerResource, maxFieldCodePoints, maxSecretScanDepth, value);
+  }
+
   public ReportLimits {
     requirePositive("maxResources", maxResources);
     requirePositive("maxPropertiesPerResource", maxPropertiesPerResource);
