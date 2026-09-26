@@ -104,6 +104,8 @@ class UpdateReportResourceTest {
     assertEquals("succeeded", json.jsonPath().getString("result"));
     assertEquals(5, json.jsonPath().getList("resources").size());
     assertEquals("preview", json.jsonPath().getString("kind"));
+    assertEquals(1, json.jsonPath().getInt("totals.replace"));
+    assertEquals("engine", json.jsonPath().getString("totalsSource"));
     assertEquals("create", json.jsonPath().getString("resources[0].op"));
     assertEquals("update-replace", json.jsonPath().getString("resources[1].properties[0].kind"));
 

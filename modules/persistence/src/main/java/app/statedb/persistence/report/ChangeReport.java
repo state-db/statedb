@@ -2,8 +2,10 @@ package app.statedb.persistence.report;
 
 import com.fasterxml.jackson.annotation.JsonValue;
 import java.time.Instant;
+import java.util.EnumMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.UUID;
 
 /**
@@ -29,6 +31,9 @@ import java.util.UUID;
  * @param dryRun whether this was a preview pass
  * @param result the engine's own result from its summary event, absent when the run has no summary
  * @param counts resource counts by operation, from {@code summaryEvent.resourceChanges}
+ * @param totals the counts a reader sees, one per {@link Bucket}
+ * @param totalsSource whether {@code totals} is the engine's summary or counted from {@code
+ *     resources} because the run ended without one
  * @param resources the resources that changed, in engine order
  * @param diagnostics counts of diagnostic events by severity
  * @param startedAt when the run started
@@ -45,6 +50,8 @@ public record ChangeReport(
     boolean dryRun,
     String result,
     Map<Op, Integer> counts,
+    Map<Bucket, Integer> totals,
+    CountSource totalsSource,
     List<ResourceChange> resources,
     Map<DiagnosticSeverity, Integer> diagnostics,
     Instant startedAt,
@@ -56,6 +63,8 @@ public record ChangeReport(
     status = ReportText.requireNeutralized(status, ReportLimits.MAX_FIELD_CODE_POINTS, "status");
     result = ReportText.requireNeutralized(result, ReportLimits.MAX_FIELD_CODE_POINTS, "result");
     counts = counts == null ? Map.of() : Map.copyOf(counts);
+    totals = totals == null ? Map.of() : Map.copyOf(totals);
+    Objects.requireNonNull(totalsSource, "totalsSource");
     resources = resources == null ? List.of() : List.copyOf(resources);
     diagnostics = diagnostics == null ? Map.of() : Map.copyOf(diagnostics);
   }
@@ -80,6 +89,8 @@ public record ChangeReport(
             dryRun,
             result,
             counts,
+            totals,
+            totalsSource,
             resources,
             diagnostics,
             startedAt,
@@ -90,6 +101,112 @@ public record ChangeReport(
   /** Whether the run changed nothing. Drives the "no changes" body rather than an empty table. */
   public boolean isNoOp() {
     return resources.isEmpty();
+  }
+
+  /** Where {@link #totals} came from. */
+  public enum CountSource {
+    /** The engine's {@code summaryEvent}; true even when rows were truncated. */
+    ENGINE,
+    /** Counted from the rows because the run ended without a summary, e.g. a cancellation. */
+    ROWS;
+
+    @JsonValue
+    public String wireValue() {
+      return name().toLowerCase(java.util.Locale.ROOT);
+    }
+  }
+
+  /** What a reader counts: the engine's many ops folded into Pulumi's five CLI groups. */
+  public enum Bucket {
+    CREATE("+", "create", 3),
+    UPDATE("~", "update", 2),
+    DELETE("-", "delete", 0),
+    REPLACE("±", "replace", 1),
+    SAME("=", "unchanged", 4),
+    /** A change outside the five, such as an import or a refresh. */
+    OTHER("?", "other", 4);
+
+    private final String glyph;
+    private final String label;
+    private final int reviewPriority;
+
+    Bucket(String glyph, String label, int reviewPriority) {
+      this.glyph = glyph;
+      this.label = label;
+      this.reviewPriority = reviewPriority;
+    }
+
+    public String glyph() {
+      return glyph;
+    }
+
+    public String label() {
+      return label;
+    }
+
+    /** Lower sorts first: a reviewer should see deletes and replacements before anything else. */
+    public int reviewPriority() {
+      return reviewPriority;
+    }
+
+    @JsonValue
+    public String wireValue() {
+      return label;
+    }
+
+    /** The bucket a single resource row falls in, or null for a non-change such as a read. */
+    public static Bucket of(Op op) {
+      return switch (op) {
+        case CREATE -> CREATE;
+        case UPDATE -> UPDATE;
+        case DELETE -> DELETE;
+        case SAME -> SAME;
+        case REPLACE -> REPLACE;
+        default -> !op.isChange() ? null : op.isReplacementSubstep() ? REPLACE : OTHER;
+      };
+    }
+
+    /**
+     * Folds the engine's summary counts.
+     *
+     * <p>The engine reports a replacement either as {@code replace} or as its substeps, never both
+     * for one resource, and each substep counts the same resources once; so a replacement is the
+     * direct count, or else the largest substep count, not their sum. The console does the same.
+     */
+    public static Map<Bucket, Integer> fold(Map<Op, Integer> engine) {
+      Map<Bucket, Integer> totals = new EnumMap<>(Bucket.class);
+      int substeps = 0;
+      for (Map.Entry<Op, Integer> entry : engine.entrySet()) {
+        Op op = entry.getKey();
+        int count = entry.getValue() == null ? 0 : entry.getValue();
+        if (op.isReplacementSubstep()) {
+          if (op != Op.READ_REPLACEMENT && op != Op.IMPORT_REPLACEMENT) {
+            substeps = Math.max(substeps, count);
+          }
+          continue;
+        }
+        Bucket bucket = of(op);
+        if (bucket != null) {
+          totals.merge(bucket, count, Integer::sum);
+        }
+      }
+      if (totals.getOrDefault(REPLACE, 0) == 0 && substeps > 0) {
+        totals.put(REPLACE, substeps);
+      }
+      return totals;
+    }
+
+    /** Counts rows, for a run the engine never summarized. */
+    public static Map<Bucket, Integer> count(List<ResourceChange> resources) {
+      Map<Bucket, Integer> totals = new EnumMap<>(Bucket.class);
+      for (ResourceChange resource : resources) {
+        Bucket bucket = of(resource.op());
+        if (bucket != null) {
+          totals.merge(bucket, 1, Integer::sum);
+        }
+      }
+      return totals;
+    }
   }
 
   /** Where the run lives, sanitized. All three are operator- or user-chosen names. */

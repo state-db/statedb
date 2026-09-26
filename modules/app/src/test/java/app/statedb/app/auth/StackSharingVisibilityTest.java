@@ -215,6 +215,13 @@ class StackSharingVisibilityTest {
   }
 
   @Test
+  void onlyOwnersManageVcsConnections() {
+    assertTrue(decideOnOrg(session(ownerId, "owner"), "vcs:Manage"));
+    assertFalse(decideOnOrg(session(memberId, "member"), "vcs:Manage"));
+    assertFalse(decideOnOrg(session(serviceUserId, "ci"), "vcs:Manage"));
+  }
+
+  @Test
   void serviceAccountRetainsAccessToPrivateStacks() {
     AuthenticatedPrincipal ci = serviceToken(serviceUserId, "ci");
     assertTrue(decide(ci, "stack:Read", PRIVATE_STACK));

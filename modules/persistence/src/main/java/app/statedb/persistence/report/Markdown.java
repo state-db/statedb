@@ -1,6 +1,7 @@
 package app.statedb.persistence.report;
 
 import java.net.URI;
+import java.nio.charset.StandardCharsets;
 
 /**
  * Markdown emission primitives for {@link MarkdownReportRenderer}.
@@ -10,26 +11,20 @@ import java.net.URI;
  * is format-specific, and so cannot live on the value object: a JSON consumer must receive the real
  * URN, not one with its markdown-significant characters rewritten.
  *
- * <h2>Everything from state is emitted as a code span</h2>
+ * <h2>Everything from state is emitted as code</h2>
  *
- * <p>{@link #code(String)} is the only way a state-derived fragment enters the body, and that is a
- * structural decision rather than a stylistic one. Inside a code span, GitHub-flavoured markdown
- * interprets nothing: {@code @everyone} does not notify, {@code #123} does not become an issue
- * link, {@code https://…} does not autolink, {@code <img onerror=…>} is not HTML, and {@code *},
- * {@code _}, {@code [} and {@code ]} are literal. Character-class escaping would have to enumerate
- * every such form and stay correct as GFM grows; a code span neutralizes the whole class at once.
+ * <p>{@link #code(String)} emits inline fragments and {@link #diffBlock(String)} emits the compact
+ * resource plan with the comment host's native diff highlighting. Inside either code form,
+ * GitHub-flavoured markdown interprets nothing: {@code @everyone} does not notify, {@code #123}
+ * does not become an issue link, {@code https://…} does not autolink, and HTML and markdown
+ * punctuation stay literal. Character-class escaping would have to enumerate every such form and
+ * stay correct as GFM grows; code neutralizes the whole class at once.
  *
- * <p>Two things a code span does not handle on its own, and this class does:
- *
- * <ul>
- *   <li><b>Backticks in the content.</b> CommonMark closes a span at the first run of backticks
- *       matching the opening run, so content containing backticks needs a longer fence. {@link
- *       #code(String)} picks one longer than any run inside, and pads with spaces when the content
- *       starts or ends with a backtick, which CommonMark strips on render.
- *   <li><b>A pipe inside a table cell.</b> GFM splits table rows on {@code |} <em>before</em> it
- *       parses cell contents, so a literal pipe breaks the row even inside a code span. {@link
- *       #tableCode(String)} adds the table-only backslash escape, which GFM then removes.
- * </ul>
+ * <p>What a code span does not handle on its own is backticks in the content. CommonMark closes a
+ * span at the first run of backticks matching the opening run, so content containing backticks
+ * needs a longer fence. {@link #code(String)} picks one longer than any run inside, and pads with
+ * spaces when the content starts or ends with a backtick, which CommonMark strips on render. {@link
+ * #diffBlock(String)} lengthens its fence the same way.
  *
  * <h2>Links</h2>
  *
@@ -42,7 +37,7 @@ public final class Markdown {
   private static final char BACKTICK = '`';
 
   /**
-   * {@code content} as an inline code span outside a table cell.
+   * {@code content} as an inline code span.
    *
    * <p>{@code content} is expected to have been through {@link ReportText#neutralize}; this method
    * assumes it is single-line and does not re-check.
@@ -61,9 +56,87 @@ public final class Markdown {
     return fence + pad + content + pad + fence;
   }
 
-  /** A code span whose pipes cannot split a GitHub-flavoured Markdown table row. */
-  public static String tableCode(String content) {
-    return code(content == null ? null : content.replace("|", "\\|"));
+  /** A fenced diff block whose fence cannot be closed by state-derived content. */
+  public static String diffBlock(String content) {
+    String value = content == null ? "" : content;
+    String fence = String.valueOf(BACKTICK).repeat(fenceLength(longestBacktickRun(value)));
+    return fence + DIFF_INFO + value + "\n" + fence;
+  }
+
+  /**
+   * A {@link #diffBlock} built one row at a time, whose size is known before each row is added.
+   *
+   * <p>The fence grows with the longest backtick run in any row, so adding a row can lengthen both
+   * fence lines; tracking that run makes each row cost one measurement rather than a re-render.
+   */
+  public static final class DiffBlock {
+    private final StringBuilder rows = new StringBuilder();
+    private int rowBytes;
+    private int longestRun;
+
+    /** UTF-8 bytes of the rendered block with {@code row} added. */
+    public int bytesWith(String row) {
+      int content = rowBytes + (rows.isEmpty() ? 0 : 1) + utf8Length(row);
+      int fence = fenceLength(Math.max(longestRun, longestBacktickRun(row)));
+      return fence + DIFF_INFO.length() + content + 1 + fence;
+    }
+
+    public void add(String row) {
+      rowBytes += (rows.isEmpty() ? 0 : 1) + utf8Length(row);
+      longestRun = Math.max(longestRun, longestBacktickRun(row));
+      rows.append(rows.isEmpty() ? "" : "\n").append(row);
+    }
+
+    public String render() {
+      return diffBlock(rows.toString());
+    }
+  }
+
+  private static final String DIFF_INFO = "diff\n";
+
+  private static int fenceLength(int longestRun) {
+    return Math.max(3, longestRun + 1);
+  }
+
+  private static int utf8Length(String text) {
+    return text.getBytes(StandardCharsets.UTF_8).length;
+  }
+
+  /**
+   * {@code token} bare when it is one unambiguous word, otherwise double-quoted with {@code "} and
+   * {@code \} escaped.
+   *
+   * <p>A diff block has no code spans to separate state from the renderer's own annotations, so a
+   * name containing a space, comma, bracket or parenthesis could otherwise imitate them.
+   */
+  public static String diffToken(String token) {
+    if (token != null && !token.isEmpty() && isBareToken(token)) {
+      return token;
+    }
+    return quote(token == null ? "" : token);
+  }
+
+  static boolean isBareToken(String token) {
+    for (int i = 0; i < token.length(); i++) {
+      char c = token.charAt(i);
+      boolean safe =
+          (c >= 'a' && c <= 'z')
+              || (c >= 'A' && c <= 'Z')
+              || (c >= '0' && c <= '9')
+              || c == '_'
+              || c == '-'
+              || c == ':'
+              || c == '/'
+              || c == '.';
+      if (!safe) {
+        return false;
+      }
+    }
+    return true;
+  }
+
+  static String quote(String value) {
+    return "\"" + value.replace("\\", "\\\\").replace("\"", "\\\"") + "\"";
   }
 
   /** A markdown link. {@code target} must have passed {@link #isEmittableLink(URI)}. */

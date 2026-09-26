@@ -161,6 +161,9 @@ class ReportGoldenTest {
     assertEquals(1, report.counts().get(ChangeReport.Op.CREATE));
     assertEquals(2, report.counts().get(ChangeReport.Op.UPDATE));
     assertEquals(1, report.counts().get(ChangeReport.Op.SAME));
+    // Replacement substeps fold into one replace; the source says these are the engine's totals.
+    assertEquals(1, report.totals().get(ChangeReport.Bucket.REPLACE));
+    assertEquals(ChangeReport.CountSource.ENGINE, report.totalsSource());
     assertEquals("succeeded", report.result());
     assertEquals(1, report.diagnostics().get(ChangeReport.DiagnosticSeverity.WARNING));
     assertFalse(report.truncated());

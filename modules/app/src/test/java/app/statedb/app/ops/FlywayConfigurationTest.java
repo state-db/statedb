@@ -17,6 +17,31 @@ import org.junit.jupiter.api.Test;
 class FlywayConfigurationTest {
 
   @Inject Flyway flyway;
+  @Inject jakarta.persistence.EntityManager em;
+
+  @Test
+  void optionalReportsDoNotAlterOrReferenceUpdateHistory() {
+    // Native SQL inspects the database contract rather than application entity behavior.
+    Number columns =
+        (Number)
+            em.createNativeQuery(
+                    """
+                    SELECT count(*) FROM information_schema.columns
+                    WHERE table_schema = 'public' AND table_name = 'stack_updates'
+                      AND column_name LIKE 'report_%'
+                    """)
+                .getSingleResult();
+    assertEquals(0, columns.intValue());
+    Number dependencies =
+        (Number)
+            em.createNativeQuery(
+                    """
+                    SELECT count(*) FROM pg_constraint
+                    WHERE conrelid = 'report_deliveries'::regclass AND confrelid = 'stack_updates'::regclass
+                    """)
+                .getSingleResult();
+    assertEquals(0, dependencies.intValue());
+  }
 
   @Test
   void productionMigrationSafetySettingsReachEmbeddedFlyway() {
@@ -39,9 +64,8 @@ class FlywayConfigurationTest {
     assertEquals(0, configuration.getIgnoreMigrationPatterns().length);
     assertEquals(
         "SET lock_timeout = '10s'; SET statement_timeout = '2min'", configuration.getInitSql());
-    assertEquals("002", flyway.info().current().getVersion().getVersion());
-    assertEquals(
-        "add service account token access profile", flyway.info().current().getDescription());
+    assertEquals("003", flyway.info().current().getVersion().getVersion());
+    assertEquals("add vcs report delivery", flyway.info().current().getDescription());
 
     Config config = ConfigProvider.getConfig();
     assertTrue(config.getValue("quarkus.datasource.active", Boolean.class));

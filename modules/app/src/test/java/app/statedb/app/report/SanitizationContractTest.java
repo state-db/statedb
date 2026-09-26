@@ -287,7 +287,7 @@ class SanitizationContractTest {
 
     @Test
     void collapsesWhitespaceRatherThanDroppingIt() {
-      // A newline must not survive — it breaks out of a markdown table row — but dropping it
+      // A newline must not survive — it breaks out of its line in the report — but dropping it
       // outright would join two words into one and misrepresent the name.
       assertEquals("a b", ReportText.neutralize("a\nb", 256).value());
       assertEquals("a b", ReportText.neutralize("a\r\n\t  b", 256).value());
@@ -416,6 +416,19 @@ class SanitizationContractTest {
     @Test
     void aPipeOutsideATableDoesNotGainAVisibleBackslash() {
       assertEquals("`a|b`", Markdown.code("a|b"));
+    }
+
+    @Test
+    void aDiffBlockPredictsItsOwnSizeAsRowsLengthenTheFence() {
+      // The plan is fitted to the body budget by bytesWith, so it must match the rendered block
+      // exactly, including when a row's backticks force a longer fence on both lines.
+      Markdown.DiffBlock block = new Markdown.DiffBlock();
+      for (String row : new String[] {"+  a", "~  ``b", "±  ü ```` c", "-  d"}) {
+        int predicted = block.bytesWith(row);
+        block.add(row);
+        assertEquals(predicted, block.render().getBytes(StandardCharsets.UTF_8).length, row);
+      }
+      assertTrue(block.render().startsWith("`````diff\n"), block.render());
     }
 
     @Test

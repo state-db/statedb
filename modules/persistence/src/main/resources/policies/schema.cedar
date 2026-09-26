@@ -34,6 +34,11 @@ action "provider:Manage" in ["site:AdminAccess"] appliesTo {
   resource: [Site]
 };
 
+action "vcs:ManageSite" in ["site:AdminAccess"] appliesTo {
+  principal: [User],
+  resource: [Site]
+};
+
 action "org:Admin" in ["site:AdminAccess"] appliesTo {
   principal: [User],
   resource: [Site]
@@ -132,6 +137,13 @@ action "serviceaccount:Revoke" in ["serviceaccount:*"] appliesTo {
 };
 
 action "org:ManageMembers" appliesTo {
+  principal: [User],
+  resource: [Org]
+};
+
+// VCS installations can cause writes to an external host.
+// Keep their administration owner-only and outside the ordinary stack-write bundle.
+action "vcs:Manage" appliesTo {
   principal: [User],
   resource: [Org]
 };

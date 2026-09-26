@@ -4,6 +4,7 @@ import app.statedb.persistence.lock.StackLock;
 import app.statedb.persistence.lock.StackLockedException;
 import app.statedb.persistence.stack.CompactionJobEnqueuer;
 import app.statedb.persistence.stack.Stack;
+import app.statedb.persistence.vcs.ReportDeliveryWorker;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 import jakarta.persistence.EntityManager;
@@ -32,6 +33,8 @@ public class StackUpdateCompleter {
   @Inject EntityManager em;
 
   @Inject CompactionJobEnqueuer compactionJobEnqueuer;
+
+  @Inject ReportDeliveryWorker reportDeliveryWorker;
 
   @Transactional
   public void complete(UUID leaseId, UUID stackId, UUID updateId, StackUpdate.Status terminal) {
@@ -81,5 +84,6 @@ public class StackUpdateCompleter {
     }
 
     compactionJobEnqueuer.enqueue(stackId);
+    reportDeliveryWorker.enqueue(u);
   }
 }

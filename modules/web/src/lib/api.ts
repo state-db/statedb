@@ -117,6 +117,35 @@ export interface OidcProviderWrite {
   enabled?: boolean;
 }
 
+export interface GitHubAppStatus {
+  setupEnabled: boolean;
+  configured: boolean;
+  appId?: number | null;
+  slug: string | null;
+  owner: string | null;
+  htmlUrl: string | null;
+  installationUrl: string | null;
+  version?: number | null;
+}
+
+export interface GitHubManifestSubmission {
+  actionUrl: string;
+  manifest: string;
+}
+
+export interface VcsConnection {
+  id: string;
+  kind: string;
+  host: string;
+  installationId: number;
+  enabled: boolean;
+  version: number;
+  accountLogin: string | null;
+  repositorySelection: string | null;
+  managementUrl: string | null;
+  error: string | null;
+}
+
 export interface AdminOrganization {
   id: string;
   name: string;
@@ -476,6 +505,14 @@ export const api = {
       ),
   },
   admin: {
+    github: {
+      status: () => request<GitHubAppStatus>("/admin/vcs/github"),
+      manifest: (githubOrganization: string) =>
+        request<GitHubManifestSubmission>("/admin/vcs/github/manifest", {
+          method: "POST",
+          body: JSON.stringify({ githubOrganization }),
+        }),
+    },
     orgs: {
       list: () => request<AdminOrganization[]>("/admin/orgs"),
       create: (org: { name: string; displayName: string }) => request<AdminOrganization>("/admin/orgs", { method: "POST", body: JSON.stringify(org) }),
@@ -510,6 +547,16 @@ export const api = {
     },
   },
   orgs: {
+    vcs: {
+      app: (org: string) =>
+        request<GitHubAppStatus>(`/orgs/${encodeURIComponent(org)}/vcs/app`),
+      connections: (org: string) =>
+        request<VcsConnection[]>(`/orgs/${encodeURIComponent(org)}/vcs/connections`),
+      connect: (org: string) =>
+        request<{ url: string }>(`/orgs/${encodeURIComponent(org)}/vcs/connect`, { method: "POST" }),
+      disconnect: (org: string) =>
+        request<void>(`/orgs/${encodeURIComponent(org)}/vcs/connections`, { method: "DELETE" }),
+    },
     members: {
       list: (org: string) => request<OrganizationMember[]>(`/orgs/${encodeURIComponent(org)}/members`),
       candidates: (org: string) => request<UserCandidate[]>(`/orgs/${encodeURIComponent(org)}/members/candidates`),

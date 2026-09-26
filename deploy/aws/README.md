@@ -28,6 +28,16 @@ The stack needs no credential input. Create it with `CAPABILITY_IAM`. Stack crea
 minutes, mostly for RDS. The outputs include the console URL, the correct `pulumi login .../pulumi`
 command, and `BreakGlassPasswordCommand`.
 
+GitHub publishing is optional and is configured after deployment from the state-db console. The
+console creates a deployment-owned GitHub App, stores its private key encrypted in PostgreSQL, and
+guides organization owners through installation and repository binding.
+
+GitHub setup stays disabled until `STATEDB_REPORTS_PUBLIC_BASE_URL` is set, because GitHub's
+callbacks need the console's public URL. This template does not set it. To enable GitHub, add it to
+the `Main` container environment with the `ConsoleUrl` output or your own domain, then update the
+stack. Connections that already exist keep publishing reports without a console link while it is
+unset.
+
 ## First sign-in
 
 The bootstrap Lambda generates the break-glass administrator password during stack creation and
