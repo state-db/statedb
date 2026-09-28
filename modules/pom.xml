@@ -42,7 +42,7 @@
         <skipTests>false</skipTests>
         <cedar-java.version>4.10.0</cedar-java.version>
         <tink.version>1.23.0</tink.version>
-        <zstd-jni.version>1.5.7-6</zstd-jni.version>
+        <zstd-jni.version>1.5.7-15</zstd-jni.version>
     </properties>
 
     <dependencyManagement>
