@@ -520,8 +520,8 @@ function RunChanges({ changes, truncated, live, preview, refresh }: {
         />
       ) : (
         <div className="rounded-lg border bg-card">
-          <Table>
-            <TableHeader><TableRow><TableHead>Operation</TableHead><TableHead>Type</TableHead><TableHead>Name</TableHead><TableHead><span className="sr-only">Property details</span></TableHead></TableRow></TableHeader>
+          <Table className="table-fixed">
+            <TableHeader><TableRow><TableHead className="w-28">Operation</TableHead><TableHead className="w-[34%]">Type</TableHead><TableHead>Name</TableHead><TableHead className="w-40"><span className="sr-only">Property details</span></TableHead></TableRow></TableHeader>
             <TableBody>
               {rows.map(({ change, allProperties }) => {
               const key = `${change.sequence}-${change.name}`;
@@ -536,8 +536,8 @@ function RunChanges({ changes, truncated, live, preview, refresh }: {
                 <Fragment key={key}>
                   <TableRow>
                     <TableCell><OperationBadge op={change.op} /></TableCell>
-                    <TableCell className="font-mono text-xs">{change.type}</TableCell>
-                    <TableCell>{change.name}</TableCell>
+                    <TableCell className="truncate font-mono text-xs" title={change.type}>{change.type}</TableCell>
+                    <TableCell className="truncate" title={change.name}>{change.name}</TableCell>
                     <TableCell className="text-right text-xs text-muted-foreground">
                       <span className="inline-flex items-center gap-2 whitespace-nowrap">
                         {propertyDetailLabel(properties.length, hiddenInternal)}
@@ -556,7 +556,7 @@ function RunChanges({ changes, truncated, live, preview, refresh }: {
                   </TableRow>
                   {open && (
                     <TableRow>
-                      <TableCell colSpan={4} className="p-0">
+                      <TableCell colSpan={4} className="max-w-0 overflow-hidden p-0">
                         <div id={detailId}>
                           <InlineJsonDiff properties={properties} hiddenInternal={hiddenInternal} operation={change.op} refresh={refresh} />
                         </div>
@@ -662,8 +662,13 @@ function InlineJsonDiff({ properties, hiddenInternal, operation, refresh }: {
     return <div className="p-4"><Alert><CircleAlert /><AlertTitle>No property-level diff</AlertTitle><AlertDescription>{description}</AlertDescription></Alert></div>;
   }
   return (
-    <ScrollArea className="max-h-[30rem] border-y bg-muted/20">
-      <pre className="min-w-max py-2 font-mono text-xs leading-5">
+    <div
+      className="scroll-thin max-h-[30rem] max-w-full overflow-auto border-y bg-muted/20"
+      role="region"
+      aria-label="Property diff"
+      tabIndex={0}
+    >
+      <pre className="w-max min-w-full py-2 font-mono text-xs leading-5">
         {jsonDiffLines(properties).map((line, index) => (
           <span
             className={cn(
@@ -681,7 +686,7 @@ function InlineJsonDiff({ properties, hiddenInternal, operation, refresh }: {
           </span>
         ))}
       </pre>
-    </ScrollArea>
+    </div>
   );
 }
 
