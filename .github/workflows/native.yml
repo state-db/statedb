@@ -66,7 +66,7 @@ jobs:
         run: echo "tag=${{ matrix.pulumi-version }}" >> "$GITHUB_OUTPUT"
       - name: Publish State Safety Report
         if: always()
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: state-safety-report-${{ steps.tag.outputs.tag }}
           path: modules/pulumi-cli-smoke/target/state-safety-report.md
@@ -167,7 +167,7 @@ jobs:
 
       - name: Upload build metadata
         if: always()
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: native-build-${{ matrix.arch }}
           path: |
@@ -179,7 +179,7 @@ jobs:
 
       - name: Upload Java SBOM
         if: always() && matrix.arch == 'amd64'
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: java-sbom
           path: artifacts/state-db-java.cdx.json
