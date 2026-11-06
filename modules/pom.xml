@@ -31,17 +31,17 @@
         <project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
         <quarkus.platform.group-id>io.quarkus.platform</quarkus.platform.group-id>
         <quarkus.platform.artifact-id>quarkus-bom</quarkus.platform.artifact-id>
-        <quarkus.platform.version>3.38.3</quarkus.platform.version>
+        <quarkus.platform.version>3.40.1.1</quarkus.platform.version>
         <jandex-maven-plugin.version>3.6.0</jandex-maven-plugin.version>
         <license-maven-plugin.version>2.7.1</license-maven-plugin.version>
-        <spotless-maven-plugin.version>3.10.0</spotless-maven-plugin.version>
-        <maven-failsafe-plugin.version>3.5.6</maven-failsafe-plugin.version>
-        <spotbugs-maven-plugin.version>4.10.4.0</spotbugs-maven-plugin.version>
+        <spotless-maven-plugin.version>3.10.4</spotless-maven-plugin.version>
+        <maven-failsafe-plugin.version>3.6.1</maven-failsafe-plugin.version>
+        <spotbugs-maven-plugin.version>4.10.5.0</spotbugs-maven-plugin.version>
         <findsecbugs-plugin.version>1.14.0</findsecbugs-plugin.version>
         <google-java-format.version>1.35.0</google-java-format.version>
         <skipTests>false</skipTests>
-        <cedar-java.version>4.10.0</cedar-java.version>
-        <tink.version>1.23.0</tink.version>
+        <cedar-java.version>4.11.0</cedar-java.version>
+        <tink.version>1.24.0</tink.version>
         <zstd-jni.version>1.5.7-6</zstd-jni.version>
     </properties>
 
