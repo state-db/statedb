@@ -36,7 +36,7 @@ policy set, so tightening what CI can do never reshapes what people can do.
 Per-stack grants layer read or write access on top of the role. Authorization
 itself runs on Cedar, and the policies are in the repository under
 `modules/persistence/src/main/resources/policies/` if you want to read the rules
-rather than take this table's word for them.
+to read the rules directly.
 
 Site administrators are separate again, and come from the
 `STATEDB_ADMIN_SUBJECTS` allow-list rather than from any organization role.
@@ -63,8 +63,8 @@ print console links after previews and updates.
 
 ## OpenID Connect
 
-statedb works with any compliant OpenID Connect provider. Microsoft Entra ID,
-Okta, Keycloak, and Google are all in regular use. Scopes must include `openid`.
+statedb works with any compliant OpenID Connect provider, such as Microsoft
+Entra ID, Okta, Keycloak, or Google. Scopes must include `openid`.
 
 Providers configured in the console are stored in PostgreSQL and can be added or
 rotated without restarting the service. A provider seeded from the environment
@@ -74,8 +74,8 @@ as read-only in the console. See
 
 ## Service accounts
 
-A service account is a first-class machine identity, not a pointer to the person
-who created it. When that person leaves the organization, CI keeps working.
+A service account is a machine identity independent of the person who created
+it. When that person leaves the organization, CI keeps working.
 
 Each account is created together with exactly one token, valid for 30, 90, or
 365 days. There is no way to add a second token to an existing account, so
@@ -93,18 +93,17 @@ The local recovery login is off unless you set
 `STATEDB_LOCAL_GLASS_PASSWORD_HASH` to a bcrypt hash. It exists for one case:
 your identity provider is unreachable and you need to get back in.
 
-It is constrained on purpose:
+It is restricted:
 
 - Loopback connections only, and `X-Forwarded-For` is not trusted.
 - It disables itself whenever an enabled OIDC provider exists.
 - It reuses the existing bootstrap administrator identity rather than creating
   a new one.
 
-That OIDC condition is checked at sign-in *and* on every session restore, so
+That OIDC condition is checked at sign-in and on every session restore, so
 restoring your identity provider also ends any recovery session already open.
 
 :::caution
-`STATEDB_LOCAL_GLASS_ALLOW_REMOTE=true` lifts the loopback restriction and turns
-a break-glass mechanism into a password-authenticated admin login exposed to the
-network. Use it only in an isolated evaluation environment.
+`STATEDB_LOCAL_GLASS_ALLOW_REMOTE=true` lifts the loopback restriction and
+exposes a password-authenticated admin login to the network. Use it only in an isolated evaluation environment.
 :::

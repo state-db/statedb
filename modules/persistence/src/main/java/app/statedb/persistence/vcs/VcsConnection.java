@@ -7,7 +7,7 @@ import jakarta.persistence.Table;
 import jakarta.persistence.UniqueConstraint;
 import java.util.UUID;
 
-/** An organization-scoped VCS host connection. Credentials arrive with the Slice 3 adapter. */
+/** An organization-scoped VCS host connection. */
 @Entity
 @Table(
     name = "vcs_connections",

@@ -99,7 +99,6 @@ public final class JournalEntryView {
   /**
    * Denormalized URN: kind 0 (Begin) reads from {@code operation.resource.urn}; kinds 1/3/4
    * (Success/RefreshSuccess/Outputs) read from {@code state.urn}; everything else returns null.
-   * Matches the table's {@code resource_urn} column rules from {@code db-schema.md}.
    */
   public String resourceUrn() {
     short k = kind();

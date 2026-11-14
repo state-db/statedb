@@ -11,8 +11,8 @@ import org.hibernate.annotations.UuidGenerator;
 
 /**
  * Per-stack distributed lock. Does not extend {@link app.statedb.persistence.BaseEntity} because
- * the canonical {@code stack_locks} schema in {@code design/db-schema.md} has no {@code created_at}
- * column — {@code locked_at} is the equivalent.
+ * the {@code stack_locks} table has no {@code created_at} column — {@code locked_at} is the
+ * equivalent.
  *
  * <p>{@code lockTokenHash} is the SHA-256 of the canonical UUID string of the bearer token. The
  * plaintext is returned exactly once at acquire/renew and is never persisted. See {@link

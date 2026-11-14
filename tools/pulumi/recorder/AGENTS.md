@@ -9,10 +9,10 @@ stub responses to keep the CLI alive, and writes each request+response as a
 numbered JSON fixture.
 
 The fixtures are the source of truth. The catalog (`api-snapshots/pulumi/catalog.md`)
-is derived from them and is what you actually implement state-db from.
+is derived from them and is the reference for implementing state-db.
 
-**Do not proxy to api.pulumi.com** — that violates Pulumi's ToS. Always use the
-active-stub approach where we return synthetic responses locally.
+Do not proxy to api.pulumi.com, which violates Pulumi's terms of service. The
+recorder returns synthetic stub responses locally.
 
 ---
 
@@ -147,15 +147,15 @@ parts live in `router`:
   `POST .../preview|update|destroy|refresh`; consumed by
   `POST .../update/{updateID}` (start operation, returns token).
 
-### Key API discoveries (things the spec got wrong)
+### Observed CLI behavior that differs from the spec
 
-| What the spec says | What the CLI actually does |
+| What the spec says | What the CLI does |
 |---|---|
 | `POST /api/stacks/{org}` | `POST /api/stacks/{org}/{project}` — project in URL, `stackName` in body |
 | `GET /api/stacks/{org}` for stack list | `GET /api/user/stacks?project=recorder-test` |
 | Separate sub-paths for preview/destroy ops | All post-creation calls go through `/update/{updateID}` regardless of op kind |
 
-Other discoveries:
+Other observed behavior:
 - `pulumi up` and `pulumi destroy` each run the full lifecycle **twice**: first pass
   is a preview (no checkpoint writes), second pass is the actual apply.
 - With `journalVersion: 1`, real resource changes are written through
@@ -185,8 +185,8 @@ Other discoveries:
 ### 1. Add the command to `entrypoint.sh`
 
 ```bash
-signal "09-stack-rename"
-run pulumi stack rename neworg/recorder-test/staging
+signal "37-whoami"
+run pulumi whoami
 ```
 
 Pick the next number in sequence. The signal must come before the `run` call.
@@ -198,12 +198,12 @@ make pulumi-recorder-discover   # from repo root, or `make run` from this dir
 ```
 
 The new command will fail at whichever endpoint the stub doesn't handle yet.
-The last fixture in `fixtures/by-command/09-stack-rename/` shows what the CLI
+The last fixture in `fixtures/by-command/37-whoami/` shows what the CLI
 sent and what we returned. Read it:
 
 ```bash
-ls fixtures/by-command/09-stack-rename/
-cat fixtures/by-command/09-stack-rename/0003_POST_api_stacks_testorg_recorder-test_dev_rename.json
+ls fixtures/by-command/37-whoami/
+cat fixtures/by-command/37-whoami/<last-fixture>.json
 ```
 
 ### 3. Fix the stub
@@ -234,7 +234,7 @@ is cached).
 ### 5. Commit the new fixtures and updated catalog
 
 ```bash
-git add tools/pulumi/recorder/fixtures/by-command/09-stack-rename/
+git add tools/pulumi/recorder/fixtures/by-command/37-whoami/
 git add api-snapshots/pulumi/catalog.md
 git add tools/pulumi/recorder/stubs.go
 git add tools/pulumi/recorder/entrypoint.sh
@@ -242,9 +242,9 @@ git add tools/pulumi/recorder/entrypoint.sh
 
 ---
 
-## Planned lifecycle gaps
+## Uncaptured commands
 
-Commands not yet captured (add these as state-db matures):
+Commands not yet captured:
 
 - `pulumi config set` / `get` — exercises `PUT .../config` and encrypt/decrypt
 - A slower `pulumi up` / `destroy` — may show `renew_lease`

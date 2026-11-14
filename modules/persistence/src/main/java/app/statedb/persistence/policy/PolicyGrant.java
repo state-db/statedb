@@ -26,7 +26,7 @@ public class PolicyGrant extends BaseEntity {
    * The per-stack share templates whose grants include {@code stack:ReadOnlyAccess}. This is the
    * read-granting set the list finders' SQL predicate and {@link
    * app.statedb.persistence.authz.StackEntityLoader}'s 404 gate mirror — it must stay in lockstep
-   * with the templates' Cedar text (see design/stack-sharing.md §9).
+   * with the templates' Cedar text (see design/stack-sharing.md).
    */
   public static final List<String> STACK_READ_TEMPLATE_IDS =
       List.of("StackReadResourcePolicy", "StackWriteResourcePolicy");

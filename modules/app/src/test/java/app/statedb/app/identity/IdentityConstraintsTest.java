@@ -18,7 +18,7 @@ import org.junit.jupiter.api.Test;
 /**
  * Schema-contract tests for the identity tables. These pin the promises that callers above this
  * layer (TokenAuthFilter, Cedar entity loaders, admin handlers) rely on. They map to the design doc
- * — see {@code design/db-schema.md} §Correctness Invariants — and exist to fail loudly if a future
+ * — see {@code design/db-schema.md} §Correctness invariants — and exist to fail loudly if a future
  * migration weakens an FK / UNIQUE / CHECK / CASCADE that the rest of the codebase assumes.
  *
  * <p>Each negative case is a separate {@code @Test} because a constraint violation marks the JTA
@@ -280,7 +280,7 @@ class IdentityConstraintsTest {
   }
 
   /**
-   * Per {@code design/db-schema.md} §Application invariants #18: removing a user from an org must
+   * Per {@code design/db-schema.md} §Identity and access: removing a user from an org must
    * invalidate their tokens for that org "without deleting the row." The token row stays;
    * authorization code is responsible for re-checking {@code org_members} on every request. This
    * test guards against someone "helpfully" adding {@code ON DELETE CASCADE} from {@code

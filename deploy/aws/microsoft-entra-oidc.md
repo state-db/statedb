@@ -1,13 +1,12 @@
 # Configure Microsoft Entra ID authentication
 
-This guide connects an AWS CloudFormation state-db installation to a customer's
-Microsoft Entra ID tenant. It also explains how to grant site-administrator
+This guide connects an AWS CloudFormation state-db installation to a Microsoft
+Entra ID tenant. It also explains how to grant site-administrator
 access through the CloudFormation stack.
 
 ## Recommended configuration
 
-Use a **single-tenant Web application** registration in the customer's Entra
-tenant. Give the state-db provider a stable lowercase slug such as `microsoft`.
+Use a single-tenant Web application registration in your Entra tenant. Give the state-db provider a stable lowercase slug such as `microsoft`.
 For a state-db origin of `https://statedb.test.com`, register this exact redirect
 URI:
 
@@ -36,20 +35,18 @@ for localhost, and matches the path case-sensitively
 
 ## Create the Entra application
 
-1. In the customer's Microsoft Entra admin center, switch to the customer's
-   tenant. Go to **Entra ID > App registrations > New registration**.
+1. In the Microsoft Entra admin center, switch to your tenant. Go to **Entra ID > App registrations > New registration**.
 2. Enter a recognizable name such as `state-db production`.
-3. Select **Accounts in this organizational directory only**. This is the
-   normal choice for a customer-owned state-db install: tenant members and
-   tenant guests can sign in, but accounts from unrelated Entra directories
-   cannot. Microsoft describes this option as a single-tenant line-of-business
+3. Select **Accounts in this organizational directory only**. Tenant
+   members and tenant guests can sign in, but accounts from unrelated Entra
+   directories cannot. Microsoft describes this option as a single-tenant line-of-business
    application
    ([registration reference](https://learn.microsoft.com/en-us/graph/auth-register-app-v2)).
 4. Under **Redirect URI**, select the **Web** platform, not **Single-page
    application**, and enter the exact public callback shown above. The browser
    UI is an SPA, but state-db itself exchanges the authorization code and keeps
    tokens in a backend session; it is therefore a confidential Web client
-   ([state-db BFF design](../../design/auth.md#console-spa--bff-with-quarkus-oidc),
+   ([state-db BFF design](../../design/auth.md#console-sessions),
    [Microsoft application types](https://learn.microsoft.com/en-us/entra/identity-platform/v2-app-types)).
 5. Select **Register**. From **Overview**, copy both **Application (client) ID**
    and **Directory (tenant) ID**. Use the former as the state-db client ID and
@@ -73,17 +70,16 @@ authority plus `/.well-known/openid-configuration`
 
 Do not use `common`, `organizations`, or `consumers` for this setup. Those are
 multi-tenant authorities whose discovery metadata contains a tenant-parameterized
-issuer and requires tenant-aware issuer validation. State-db currently models a
-provider as one fixed issuer/client pair and has no Microsoft-specific
-multi-tenant validation policy. A single customer tenant is therefore the
-narrow contract supported by the current implementation
+issuer and requires tenant-aware issuer validation. State-db models a provider as
+one fixed issuer/client pair and has no Microsoft-specific multi-tenant
+validation policy, so a single tenant is the supported configuration
 ([provider model](../../modules/persistence/src/main/java/app/statedb/persistence/identity/OidcProvider.java),
 [Microsoft issuer-validation requirements](https://learn.microsoft.com/en-us/entra/identity-platform/access-tokens#validate-the-issuer)).
 
 ## Configure state-db
 
 The AWS installer uses a console-managed provider. Sign in with the generated
-break-glass credential while no provider is enabled, then open **Admin >
+break-glass credential while no provider is enabled, then open **Manage >
 Providers** and add:
 
 - name `microsoft`;
@@ -119,14 +115,12 @@ These values are mutable display data and must not be used for authorization
 ([Microsoft OIDC scopes](https://learn.microsoft.com/en-us/entra/identity-platform/scopes-oidc),
 [ID-token claims](https://learn.microsoft.com/en-us/entra/identity-platform/id-token-claims-reference)).
 
-The checked-in state-db default does not include `offline_access`. Microsoft
+The state-db default scopes do not include `offline_access`. Microsoft
 requires that scope explicitly on its v2 endpoint before it returns a refresh
-token. Consequently, operators should expect Entra reauthentication when the
-token-backed console session can no longer be continued rather than assuming
-the design's generic refresh-token support guarantees a Microsoft refresh token.
-Adding `offline_access` is possible for a console-managed provider, but is not
-part of the bootstrap provider's default and has no Microsoft-specific contract
-test today
+token. Without it, expect Entra reauthentication when the token-backed console session
+can no longer be continued. You can add `offline_access` to a console-managed
+provider; it is not in the default scopes and has no Microsoft-specific contract
+test
 ([scope default](../../modules/console-api/src/main/java/app/statedb/consoleapi/provider/OidcProvidersResource.java),
 [Microsoft `offline_access` behavior](https://learn.microsoft.com/en-us/entra/identity-platform/scopes-oidc#the-offline_access-scope)).
 
@@ -164,7 +158,7 @@ The reliable first-admin procedure is:
    ```
 
    An existing site admin can instead copy the canonical **Identity** value from
-   **Admin > Users**
+   **Manage > Users**
    ([admin-users UI](../../modules/web/src/routes/admin-users.tsx)).
 3. Set the CloudFormation `AdminSubjects` parameter to the exact concatenated
    value. Do not substitute the user's email, UPN, object ID, or tenant ID for
@@ -206,7 +200,7 @@ current template, edit **OIDC site administrator subjects**, and review the
 change set before applying it. Preserve every administrator that should retain
 access: the new comma-separated value replaces the complete allow-list.
 
-After the rollout, sign in again and verify that **Admin** is available. Keep a
+After the rollout, sign in again and verify that **Manage** is available. Keep a
 recovery route until that check succeeds. Enabling the first OIDC provider ends
 existing break-glass sessions, so an incorrect subject can otherwise leave the
 deployment without an OIDC site administrator.
@@ -222,8 +216,8 @@ OIDC subject a site admin does not rewrite that organization membership
   the public host and sends the public scheme, and enable
   `QUARKUS_HTTP_PROXY_PROXY_ADDRESS_FORWARDING=true` only when port 8080 is
   reachable exclusively through that proxy. Otherwise the generated
-  `redirect_uri` can use the wrong scheme or authority. The current example Helm
-  chart does not set this variable.
+  `redirect_uri` can use the wrong scheme or authority. The example Helm chart
+  does not set this variable.
 - Restrict who may authenticate if tenant-wide sign-in is too broad. In the
   Entra **Enterprise application**, set **Assignment required?** to **Yes** and
   assign the approved users or groups. Without required assignment, unassigned
@@ -232,7 +226,7 @@ OIDC subject a site admin does not rewrite that organization membership
   [assignment procedure](https://learn.microsoft.com/en-us/entra/identity/enterprise-apps/assign-user-or-group-access-portal)).
   Required assignment may also require tenant-wide admin consent under the
   tenant's consent policy.
-- Apply the customer's Conditional Access and MFA policy to the enterprise
+- Apply your Conditional Access and MFA policy to the enterprise
   application. State-db delegates authentication to Entra and does not implement
   a second MFA policy.
 - Store the client secret in a deployment secret manager, protect PostgreSQL and
@@ -240,22 +234,11 @@ OIDC subject a site admin does not rewrite that organization membership
   environment-managed provider supports rotation by replacing the secret and
   redeploying; console-managed providers support a secret update.
 - Microsoft recommends certificates or federated credentials instead of client
-  secrets in production. State-db currently accepts only a client-secret string,
-  so those stronger client-authentication methods are not yet available; this is
-  an explicit product limitation
+  secrets in production. State-db accepts only a client-secret string, so
+  certificates and federated credentials are not available
   ([Microsoft credential guidance](https://learn.microsoft.com/en-us/entra/identity-platform/how-to-add-credentials),
   [state-db resolver](../../modules/console-api/src/main/java/app/statedb/consoleapi/auth/ProviderTenantConfigResolver.java)).
 - Test with an assigned normal user and an unassigned user, test the exact HTTPS
   callback, verify the resulting `iss`/`sub`, and verify a fresh-browser
   `pulumi login https://statedb.test.com/pulumi` before removing installation
   access.
-
-## Conclusion
-
-For a customer-owned Microsoft identity provider, use one tenant-specific Entra
-Web app registration and one state-db provider. The only mandatory identity
-claims are `iss` and `sub`; `profile` and `email` improve the UI but do not grant
-access. Entra controls who may authenticate, while state-db separately controls
-site administration through the exact token identity in
-`STATEDB_ADMIN_SUBJECTS` and organization access through its own membership and
-policy model.

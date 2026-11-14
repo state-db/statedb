@@ -11,7 +11,7 @@ import java.util.regex.Pattern;
 import org.junit.jupiter.api.Test;
 
 /**
- * Lints the static policy set for the listing invariant (design/stack-sharing.md §3): no {@code
+ * Lints the static policy set for the listing invariant (design/stack-sharing.md): no {@code
  * forbid} may target an action inside {@code stack:ReadOnlyAccess}. List endpoints mirror the read
  * policies as a SQL predicate; a read-affecting forbid would be SQL-inexpressible and silently
  * desynchronize listing from the PDP.

@@ -27,11 +27,11 @@ import java.util.UUID;
  * a tenant-isolation hazard.
  *
  * <p>The WHERE clause is the SQL mirror of the Cedar read policies — a stack is listed iff the PDP
- * would permit {@code stack:Read} (design/stack-sharing.md §3/§9): owners and service accounts read
- * their orgs unconditionally; members/viewers read {@code internal} stacks; per-stack shares
- * (guarded on human membership, exactly as the template guard is) fill the rest, which is all a
- * guest ever gets. {@code StackEntityLoader} applies the same predicate on detail routes so
- * unreadable stacks 404. The list/PDP equivalence test pins this mirror to the PDP.
+ * would permit {@code stack:Read} (design/stack-sharing.md): owners and service accounts read their
+ * orgs unconditionally; members/viewers read {@code internal} stacks; per-stack shares (guarded on
+ * human membership, exactly as the template guard is) fill the rest, which is all a guest ever
+ * gets. {@code StackEntityLoader} applies the same predicate on detail routes so unreadable stacks
+ * 404. The list/PDP equivalence test pins this mirror to the PDP.
  *
  * <p>{@code join fetch} walks the {@code @ManyToOne} navigation on {@link Stack} to collapse
  * stack/project/organization/workspace into a single SQL statement.

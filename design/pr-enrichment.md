@@ -1,146 +1,192 @@
 # GitHub PR reports
 
-GitHub enrichment is an optional add-on. An unmodified Pulumi CLI supplies commit metadata and repository tags.
-A completed run produces a compact report with a colored diff, risky changes first, honest truncation, and a full-preview link.
-The existing renderer owns report content and secret redaction.
+The optional GitHub integration posts a report on the pull request for a run's
+commit after the run ends. It works with an unmodified Pulumi CLI, using the
+commit metadata and repository tags the CLI already sends. It publishes
+completed reports only, never commit statuses or progress for a running update.
+The integration supports `github.com`.
 
 ## Ownership and storage
 
-The integration has four tables in one unshipped migration, V003:
+`ReportDeliveryWorker` owns enqueue, polling, preparation, retries, and
+retention. `GitHubPublisher` verifies pull-request targets and reconciles
+comments. `ReportPublisher` is the interface between persistence and the GitHub
+HTTP code.
 
-- `vcs_app_registrations` stores the GitHub App private key and OAuth client secret, encrypted with `service_secrets_keyset`, and the App's public identity.
-- `vcs_auth_flows` stores expiring, one-time registration and connection state bound to the initiating user and organization.
-- `vcs_connections` binds an installation to an organization. Organization owners manage their own connections.
-- `report_deliveries` stores one report per run, including captured metadata, frozen report content, retries, and the result.
+The [integration migration](../modules/persistence/src/main/resources/db/migration/V003__add_vcs_report_delivery.sql)
+creates four tables:
 
-The migration creates only add-on objects. It has no foreign key to `stack_updates` and does not alter, scan, or backfill update history.
-The existing update entity is unchanged. Registration, encrypted credentials, and Cedar authorization retain their existing ownership.
+| Table | Purpose |
+| --- | --- |
+| `vcs_app_registrations` | The App's public identity plus its encrypted private key and OAuth client secret |
+| `vcs_auth_flows` | Expiring, one-use authorization state bound to a user and organization |
+| `vcs_connections` | An organization's connection to an installation |
+| `report_deliveries` | One row per run: captured metadata, frozen report, attempts, and outcome |
 
-`ReportDeliveryWorker` owns enqueue, polling, retries, and retention. `GitHubPublisher` owns target verification and comment reconciliation.
-`ReportPublisher` is the small interface between persistence and GitHub HTTP code. No publication-head table, terminal sweeper, or separate metadata table remains.
-Commit statuses and start-phase publication are removed. This integration publishes completed reports only.
+The private key and client secret are encrypted with the
+[service secrets](secrets.md) keyset under separate associated data that also
+binds the App version. `report_deliveries` has no foreign key to
+`stack_updates`, so the queue never locks or scans update history, and its
+retention has no effect on that history. Historical runs never enter the queue.
 
 ## Connecting an organization
 
-A site administrator creates the deployment-owned GitHub App through its manifest flow.
-The manifest registers installation and OAuth callbacks under `statedb.reports.public-base-url`.
-No request header or callback establishes the public host. The same configured URL supplies report links.
+A site administrator creates the deployment-owned GitHub App through GitHub's
+manifest flow. The App requests `pull_requests: write` only.
+`statedb.reports.public-base-url` supplies the public URL for the App's
+callbacks and for console links in reports; request headers never establish
+that host. The value must be an `http` or `https` URL without credentials, query,
+or fragment, and an invalid value stops startup. While it is unset, GitHub setup
+is disabled.
 
-An organization owner selects **Connect GitHub**:
+An organization owner then connects the organization:
 
-1. State-db creates a 15-minute, one-use installation state bound to the user, organization, and App version.
-2. GitHub lets the user select an account and repository access, then returns an installation identifier.
-3. State-db consumes the installation state and starts a separate OAuth handshake with fresh state and PKCE.
-4. The server exchanges the authorization code and verifies that `/user/installations` contains the returned installation for this App.
-5. State-db checks installation suspension and pull-request write permission, then connects the original organization automatically.
+1. state-db creates a 15-minute, one-use installation state bound to the user,
+   organization, and App version.
+2. On GitHub, the user picks an account and repository access, and GitHub
+   returns an installation ID.
+3. state-db consumes that state and starts a separate OAuth flow with fresh
+   state and PKCE.
+4. After exchanging the code, the server checks that the user's
+   `/user/installations` list contains the returned installation for this App,
+   that the installation is not suspended, and that it grants pull-request write.
 
-The installation identifier is only a hint. App-level lookup alone never authorizes connection.
-Fixed callback endpoints route to organization-scoped endpoints, which recheck the current Cedar `vcs:Manage` permission.
-The callback cannot select a different organization. Replayed, expired, wrong-user, and wrong-purpose states fail.
-App replacement invalidates existing handshakes, including a version check when the connection is committed.
-OAuth user tokens remain in server memory for this verification only. They are not stored, returned to the browser, or used for report delivery.
-Private keys and OAuth client secrets use different authenticated-encryption contexts.
+The installation ID from the redirect is only a hint, because anyone can put one
+in a URL; the OAuth check proves the connecting user can access it. Callbacks
+recheck the initiating user, the organization, the App version, and current
+`vcs:Manage` authority, so replayed, expired, or wrong-purpose state fails, and
+replacing the App invalidates handshakes in progress. The OAuth user token stays
+in memory for this verification and is never stored or used for delivery.
 
-The connection card shows the verified GitHub account and whether repository access covers all or selected repositories.
-**Manage repositories** opens GitHub's installation settings. A return without state does not create or change a connection.
-**Disconnect** disables the local connection and removes its pending authorization handshakes. It does not uninstall the App on GitHub.
-Already-running publication or authorization requests can finish. Reports processed after disconnection fail without publication.
-Connection verification failures retain the previous connection and present a retry action.
-Pending installation approval and denied authorization have explicit return messages.
-
-The global installation picker and direct installation-ID connection endpoint are removed.
-GitHub documents [setup-ID verification](https://docs.github.com/en/apps/creating-github-apps/registering-a-github-app/about-the-setup-url)
-and the [user authorization and PKCE flow](https://docs.github.com/en/apps/creating-github-apps/authenticating-with-a-github-app/generating-a-user-access-token-for-a-github-app).
+Disconnect disables the local connection and deletes its pending authorization
+flows. It does not uninstall the App on GitHub. A request already in flight can
+finish; later delivery attempts fail on the disabled connection.
 
 ## Repository scope
 
-State-db has no per-repository binding. Any stack writer in a connected organization can have a report posted to any repository the installation can access, by setting the `vcs:owner` and `vcs:repo` tags.
-The installation's repository access on GitHub is the only boundary. Organization owners narrow it with **Manage repositories**, so state-db keeps no repository list of its own.
-If a skip list is ever needed, it belongs on the connection as `owner/repo` patterns checked at enqueue. It is not built.
+There is no per-stack repository binding. The CLI sets the `vcs:kind`,
+`vcs:owner`, and `vcs:repo` stack tags from the Git remote, and any stack writer
+can change them. A report can therefore target any repository the
+organization's installation can access, and the installation's repository
+access on GitHub is the only boundary. The connection view links to GitHub's
+installation settings to narrow it; state-db keeps no repository allowlist of its
+own.
 
 ## Queue lifecycle
 
-The transaction that ends a run calls `enqueue`: `/complete`, graceful cancel, forced cancel, and forced unlock. It reads the tags Pulumi refreshed at lease time from the update row.
-Runs abandoned by an expired lease are not reported.
-An enabled organization connection and a valid commit are required; otherwise no queue row is written.
-Enqueue is one `INSERT ... SELECT ... ON CONFLICT (update_id) DO NOTHING`, so it cannot fail the run's commit on a missing connection or a repeated call. A database identity on the queue orders runs by enqueue order.
+The transaction that ends a run enqueues its report: completion, graceful or
+forced cancellation, and forced unlock. A run abandoned through an expired lease
+produces no report. Enqueue reads the tags refreshed when the update started and
+needs all of the following, otherwise it writes nothing:
 
-The worker selects at most 50 due rows through a partial `(next_attempt_at, id)` index.
-For each row, it reads the update by its existing primary key.
-Historical updates never enter the queue automatically.
+- reports enabled (`statedb.reports.enabled`)
+- `vcs:kind`, `vcs:owner`, and `vcs:repo` tags, with `vcs:kind` matching an
+  enabled connection's host for the stack's organization
+- a commit SHA from `ci.pr.headSHA`, falling back to `git.head`, in the update's
+  environment metadata
 
-Before publication, the worker verifies one open PR with the exact commit. Ambiguous, closed, or mismatched targets fail without posting.
-It commits the verified repository, PR number, and rendered body before remote writes. Retries use this frozen content even after a force-push or closure.
+When the CLI also reports `ci.pr.number`, the target PR must have that number.
+Pulumi fills the `ci.pr.*` keys for CI systems it recognizes, or from the
+`PULUMI_CI_*` variables when `PULUMI_CI_SYSTEM` is set.
 
-Rows have three states: `pending`, `delivered`, and `failed`. Preparation is represented by the frozen body, without a separate state machine.
-Five attempts apply separately to preparation and publication. Transient failures use exponential backoff and respect GitHub rate-limit delays.
-Definitive HTTP failures and GraphQL permission or validation errors stop immediately. Pending work expires after seven days by default.
+Enqueue is a single `INSERT ... SELECT ... ON CONFLICT (update_id) DO NOTHING`,
+so a missing connection or a repeated call can never fail the run's commit. An
+identity column records enqueue order as the report's generation. Rows are
+`pending`, `delivered`, or `failed`.
 
-## Concurrency and recovery
+Each delivery has two phases with separate attempt budgets. Preparation finds
+one open PR whose head is exactly the run's commit; an ambiguous, closed, or
+mismatched target fails without a comment. The worker then commits the verified
+target and the rendered body before any remote write, and every retry posts that
+frozen content even after a force-push or a closed PR. Publication posts it.
 
-`FOR UPDATE SKIP LOCKED` prevents two workers from processing the same queue row.
-A transaction-scoped advisory lock serializes publication for a stack across replicas. It does not lock Pulumi state or update rows.
-Database rollback and connection cleanup release both locks. There is no durable claim or lease to repair.
-A publication transaction has a 90-second timeout. HTTP requests have 20-second timeouts.
-The publisher stops starting requests after its 40-second reconciliation budget expires.
+Defaults allow five attempts per phase and seven days of queue age. Transient
+failures back off exponentially up to five minutes and honor GitHub rate-limit
+delays. Definitive HTTP failures and GraphQL permission or validation errors stop
+retrying immediately.
 
-Each comment starts with `<!-- statedb-report:STACK:GENERATION:UPDATE -->`.
-Reconciliation accepts markers only from the registered App's bot account on the verified PR.
-It reads the complete comment list before posting, with a limit of 20 pages of 100 comments.
-An incomplete search fails without creating a comment. The limit is an explicit terminal failure, not evidence that no comment exists.
+## Concurrent delivery and recovery
 
-If the run marker exists, the publisher reuses that comment without changing its body.
-Otherwise, it creates a new comment. Only after that comment exists does it minimize preceding reports with `OUTDATED`.
-The highest generation stays current. A delayed older run becomes collapsed history immediately.
-Duplicate markers use a stable node-ID tie-breaker, leaving one current comment. Reports from other stacks or authors remain unchanged.
+`FOR UPDATE SKIP LOCKED` keeps two workers off the same row. A
+transaction-scoped advisory lock serializes publication per stack across
+replicas without locking Pulumi state or update rows. Rollback releases both, so
+no claim or lease needs repair after a crash. A publication transaction has a
+90-second timeout, each HTTP request 20 seconds, and the publisher stops starting
+requests after its 40-second reconciliation budget.
 
-Crash recovery uses the same procedure:
+Each comment begins with this marker:
 
-1. Before posting, a crash leaves pending work and its frozen report.
-2. After posting but before recording the ID, a retry finds the marker and reuses the comment.
-3. During minimization, a retry skips already minimized comments and completes the remaining work.
-4. After remote success but before database commit, a retry repeats reconciliation and records the same result.
+```text
+<!-- statedb-report:STACK:GENERATION:UPDATE -->
+```
 
-GitHub provides no transaction shared with PostgreSQL or idempotency key for comment creation.
-A lost response can temporarily leave two visible reports. Recovery converges after GitHub reads expose the completed writes.
-A permanent permission failure or exhausted retry budget requires operator action. The worker never reports that partial cleanup succeeded.
-Human deletion of a marker comment can cause recreation during a retry. Human minimization is respected.
-Changing the registered App identity does not authorize the new bot to claim the previous bot's comments.
+The publisher trusts a marker only on a comment by the registered App's bot on
+the verified PR. A replacement App's bot therefore cannot claim earlier reports.
+Before posting, the publisher reads the complete comment list, up to 20 pages of
+100 comments; a longer or incomplete list fails without posting, because a
+partial search is not evidence that no report exists.
 
-## GitHub API and permissions
+If a comment for this run exists, the publisher reuses it unchanged. Otherwise it
+first confirms through `viewerCanMinimize` that it can collapse every earlier
+report, creates the new comment, and then minimizes the earlier reports with the
+`OUTDATED` classifier. The highest generation stays current, so a late older
+run becomes collapsed history at once, and duplicate markers resolve to one
+current comment by node ID. Comment bodies are never edited or deleted.
 
-The App requests `pull_requests: write`; commit-status permission is no longer requested.
-[GitHub REST documentation](https://docs.github.com/en/rest/issues/comments#create-an-issue-comment) explicitly permits installation tokens with this permission to create PR comments.
-[GitHub GraphQL documentation](https://docs.github.com/en/graphql/reference/issues#minimizecomment) defines `minimizeComment`, `subjectId`, and the minimization result.
-The comment's `viewerCanMinimize` field provides a runtime permission check before another report is posted.
-[The MCP servers workflow](https://github.com/modelcontextprotocol/servers/blob/main/.github/workflows/readme-pr-check.yml) demonstrates minimization with only `pull-requests: write`.
-GitHub does not publish a separate mutation-to-App-permission matrix. The runtime capability check is authoritative for each comment.
-No comment body is updated or deleted. The documented [OUTDATED classifier](https://docs.github.com/en/graphql/reference/meta#reportedcontentclassifiers) preserves the report as collapsed history.
+Retries repeat the same procedure, which makes each crash point recoverable:
+
+1. Before posting, the row is still pending with its frozen report.
+2. After posting but before recording the ID, the retry finds the marker and
+   reuses the comment.
+3. During minimization, the retry skips comments already minimized.
+4. After remote success but before the database commit, the retry reconciles
+   again and records the same result.
+
+GitHub offers no transaction shared with PostgreSQL and no idempotency key for
+comment creation, so a lost response can briefly leave two visible reports until
+GitHub's reads reflect the earlier write. Deleting a marker comment by hand
+while its delivery is still pending can cause it to be recreated; a comment a
+human minimized stays minimized. A permanent permission failure or an exhausted
+budget can leave minimization incomplete and needs operator action.
+
+## Report content and secrets
+
+`RunChangeDeriver` supplies the same resource changes as the console
+([Console](console-ux.md#change-interpretation)). `ChangeReportDeriver` adds
+summaries, diagnostics, sanitization, and content limits, and
+`MarkdownReportRenderer` formats the result and states what it omitted.
+
+Secrets are redacted by `SecretSentinel` before rendering. Every state-derived
+string is untrusted, since URNs and property paths carry names chosen by program
+authors and providers. `ReportText` makes each string safe to carry by removing
+invisible and direction-changing characters, collapsing it to one line, and
+bounding its length. Escaping and mention suppression are format-specific and
+belong to `Markdown`, so the JSON form of the report keeps the real values.
+
+`GET /api/updates/{updateId}/report` serves the same report to a reader of the
+stack, as `format=json` (the sanitized model) or `format=markdown`.
 
 ## Operations
 
-Set `statedb.reports.public-base-url` to the public application URL, including a deployment path prefix when applicable.
-The URL must use HTTP or HTTPS and contain no credentials, query, or fragment.
-Missing or invalid configuration fails the report with a clear reason. GitHub callbacks never establish the public host.
+The worker polls every five seconds and processes at most 50 due rows per tick.
+Settled rows expire after 30 days, at most 50 per tick. Retention keeps running
+while reports are disabled; pending rows pause and no new rows are enqueued.
+GitHub keeps the comments after local rows expire.
 
-Inspect a report by its indexed update identifier:
+Structured logs carry `delivery_id`, `update_id`, `stack_id`, and `pr_number`.
+Metrics under `statedb.reports` cover queue depth, attempts, deliveries,
+failures, and delivery latency. Queue depth is capped at 10,000, so that value
+means at least that many pending reports.
+
+Inspect a report by update ID:
 
 ```sql
 SELECT id, state, attempts, next_attempt_at, target_pr_number, external_id, last_error
 FROM report_deliveries WHERE update_id = :update_id;
 ```
 
-Structured delivery logs include `delivery_id`, `update_id`, `stack_id`, and `pr_number`.
-Micrometer exposes `statedb.reports.queue.depth`, `attempts`, `delivered`, `failures`, and `delivery.latency` under the same prefix.
-Queue depth is sampled after each enabled tick and capped at 10,000 to bound query cost. A value of 10,000 means at least that many pending reports.
-Counters measure observed attempts and outcomes, not an exactly-once accounting ledger across database rollbacks.
-
-Settled rows expire after 30 days. Each tick deletes at most 50 rows through the partial `(settled_at, id)` index.
-Retention also runs while publication is disabled. Disabled publication pauses existing pending rows and prevents new enqueue calls.
-The queue-age limit applies when publication resumes. GitHub retains the comment history after local queue retention.
-Handshake cleanup uses its expiry index when a registration or connection starts. Disconnect uses the organization index.
-
-After correcting a terminal failure, retry its retained row:
+After fixing the cause of a terminal failure, retry the retained row. The frozen
+content makes this safe; match the interval to `statedb.reports.max-age`:
 
 ```sql
 UPDATE report_deliveries
@@ -149,14 +195,7 @@ SET state = 'pending', attempts = 0, settled_at = NULL, last_error = NULL,
 WHERE id = :delivery_id AND state = 'failed' AND created_at > now() - interval '7 days';
 ```
 
-The default seven-day predicate matches the queue-age limit. Use the configured limit if it differs.
-Retained frozen content makes this retry safe. Do not recreate expired queue rows from historical updates.
-
-## Verification scope
-
-HTTP test sources cover immutable bodies, lost responses, duplicate markers, delayed runs, permissions, pagination limits, and error classification.
-Database test sources cover terminal entry points, concurrent workers, frozen targets, retention, and terminal failures.
-Authorization test sources also cover installation spoofing, callback replay, changed membership, disconnect, PKCE, and OAuth secret encryption.
-Existing report-formatting and hostile-content tests remain.
-This revision was inspected statically. Tests, builds, native checks, CLI smoke tests, and schema generation were skipped at the user's request.
-The schema snapshot was updated manually and still requires comparison with `./dev schema` in a later verification pass.
+The implementation lives in [persistence/vcs](../modules/persistence/src/main/java/app/statedb/persistence/vcs/)
+and [vcs](../modules/vcs/src/main/java/app/statedb/vcs/). Tests cover frozen
+content, lost responses, duplicate markers, callback replay, installation
+spoofing, disconnection, permissions, and secret redaction.

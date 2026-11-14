@@ -3,9 +3,9 @@ title: Quickstart
 description: Run statedb locally with Docker Compose and connect the Pulumi CLI in a few minutes.
 ---
 
-The fastest way to evaluate statedb is to run it locally with Docker Compose,
-point a real Pulumi CLI at it, and watch a stack appear in the console. You need
-Docker and the Pulumi CLI, and about five minutes.
+Run statedb locally with Docker Compose, point a real Pulumi CLI at it, and
+watch a stack appear in the console. You need Docker and the Pulumi CLI, and
+about five minutes.
 
 This is an evaluation setup. It uses a password sign-in instead of an identity
 provider and keeps everything on your machine, so it is not a template for a
@@ -14,7 +14,7 @@ real deployment. When you are ready for that, see
 
 ## Start statedb
 
-Grab the example stack and bring it up:
+Download the example stack and start it:
 
 ```sh
 curl -O https://raw.githubusercontent.com/state-db/statedb/main/examples/compose.yml
@@ -37,8 +37,7 @@ as soon as one is enabled.
 
 ## Connect the CLI
 
-In another terminal, log in against the local backend. The `/pulumi` suffix
-matters, because that's the path the Pulumi API is mounted on:
+In another terminal, log in against the local backend. The `/pulumi` suffix is required because the Pulumi API is mounted on that path:
 
 ```sh
 pulumi login http://localhost:8080/pulumi
@@ -58,8 +57,7 @@ resources it planned.
 
 ## Try the console
 
-A single preview makes for a thin console. To see it with real history, run a
-few more commands against the stack: `pulumi up`, a change, another `pulumi up`,
+To see more in the console, run a few more commands against the stack: `pulumi up`, a change, another `pulumi up`,
 then `pulumi destroy`. Each one shows up under the stack's activity, with its
 resource changes, duration, and result.
 
@@ -79,8 +77,7 @@ starts where you left off. Add `-v` to delete the data too.
 ## Next steps
 
 For a real deployment, [choose an installation](/docs/install/). If you have
-stacks on another backend, [migrating one](/docs/migration/) is the natural next
-step, and the free tier covers ten of them.
+stacks on another backend, [migrate one](/docs/migration/) next.
 
 Building from source is only necessary if you intend to change statedb itself;
 the repository's `CONTRIBUTING.md` covers that workflow.

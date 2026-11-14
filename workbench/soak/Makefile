@@ -41,7 +41,7 @@ SOAK_MODE            ?= cycle
 SOAK_BURST_STACKS    ?= $(SOAK_STACKS)
 SOAK_BURST_ROUNDS    ?= 0
 
-## Pass-through for the app's JDBC insert-batching flags; see design/load-resilience.md §3.
+## Pass-through for the app's JDBC insert-batching flags; see design/load-resilience.md.
 SOAK_DB_REWRITE_BATCHED_INSERTS ?= true
 SOAK_DB_INSERT_BATCH_SIZE       ?= 50
 

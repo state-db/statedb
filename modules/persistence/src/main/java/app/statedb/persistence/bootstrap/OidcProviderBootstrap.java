@@ -16,8 +16,8 @@ import org.jboss.logging.Logger;
  * <p>Env wins on conflict: re-running with a rotated {@code CLIENT_SECRET} (or a changed issuer /
  * client id) updates the existing row in place and re-enables it. {@code scopes} are left to the
  * column default on insert and untouched on update, so an operator who tuned them via SQL keeps
- * their values across redeploys. Additional providers are added at runtime through the admin API (a
- * later slice); this only manages the single bootstrap row keyed by {@code name}.
+ * their values across redeploys. Additional providers are added at runtime through the admin API;
+ * this only manages the single bootstrap row keyed by {@code name}.
  *
  * <p>Concurrency mirrors {@link BootstrapProvisioner}: serialized cluster-wide by {@link
  * AdvisoryLock#OIDC_PROVIDER_BOOTSTRAP_KEY}, with a single {@code INSERT ... ON CONFLICT} so the

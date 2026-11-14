@@ -4,8 +4,8 @@ description: Manage organizations, identity providers, users, tokens, locks, and
 ---
 
 The console inspects state and administers the service. It does not deploy
-anything. The Pulumi CLI remains the only thing that changes cloud resources,
-and nothing in these screens can start an update.
+anything: only the Pulumi CLI changes cloud resources, and nothing in these
+screens can start an update.
 
 The **Manage** group in the sidebar is visible to site administrators.
 Organization owners see a narrower version of it, covering members and service
@@ -22,7 +22,7 @@ and creation date.
 ![The Organizations screen in the statedb console](/screens/console-organizations.jpg)
 
 Selecting the member count opens role management for that organization. statedb
-will not let you remove the last owner, and an organization can only be deleted
+does not let you remove the last owner, and an organization can only be deleted
 once all its stacks are gone.
 
 Removing someone from an organization is how you revoke their access; their
@@ -93,14 +93,12 @@ that process is genuinely gone or stuck.
 
 Compaction folds journal entries into a new snapshot in the background. The
 table lists pending, active, completed, and failed jobs; a failed job shows its
-last error and retry count. Compaction never blocks the CLI, so jobs sitting in
-the queue are not a reason to hold off an update.
+last error and retry count. Compaction does not block the CLI, so queued jobs are no reason to delay an update.
 
 ## Personal CLI tokens
 
 **Tokens** creates a personal CLI token for your own use. It lasts 24 hours and
-carries your access, which makes it appropriate for a laptop and wrong for a
-pipeline. Use a service account for anything unattended.
+carries your access, which suits a laptop but not a pipeline. Use a service account for anything unattended.
 
 The page gives you the three commands to run:
 

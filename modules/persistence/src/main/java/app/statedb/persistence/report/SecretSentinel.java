@@ -12,8 +12,7 @@ import java.util.Set;
  *
  * <p>Pinned against Pulumi SDK v3.259.0 {@code sdk/go/common/resource/sig/sig.go} (re-exported from
  * {@code properties.go}) and against the recorded preview fixture under {@code
- * tools/pulumi/recorder/fixtures/by-command/04-preview/}. See "The secret sentinel" in {@code
- * design/pr-enrichment.md}.
+ * tools/pulumi/recorder/fixtures/by-command/04-preview/}.
  *
  * <p><b>Detection is structural, never a property-name heuristic.</b> A property called {@code
  * password} holding a plain string is not a secret; a property called {@code length} holding a

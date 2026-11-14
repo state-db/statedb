@@ -3,10 +3,9 @@ title: Pulumi CLI compatibility
 description: How statedb tests its wire protocol and proves state survives failure.
 ---
 
-A state backend cannot be approximately compatible. Either the unmodified Pulumi
-CLI works against statedb or it doesn't, so the repository tests that claim at
-four levels: three covering the normal workflow, and one dedicated to the
-failures most likely to damage state.
+The unmodified Pulumi CLI either works against statedb or it does not. The
+repository tests that claim at four levels: three cover the normal workflow, and
+one covers the failures most likely to damage state.
 
 ## Replaying recorded traffic
 
@@ -15,14 +14,12 @@ covering stack operations, updates, tags, history, rename, export, and import.
 
 Responses have to match the recording byte for byte. The comparison ignores only
 an explicit list of volatile fields such as timestamps and generated
-identifiers, which keeps "we changed the protocol" from ever passing as "the
-timestamp moved".
+identifiers, so a protocol change cannot pass as a timestamp change.
 
 ## Verifying every checkpoint
 
 Assembled checkpoints are handed to Pulumi's own snapshot integrity verifier.
-This is the check that matters most: it means stored state is state the CLI
-itself would agree to load, and it catches invalid resource relationships that a
+This check means stored state is state the CLI itself would agree to load, and it catches invalid resource relationships that a
 byte comparison would happily accept.
 
 ## Running the real CLI
@@ -33,12 +30,11 @@ The smoke tests drive an unmodified CLI against statedb in Docker, across:
 - previews and updates
 - stack references and secret masking
 - tags, history, and rename
-- unsupported endpoints, which must answer with a clear `501` rather than
-  failing in some more creative way
+- unsupported endpoints, which must answer with a clear `501`
 
 ## Injecting failures
 
-The last tier assumes something has already gone wrong and asks what survives.
+The last tier assumes a failure has already happened and checks what survives.
 
 | Scenario | Required outcome |
 | --- | --- |
@@ -62,5 +58,4 @@ between. Before adopting a different CLI version, read its release notes and run
 
 ## OpenTofu
 
-Not supported. Its HTTP backend protocol is a planned addition, and nothing in
-statedb implements it today.
+Not supported. statedb does not implement the OpenTofu HTTP backend protocol.

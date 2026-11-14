@@ -23,8 +23,8 @@ import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
 
 /**
- * The sanitization contract of {@code design/pr-enrichment.md} Invariant 2, tested as the security
- * surface it is rather than as renderer polish.
+ * The sanitization contract of {@code design/pr-enrichment.md}, tested as the security surface it
+ * is rather than as renderer polish.
  *
  * <p>No Quarkus context: every class under test is pure, and keeping these tests out of the
  * container is the point — they are the ones that must be cheap enough to keep adding cases to.

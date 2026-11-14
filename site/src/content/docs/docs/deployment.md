@@ -10,10 +10,9 @@ everything users touch, meaning the Pulumi API and the console, while port
 
 ## Prepare the database
 
-Use PostgreSQL 14 or newer with LZ4 support. Both the official images and the
-major managed services include it, and statedb verifies the capability before
-applying any migration, so startup fails with an explicit error rather than
-producing a schema it cannot use.
+Use PostgreSQL 14 or newer with LZ4 support. The official images and the major
+managed services include it. statedb verifies the capability before applying any
+migration and fails at startup with an explicit error if it is missing.
 
 Give statedb its own database and login role. It needs neither superuser rights
 nor ownership of the database itself:
@@ -47,7 +46,7 @@ same value. If replicas disagree, a user's session stops being readable the
 moment their next request lands on a different pod.
 
 On a fresh deployment you can also have statedb create the first organization
-for you. Setting `STATEDB_BOOTSTRAP_ORG_NAME` opts into this;
+for you. Set `STATEDB_BOOTSTRAP_ORG_NAME` to enable this;
 `STATEDB_BOOTSTRAP_ORG_DISPLAY_NAME` is optional and defaults to the name. Both
 are ignored once the organization exists.
 
@@ -78,10 +77,10 @@ manual database insert on a new deployment:
 | `STATEDB_OIDC_DEFAULT_PROVIDER` | Provider used by the default sign-in button |
 | `STATEDB_ADMIN_SUBJECTS` | Comma-separated issuer/subject pairs for site administrators |
 
-`STATEDB_OIDC_BOOTSTRAP_NAME` is the switch: set it and the other three become
-required, so a half-configured provider fails at startup instead of at first
-login. These values are re-applied at every start, which makes rotating the
-client secret a matter of changing the environment and restarting. The console
+Setting `STATEDB_OIDC_BOOTSTRAP_NAME` makes the other three required, so a
+half-configured provider fails at startup instead of at first login. These
+values are re-applied at every start, so rotating the client secret means
+changing the environment and restarting. The console
 shows this provider as environment-managed and read-only.
 
 Any further providers you add from **Manage → Providers** are stored in
@@ -93,8 +92,8 @@ Recovery access is off unless you set `STATEDB_LOCAL_GLASS_PASSWORD_HASH` to a
 bcrypt hash in Modular Crypt Format. It exists for one situation: your identity
 provider is down and you need to get back in.
 
-Two things keep it contained. It accepts loopback connections only, and it turns
-itself off entirely whenever an enabled OIDC provider exists. That second
+It accepts loopback connections only, and it turns itself off whenever an
+enabled OIDC provider exists. That second
 condition is checked both at sign-in and on every session restore, so restoring
 OIDC service also ends any recovery session already open.
 
@@ -124,11 +123,10 @@ minutes, and a tighter deadline will kill tasks that were about to succeed.
 ## Running several replicas
 
 Update leases and session data both live in PostgreSQL, so any healthy replica
-can serve any request. The requirements are just that every replica shares a
-database and a session-encryption secret.
+can serve any request. Every replica must share a database and a session-encryption secret.
 
-Migrations are safe under this model too. Flyway takes a database lock, one
-replica applies the schema change, and the rest wait and then verify the result.
+Flyway takes a database lock during migration: one replica applies the schema
+change, and the rest wait and then verify the result.
 
 ## Sizing for concurrent deploys
 
@@ -150,15 +148,13 @@ back to one statement per row.
 
 ## Upgrades
 
-Replacing the application image is the entire upgrade procedure. Every Flyway
-migration ships inside the image and runs at startup, so there is no separate
-migration job to sequence.
+To upgrade, replace the application image. Every Flyway migration ships inside
+the image and runs at startup, so there is no separate migration job.
 
 Keep the old tasks serving until a new one reports ready, and enable automatic
 rollback for services that never reach a steady state. Allow at least 10 seconds
 between `SIGTERM` and `SIGKILL` so in-flight requests can finish. While old and
-new tasks overlap, only expand-only migrations are safe. That constraint is on
-the migrations themselves, not on your deployment tooling.
+new tasks overlap, only expand-only migrations are safe. That constraint comes from the migrations, not from your deployment tooling.
 
 ## Backups
 
@@ -167,7 +163,7 @@ organizations, policies, and tokens. Your existing backup process therefore
 already covers statedb, whether that means managed snapshots, WAL archiving, or
 `pg_dump`.
 
-Test the restore rather than assuming it. Restore into a separate database,
+Test the restore. Restore into a separate database,
 start the same statedb version against it, and export a stack with the Pulumi
 CLI. That exercises the whole path from stored rows back to a checkpoint the CLI
 accepts.

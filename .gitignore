@@ -33,4 +33,3 @@ workbench/soak/artifacts/
 /artifacts/
 .scratch/
 .cache/
-design/pulumi-state-testing-roadmap.md

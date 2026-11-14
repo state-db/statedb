@@ -1,423 +1,225 @@
-# Pulumi State Lifecycle: CLI, Journal, Events, and DB State
+# Pulumi state lifecycle
 
-This note captures how Pulumi CLI state moves through state-db, based on the
-workbench run against `workbench/pulumi` and the current schema/code. It is a
-companion to [`db-schema.md`](db-schema.md) and
-[`slice-17.5-stack-assembler.md`](slice-17.5-stack-assembler.md): those docs
-define the model; this one explains the operational story.
+Pulumi sends state journals and engine events through separate endpoints. The
+journal is the source of truth for reconstructing a deployment; events describe
+a run to people. `stack_updates` frames each operation and links both streams to it.
 
-## Mental Model
+The implementation lives in the `update`, `lock`, `journal`, `events`, and `stack`
+packages under [persistence](../modules/persistence/src/main/java/app/statedb/persistence/).
+Pulumi routes live in [pulumi-api](../modules/pulumi-api/src/main/java/app/statedb/pulumiapi/).
 
-Pulumi sends three related streams of information, and state-db maintains a few
-derived control tables around them:
+## The stack_state row lock
 
-| Table | Meaning | Used for |
-|---|---|---|
-| `stack_updates` | One row per Pulumi run: preview, update, refresh, destroy, etc. | History list, status, timestamps, journal bounds |
-| `journal_entries` | Append-only state journal for a run | Reconstructing `GET /export` state |
-| `update_events` | Pulumi engine event stream | UI timeline, preview/change display, diagnostics |
-| `stack_state` | One small mutable head row per stack | Current journal sequence, active snapshot pointer, per-stack serialization lock |
-| `snapshots` | Compacted DeploymentV3 checkpoints | Fast `/export` baseline after compaction |
-| `compaction_jobs` | Async worker queue | Multi-pod safe snapshot generation |
+`stack_state` holds one mutable row per stack: the next journal sequence, the
+current snapshot pointer, and the snapshot version. It is also the per-stack
+serialization point. Lease acquisition, journal appends, completion, compaction,
+import, rename, and stack deletion all take `SELECT ... FOR UPDATE` on this row
+before they change sequence numbers, snapshot pointers, or the active update.
+This keeps two appenders from allocating overlapping sequences, keeps compaction
+from snapshotting while an append or a lease acquisition is in flight, and makes
+completion read its journal boundary after every in-flight batch has committed.
 
-The key split is:
+Paths that also touch the lease row lock `stack_state` first and `stack_locks`
+second. `JournalAppender` and `StackUpdateCompleter` share that order, so they
+cannot deadlock.
 
-- `journal_entries` is the source of truth for checkpoint reconstruction.
-- `update_events` is the human-facing event/progress stream.
-- `stack_updates` frames each operation and ties those streams together.
-- `stack_state` is not the checkpoint itself; it is the current head pointer
-  for one stack.
+Engine events take no `stack_state` lock. They carry no ordering invariant
+against state, so event writes and archiving never contend with updates or compaction.
 
-## What the Workbench Created
+## Start and lease
 
-After `pulumi preview`, `pulumi up --skip-preview`, and `pulumi refresh
---skip-preview`, the workbench stack had three `stack_updates` rows:
+The CLI first creates an update record, then starts that update to acquire its
+lease. These are separate requests, and an update record alone does not reserve
+the stack. A partial unique index on `client_request_id` makes a retried create
+return the existing record.
 
-| Version | Kind | Status | Journal range | Meaning |
-|---:|---|---|---|---|
-| 1 | `preview` | `succeeded` | none, `end_journal_seq=0` | Planned six creates |
-| 2 | `update` | `succeeded` | `1..16` | Created the stack/provider/resources |
-| 3 | `refresh` | `succeeded` | `18..33` | Re-read current provider state, no changes |
+`StackLockAcquirer` locks `stack_state`, then takes the lease with one
+`INSERT ... ON CONFLICT (stack_id) DO UPDATE ... WHERE expires_at < now()`
+statement. A live lease leaves the result empty and the caller returns 409. An
+expired lease is replaced in place, and the same transaction marks the displaced
+active update as failed and sets `active_update_id` to the new update.
 
-The stack's `stack_state.journal_seq` advanced to `34`, meaning the next
-server-assigned journal sequence starts there. (At the time of this workbench
-run, `stack_state` still carried a vestigial `cache_valid` read cache; V014
-dropped it — snapshot compaction via `base_snapshot_id` is the read
-optimization.)
+Before it takes the lease, the acquirer waits up to `statedb.lock.compaction-wait`
+(30 seconds by default) for a queued compaction job to finish, so back-to-back
+updates cannot postpone compaction indefinitely. Correctness does not depend on
+this wait; the worker refuses to snapshot during an update.
 
-## Stack State, Snapshots, and the Head Pointer
+The raw lease token goes to the CLI once, and PostgreSQL stores only its SHA-256
+hash. Lease-scoped requests use `Authorization: update-token <token>`; ordinary
+requests use an API token.
 
-`stack_state` has exactly one row per stack. It is the mutable control row that
-answers, "where is the current state head for this stack?"
+The initial lease lasts `statedb.lock.lease-ttl` (five minutes by default), which
+matches the CLI's own assumption: it renews after two and a half minutes whatever
+expiry the server returns. Renewal rotates the token and clamps the requested
+duration to between 30 seconds and the lease TTL. It never extends past
+`max_expires_at`, which acquisition sets from `statedb.lock.max-lease-lifetime`
+(24 hours by default). The lease lives in the database, so it does not depend on
+a particular replica.
 
-Important columns:
+## Append a journal batch
 
-| Column | Meaning |
-|---|---|
-| `stack_id` | The stack this head row belongs to |
-| `journal_seq` | The next stack-global journal sequence number to allocate |
-| `base_snapshot_id` | FK to `snapshots.id`, or `NULL` before first compaction |
-| `base_snapshot_version` | Monotonic snapshot version for the stack |
-| `journal_entries_since_compaction` | Counter reset after compaction |
+The capabilities endpoint advertises `delta-checkpoint-updates` version 1, and
+the CLI then requests `journalVersion: 1` when it starts an update. Journaling is
+required: the server rejects recognized CLI versions older than 3.225.0 before it
+creates an update, and the legacy checkpoint, checkpoint-delta, and
+verbatim-checkpoint endpoints return 501.
 
-The table is also the per-stack serialization point. Journal appends, update
-completion, and compaction all lock the same `stack_state` row before changing
-sequence numbers or snapshot pointers. That keeps these races safe across pods:
-
-- two journal appenders cannot allocate overlapping `sequence_id` ranges,
-- compaction cannot snapshot while a journal append is advancing the stack,
-- `/complete` cannot mark the update boundary while compaction is moving the
-  base snapshot pointer.
-
-`snapshots` stores the compacted checkpoint JSON. A row contains:
-
-| Column | Meaning |
-|---|---|
-| `id` | Snapshot UUID; this is what `stack_state.base_snapshot_id` points at |
-| `stack_id` | Owning stack |
-| `version` | Stack-local snapshot version |
-| `checkpoint` | The compacted DeploymentV3 deployment JSON |
-| `compacted_from_journal_seq` | Highest journal sequence included in the snapshot |
-
-So a workbench value like:
-
-```text
-stack_state.base_snapshot_id = ac110002-9e71-114f-819e-7683aef8001f
-```
-
-means:
-
-```sql
-SELECT *
-FROM snapshots
-WHERE id = 'ac110002-9e71-114f-819e-7683aef8001f';
-```
-
-That snapshot row is the baseline for future `/export` calls. It is not stored
-inside `stack_state`; `stack_state` only points to it.
-
-## Update Start and Completion
-
-When Pulumi starts a run, state-db inserts a `stack_updates` row:
-
-- `kind`: `preview`, `update`, `refresh`, `destroy`, etc.
-- `status`: starts as `in-progress`.
-- `version`: monotonically increasing per stack.
-- `config`, `metadata`, `options`, `description`, `runtime`, `pulumi_version`,
-  `message`, `tags`: request metadata from the CLI.
-- `started_by_*`: durable attribution to user/token.
-
-For journaling runs, the first journal PATCH captures:
-
-- `start_journal_seq`: the current `stack_state.journal_seq`.
-- each row's `sequence_id = start_journal_seq + wire_sequence_id`.
-
-On complete, state-db:
-
-- locks `stack_state` to serialize against in-flight journal appends,
-- records `end_journal_seq`,
-- moves `status` to `succeeded` or `failed`,
-- deletes the stack lock,
-- clears `stacks.active_update_id`,
-- increments `stacks.version` for non-preview operations.
-
-## Journal Entries
-
-Pulumi sends journal batches to:
+The CLI sends batches to:
 
 ```text
 PATCH /pulumi/api/stacks/{org}/{project}/{stack}/update/{updateID}/journalentries
 ```
 
-The wire field `sequenceID` is stored as `wire_sequence_id`. It is unique only
-within a single Pulumi update and resets on each run. state-db derives the
-stack-global `sequence_id` by adding the update's `start_journal_seq`.
+`JournalAppender` validates the whole batch before writing, locks `stack_state`,
+and then revalidates the lease inside the write transaction. The HTTP filter has
+already checked the token, but a concurrent completion or cancellation could
+delete the lease after that check. Revalidation locks the lease row `FOR SHARE`
+until commit and compares the expiry against `clock_timestamp()`, so no journal
+entry can land past the update's recorded end. Appenders that share a lease do
+not block each other on the share lock.
 
-This means:
+Each wire sequence maps to a stack-global sequence through a fixed per-update
+offset, so arrival order does not determine replay order. A batch commits as one
+transaction: a crash never leaves part of a batch behind, and a retry of a
+committed batch is a no-op. A retry whose content differs returns 409. Dry runs
+cannot append journal entries. [Database model](db-schema.md#journaling) gives the
+sequence formula and the journal entry kinds.
 
-```text
-wire_sequence_id = Pulumi's per-update entry number
-sequence_id      = state-db replay order for the whole stack
-```
+## Complete or cancel
 
-Pulumi never knows `sequence_id`; it only sends `sequenceID`. The DB uses
-`UNIQUE(update_id, wire_sequence_id)` to catch duplicate retries.
+`StackUpdateCompleter` takes the same `stack_state` lock as journal writes. In one
+transaction it records the terminal status and `end_journal_seq`, deletes the
+lease, clears `active_update_id`, and, for applied updates, increments
+`stacks.version`. The same transaction queues a compaction job and any eligible
+GitHub report, so a rollback discards all of these together. If a concurrent
+cancellation already ended the update, completion still releases the lease but
+leaves the status and version alone.
 
-### Journal Kinds Seen in the Workbench
+Graceful cancellation and forced unlock run their own transactions. They delete
+the lease, mark an in-progress update `cancelled`, and clear `active_update_id`
+without discarding committed journal entries. A later export can therefore
+contain pending operations from the interrupted run.
 
-The initial `up` wrote:
+Nothing sweeps abandoned update records periodically. Takeover fails the update
+that held the expired lease, but a record created before lease acquisition can
+stay `in-progress` if its client disappears.
 
-| Kind | Meaning | Workbench use |
-|---:|---|---|
-| 0 | Begin | Start creating a resource operation |
-| 1 | Success | Persist the resulting resource state |
-| 4 | Outputs | Replace stack resource state with final outputs |
-| 6 | SecretsProvider | Record service secrets provider |
-
-The later `refresh` wrote:
-
-| Kind | Meaning | Workbench use |
-|---:|---|---|
-| 0 | Begin | Empty refresh placeholders, payload `{}` |
-| 3 | RefreshSuccess | Replace existing base resources by index |
-| 6 | SecretsProvider | Re-record service secrets provider |
-| 7 | RebuiltBaseState | Promote replayed state to the in-memory base |
-
-Kind `5` (`Write`) is implemented and tested but was not observed in the live
-workbench. It carries `payload.newSnapshot` and replaces the working base
-deployment wholesale during replay.
-
-## The `up` Story
-
-The `up` journal started from an empty stack:
-
-1. Kind `6`: set the service secrets provider.
-2. Begin/success for the logical stack resource.
-3. Begin/success for the default `random` provider.
-4. Begin/success for `randomPet` `pet`.
-5. Begin/success for `randomString` `word`.
-6. Begin/success for `randomInteger` `pin`.
-7. Begin/success for `randomPassword` `password`.
-8. Begin/success for `randomId` `token`.
-9. Kind `4`: replace the stack resource with final stack outputs.
-
-Every successful resource row carries a full `payload.state` JSON object. That
-is the data `GET /export` later collects into `deployment.resources`.
-
-## The `refresh` Story
-
-After `up`, `GET /export` returns a `deployment.resources` array. In the
-workbench it was:
-
-```text
-resources[0] = stack resource
-resources[1] = random provider
-resources[2] = pet
-resources[3] = word
-resources[4] = pin
-resources[5] = password
-resources[6] = token
-```
-
-During refresh, Pulumi refers back to that exported resource array using
-`removeOld`. For example:
-
-```text
-remove_old=2 -> replace deployment.resources[2], the pet
-remove_old=6 -> replace deployment.resources[6], the token
-```
-
-These are not journal row numbers. They are indexes into the base checkpoint's
-`deployment.resources` array as seen by the Pulumi CLI.
-
-The refresh emitted duplicate resource URNs in `journal_entries`, one state row
-from the original `up` and one from `refresh`. That is expected because the
-journal is an event log. `StackAssembler` reduces those entries back to one
-current resource per resource slot.
-
-## Export and State Reconstruction
-
-Pulumi loads stack state through:
+## Export
 
 ```text
 GET /pulumi/api/stacks/{org}/{project}/{stack}/export
 ```
 
-The current implementation:
+`StackAssembler` loads the current base snapshot, or an empty deployment before
+the first snapshot, and streams journal rows after its boundary in `sequence_id`
+order. It reads the pointer and the snapshot in one statement so a concurrent
+pruner cannot leave the pointer resolving to nothing. The export uses deployment
+version 3, or version 4 with a feature list when replay finds features such as
+hooks or views.
 
-1. resolves `(org, project, stack)` to `stack_id`,
-2. calls `StackAssembler.assemble(stackId)`,
-3. starts from `snapshots.checkpoint` when `stack_state.base_snapshot_id` is
-   set, or an empty deployment if there is no base snapshot yet,
-4. streams `journal_entries` ordered by `sequence_id`, starting after the
-   snapshot boundary,
-5. applies each entry through `JournalReplayer`,
-6. returns:
+`JournalReplayer` ports Pulumi's reducer rules and does not deduplicate resources
+by URN. A refresh, for example, writes a second state row for an existing URN,
+and the reducer replaces the base resource at the referenced index instead of
+appending. At each update boundary the assembler materializes the deployment and
+starts a new reducer with it as the base, because operation IDs are scoped to one
+update.
 
-```json
-{
-  "version": 3,
-  "deployment": {
-    "secrets_providers": { "...": "..." },
-    "resources": [ "... current resources ..." ]
-  }
-}
-```
+A Begin entry with an `operation` payload records a pending operation. Success,
+Failure, and RefreshSuccess for the same operation ID remove it. Operations that
+remain unresolved appear in the exported `pending_operations` for CLI recovery.
 
-If there is no compacted snapshot yet, `stack_state.base_snapshot_id` is `NULL`
-and export replays the whole journal from sequence `0`. After compaction,
-export loads:
+The assembler reads journal rows as scalar projections rather than ORM entities,
+but the assembled deployment still lives in memory as a JSON tree. Export cost
+depends on both deployment size and replay length.
 
-```text
-base = snapshots.checkpoint
-baseSeq = snapshots.compacted_from_journal_seq
-tail = journal_entries where sequence_id > baseSeq
-```
+## Historical exports, import, and rename
 
-The same `StackAssembler` code path is used by `/export` and the compaction
-worker, so a compacted snapshot should be byte-equivalent to the state that
-`/export` would have returned immediately before compaction.
+`StackAssembler.assembleAt` reconstructs a completed applied version at its
+`end_journal_seq`. It picks the newest retained snapshot at or below that boundary
+and replays the remaining journal up to it, starting from the empty deployment
+when no snapshot qualifies.
 
-### How Duplicate URNs Are Avoided
+Position alone cannot choose the base. Import and rename install snapshots without
+adding journal entries, so a later lineage's snapshot can share the target's
+boundary. Those operations stamp `stack_updates.base_snapshot_version`, and the
+earliest stamp after the requested version fences the lookup: only older
+snapshot versions are candidates.
 
-The assembler does not deduplicate by URN. It replays Pulumi's reducer rules.
+Import and rename are lease-less server-side operations. Each locks the `stacks`
+and `stack_state` rows, refuses to run while `active_update_id` is set, installs a
+new base snapshot, and records an already-succeeded update of kind `import` or
+`rename`. Import accepts a version-3 deployment without feature flags and checks
+the envelope, not full resource-graph integrity. Rename rewrites the URNs and
+`service` secrets-provider state baked into the checkpoint, so decryption and the
+next update see the new stack identity.
 
-For an `up`:
+## Compaction and pruning
 
-- kind `1` Success appends `payload.state` into `newResources`.
+Compaction runs in `CompactionWorker`, outside the HTTP request path. Completion
+enqueues a job with an upsert against the partial unique index, which allows one
+pending or running job per stack. Workers poll every
+`statedb.compaction.poll-interval` (10 seconds) and claim jobs with
+`FOR UPDATE SKIP LOCKED`.
 
-When a new update starts:
+The worker locks `stack_state` and checks `stacks.active_update_id`. A snapshot
+taken mid-update would let replayed entries land ahead of the provider they
+reference, so while an update is active the worker returns the job to pending
+without spending a retry. Lease acquisition takes the same row lock, so no update
+can start between the check and the write. Otherwise the worker assembles the
+deployment through the same `StackAssembler` path as export, strips stack traces,
+writes a snapshot at the current `journal_seq`, and moves the base pointer in one
+transaction.
 
-- `StackAssembler` detects the update boundary,
-- materializes the prior replayer's deployment,
-- uses that as the next update's `base`.
+The worker flushes the new pointer before pruning; otherwise the bulk delete could
+trip the `stack_state` foreign key on the previous base. `SnapshotPruner` keeps:
 
-For a `refresh`:
+- the live base and every import or rename lineage snapshot,
+- the newest `statedb.compaction.prune.newest-snapshots` (10) snapshots,
+- an older rung once either budget is spent since the last kept rung:
+  `ladder-journal-spacing` (5,000 journal positions) or `ladder-update-spacing`
+  (50 distinct update boundaries).
 
-- kind `3` RefreshSuccess with `removeOld=N` stores
-  `toReplaceInSnapshot[N] = payload.state`.
-- final materialization iterates `base.resources` by index.
-- if a replacement exists for that index, it emits the replacement instead of
-  the old base resource.
+The two budgets bound the two costs of a historical export: rows replayed and
+whole-deployment rebuilds, which happen once per update boundary crossed. The walk
+starts from the oldest snapshot, so it reproduces the same rungs on every run.
+Setting `newest-snapshots` to 0 disables pruning; setting either spacing to 0
+disables that budget.
 
-Kind `7` then promotes the materialized deployment to the current in-memory
-base and clears transient replay maps. This is a replay optimization/semantic
-marker, not persisted compaction.
+A failed attempt returns the job to pending until `statedb.compaction.max-attempts`
+(3). A claim older than `statedb.compaction.claim-timeout` (5 minutes) returns to
+the queue, or fails once the job has used its attempts.
 
-## Pending Operations
+Journal rows are never pruned, so historical correctness does not depend on any
+derived snapshot. Lineage snapshots are the exception: they hold state that replay
+alone cannot recover, so pruning always keeps them.
 
-During ordered journal replay, each Begin entry records its non-null
-`payload.operation` object under the update-local operation ID. Replay does not
-filter that object by resource fields or operation type; it preserves the wire
-value for Pulumi compatibility. A Begin whose payload omits `operation` does not
-surface as pending.
-
-Terminal journal entries for the same operation remove it from that set:
-
-- kind `1`: Success
-- kind `2`: Failure
-- kind `3`: RefreshSuccess
-
-When replay materializes the checkpoint, any operations still in the set become
-`deployment.pending_operations`. Pending creates from a prior snapshot remain
-until the user explicitly resolves them, matching Pulumi's crash-recovery behavior.
-
-Refresh Begin entries in the workbench had payload `{}`, so they did not surface
-as pending operations.
-
-## Update Events
-
-Pulumi sends decoded event batches to:
+## Engine events
 
 ```text
 POST /pulumi/api/stacks/{org}/{project}/{stack}/update/{updateID}/events/batch
 ```
 
-These rows are observability data. They preserve the raw event payload and
-promote only:
+`EventBatchAppender` stores each event's sequence, kind, severity, and raw payload
+after revalidating the lease in its transaction. A duplicate sequence for the same
+update returns 409. Console history, resource changes, diagnostics, and reports
+read events through `UpdateEventReader`.
 
-- `sequence`
-- `kind`
-- diagnostic `severity`
+`EventArchiveFolder` folds a terminal update's events into one zstd archive after
+`statedb.events.archive.grace-period` (one hour), which leaves live console tails
+paging over rows. It locks only the `stack_updates` row it folds, with
+`SKIP LOCKED`. The fold checks that the archive holds every row before it deletes
+them, and `summary` rows stay in `update_events` for cheap history queries.
+`UpdateEventReader` reads both forms, and `EventArchiveFolder#unfold` restores
+rows transactionally. Archiving does not expire events or change their sequence
+numbers.
 
-Useful event kinds observed:
+## Verification
 
-| Event kind | Meaning |
-|---|---|
-| `prelude` | run setup/config |
-| `resourcePre` | Pulumi is about to act on a resource |
-| `resOutputs` | Pulumi has planned/current output metadata |
-| `summary` | final result and resource-change counts |
+The application suite tests sequence conflicts, replay, history, compaction,
+imports, renames, archives, and concurrency. The
+[real-CLI suite](../modules/pulumi-cli-smoke/README.md) adds crashes, lease
+renewal, concurrent updates, cancellation, failed deployments, and secrets
+durability.
 
-The workbench summaries were:
-
-```text
-preview: {"create": 6}
-update:  {"create": 6}
-refresh: {"same": 6}
-```
-
-For a console UI, `update_events` is the best source for a run timeline and
-preview/change rendering. It includes per-resource metadata:
-
-- `metadata.op`
-- `metadata.old`
-- `metadata.new`
-- `metadata.detailedDiff`
-- `summaryEvent.resourceChanges`
-
-By contrast, `journal_entries` is for reconstructing state and should not be
-treated as the UI event stream.
-
-## Snapshot Compaction
-
-Snapshot generation is asynchronous and does not run in the request path.
-`POST /complete` enqueues a compaction job after a completed update; the
-database queue coalesces bursts so each stack has at most one pending/running
-job.
-
-The worker:
-
-1. claims a `compaction_jobs` row with `FOR UPDATE SKIP LOCKED`,
-2. locks the stack's `stack_state` row,
-3. calls `StackAssembler.assemble(stackId)`, the same code used by `/export`,
-4. inserts a `snapshots` row with the assembled checkpoint and current
-   `stack_state.journal_seq`,
-5. updates `stack_state.base_snapshot_id` and `base_snapshot_version`,
-6. resets `journal_entries_since_compaction`,
-7. marks the job `completed`.
-
-`journal_entries` are not deleted by compaction today. They remain the detailed
-append-only history, but `/export` skips entries at or before
-`snapshots.compacted_from_journal_seq`. This keeps reads fast but does not yet
-bound table size.
-
-Journal pruning needs an explicit retention policy before it is safe to add.
-The key product question is whether state-db must preserve full historical
-reconstruction or only current-state export correctness. A likely policy is:
-
-- keep the latest one or two snapshots per stack,
-- delete `journal_entries` for that stack where
-  `sequence_id <= active_snapshot.compacted_from_journal_seq`,
-- preserve `stack_updates` metadata for the history list,
-- make the retention window/config explicit if operators need longer audit
-  history.
-
-## Practical Query Map
-
-History list:
-
-```sql
-SELECT version, kind, status, started_at, ended_at, start_journal_seq, end_journal_seq
-FROM stack_updates
-WHERE stack_id = :stack_id
-ORDER BY version;
-```
-
-Current-state journal tail:
-
-```sql
-SELECT *
-FROM journal_entries
-WHERE stack_id = :stack_id
-  AND sequence_id > :base_sequence
-ORDER BY sequence_id;
-```
-
-Active snapshot:
-
-```sql
-SELECT s.*
-FROM stack_state st
-JOIN snapshots s ON s.id = st.base_snapshot_id
-WHERE st.stack_id = :stack_id;
-```
-
-Run timeline:
-
-```sql
-SELECT sequence, kind, severity, payload
-FROM update_events
-WHERE update_id = :update_id
-ORDER BY sequence;
-```
+`./dev protocol` runs the real-CLI checks. State lifecycle changes also require
+`./dev quick` during iteration and `./dev check` before handoff.

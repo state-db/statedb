@@ -1,10 +1,9 @@
 # CI linkage metadata — captured shapes
 
-Regression evidence for `design/pr-enrichment.md` ("Linkage: what the CLI
-actually sends"). These files pin **which `metadata.environment` keys the
-Pulumi CLI sends, and when** — the input that pull-request enrichment resolves
-a PR from. They are not discovery material; the linkage rules were read from
-Pulumi source first and these confirm them.
+Regression evidence for `design/pr-enrichment.md`. These files pin which
+`metadata.environment` keys the Pulumi CLI sends, and when. This is the input
+that pull-request enrichment resolves a PR from. The linkage rules come from
+Pulumi source; these files confirm them.
 
 Only `POST /api/stacks/{org}/{project}/{stack}/preview` (and its
 `update`/`destroy`/`refresh` siblings) carries the metadata bag. The rest of
@@ -21,7 +20,7 @@ Captured with Pulumi CLI `v3.259.0`, the version pinned in
 | `preview-ci-escape-hatch.json` | `PULUMI_CI_SYSTEM` escape hatch | all seven `ci.*` keys, values passed through verbatim |
 
 `preview-local-no-ci.json` is a verbatim copy of
-`tools/pulumi/recorder/fixtures/by-command/04-preview/0006_POST_..._preview.json`
+`tools/pulumi/recorder/fixtures/by-command/04-preview/0006_POST_api_stacks_testorg_recorder-test_dev_preview.json`
 from the committed baseline capture. It is the negative control: the recorder
 container runs no CI and has no git repository at the project root, so the bag
 carries `exec.kind`, `runtime.name`, `stack.environments`, `updatePlan` and the
@@ -55,7 +54,7 @@ and produces:
 "ci.system":       "statedb-recorder"
 ```
 
-Three things this confirms, each of which the design depends on:
+This confirms three things the design depends on:
 
 1. The escape hatch works with **no CI present**, on an unmodified CLI, driven
    entirely by environment variables. That is what makes explicit PR
@@ -80,9 +79,8 @@ is a flag only — it carries no value.
 `git.head` differs from `ci.pr.headSHA` because Actions checks out a synthetic
 merge commit. Reproducing it needs a GitHub Actions runner and a repository
 with an open pull request; the recorder cannot fabricate it, and a hand-written
-file would be an assertion dressed as evidence. The design's claim about this
-shape rests on Pulumi source (`sdk/go/common/util/ciutil/`), which states it
-directly; see "Linkage: what the CLI actually sends" §3.
+file would not be captured evidence. The design's claim about this shape rests
+on Pulumi source (`sdk/go/common/util/ciutil/`).
 
 ## Reproducing
 

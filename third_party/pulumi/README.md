@@ -1,6 +1,6 @@
 # Pulumi license
 
-`LICENSE` is a verbatim copy of Pulumi's license file, vendored 2026-07-27
+`LICENSE` is a verbatim copy of Pulumi's license file, vendored
 from https://github.com/pulumi/pulumi/blob/master/LICENSE. It is the standard
 Apache License 2.0 text; Pulumi's repository ships it without a filled-in
 copyright line, which is why nothing in the file itself names Pulumi.

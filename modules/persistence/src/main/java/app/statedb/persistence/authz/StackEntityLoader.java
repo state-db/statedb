@@ -36,7 +36,7 @@ public class StackEntityLoader implements EntityLoader<StackRef> {
     }
     // Read-visibility boundary: a stack the principal cannot READ does not resolve — the denial
     // collapses to 404, not 403 (a 403 would confirm the hidden stack exists). This applies the
-    // same predicate as the list finders (design/stack-sharing.md §3/§9): non-members see nothing;
+    // same predicate as the list finders (design/stack-sharing.md): non-members see nothing;
     // guests see only granted stacks; members/viewers additionally lose private stacks unless
     // granted. 403 stays reserved for within-visible-scope denials on non-read actions.
     return readAuthorizer.visibleResource(ref.get(), principal);

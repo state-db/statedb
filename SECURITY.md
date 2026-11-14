@@ -2,11 +2,11 @@
 
 ## Reporting a vulnerability
 
-**Please do not open a public GitHub issue for security reports.**
+Do not open a public GitHub issue for security reports.
 
-Use **GitHub's private vulnerability reporting**: open the repository's *Security* tab and click *Report a vulnerability*. This routes the report privately to the maintainer.
+Use GitHub's private vulnerability reporting: open the repository's *Security* tab and click *Report a vulnerability*. The report goes privately to the maintainer.
 
-If you cannot use GitHub's private reporting for some reason, open a stub public issue saying "I would like to report a security issue privately" — do not include vulnerability details — and the maintainer will follow up with a private channel.
+If you cannot use GitHub's private reporting, open a public issue that says only "I would like to report a security issue privately", with no vulnerability details. The maintainer will follow up through a private channel.
 
 ## What to include
 
@@ -19,25 +19,25 @@ Where possible:
 
 ## Response
 
-state-db is a small project. The maintainer aims to acknowledge a report within **fourteen (14) days** of receipt and to provide a status update within thirty (30) days.
+The maintainer aims to acknowledge a report within 14 days of receipt and to provide a status update within 30 days.
 
-No formal service level agreement is offered. Disclosure timing will be coordinated with the reporter.
+No service level agreement is offered. Disclosure timing is coordinated with the reporter.
 
 ## Scope
 
-**In scope:** the current `main` branch, and any tagged release made within the last 12 months.
+In scope: the current `main` branch, and any tagged release made within the last 12 months.
 
-**Out of scope:**
+Out of scope:
 
-- Vulnerabilities in third-party dependencies — please report those directly to the upstream maintainer. If a dependency CVE materially affects state-db, mention that in the report so the maintainer can prioritize an upgrade.
+- Vulnerabilities in third-party dependencies — report those to the upstream maintainer. If a dependency CVE materially affects state-db, say so in the report so the maintainer can prioritize an upgrade.
 - Misconfiguration of a self-hosted deployment (weak admin passwords, exposed DB, etc.).
-- Denial-of-service that requires direct network access to a customer's own database.
+- Denial-of-service that requires direct network access to the operator's own database.
 
-## A note on what state-db stores
+## What state-db stores
 
-state-db stores Pulumi (and eventually OpenTofu) checkpoint blobs. Those checkpoints **can contain secrets** that operators of the upstream infrastructure chose to encode in state (cloud credentials, passwords, tokens, etc.). Vulnerabilities that expose or leak stored checkpoints, lock tokens, or API tokens are considered high severity.
+state-db stores Pulumi checkpoints. Checkpoints can contain secrets that users chose to put in state, such as cloud credentials, passwords, and tokens. Vulnerabilities that expose stored checkpoints, lock tokens, or API tokens are high severity.
 
-Please coordinate disclosure carefully — a public proof-of-concept that exfiltrates a real checkpoint is not appropriate.
+A public proof-of-concept that exfiltrates a real checkpoint is not appropriate.
 
 ## Recognition
 

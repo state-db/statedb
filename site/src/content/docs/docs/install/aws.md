@@ -1,22 +1,20 @@
 ---
 title: AWS CloudFormation
-description: Architecture, parameters, and current status of the AWS CloudFormation installer.
+description: Architecture, parameters, and installation flow of the AWS CloudFormation installer.
 ---
 
-:::caution[This installer is not released]
-The AWS package is still in development. Do not deploy the template from source:
-it carries image markers that a release build has to replace with digest-pinned
-images. The source currently lives on the development branch
-`codex/aws-packaging-mvp` as engineering evidence, not as a usable installer.
+:::caution[Not yet published]
+Do not deploy the template from source. It carries image markers that the
+release build replaces with digest-pinned images.
 :::
 
-The planned package is a single CloudFormation stack that owns everything
-statedb needs on AWS: the application service, the database, secrets, IAM roles,
-and network rules.
+The package is a single CloudFormation stack that owns everything statedb needs
+on AWS: the application service, the database, secrets, IAM roles, and network
+rules.
 
 ## What the stack creates
 
-The default profile provisions two 0.25-vCPU, 512-MiB tasks on AWS Fargate
+The default profile provisions two 1-vCPU, 2-GiB tasks on AWS Fargate
 behind an Amazon ECS Express Mode service with managed HTTPS. Behind them sits a
 private, encrypted PostgreSQL 17 RDS instance with 80 GiB of gp3 storage that
 grows automatically to 500 GiB, and seven days of backups.
@@ -25,8 +23,8 @@ Two Secrets Manager values hold the browser session secret and initial recovery
 access. A one-time task creates the PostgreSQL application role during stack
 creation.
 
-The database is Single-AZ by default. If you are taking this to production,
-Multi-AZ is the first change worth making.
+The database is Single-AZ by default. Multi-AZ is the first change to make for
+production.
 
 ## How requests and credentials flow
 
@@ -65,22 +63,23 @@ replace network resources or the database itself, so read the CloudFormation
 change set before applying any such update.
 :::
 
-## Parameters worth a decision
+## Parameters
 
 | Parameter | Default | Meaning |
 | --- | --- | --- |
 | `NetworkMode` | `CreateNew` | Create a VPC or use an existing one |
 | `ApplicationSubnetType` | `Public` | Public or private application routing |
 | `OrganizationName` | `default` | Name of the first statedb organization |
+| `AppTaskSize` | `1vCPU-2GB` | Fargate CPU and memory for each application task |
 | `DbInstanceClass` | `db.t4g.small` | RDS instance size |
 | `DbAllocatedStorage` | `80` | Initial gp3 storage in GiB |
 
 The stack asks for no credential. It generates the recovery password itself
 during creation, so there is nothing to prepare before you launch it.
 
-The released template will pin immutable image references. Operators can replace both references with approved regional ECR copies.
+The released template pins immutable image references. Operators can replace both references with approved regional ECR copies.
 
-## Installation flow, once released
+## Installation flow
 
 1. Create the stack with `CAPABILITY_IAM`.
 2. Wait for RDS and the ECS service to become ready. Expect 15 to 25 minutes,
@@ -112,9 +111,8 @@ you get back in when an identity provider is unavailable.
 ## Deletion and storage
 
 CloudFormation snapshots the RDS instance when it deletes or replaces the
-database. Deletion protection is off in the development template, which is
-appropriate for testing and not for production. Review it before you rely on the
-stack.
+database. Deletion protection is off in the template, which suits testing but not
+production. Enable it before you rely on the stack.
 
 RDS storage grows but never shrinks, so raising `DbAllocatedStorage` sets a new
 floor you cannot walk back.

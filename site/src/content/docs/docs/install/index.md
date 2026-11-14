@@ -3,9 +3,9 @@ title: Choose an installation
 description: Compare the available ways to install statedb and what every installation needs.
 ---
 
-statedb is a single service backed by a single PostgreSQL database. Whichever
-path you take, that shape does not change. There is no second web tier, no
-queue, and no object store to provision.
+statedb is a single service backed by a single PostgreSQL database. Every
+path uses that shape. There is no second web tier, queue, or object store to
+provision.
 
 ## Available paths
 
@@ -14,16 +14,15 @@ queue, and no object store to provision.
 | [Docker Compose](/docs/quickstart/) | Available | Evaluating statedb on your own machine |
 | [Kubernetes](/docs/install/kubernetes/) | Available | A cluster you already run, via the Helm chart |
 | [Self-managed](/docs/deployment/) | Available | Any other container platform or VM |
-| [AWS CloudFormation](/docs/install/aws/) | In development | A managed AWS install on ECS and RDS |
-| [Google Cloud](/docs/install/gcp/) | Reserved | A future Google Cloud installer |
-| [Microsoft Azure](/docs/install/azure/) | Reserved | A future Azure installer |
+| [AWS CloudFormation](/docs/install/aws/) | Not yet published | A managed AWS install on ECS and RDS |
+| [Google Cloud](/docs/install/gcp/) | No installer | GKE or Cloud Run, using the Helm chart or self-managed guide |
+| [Microsoft Azure](/docs/install/azure/) | No installer | AKS or Container Apps, using the Helm chart or self-managed guide |
 
 ## What every installation needs
 
 - **PostgreSQL 14 or newer, built with LZ4.** The official PostgreSQL images and
   the major managed services all include it. statedb checks for LZ4 before it
-  touches the schema and refuses to start without it, so a missing build flag
-  fails loudly at startup rather than quietly later.
+  touches the schema and refuses to start without it.
 - **One or more statedb replicas**, all pointed at that database.
 - **HTTPS in front of port `8080`**, which carries both the Pulumi API and the
   console.
@@ -33,9 +32,9 @@ queue, and no object store to provision.
   Browser sessions are encrypted with it, so replicas that disagree will log
   users out as their requests move between pods.
 - **An OpenID Connect provider** for everyday console access. The local recovery
-  login exists for an IdP outage, not for daily use.
+  login is for an IdP outage only.
 
-## Once it's running
+## After it starts
 
 1. Open the console URL your installation reports.
 2. Configure an OpenID Connect provider before you let anyone else in.

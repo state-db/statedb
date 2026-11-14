@@ -7,15 +7,15 @@ statedb is a state backend for the Pulumi CLI that you run yourself. It keeps
 checkpoints, update history, users, and tokens in a PostgreSQL database you
 control, and gives you a console to browse them.
 
-Nothing about the CLI changes. There is no plugin to install and no patched
-build to distribute. You point Pulumi at your own URL and carry on:
+The CLI needs no plugin or patched build. Point Pulumi at your own URL:
 
 ```sh
 pulumi login https://statedb.example.com/pulumi
 ```
 
-From that point, `preview`, `up`, `refresh`, and `destroy` behave exactly as
-they did before. What changes is where the state lands, and who can see it.
+From that point, `preview`, `up`, `refresh`, and `destroy` behave as they do on
+any other backend. Only the place the state is stored, and who can see it,
+differs.
 
 ## Concepts
 
@@ -53,23 +53,20 @@ your CLI talks to, and the web console, on the same origin. It manages its own
 database schema, applying any pending changes at startup before it accepts
 traffic, so an upgrade is just a new image.
 
-That combination is what keeps self-hosting cheap. Point the container at a
-managed PostgreSQL instance and your provider handles backups, patching, and
-failover, while your existing container platform handles rollouts and health
-checks. Neither job is specific to statedb, so running it adds no new
-operational discipline.
+Point the container at a managed PostgreSQL instance and your provider handles
+backups, patching, and failover, while your container platform handles rollouts
+and health checks.
 
-Replicas share the database, so you can run as many as you want behind a load
-balancer. Update leases and session state both live in PostgreSQL, which means a
-request can land on any healthy replica.
+Replicas share the database, so you can run several behind a load balancer.
+Update leases and session state both live in PostgreSQL, so a request can land on
+any healthy replica.
 
 ## Where to go next
 
-If you want to see it working, the [quickstart](/docs/quickstart/) gets it
-running locally with Docker Compose in about five minutes. If you already know
-you want to deploy it, start at [choosing an installation](/docs/install/). If
-you have stacks on another backend today, [migrating a stack](/docs/migration/)
-is the smallest useful first step.
+To see it working, the [quickstart](/docs/quickstart/) runs it locally with
+Docker Compose in about five minutes. To deploy it, start at
+[choosing an installation](/docs/install/). To move existing stacks, see
+[migrating a stack](/docs/migration/).
 
 :::note
 Pulumi is a trademark of Pulumi Corporation. statedb is an independent project.

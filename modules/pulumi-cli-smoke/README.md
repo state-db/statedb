@@ -1,7 +1,7 @@
 # Pulumi-compatible CLI Smoke & Fault Tests
 
 This module runs slower, opt-in integration tests against the real Pulumi CLI in
-a Docker container, in two tiers. Keep normal development on the fast app tests.
+a Docker container, in two tiers. Normal development uses the faster app tests.
 
 **Smoke** — per-command sanity against the real CLI:
 
@@ -21,10 +21,10 @@ own `snapshot.VerifyIntegrity`. Results are written to
 ```
 
 The Pulumi CLI version under test is pinned by the pom's `pulumi.cli.image`
-property; the nightly CI matrix overrides it per version:
+property; the release workflow matrix overrides it per version:
 
 ```bash
-./dev -- modules/mvnw ... -Dpulumi.cli.image=pulumi/pulumi:3.242.0
+./dev -- modules/mvnw ... -Dpulumi.cli.image=pulumi/pulumi:3.259.0
 ```
 
 These focused commands are the explicit human-local path and require Docker.
@@ -54,8 +54,8 @@ it directly.
 | `WatchSmokeIT` | `watch` (detached; first deploy must complete and land in history) |
 | `UnsupportedFeatureSmokeIT` | endpoints we 501 (`schedule list`, `webhook list`, `org search`, `policy ls`, `env ls`) |
 
-Command-by-command coverage, including what is deliberately unsupported, is
-tracked in `design/pulumi-command-coverage.md`.
+The test classes in this module define command coverage, including unsupported
+operations.
 
 The fault tier lives in the `faults` package: `*FaultIT` classes extend
 `PulumiFaultBase` (process-kill, lease-expiry, DB-poll helpers) and annotate each

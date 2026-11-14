@@ -5,8 +5,8 @@ import app.statedb.persistence.stack.Stack;
 import java.util.function.BooleanSupplier;
 
 /**
- * The in-memory arm of the read-visibility predicate (design/stack-sharing.md §9): mirrors the
- * Cedar read policies exactly as {@code StackListFinder}'s SQL does, and is what {@code
+ * The in-memory arm of the read-visibility predicate (design/stack-sharing.md): mirrors the Cedar
+ * read policies exactly as {@code StackListFinder}'s SQL does, and is what {@code
  * StackEntityLoader} uses to collapse unreadable stacks to 404. Pure logic so the list/PDP
  * equivalence test can pin it to the PDP alongside the SQL arm.
  */

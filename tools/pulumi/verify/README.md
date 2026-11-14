@@ -1,8 +1,7 @@
 # Pulumi Integrity Verifier
 
 Wraps Pulumi's own `snapshot.VerifyIntegrity` (from
-`github.com/pulumi/pulumi/pkg/v3/resource/stack/snapshot`; before v3.259.0 this
-lived in `sdk/v3/go/common/snapshot` — PR pulumi/pulumi#23747) in a tiny CLI so
+`github.com/pulumi/pulumi/pkg/v3/resource/stack/snapshot`) in a small CLI so
 tests can assert that a deployment assembled by state-db is one Pulumi itself
 would accept.
 

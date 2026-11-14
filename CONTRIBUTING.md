@@ -1,6 +1,6 @@
 # Contributing to state-db
 
-Thank you for your interest in state-db. Read this document before you send a pull request.
+Read this document before you send a pull request.
 
 ## License and contributor agreements
 

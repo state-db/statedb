@@ -137,7 +137,7 @@ class StackHeadContractTest {
         .body("tags.\"pulumi:project\"", equalTo(PROJECT))
         .body("tags.\"pulumi:runtime\"", equalTo("yaml"))
         .body("tags.\"pulumi:description\"", equalTo("test desc"))
-        // Deferred fields must NOT appear on the Pulumi wire (Slice 12 / Slice 17 land them).
+        // Deferred fields must NOT appear on the Pulumi wire.
         .body("$", org.hamcrest.Matchers.not(hasKey("version")))
         .body("$", org.hamcrest.Matchers.not(hasKey("lastUpdate")))
         .body("$", org.hamcrest.Matchers.not(hasKey("resourceCount")));

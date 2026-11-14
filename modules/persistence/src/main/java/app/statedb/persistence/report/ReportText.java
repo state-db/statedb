@@ -3,7 +3,7 @@ package app.statedb.persistence.report;
 /**
  * Neutralizes one state-derived string for carriage on {@link ChangeReport}.
  *
- * <p>This is the construction-time half of the sanitization contract (see "Invariant 2" in {@code
+ * <p>This is the construction-time half of the sanitization contract (see {@code
  * design/pr-enrichment.md}). It makes a string <em>safe to carry and safe to read</em>: no
  * invisible or direction-flipping codepoints, single-line, bounded length. It deliberately does
  * <b>not</b> do markdown escaping or mention suppression — those are format-specific and belong to

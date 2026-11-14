@@ -44,8 +44,8 @@ make soak cmd=up args="SOAK_CONSOLE_READS=0"             # Pulumi write path onl
 
 `SOAK_MODE=burst` models concurrent CI instead of steady churn: it seeds `SOAK_BURST_STACKS`
 stacks, then runs `pulumi up --refresh` on all of them at the same moment, `SOAK_BURST_ROUNDS`
-times. Each run's exit status and first error land in `burst.tsv`. This reproduces the
-out-of-memory crash loop described in `design/load-resilience.md`:
+times. Each run's exit status and first error land in `burst.tsv`. This reproduces
+the memory pressure discussed in `design/load-resilience.md`:
 
 ```bash
 make soak cmd=up args="SOAK_MODE=burst SOAK_BURST_STACKS=12 SOAK_BURST_ROUNDS=6 \
@@ -72,10 +72,9 @@ alarming slope that means nothing.
 The heap check regresses the *post-GC floor* rather than raw usage: raw heap mostly measures where
 in the GC cycle each sample landed, whereas a rising floor is the leak signal.
 
-History growth is **measured, not graded**. Nothing prunes `snapshots`, `journal_entries`,
-`update_events` or `stack_updates` today, so growth is expected; the report exists to quantify the
-rate. What it does warn about is *super-linear* growth — events per update climbing over the run,
-which would mean per-update cost scaling with history depth.
+History growth is measured, not graded. Nothing prunes `journal_entries`, `update_events` or
+`stack_updates`, so growth is expected; the report quantifies the rate. What it does warn about is *super-linear* growth — events per update climbing over the
+run, which would mean per-update cost scaling with history depth.
 
 `artifacts/` also holds `gc.log` (rotating), `pulumi.log`, the raw `series.tsv` and `ops.tsv`, and
 any heap dump written on OOM. Native memory tracking is on, so off-heap growth can be broken down

@@ -3,21 +3,25 @@
 state-db is a self-hosted Pulumi state backend and web console. Pulumi CLI
 compatibility is the primary contract: when observed CLI behavior, fixtures,
 and prose disagree, verify against the Pulumi source and real CLI, then update
-the stale artifact. OpenTofu support is planned, not implemented.
+the stale artifact. OpenTofu support is not implemented.
 
 ## Repository map
 
 Read only the documents relevant to the task:
 
+- `design/README.md` — index of the design documents.
 - `design/architecture.md` — module boundaries and request flow.
 - `design/db-schema.md` — schema rationale; Flyway migrations are authoritative.
 - `design/pulumi-state-lifecycle.md` — updates, journals, events, and compaction.
 - `api-snapshots/pulumi/` and `tools/pulumi/recorder/fixtures/` — captured wire
   evidence. `modules/pulumi-cli-smoke/README.md` owns real-CLI verification.
-- `design/auth.md`, `design/secrets.md`, and `design/native-image.md` — read when
-  changing those contracts.
+- `design/auth.md`, `design/stack-sharing.md`, `design/secrets.md`, and
+  `design/native-image.md` — read when changing those contracts.
+- `design/console-ux.md`, `design/pr-enrichment.md`, `design/load-resilience.md`,
+  `design/database-connections.md`, `design/migrations.md`, and `design/release.md`
+  — read for the console, GitHub reports, runtime load, database connectivity,
+  migrations, and releases.
 - `workbench/pulumi/README.md` — interactive application and fixtures.
-- `design/tofu-backend.md` — implementation plan; use only for OpenTofu work.
 
 Follow any closer `AGENTS.md` for a subsystem. Do not copy detailed design
 rationale into this file; keep the owning document or code comment current.

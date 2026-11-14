@@ -2,9 +2,9 @@
 
 <!-- 1–3 lines: what does this PR change, and why? -->
 
-## Slice / linked issue
+## Linked issue
 
-<!-- Reference the slice in design/implementation-slices-v2.md or the issue this addresses, if any. -->
+<!-- The issue this addresses, if any. -->
 
 ## Manual verification
 

@@ -65,10 +65,10 @@ aws ssm put-parameter --name <BreakGlassHash> --value rotate --type String --ove
 ```
 
 The bootstrap Lambda regenerates the credential on the stack's next application task definition
-update, such as an image upgrade, before the service rolls onto tasks that read the new hash. Note
-the limitation: CloudFormation only re-invokes the custom resource when the stack actually changes,
-so clearing the parameter does not rotate on its own. Until then the previous password keeps
-working. A standalone rotation command does not exist yet.
+update, such as an image upgrade, before the service rolls onto tasks that read the new hash.
+CloudFormation only re-invokes the custom resource when the stack actually changes, so clearing
+the parameter does not rotate on its own. Until then the previous password keeps working. There is
+no standalone rotation command.
 
 For a guided command-line test deployment, run:
 
@@ -76,12 +76,12 @@ For a guided command-line test deployment, run:
 deploy/aws/deploy.sh
 ```
 
-The script defaults to the gated ARM64 candidate from commit `d186ef2`. It confirms the AWS caller
-and region, validates the template, displays a
-CloudFormation change set, and pauses before execution. It also verifies that a GHCR image is
-anonymously pullable because the current stack does not inject third-party registry credentials.
-For test-stack compatibility, the script sets automated backup retention to one day. Override it
-with `STATEDB_DB_BACKUP_RETENTION_DAYS`; the standalone template defaults to seven days.
+The script defaults to a pinned ARM64 candidate image. It confirms the AWS caller and region,
+validates the template, displays a CloudFormation change set, and pauses before execution. It also
+verifies that a GHCR image is anonymously pullable because the stack does not inject third-party
+registry credentials.
+The script sets automated backup retention to one day for test stacks. Override it with
+`STATEDB_DB_BACKUP_RETENTION_DAYS`; the template defaults to seven days.
 Run `deploy/aws/deploy.sh --help` for image, network, database, and non-interactive overrides.
 
 To delete the test stack after validation, use the same profile, region, and stack name:
@@ -95,7 +95,7 @@ and continues to incur snapshot-storage charges until you delete it separately.
 
 ## Topology and cost posture
 
-- Two 0.25-vCPU, 512-MiB Fargate tasks run at all times and may scale to four.
+- Two Fargate tasks (1 vCPU, 2 GiB each by default, set by `AppTaskSize`) run at all times and may scale to four.
 - Express Mode owns HTTPS, the ALB, target groups, alarms, and autoscaling. The stack owns the
   application task definition and log group so it can select the container CPU architecture.
 - Express Mode creates and manages the load balancer security group. The stack adds a separate task

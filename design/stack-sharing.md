@@ -1,266 +1,119 @@
-# Stack Sharing & Visibility — Design Spec
+# Stack visibility and grants
 
-Status: **engine implemented** (guest role, visibility, listing predicate, 404
-collapse); the management surface (§7 shares API/console, visibility toggle) is
-**pending**. Companion docs: [`auth.md`](auth.md) (Cedar model, roles,
-`policy_grants`), [`db-schema.md`](db-schema.md), [`console-ux.md`](console-ux.md)
-(S7/S17 surfaces this spec extends).
+Two mechanisms narrow or widen stack access inside an organization. The `guest`
+role is additive: a guest is a member with no default permissions, whose access
+is exactly the stacks granted to them. `private` visibility is subtractive: it
+withdraws one stack from the organization-wide read that viewers and members
+otherwise have. Both use the same per-stack grants. Grants and visibility are
+enforced throughout, but there is no API or console workflow to change them yet
+(see [Current limits](#current-limits)).
 
-## 1. Requirement
+## Visibility
 
-Grant a principal access to a **single stack** rather than to everything in an
-org — always *within* the org (cross-org sharing is out of scope, §12; the
-console is org-scoped and a grantee is always an org member). Two distinct
-product scenarios, with an asymmetry that picks the mechanism:
+Every stack has `internal` or `private` visibility, and new stacks default to
+`internal`. Both values describe access within the organization; there is no
+anonymous public access.
 
-- **A — a contractor needs only specific stacks (additive).** The principal
-  should start from *nothing* and have access enumerated grant by grant.
-  Modeled by the `guest` membership tier (§4): membership with no default
-  permissions, plus per-stack grants.
-- **B — a stack too sensitive for ordinary members (subtractive).** The org
-  keeps its defaults; *one stack* retracts the org-wide read. Modeled by
-  `private` visibility (§5): invisible to members/viewers unless granted,
-  always visible to owners.
+| Principal | Internal stack | Private stack |
+| --- | --- | --- |
+| Site administrator | Read | Read |
+| Organization owner | Read | Read |
+| Service account in the organization | Read | Read |
+| Member or viewer | Read | Explicit grant required |
+| Guest | Explicit grant required | Explicit grant required |
+| Non-member | No access | No access |
 
-The mechanisms compose: a guest can be granted a private stack; a member can be
-granted a private stack; everything flows through the same `policy_grants`
-rows.
+Private visibility does not hide a stack from owners or service accounts.
+Service accounts keep access so that marking a stack private never breaks the
+pipeline that deploys it. As a consequence, anyone who can read a CI secret can
+reach private state.
 
-## 2. Why the pre-guest model could not express scenario A
+## Listing invariant
 
-1. **The role floor was org-wide read.** `viewer.cedar` permits
-   `stack:ReadOnlyAccess` to `Role::"viewer"`, and every human role inherits
-   viewer (`viewer ⊂ member ⊂ owner`). Membership ⇒ read every stack in the
-   org — there was no membership tier that saw *nothing*.
-2. **The share templates guard on membership.** A grant applies only to a
-   principal holding a role in the stack's org. Before the guest role, the
-   lowest tier already read everything, so within-org read shares were
-   redundant; scenario A had no principal to attach to.
+A stack appears in a caller's inventory exactly when Cedar would permit
+`stack:Read` on it. There is no `stack:List` action: the list endpoints
+(`GET /pulumi/api/user/stacks` and the console workspace list) filter with a
+SQL predicate before pagination instead of calling Cedar per row, which would
+produce short pages and wrong counts.
 
-The `guest` role fills exactly that hole. The guard itself is correct and
-stays: it is what keeps tenancy (grants never escape the org) and instant
-revocation (remove the membership, the grant is dead on the next request).
+Three implementations of the read rule must agree: the SQL in `StackListFinder`,
+the in-memory `StackReadVisibility` predicate used by `StackEntityLoader`, and
+the Cedar read policies. `StackSharingVisibilityTest` checks that they produce
+the same results. Any policy change that affects read needs a matching SQL change
+and test coverage.
 
-## 3. The listing invariant (constraint on every design here)
+The rule must stay expressible in SQL, so no static `forbid` may target a read
+action. `PolicyForbidLintTest` enforces this, and it is why `private` visibility
+is a condition on the viewer `permit` rather than a deny.
 
-> A stack appears in a list **iff** the PDP would permit `stack:Read` on it
-> for that principal — read visibility must remain **SQL-expressible** — and a
-> direct request for a stack the principal cannot read collapses to **404**,
-> never 403.
+`StackEntityLoader` treats an unreadable stack as absent and returns 404, for
+outsiders, guests without a grant, and members blocked by private visibility
+alike. A 403 would confirm that the hidden stack exists. A denied action on a
+readable stack, such as a viewer deleting a stack, returns 403.
 
-There is deliberately no `stack:List` action. List endpoints
-(`GET /pulumi/api/user/stacks`, `GET /api/workspaces`) do not call Cedar per
-row; they apply a SQL predicate that mirrors the read policies
-(`StackListFinder`), while Cedar stays authoritative on detail routes.
-Consequences:
+Site administrators are the one exception to the invariant. They can read any
+stack directly, but inventory listing is membership-driven for them too, so a
+stack appears in their list only through their own memberships and grants.
 
-- No static `forbid` may target an action inside `stack:ReadOnlyAccess`
-  (guardrails stay write-only; today's only guardrail is on `stack:Delete`).
-  Design B is therefore *not* a forbid — it inverts the viewer `permit`.
-- Every policy feature that affects read ships with its SQL arm **and** extends
-  the equivalence test (§9) that pins SQL row set == per-row PDP decisions.
-- **404 collapse extends inside the org.** `StackEntityLoader` applies the same
-  read-visibility predicate as the list finders: a stack the principal cannot
-  read does not resolve (404), whether the principal is an outsider, a guest,
-  or a member blocked by `private` visibility. A 403 would leak the existence
-  and name of exactly the stacks being hidden. 403 remains reserved for
-  within-visible-scope denials (e.g. a viewer attempting `stack:Delete` on a
-  stack they can read).
+## Grant types
 
-## 4. Design A — `guest` role (additive-only membership)
+Each `policy_grants` row links a user to one of three Cedar templates:
 
-A role *below* viewer that carries membership — tenancy, revocation-on-removal,
-the template guard, `pulumi login` — but **no default permissions**.
+| Template | Resource | Authority |
+| --- | --- | --- |
+| `StackReadResourcePolicy` | One stack | Read and decrypt |
+| `StackWriteResourcePolicy` | One stack | Read and write |
+| `StackWriteAccess` | One organization | Write actions on every stack in it |
 
-| Piece | Change |
-|---|---|
-| `org_members.role` | CHECK extended to `('owner','member','viewer','service','guest')`; `guest` added to `OrgMember.Role` |
-| `schema.cedar` | No structural change (roles are `entity Role in [Role]`); hierarchy is data |
-| `Authorizer` role chain | `guest` is the new base of the human ladder: `viewer memberOf guest`, `member memberOf viewer`, `owner memberOf member`. So `principal in Role::"guest"` means "any human member, including guests", while `principal in Role::"viewer"` continues to exclude guests. `service` and `admin` still stand alone |
-| Static policies | **Unchanged.** `viewer.cedar` still keys on `Role::"viewer"`, so a bare guest matches no policy and can do nothing |
-| Per-stack share templates | Guard changes from `when { principal in Role::"viewer" }` to `when { principal in Role::"guest" }` — same purpose (grantee must be a member; grant dies with the membership), now inclusive of guests. The managed `StackWriteAccess` template keeps the `viewer` guard — see below |
-| `PrincipalRoleResolver` | Unchanged (resolves whatever role the membership row holds) |
+A per-stack write grant includes read, because whoever can run `pulumi up` on a
+stack must be able to read its checkpoint, and the grantee may be a guest or the
+stack may be private.
 
-Because `service` stands outside the guest chain, a `policy_grants` row naming
-a service-account user is inert (the guard fails). Service accounts don't need
-shares — see §5 for their visibility posture.
+The organization-wide `StackWriteAccess` template grants write only, since
+adding read would bypass private visibility across the organization. It also
+requires a viewer or higher role: its resource is the organization, so it
+matches `stack:Create`, where no stack-level 404 check applies, and a
+guest-inclusive guard would let guests create stacks.
 
-**Write shares carry read.** `StackWriteResourcePolicy` grants
-`[stack:ReadOnlyAccess, stack:WriteAccess]`, not the write bundle alone. A
-write share must be self-contained: its grantee may be a guest (no inherited
-read) or the stack may be private (member read retracted), and a principal who
-can `pulumi up` a stack must be able to read its checkpoint. The org-wide
-managed template `StackWriteAccess` stays write-only — bundling read there
-would silently bypass `private` visibility across the whole org — **and keeps
-its `Role::"viewer"` guard**: its `?resource` is the Org, so it matches
-`stack:Create` on the Org resource, where no stack-read 404 gate applies. A
-guest-inclusive guard there would let a guest with a managed grant create
-stacks. Guests therefore get per-stack shares only; org-wide write remains a
-viewer+ elevation, and `stack:Create` is never grantable to a guest.
+Every template requires the grantee to hold a human role in the stack's
+organization, guest included. Grants to non-members or service accounts have no
+effect. A database constraint fixes which templates exist and whether each has a
+stack, and a composite foreign key keeps a granted stack in the grant's
+organization.
 
-### Grant flow
+Removing a membership neutralizes the user's grants on the next request, because
+the template condition fails. The grant rows stay, so restoring the
+membership reactivates them. Deleting the stack, the user, or the organization
+deletes the rows.
 
-Owner adds the user to the org with role `guest`, then creates a
-`policy_grants` row (`StackReadResourcePolicy` or `StackWriteResourcePolicy`,
-`resource_stack_id` set), then the policy set reloads (§8). The guest can
-`pulumi login`, sees exactly the granted stack(s) in every list, and can read —
-or with a write grant, `pulumi up` — those stacks only. A write-granted guest
-still cannot create stacks (`stack:Create` targets the Org and no policy
-grants it to guests).
+## Secrets
 
-Revocation: deleting the membership row is **immediate** (`org_members` is
-re-checked per request and the template guard fails); deleting only the grant
-row closes the 404 gate **immediately** (the loader and list finders check
-`policy_grants` per request) and retires the Cedar link on the next policy
-reload (§8).
+Read access includes `stack:DecryptSecrets`, so a read grant lets the grantee
+recover service-managed secret plaintext through the CLI. The console never
+decrypts, and its masking does not narrow that authority.
 
-## 5. Design B — `private` visibility (hide from ordinary members)
+Stacks that use an external secrets provider keep that provider's boundary:
+ciphertext read from state-db is useless without the external key.
 
-Not a guardrail `forbid` on read — that is exactly the SQL-inexpressible
-policy §3 bans. Instead, invert the default per stack. The default value is
-**`internal`** (visible to the whole org's member tier — the GitHub/GitLab
-sense of the word), the restricted value is **`private`**:
+## Current limits
 
-| Piece | Change |
-|---|---|
-| `stacks` | `visibility TEXT NOT NULL DEFAULT 'internal' CHECK (visibility IN ('internal','private'))` |
-| `schema.cedar` | `entity Stack in [Project] { id: String, visibility: String }` |
-| `StackEntityLoader` | Includes `visibility` in the Stack entity attributes; applies the §3 404 gate |
-| `viewer.cedar` | Gains `when { resource.visibility == "internal" }` |
-| `owner.cedar` | Unchanged — owners keep unconditional `stack:*`, so they always see private stacks. Members' read comes only via the viewer policy (member's own policy grants the write bundle, not read), so members/viewers lose sight of private stacks unless granted |
-| `service.cedar` | **Deliberately unchanged** — service accounts retain org-wide access including private stacks. They are owner-minted org credentials driving CI; flipping a stack private must not break its pipeline, and shares cannot target them (§4). Anyone who can read CI secrets can therefore reach private state — document, don't pretend otherwise |
+There is no API or console workflow to create or revoke grants or to change a
+stack's visibility. The organization member view shows a guest's existing
+grants.
 
-Access to a private stack = owners + service accounts + explicit
-`policy_grants` shares (any membership tier, §4). Console: an owner-only
-visibility toggle on the stack Settings tab (S7) and a `private` badge on list
-rows — both pending (§7).
+`PolicySetCache` reads grant links at startup and has an in-process `reload()`
+method, but nothing in the application calls it and there is no cross-replica
+invalidation. The list endpoints and the 404 check read `policy_grants` on each
+request, while Cedar uses the links compiled at startup. After a direct database
+edit, a new grant makes the stack visible in lists while Cedar still denies the
+actions it grants, and a deleted write grant keeps working on a stack the user
+can still read, until each replica restarts. Direct database edits are therefore not a supported way to manage
+grants, and a management path must reload every replica after each committed
+change.
 
-## 6. Secrets scope of a read share
+## Implementation
 
-`stack:ReadOnlyAccess` bundles `stack:Read` **and** `stack:DecryptSecrets` —
-a read share today implies `pulumi stack export --show-secrets`. For a
-contractor that is often wrong. Add a third template (pending, ships with §7):
-
-- `StackReadNoSecretsPolicy` — identical to `StackReadResourcePolicy` but
-  permits `action == Action::"stack:Read"` only (leaf, not the bundle).
-- `policy_grants` CHECK constraint extends its accepted-template set
-  (a deliberate migration, per the V009 design).
-- The share-mint UI offers the choice at grant time: "read" vs
-  "read incl. secrets" vs "write".
-
-The console never decrypts, so this distinction only bites CLI access — which
-is exactly where it matters. When this template ships it joins the
-read-granting set in the listing predicate (§9) and the loader gate.
-
-## 7. Share management surface (pending)
-
-Grants and visibility are psql-managed today. Additions:
-
-- **Who may share:** new leaf action `stack:ManageShares` in `stack:*` but
-  **not** in `stack:WriteAccess` — so owners (and admins) manage shares,
-  members do not; in particular a write-share grantee cannot re-share
-  (`stack:*` membership would otherwise leak it via the write template's
-  bundles — the template grants the two `*Access` bundles precisely to exclude
-  future owner-only leaf actions like this one). Mirrors `serviceaccount:*`
-  being owner-only.
-- **Visibility toggle:** owner-only `stack:SetVisibility` (also in `stack:*`
-  only), PATCH on the stack, S7 Settings toggle.
-- **API:** `GET/POST/DELETE /api/stacks/{org}/{project}/{stack}/shares`
-  (console session auth, `@Authorize(action = "stack:ManageShares",
-  loader = StackEntityLoader)`). POST body: grantee user id + template choice
-  (§6). Membership of the grantee in the stack's org is validated at mint
-  (offering to add them as `guest` if absent is a console affordance, not an
-  API side effect).
-- **Console:** a "Sharing" card on the stack Settings tab (S7) listing grants
-  (grantee, scope, created, revoke), plus read-only grant visibility on the
-  owner-or-admin organization member detail (S17). Add both to
-  `console-ux.md`'s API-gap table when sliced.
-
-## 8. Multi-pod grant propagation
-
-`PolicySetCache.reload()` is per-pod and in-memory; a grant written on pod A is
-invisible to pod B until B rebuilds. Fix (ships with §7): a cheap staleness
-poll — `@Scheduled` every ~10s, `SELECT max(created_at), count(*) FROM
-policy_grants` (or a version row bumped on every grant write), reload on
-change. Bounded staleness of seconds is acceptable for *granting*; the hard
-revocation guarantees are per-request already — membership removal kills the
-guard, grant-row deletion closes the 404 gate (§4). LISTEN/NOTIFY is the
-upgrade path if the poll ever matters; don't start there.
-
-## 9. Listing predicate & tests
-
-Read visibility for a principal `:me`, applied identically by the list finders
-(`StackListFinder`, backing both list endpoints) and — per §3 — by
-`StackEntityLoader`'s 404 gate on detail routes:
-
-```sql
-WHERE
-      -- owner.cedar / service.cedar: unconditional org-wide read
-      EXISTS (SELECT 1 FROM org_members m WHERE m.user_id = :me
-                AND m.org_id = s.org_id AND m.role IN ('owner','service'))
-   OR -- viewer.cedar (member/viewer inherit): internal stacks only
-      (s.visibility = 'internal'
-       AND EXISTS (SELECT 1 FROM org_members m WHERE m.user_id = :me
-                     AND m.org_id = s.org_id AND m.role IN ('member','viewer')))
-   OR -- per-stack shares (read-granting templates), guarded on membership
-      -- exactly as the Cedar guard is (any human tier incl. guest; not service)
-      (EXISTS (SELECT 1 FROM policy_grants g WHERE g.principal_user_id = :me
-                 AND g.resource_stack_id = s.id
-                 AND g.template_id IN ('StackReadResourcePolicy',
-                                       'StackWriteResourcePolicy'))
-       AND EXISTS (SELECT 1 FROM org_members m WHERE m.user_id = :me
-                     AND m.org_id = s.org_id
-                     AND m.role IN ('owner','member','viewer','guest')))
-```
-
-Single-org credentials additionally clamp to their org (existing behavior).
-Because visibility is a WHERE clause, keyset pagination composes unchanged
-(cursor on the existing `org.name, project.name, stack.name` order). Admin
-principals are out of scope for the predicate: listing remains
-membership-driven for admins too (they browse other orgs via admin surfaces,
-not `/api/workspaces`).
-
-**Tests that hold the line:**
-
-1. *Forbid lint* — scan the static policy set; assert no `forbid` targets an
-   action in `stack:ReadOnlyAccess`.
-2. *List/PDP equivalence* — seed orgs, members across all five roles, internal
-   and private stacks, and grants of each template; assert the list finder's
-   row set equals the set of stacks where the PDP permits `stack:Read`. This
-   test is the invariant; every new policy feature must keep it green.
-3. Role-floor regressions: bare guest sees nothing; guest + read grant sees
-   exactly one stack (list + detail); member cannot see a private stack (404,
-   not 403); owner and service see private stacks; revoked membership 404s
-   immediately; write-granted guest can read/lock but not create or delete a
-   share; a share to a non-member stays inert; a guest with a managed
-   `StackWriteAccess` grant still cannot create stacks (the viewer guard).
-
-## 10. Migration summary
-
-One migration (V015): `org_members` CHECK gains `'guest'`; `stacks` gains
-`visibility` with default `'internal'`. Template/policy text changes (guards,
-viewer `when`, write-template bundles) are classpath changes — a redeploy, no
-migration. The pending §6/§7 work adds its own migration
-(`policy_grants` CHECK gains `StackReadNoSecretsPolicy`).
-
-## 11. Build order
-
-1. **A1+B — engine** *(done)*: migration, guest role + role chain, template
-   guard swap, write-share read bundle, visibility column + Cedar attribute,
-   viewer `when`, loader 404 gate, listing predicate, tests 1–3. Ships both
-   scenarios end-to-end via psql-managed grants and visibility.
-2. **A2 — management surface** *(pending)*: `stack:ManageShares` +
-   `stack:SetVisibility`, shares API, S7 Sharing card + visibility toggle,
-   `StackReadNoSecretsPolicy`, grant-propagation poll (§8).
-
-## 12. Out of scope
-
-- Cross-org shares / shares without membership. The console is org-scoped and
-  the guard's membership requirement is a feature: tenancy and instant
-  revocation. (If ever revisited, the IAM precedent is that resource-policy
-  grants need not appear in listings at all — access by explicit ref — so the
-  listing invariant has a principled relaxation available. Not needed now.)
-- Teams/groups as grantees; per-project grants; grant expiry.
-- Changing the default read scope of existing roles (viewer stays org-wide for
-  `internal` stacks).
-- Decrypt audit logging (worth doing; separate concern).
+The relevant code is [StackReadVisibility](../modules/persistence/src/main/java/app/statedb/persistence/authz/StackReadVisibility.java),
+[StackListFinder](../modules/persistence/src/main/java/app/statedb/persistence/stack/StackListFinder.java),
+[PolicySetCache](../modules/persistence/src/main/java/app/statedb/persistence/policy/PolicySetCache.java),
+and the [Cedar templates](../modules/persistence/src/main/resources/policies/templates/).

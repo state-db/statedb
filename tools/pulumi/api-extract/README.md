@@ -58,12 +58,10 @@ make pulumi-extract PULUMI_REF=v3.234.0 PULUMI_SCOPE=
 
 For stable snapshots, prefer refs where `openapi_source` is `repo-fixture`.
 
-## AI harness flow
+## Discovery
 
-Use one command to automate API change discovery:
+One command extracts the new version and compares it with the old one:
 
 ```bash
 make pulumi-discover FROM=v3.233.0 TO=v3.234.0
 ```
-
-This extracts `TO` and writes a comparison report against `FROM`.

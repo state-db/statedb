@@ -113,7 +113,7 @@ public class LeaseResource {
     return Response.ok(Map.of()).build();
   }
 
-  // Wave-1 fallback: the OpenAPI defines these but the CLI only hits them when journalVersion
+  // Checkpoint fallback: the OpenAPI defines these but the CLI only hits them when journalVersion
   // negotiation fails. We negotiate journaling on /update (acquire), so a request here means a
   // protocol-version mismatch — surface that explicitly rather than silently 404-ing.
   @PATCH

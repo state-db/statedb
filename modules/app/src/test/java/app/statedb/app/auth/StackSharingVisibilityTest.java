@@ -43,9 +43,9 @@ import org.junit.jupiter.api.Test;
 
 /**
  * The guest role + internal/private visibility model end-to-end (design/stack-sharing.md): the
- * role-floor regressions of §9, and the list/PDP equivalence invariant — the {@link
- * StackListFinder} row set and the {@link StackReadVisibility} loader arm must both equal the PDP's
- * per-stack {@code stack:Read} decisions.
+ * role-floor regressions, and the list/PDP equivalence invariant — the {@link StackListFinder} row
+ * set and the {@link StackReadVisibility} loader arm must both equal the PDP's per-stack {@code
+ * stack:Read} decisions.
  *
  * <p>Seeded matrix in org {@code vis-acme}: an {@code internal} stack ("app") and a {@code private}
  * stack ("secrets"); one user per human role plus a bare guest, an outsider (member of another org
@@ -163,7 +163,7 @@ class StackSharingVisibilityTest {
     assertFalse(targetedVisible(ownerId, ACME, PROJECT, "App"));
   }
 
-  // The invariant of design/stack-sharing.md §3: for every (principal, stack), listed == PDP
+  // The listing invariant of design/stack-sharing.md: for every (principal, stack), listed == PDP
   // stack:Read == loader predicate. The three arms (SQL, Cedar, in-memory) must never drift.
   @Test
   void listingAndLoaderPredicateMirrorThePdp() {

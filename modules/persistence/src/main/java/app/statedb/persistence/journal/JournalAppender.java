@@ -27,7 +27,7 @@ import java.util.UUID;
  * non-monotonically across PATCHes. By making the server's {@code sequence_id} a deterministic
  * function of the wire ID (plus a per-update offset captured on the first PATCH), {@code ORDER BY
  * sequence_id} always reconstructs wire order regardless of arrival order. See {@code
- * design/db-schema.md §JOURNALING} and the Slice 15 plan for the full analysis.
+ * design/db-schema.md §Journaling}.
  *
  * <p>Concurrency: a {@code SELECT ... FOR UPDATE} on the {@code stack_state} row serializes
  * appenders cross-pod for the same stack. The {@code UNIQUE(update_id, wire_sequence_id)} and
@@ -50,8 +50,7 @@ public class JournalAppender {
   private static final short MIN_KIND = 0;
   private static final short MAX_KIND = 7;
 
-  // Kinds 0..7 per design/db-schema.md §Journal Entry Payload Structures (pinned to Pulumi
-  // v3.242.0).
+  // Kinds 0..7 per design/db-schema.md §Journal entry kinds (pinned to Pulumi v3.242.0).
   @Inject EntityManager em;
 
   @Inject LeaseRevalidator leaseRevalidator;
