@@ -14,5 +14,10 @@ jobs:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           fetch-depth: 0
+          persist-credentials: false
       - name: Validate contributor agreement records
-        run: bin/check-cla-acceptance '${{ github.event.pull_request.base.sha }}' '${{ github.event.pull_request.head.sha }}' '${{ github.event.pull_request.user.login }}'
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          PR_AUTHOR: ${{ github.event.pull_request.user.login }}
+        run: bin/check-cla-acceptance "$BASE_SHA" "$HEAD_SHA" "$PR_AUTHOR"
