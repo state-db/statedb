@@ -70,6 +70,7 @@ export default defineConfig({
         {
           label: "Operate",
           items: [
+            { label: "Operate statedb", slug: "docs/operations" },
             { label: "Use the console", slug: "docs/management" },
             { label: "Authentication and access", slug: "docs/authentication" },
           ],
@@ -77,6 +78,7 @@ export default defineConfig({
         {
           label: "Reference",
           items: [
+            { label: "Architecture", slug: "docs/architecture" },
             { label: "Pulumi CLI compatibility", slug: "docs/compatibility" },
             { label: "License and Pulumi", slug: "docs/license" },
           ],

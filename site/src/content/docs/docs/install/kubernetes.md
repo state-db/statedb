@@ -94,5 +94,5 @@ the migrations guarantee this, not your rollout strategy.
 The full set is in
 [`values.yaml`](https://github.com/state-db/statedb/blob/main/examples/helm/statedb/values.yaml).
 
-The [self-managed guide](/docs/deployment/) covers database requirements and
-backups.
+The [self-managed guide](/docs/deployment/) covers database requirements, and
+[operate statedb](/docs/operations/) covers backups and monitoring.

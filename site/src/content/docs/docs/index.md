@@ -32,7 +32,7 @@ the console's history view reads back.
 **Lease** is the exclusive claim a running update holds on its stack. Only one
 update can hold a stack's lease at a time, which is how two engineers running
 `pulumi up` against the same stack cannot corrupt each other's work. A lease
-expires an hour after its last heartbeat, so an interrupted run releases the
+expires five minutes after its last renewal, so an interrupted run releases the
 stack on its own.
 
 ## What statedb stores
@@ -63,10 +63,14 @@ any healthy replica.
 
 ## Where to go next
 
-To see it working, the [quickstart](/docs/quickstart/) runs it locally with
-Docker Compose in about five minutes. To deploy it, start at
-[choosing an installation](/docs/install/). To move existing stacks, see
-[migrating a stack](/docs/migration/).
+- [Quickstart](/docs/quickstart/) runs statedb locally with Docker Compose in
+  about five minutes.
+- [Choose an installation](/docs/install/) when you are ready to deploy it.
+- [Operate statedb](/docs/operations/) covers upgrades, backups, and
+  monitoring.
+- [Architecture](/docs/architecture/) explains how an update is stored and
+  links to the detailed design.
+- [Migrate stacks](/docs/migration/) moves existing stacks in or out.
 
 :::note
 Pulumi is a trademark of Pulumi Corporation. statedb is an independent project.

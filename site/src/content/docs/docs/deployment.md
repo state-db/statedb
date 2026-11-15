@@ -1,6 +1,6 @@
 ---
 title: Self-managed installation
-description: Install, configure, and operate statedb on your own container platform or virtual machine.
+description: Install and configure statedb on your own container platform or virtual machine.
 ---
 
 statedb runs as one service against one PostgreSQL database. Port `8080` carries
@@ -80,8 +80,8 @@ manual database insert on a new deployment:
 Setting `STATEDB_OIDC_BOOTSTRAP_NAME` makes the other three required, so a
 half-configured provider fails at startup instead of at first login. These
 values are re-applied at every start, so rotating the client secret means
-changing the environment and restarting. The console
-shows this provider as environment-managed and read-only.
+changing the environment and restarting. The console shows this provider as
+environment-managed and read-only.
 
 Any further providers you add from **Manage → Providers** are stored in
 PostgreSQL and editable in the console.
@@ -93,9 +93,9 @@ bcrypt hash in Modular Crypt Format. It exists for one situation: your identity
 provider is down and you need to get back in.
 
 It accepts loopback connections only, and it turns itself off whenever an
-enabled OIDC provider exists. That second
-condition is checked both at sign-in and on every session restore, so restoring
-OIDC service also ends any recovery session already open.
+enabled OIDC provider exists. That second condition is checked at sign-in and on
+every session restore, so restoring OIDC service also ends any recovery session
+already open.
 
 :::caution
 `STATEDB_LOCAL_GLASS_ALLOW_REMOTE=true` removes the loopback restriction. Use it
@@ -117,56 +117,14 @@ public port; it never touches the database or a worker thread, so a task busy
 with Pulumi writes never looks dead to it.
 
 Allow at least 600 seconds of health-check grace for a new task. A database cold
-start, or a wait behind another replica's migration lock, can legitimately take
-minutes, and a tighter deadline will kill tasks that were about to succeed.
+start, or a wait behind another replica's migration lock, can take minutes, and
+a tighter deadline kills tasks that were about to succeed.
 
-## Running several replicas
+## Next steps
 
-Update leases and session data both live in PostgreSQL, so any healthy replica
-can serve any request. Every replica must share a database and a session-encryption secret.
-
-Flyway takes a database lock during migration: one replica applies the schema
-change, and the rest wait and then verify the result.
-
-## Sizing for concurrent deploys
-
-0.25 vCPU / 512 MB is not enough for concurrent deploys of stacks with
-hundreds of resources. Size for at least 1 vCPU / 2 GB per task, and keep
-enough tasks running that one task's worth of concurrent deploys stays within
-what its memory and CPU can hold.
-
-## Write-path tuning
-
-| Variable | Meaning |
-| --- | --- |
-| `STATEDB_DB_REWRITE_BATCHED_INSERTS` | pgjdbc multi-row insert rewriting; `true` by default |
-| `STATEDB_DB_INSERT_BATCH_SIZE` | Hibernate JDBC insert batch size; `50` by default |
-
-These speed up journal and event writes under concurrent load. Rewriting only
-applies to batches, so an insert batch size of `0` also turns it off and falls
-back to one statement per row.
-
-## Upgrades
-
-To upgrade, replace the application image. Every Flyway migration ships inside
-the image and runs at startup, so there is no separate migration job.
-
-Keep the old tasks serving until a new one reports ready, and enable automatic
-rollback for services that never reach a steady state. Allow at least 10 seconds
-between `SIGTERM` and `SIGKILL` so in-flight requests can finish. While old and
-new tasks overlap, only expand-only migrations are safe. That constraint comes from the migrations, not from your deployment tooling.
-
-## Backups
-
-Every statedb record is in PostgreSQL: checkpoints, history, users,
-organizations, policies, and tokens. Your existing backup process therefore
-already covers statedb, whether that means managed snapshots, WAL archiving, or
-`pg_dump`.
-
-Test the restore. Restore into a separate database,
-start the same statedb version against it, and export a stack with the Pulumi
-CLI. That exercises the whole path from stored rows back to a checkpoint the CLI
-accepts.
+[Operate statedb](/docs/operations/) covers upgrades, backups, replicas,
+sizing, and monitoring. [Authentication and access](/docs/authentication/)
+covers identity providers, roles, and tokens.
 
 ## Source code and license
 

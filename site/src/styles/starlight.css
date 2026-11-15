@@ -79,6 +79,13 @@ kbd {
   font-family: "JetBrains Mono Variable", ui-monospace, "SF Mono", Menlo, monospace;
 }
 
+/* On phones, scroll a wide table rather than crush its prose column into a sliver. */
+@media (max-width: 50rem) {
+  .sl-markdown-content td:last-child:not(:has(> code:only-child)) {
+    min-width: 8rem;
+  }
+}
+
 /* Console captures are product evidence, not decorative illustrations. */
 .sl-markdown-content img[src^="/screens/"] {
   display: block;

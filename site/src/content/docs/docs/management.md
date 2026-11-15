@@ -81,7 +81,7 @@ every five seconds.
 ![The Operations screen in the statedb console](/screens/console-operations.jpg)
 
 An active lock names the stack, the holder, the update, and when the lease
-expires. Leases expire on their own an hour after their last heartbeat, so an
+expires. Leases expire on their own five minutes after their last renewal, so an
 interrupted run normally clears itself and force-unlock is for the cases where
 you cannot wait.
 

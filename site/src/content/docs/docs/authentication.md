@@ -36,7 +36,7 @@ policy set, so tightening what CI can do never reshapes what people can do.
 Per-stack grants layer read or write access on top of the role. Authorization
 itself runs on Cedar, and the policies are in the repository under
 `modules/persistence/src/main/resources/policies/` if you want to read the rules
-to read the rules directly.
+directly.
 
 Site administrators are separate again, and come from the
 `STATEDB_ADMIN_SUBJECTS` allow-list rather than from any organization role.
