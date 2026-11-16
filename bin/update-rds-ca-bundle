@@ -1,0 +1,57 @@
+#!/usr/bin/env bash
+# Refreshes the vendored AWS RDS CA bundle and prints what changed, for review before commit.
+#
+# AWS publishes no checksum or signature for this file. Read the added and removed certificates
+# below, confirm they are Amazon RDS root CAs, then commit the bundle.
+set -euo pipefail
+
+cd "$(dirname "$0")/.."
+
+readonly URL=https://truststore.pki.rds.amazonaws.com/global/global-bundle.pem
+readonly BUNDLE=third_party/aws-rds/global-bundle.pem
+
+work_dir=$(mktemp -d)
+trap 'rm -rf "$work_dir"' EXIT
+
+# One line per certificate: fingerprint, expiry, subject.
+describe() {
+  local bundle=$1 split=$2 cert
+  mkdir -p "$split"
+  awk -v dir="$split" \
+    '/-----BEGIN CERTIFICATE-----/ { n++ } n { print > sprintf("%s/%04d.pem", dir, n) }' "$bundle"
+  for cert in "$split"/*.pem; do
+    openssl x509 -in "$cert" -noout -fingerprint -sha256 -enddate -subject | paste -sd' ' -
+  done | sort
+}
+
+curl --proto '=https' --tlsv1.2 --fail --location --silent --show-error "$URL" \
+  -o "$work_dir/new.pem"
+describe "$work_dir/new.pem" "$work_dir/new" >"$work_dir/new.txt"
+[[ -s $work_dir/new.txt ]] || {
+  echo "update-rds-ca-bundle: the download contains no certificates" >&2
+  exit 1
+}
+if grep -v 'Amazon RDS' "$work_dir/new.txt" >&2; then
+  echo "update-rds-ca-bundle: the certificates above are not Amazon RDS CAs; nothing was written" >&2
+  exit 1
+fi
+
+if [[ -f $BUNDLE ]]; then
+  describe "$BUNDLE" "$work_dir/old" >"$work_dir/old.txt"
+else
+  : >"$work_dir/old.txt"
+fi
+
+if cmp -s "$work_dir/old.txt" "$work_dir/new.txt"; then
+  echo "update-rds-ca-bundle: $BUNDLE already has the published certificates"
+  exit 0
+fi
+
+echo "Removed:"
+comm -23 "$work_dir/old.txt" "$work_dir/new.txt"
+echo "Added:"
+comm -13 "$work_dir/old.txt" "$work_dir/new.txt"
+
+mkdir -p "$(dirname "$BUNDLE")"
+mv "$work_dir/new.pem" "$BUNDLE"
+echo "Wrote $BUNDLE ($(wc -l <"$work_dir/new.txt" | tr -d ' ') certificates). Review the list, then commit."

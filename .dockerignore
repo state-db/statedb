@@ -8,6 +8,8 @@
 !THIRD-PARTY-NOTICES.txt
 !third_party/cedar-java/
 !third_party/cedar-java/**
+!third_party/aws-rds/
+!third_party/aws-rds/global-bundle.pem
 !workbench/
 !workbench/pulumi/
 !workbench/pulumi/mock-oauth2-login.html

@@ -131,11 +131,9 @@ COPY --chown=0:0 --chmod=0444 third_party/cedar-java/LICENSE /licenses/CEDAR-LIC
 COPY --chown=0:0 --chmod=0444 third_party/cedar-java/NOTICE /licenses/CEDAR-NOTICE
 COPY --chown=0:0 --chmod=0444 third_party/cedar-java/THIRD_PARTY_LICENSES.txt /licenses/CEDAR-THIRD-PARTY-LICENSES.txt
 
-# RDS IAM authentication requires TLS hostname and certificate verification. Pin the AWS-published
-# global CA bundle by content so a remote rotation cannot silently change a released image.
-ADD --checksum=sha256:e5bb2084ccf45087bda1c9bffdea0eb15ee67f0b91646106e466714f9de3c7e3 \
-    --chmod=0444 https://truststore.pki.rds.amazonaws.com/global/global-bundle.pem \
-    /work/aws-rds-global-bundle.pem
+# RDS IAM authentication requires TLS hostname and certificate verification. The AWS global CA
+# bundle is vendored so a remote rotation cannot change or break a build; bin/update-rds-ca-bundle.
+COPY --chown=0:0 --chmod=0444 third_party/aws-rds/global-bundle.pem /work/aws-rds-global-bundle.pem
 
 ENV CEDAR_JAVA_FFI_LIB=/work/libcedar_java_ffi.so
 
