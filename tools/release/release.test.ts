@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import {
   compareVersions,
+  indexAnnotationArgs,
   parseOptions,
   ReleaseError,
   rollChangelog,
@@ -31,6 +32,17 @@ describe("release policy", () => {
     expect(rollChangelog(changelog, "0.2.0", "2026-08-22")).toBe(
       "Mention `## Unreleased` here.\n\n## Unreleased\n\n## 0.2.0 — 2026-08-22\n\n### Added\n\n- One thing\n",
     );
+  });
+  test("annotates the release index so the registry can describe and link it", () => {
+    const args = indexAnnotationArgs("1.2.3", "0123456789abcdef0123456789abcdef01234567");
+    expect(args.filter((arg) => arg === "--annotation")).toHaveLength(args.length / 2);
+    expect(args).toContain("index:org.opencontainers.image.source=https://github.com/state-db/statedb");
+    expect(args).toContain("index:org.opencontainers.image.licenses=AGPL-3.0-only");
+    expect(args).toContain("index:org.opencontainers.image.version=1.2.3");
+    expect(args).toContain(
+      "index:org.opencontainers.image.revision=0123456789abcdef0123456789abcdef01234567",
+    );
+    expect(() => indexAnnotationArgs("1.2", "0123456")).toThrow(ReleaseError);
   });
   test("publishes a versioned CloudFormation object only when absent", () => {
     expect(versionedCloudFormationPutArgs("installer-bucket", "1.2.3", "/tmp/template.yaml")).toEqual([

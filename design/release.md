@@ -60,10 +60,14 @@ The build-and-gate job fails on fixable HIGH or CRITICAL findings in the image
 and, on amd64, in the dependency-level Java SBOM. It records a CycloneDX
 container SBOM per architecture, then pushes the gated image as
 `<registry>-candidates:<commit>-<arch>` and uploads its digest with the build
-metadata. The job runs in the `release` environment, so it waits for maintainer
-approval and runs only from `main`. The workflow holds `packages: write` for candidates only and never the
-release-signing identity. Its artifacts are retained for 14 days, so a release
-must run within 14 days of the workflow run it relies on.
+metadata. It then attests build provenance and the container SBOM for the
+platform image manifest, signed with the workflow's own identity. The release
+index lists that manifest unchanged, so an attestation made here verifies
+against the released image; no maintainer key or personal identity signs
+anything. The job runs in the `release` environment, so it waits for maintainer
+approval and runs only from `main`. The workflow holds `packages: write` for
+candidates only. Its artifacts are retained for 14 days, so a release must run
+within 14 days of the workflow run it relies on.
 
 `./dev publish-candidate` builds the current Docker architecture from a clean
 tracked tree and publishes it under the same candidate naming. It then pulls the
@@ -101,14 +105,16 @@ provider, and a real Pulumi CLI. Its steps run in this order:
 bin/release [--version X.Y.Z] [--dry-run | --rehearse]
 ```
 
-The maintainer machine needs Docker with buildx, `git`, `gh`, and `cosign`; a
-real release also needs the AWS CLI and `STATEDB_CFN_BUCKET`. The coordinator
+The maintainer machine needs Docker with buildx, `git`, and `gh`; a
+real release that sets `STATEDB_CFN_BUCKET` also needs the AWS CLI. The coordinator
 runs these steps in order:
 
 1. Preflight: `main` is checked out, clean, and equal to `origin/main`; the
    version (from `--version` or `.version`) has no tag locally or on `origin` and
    is newer than the latest release tag; `CHANGELOG.md` has a nonempty
-   `## Unreleased` section.
+   `## Unreleased` section. When `STATEDB_CFN_BUCKET` is set, a real release also
+   confirms AWS credentials and access to that bucket, because both are first
+   used after the tag.
 2. Evidence: the commit has a successful `signoff/ci` status, which only
    `./dev signoff` produces after clean-VM verification, and its latest
    `native.yml` run succeeded. The coordinator downloads that run's candidate
@@ -118,15 +124,18 @@ runs these steps in order:
    gates it with `--previous` set to the latest release when one exists.
 4. Manifest: it assembles the multi-architecture manifest from the workflow's
    digest references rather than mutable tags, pulls it, and gates it again
-   against the exact commit and release version.
+   against the exact commit and release version. The index carries the OCI
+   source, version, revision, and license annotations, because the registry
+   reads a multi-architecture package's description and repository link there.
 5. Tag: after rechecking that `HEAD`, the worktree, and `origin/main` are
    unchanged, it pushes the tag atomically together with an assertion on `main`,
    so the tag cannot appear if `main` moved.
-6. Publication: it publishes `X.Y.Z`, signs the image digest with cosign, uploads
-   the versioned CloudFormation template (stamped with the gated digest) with a
-   create-only condition, moves `X.Y` and `latest`, creates the GitHub Release
+6. Publication: it publishes `X.Y.Z`, uploads the versioned CloudFormation
+   template (stamped with the gated digest) with a create-only condition, moves `X.Y` and `latest`, creates the GitHub Release
    from the changelog section with the template, Java SBOM, and build evidence,
-   and promotes `releases/latest/cloudformation.yaml`.
+   and promotes `releases/latest/cloudformation.yaml`. Both bucket uploads are
+   skipped when `STATEDB_CFN_BUCKET` is unset; the template is then published
+   only as a GitHub Release asset.
 7. Rollover: it moves the `Unreleased` notes under the release heading, bumps
    `.version` to the next minor, and commits and pushes both to `main`.
 

@@ -6,12 +6,26 @@ body.
 
 ## Unreleased
 
+First public release. statedb is at version 0.x: a minor release can include breaking changes, and
+this file states each one.
+
 ### Added
 
-- Maintainer-run release tooling for building, gating, signing, and publishing the Docker image.
-- Authenticated `/api/version` endpoint that reports the running build identity, derived from
-  `.version`, Git tags, and the source commit.
-- Signed amd64 and arm64 native-image releases, built inside Docker, with Cedar authorization
-  readiness checks, strict reachability validation, vulnerability scanning, and Java/container SBOMs.
-- AWS CloudFormation packaging for two ECS Express Mode replicas, encrypted RDS PostgreSQL, and
-  ECS task-role database authentication without a long-lived application password.
+- Pulumi state backend: an unmodified Pulumi CLI stores stacks, checkpoints, update history, and
+  engine events in your PostgreSQL database, with stack locking and recovery of interrupted updates.
+- Web console for stacks, resources, and update history, and for administering organizations,
+  users, identity providers, and service tokens.
+- Sign-in through OpenID Connect, service account tokens for CI, and organization roles enforced
+  with Cedar policies.
+- Pulumi's `service` secrets provider, backed by a keyset stored in the database.
+- Optional GitHub App that reports previews and updates on pull requests.
+- Native image for `linux/amd64` and `linux/arm64` at `ghcr.io/state-db/statedb`, with build
+  provenance and SBOM attestations, and Java and container SBOMs attached to the release.
+- AWS CloudFormation template, attached to the release, for two ECS replicas and encrypted RDS
+  PostgreSQL with ECS task-role database authentication.
+
+### Compatibility
+
+- Tested with Pulumi CLI `3.234.0` and `3.259.0`.
+- Requires PostgreSQL 14 or newer with LZ4; migrations are tested on PostgreSQL 14, 16, and 18.
+- This release creates the schema. There is no earlier release to upgrade from.

@@ -27,6 +27,8 @@ Pulumi still runs your program and calls providers on your machine or CI runner.
 
 OpenTofu and Terraform state are not supported.
 
+statedb is at version 0.x. A minor release can include breaking changes; the [changelog](CHANGELOG.md) states each one.
+
 <img src="site/public/screens/console-operations.jpg" alt="The statedb console showing active locks and compaction jobs" width="820">
 
 ## Try it

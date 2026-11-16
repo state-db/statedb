@@ -117,6 +117,22 @@ export function versionedCloudFormationPutArgs(
     "*",
   ];
 }
+// GHCR reads a multi-architecture package's description and repository link from the index.
+export function indexAnnotationArgs(version: string, commit: string): string[] {
+  versionParts(version);
+  const annotations = {
+    title: "state-db",
+    description: "Self-hosted state backend for the Pulumi CLI, with a web console.",
+    source: "https://github.com/state-db/statedb",
+    licenses: "AGPL-3.0-only",
+    version,
+    revision: commit,
+  };
+  return Object.entries(annotations).flatMap(([key, value]) => [
+    "--annotation",
+    `index:org.opencontainers.image.${key}=${value}`,
+  ]);
+}
 function changelogNotes(): string {
   const lines = readFileSync(resolve(ROOT, "CHANGELOG.md"), "utf8").split("\n");
   const start = lines.indexOf("## Unreleased");
@@ -193,18 +209,21 @@ export function release(options: Options) {
 
   try {
     step("Preflight");
-    for (const tool of ["docker", "git", "gh", "cosign"]) {
+    for (const tool of ["docker", "git", "gh"]) {
       if (!Bun.which(tool)) {
         throw new ReleaseError(`${tool} is not on PATH`);
       }
     }
-    if (!dryRun) {
+    if (!dryRun && !CFN_BUCKET) {
+      note("STATEDB_CFN_BUCKET is unset: the template ships only as a GitHub Release asset");
+    }
+    if (!dryRun && CFN_BUCKET) {
       if (!Bun.which("aws")) {
         throw new ReleaseError("aws is not on PATH");
       }
-      if (!CFN_BUCKET) {
-        throw new ReleaseError("STATEDB_CFN_BUCKET is required for CloudFormation publishing");
-      }
+      // AWS access is first used after the tag is pushed, and that tag cannot be withdrawn.
+      command("aws", ["sts", "get-caller-identity"], { capture: true });
+      command("aws", ["s3api", "head-bucket", "--bucket", CFN_BUCKET], { capture: true });
     }
     command("docker", ["buildx", "version"], { capture: true });
     require(capture("git", ["rev-parse", "--abbrev-ref", "HEAD"]) === "main", "not on main");
@@ -381,7 +400,7 @@ export function release(options: Options) {
     if (dryRun) {
       note(
         "[dry-run] would assemble and gate the manifest, then publish the tag, image, " +
-          "signature, aliases, GitHub Release, and version bump",
+          "aliases, GitHub Release, and version bump",
       );
       return { version, published: false };
     }
@@ -398,6 +417,7 @@ export function release(options: Options) {
       "create",
       "-t",
       candidateManifest,
+      ...indexAnnotationArgs(version, commitFull),
       ...candidateReferences,
     ]);
     command("docker", ["pull", candidateManifest]);
@@ -437,11 +457,10 @@ export function release(options: Options) {
     }
     completedPhase = "immutable image publication";
 
-    command("cosign", ["sign", "--yes", `${REGISTRY}@${digest}`]);
-    completedPhase = "image signing";
-
-    command("aws", versionedCloudFormationPutArgs(CFN_BUCKET!, version, cloudFormationArtifact));
-    completedPhase = "versioned CloudFormation publication";
+    if (CFN_BUCKET) {
+      command("aws", versionedCloudFormationPutArgs(CFN_BUCKET, version, cloudFormationArtifact));
+      completedPhase = "versioned CloudFormation publication";
+    }
 
     command("docker", [
       "buildx",
@@ -474,13 +493,15 @@ export function release(options: Options) {
     );
     completedPhase = "GitHub Release publication";
 
-    command("aws", [
-      "s3",
-      "cp",
-      `s3://${CFN_BUCKET}/releases/${version}/cloudformation.yaml`,
-      `s3://${CFN_BUCKET}/releases/latest/cloudformation.yaml`,
-    ]);
-    completedPhase = "latest CloudFormation promotion";
+    if (CFN_BUCKET) {
+      command("aws", [
+        "s3",
+        "cp",
+        `s3://${CFN_BUCKET}/releases/${version}/cloudformation.yaml`,
+        `s3://${CFN_BUCKET}/releases/latest/cloudformation.yaml`,
+      ]);
+      completedPhase = "latest CloudFormation promotion";
+    }
 
     step("Rolling the changelog and .version");
     const [major, minorNumber] = minor.split(".").map(BigInt);

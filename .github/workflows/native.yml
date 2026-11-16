@@ -37,7 +37,7 @@ jobs:
 
   cli-battle-tests:
     name: Pulumi compatibility (${{ matrix.pulumi-version }})
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 90
     strategy:
       fail-fast: false
@@ -52,7 +52,7 @@ jobs:
         with:
           persist-credentials: false
       - name: Install the pinned verification toolchain
-        uses: jdx/mise-action@5228313ee0372e111a38da051671ca30fc5a96db # v3
+        uses: jdx/mise-action@5228313ee0372e111a38da051671ca30fc5a96db # v3.6.3
         with:
           version: 2026.8.5
           cache: false
@@ -95,6 +95,8 @@ jobs:
     permissions:
       contents: read
       packages: write
+      id-token: write
+      attestations: write
     strategy:
       fail-fast: false
       matrix:
@@ -151,7 +153,9 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Publish the gated architecture candidate
+        id: candidate
         env:
+          ARCH: ${{ matrix.arch }}
           CANDIDATE: ghcr.io/${{ github.repository }}-candidates:${{ github.sha }}-${{ matrix.arch }}
         run: |
           docker tag state-db:native-ci "$CANDIDATE"
@@ -159,6 +163,25 @@ jobs:
           digest=$(docker buildx imagetools inspect "$CANDIDATE" --format '{{json .Manifest.Digest}}' | tr -d '"')
           case "$digest" in sha256:*) ;; *) echo "invalid candidate digest: $digest" >&2; exit 1 ;; esac
           printf '%s\n' "$digest" > native-candidate-${{ matrix.arch }}.digest
+          # The release index lists this platform manifest unchanged, so users verify it there.
+          platform_digest=$(docker buildx imagetools inspect "$CANDIDATE" --raw |
+            jq -r --arg arch "$ARCH" --arg digest "$digest" \
+              'if .manifests then .manifests[] | select(.platform.os == "linux" and .platform.architecture == $arch) | .digest else $digest end')
+          case "$platform_digest" in sha256:*) ;; *) echo "invalid platform digest: $platform_digest" >&2; exit 1 ;; esac
+          echo "platform-digest=$platform_digest" >> "$GITHUB_OUTPUT"
+
+      - name: Attest build provenance for the gated image
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
+        with:
+          subject-name: ghcr.io/${{ github.repository }}
+          subject-digest: ${{ steps.candidate.outputs.platform-digest }}
+
+      - name: Attest the container SBOM for the gated image
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
+        with:
+          subject-name: ghcr.io/${{ github.repository }}
+          subject-digest: ${{ steps.candidate.outputs.platform-digest }}
+          sbom-path: native-container-${{ matrix.arch }}.cdx.json
 
       - name: Capture native build metadata
         if: always()

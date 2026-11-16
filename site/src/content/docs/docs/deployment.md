@@ -8,6 +8,47 @@ everything users touch, meaning the Pulumi API and the console, while port
 `9000` carries health and metrics for your platform. Put HTTPS in front of
 `8080` and keep `9000` on the private network.
 
+## Get the image
+
+Releases are published to the GitHub Container Registry for `linux/amd64` and
+`linux/arm64`:
+
+```sh
+docker pull ghcr.io/state-db/statedb:0.1.0
+```
+
+| Tag | Meaning |
+| --- | --- |
+| `X.Y.Z` | One release. It is never repointed. |
+| `X.Y` | The latest patch of that minor release |
+| `latest` | The latest release |
+
+Run a specific release in production, not `latest`. For a reference that cannot
+change, pin the digest that `docker buildx imagetools inspect` reports for the
+tag, as in `ghcr.io/state-db/statedb:0.1.0@sha256:...`. Each
+[GitHub Release](https://github.com/state-db/statedb/releases) lists its changes
+and attaches the software bills of materials.
+
+### Verify the image
+
+Each platform image carries a build provenance attestation and a CycloneDX SBOM
+attestation, signed by the release build workflow. Verification needs the
+[GitHub CLI](https://cli.github.com/) and `jq`. Look up the digest for your
+platform, then verify it:
+
+```sh
+digest=$(docker buildx imagetools inspect ghcr.io/state-db/statedb:0.1.0 \
+  --format '{{json .Manifest}}' |
+  jq -r '.manifests[] | select(.platform.architecture == "amd64") | .digest')
+
+gh attestation verify "oci://ghcr.io/state-db/statedb@$digest" \
+  --repo state-db/statedb \
+  --signer-workflow state-db/statedb/.github/workflows/native.yml
+```
+
+Use `arm64` for an ARM host. Add `--predicate-type https://cyclonedx.org/bom`
+to verify the SBOM attestation instead.
+
 ## Prepare the database
 
 Use PostgreSQL 14 or newer with LZ4 support. The official images and the major

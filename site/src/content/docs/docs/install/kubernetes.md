@@ -9,8 +9,13 @@ instance from your cloud provider.
 
 ## Install
 
+The chart is not yet published to a chart registry. Install it from a checkout
+of the release you want to run:
+
 ```sh
-helm install statedb oci://ghcr.io/state-db/charts/statedb \
+git clone --branch v0.1.0 https://github.com/state-db/statedb
+cd statedb
+helm install statedb examples/helm/statedb \
   --set database.jdbcUrl=jdbc:postgresql://postgres:5432/statedb \
   --set database.user=statedb \
   --set database.existingSecret=statedb-db \
@@ -38,7 +43,7 @@ You can configure OpenID Connect from the console after installing, or seed a
 provider at install time so the deployment is usable immediately:
 
 ```sh
-helm upgrade statedb oci://ghcr.io/state-db/charts/statedb \
+helm upgrade statedb examples/helm/statedb \
   --reuse-values \
   --set oidc.name=okta \
   --set oidc.issuer=https://example.okta.com \
@@ -68,7 +73,7 @@ The Ingress does not expose the management port that carries health and metrics.
 ## Upgrades
 
 ```sh
-helm upgrade statedb oci://ghcr.io/state-db/charts/statedb --reuse-values
+helm upgrade statedb examples/helm/statedb --reuse-values
 ```
 
 Each pod applies any pending schema changes before it reports ready, and a
