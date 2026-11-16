@@ -60,7 +60,8 @@ The build-and-gate job fails on fixable HIGH or CRITICAL findings in the image
 and, on amd64, in the dependency-level Java SBOM. It records a CycloneDX
 container SBOM per architecture, then pushes the gated image as
 `<registry>-candidates:<commit>-<arch>` and uploads its digest with the build
-metadata. The workflow holds `packages: write` for candidates only and never the
+metadata. The job runs in the `release` environment, so it waits for maintainer
+approval and runs only from `main`. The workflow holds `packages: write` for candidates only and never the
 release-signing identity. Its artifacts are retained for 14 days, so a release
 must run within 14 days of the workflow run it relies on.
 
