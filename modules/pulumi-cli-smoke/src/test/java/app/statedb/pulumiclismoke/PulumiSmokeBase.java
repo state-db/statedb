@@ -18,7 +18,10 @@ import io.quarkus.narayana.jta.QuarkusTransaction;
 import io.quarkus.test.common.http.TestHTTPResource;
 import jakarta.inject.Inject;
 import jakarta.persistence.EntityManager;
+import java.io.IOException;
+import java.io.UncheckedIOException;
 import java.net.URL;
+import java.nio.file.Files;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
@@ -30,6 +33,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.testcontainers.Testcontainers;
 import org.testcontainers.containers.Container;
 import org.testcontainers.containers.GenericContainer;
+import org.testcontainers.containers.wait.strategy.Wait;
 import org.testcontainers.images.builder.Transferable;
 import org.testcontainers.utility.DockerImageName;
 import org.testcontainers.utility.MountableFile;
@@ -52,6 +56,12 @@ public abstract class PulumiSmokeBase {
   // default pin comes from the pom's pulumi.cli.image property (forwarded by failsafe).
   protected static final DockerImageName PULUMI_IMAGE =
       DockerImageName.parse(System.getProperty("pulumi.cli.image", "pulumi/pulumi:3.234.0"));
+
+  // Installed up front at a pinned version: resolving "latest" hits GitHub's rate-limited API.
+  private static final String PROJECT_COMMAND =
+      "mkdir -p /tmp/pulumi-home && pulumi plugin install resource random "
+          + randomProviderVersion()
+          + " && echo cli-ready && sleep infinity";
 
   protected static final String ORG = "acme";
   protected static final String STACK = "dev";
@@ -121,7 +131,8 @@ public abstract class PulumiSmokeBase {
     return baseContainer()
         .withCopyFileToContainer(recorderProject, "/workspace/Pulumi.yaml")
         .withCopyToContainer(Transferable.of("{}\n"), "/workspace/Pulumi.dev.yaml")
-        .withCommand("-lc", "mkdir -p /tmp/pulumi-home && sleep infinity");
+        .withCommand("-lc", PROJECT_COMMAND)
+        .waitingFor(Wait.forLogMessage(".*cli-ready.*", 1));
   }
 
   // Container with an inline single-project body mounted at /workspace.
@@ -129,7 +140,21 @@ public abstract class PulumiSmokeBase {
     return baseContainer()
         .withCopyToContainer(Transferable.of(pulumiYaml), "/workspace/Pulumi.yaml")
         .withCopyToContainer(Transferable.of("{}\n"), "/workspace/Pulumi.dev.yaml")
-        .withCommand("-lc", "mkdir -p /tmp/pulumi-home && sleep infinity");
+        .withCommand("-lc", PROJECT_COMMAND)
+        .waitingFor(Wait.forLogMessage(".*cli-ready.*", 1));
+  }
+
+  private static String randomProviderVersion() {
+    String prefix = "ARG RANDOM_PROVIDER_VERSION=";
+    try (var lines = Files.lines(RepoRoot.get().resolve("tools/pulumi/recorder/Dockerfile"))) {
+      return lines
+          .filter(line -> line.startsWith(prefix))
+          .map(line -> line.substring(prefix.length()).trim())
+          .findFirst()
+          .orElseThrow(() -> new IllegalStateException("no RANDOM_PROVIDER_VERSION pin"));
+    } catch (IOException e) {
+      throw new UncheckedIOException(e);
+    }
   }
 
   protected JsonNode execJson(String command) throws Exception {
