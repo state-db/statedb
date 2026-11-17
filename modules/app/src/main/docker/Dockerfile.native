@@ -107,7 +107,7 @@ mv "${zstd_so}" "/project/jni/$(basename "${zstd_so}")"
 EOF
 
 # ---- runtime --------------------------------------------------------------------------------
-FROM quay.io/quarkus/ubi9-quarkus-micro-image:2.0@sha256:0c71064c81a42e6fa776d2deb1183fce538b4a97b24236ccc3a7ea730d83c267
+FROM quay.io/quarkus/ubi9-quarkus-micro-image:2.0@sha256:869f5029fcf355676ac511e1c60003b43aa23d69e33e1dd4b4ffddd3ae3a69a1
 
 ARG BUILD_VERSION=unknown
 ARG BUILD_COMMIT=unknown
