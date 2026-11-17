@@ -57,10 +57,11 @@ public abstract class PulumiSmokeBase {
   protected static final DockerImageName PULUMI_IMAGE =
       DockerImageName.parse(System.getProperty("pulumi.cli.image", "pulumi/pulumi:3.234.0"));
 
-  // Installed up front at a pinned version: resolving "latest" hits GitHub's rate-limited API.
+  // Installed up front at pinned versions: resolving "latest" hits GitHub's rate-limited API.
   private static final String PROJECT_COMMAND =
       "mkdir -p /tmp/pulumi-home && pulumi plugin install resource random "
           + randomProviderVersion()
+          + " && pulumi plugin install resource command 1.3.0"
           + " && echo cli-ready && sleep infinity";
 
   protected static final String ORG = "acme";
