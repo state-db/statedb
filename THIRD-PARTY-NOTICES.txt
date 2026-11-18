@@ -25,7 +25,7 @@ the appendix; the license texts of all non-Apache components are reproduced
 in the next section.
 
 
-Lists of 238 third-party dependencies.
+Lists of 239 third-party dependencies.
      (Apache License 2.0) Agroal API (io.agroal:agroal-api:3.2.1 - https://github.com/agroal)
      (Apache License 2.0) Agroal Connection Pool (io.agroal:agroal-pool:3.2.1 - https://github.com/agroal)
      (Apache License 2.0) Agroal Narayana Integration (io.agroal:agroal-narayana:3.2.1 - https://github.com/agroal)
@@ -53,7 +53,8 @@ Lists of 238 third-party dependencies.
      (Apache License 2.0) flyway-core (org.flywaydb:flyway-core:12.0.0 - https://flywaydb.org/flyway-core)
      (Apache License 2.0) Gson (com.google.code.gson:gson:2.14.0 - https://github.com/google/gson)
      (Apache License 2.0) Guava InternalFutureFailureAccess and InternalFutures (com.google.guava:failureaccess:1.0.1 - https://github.com/google/guava/failureaccess)
-     (Apache License 2.0) Guava: Google Core Libraries for Java (com.google.guava:guava:33.6.0-jre - https://github.com/google/guava)
+     (Apache License 2.0) Guava ListenableFuture only (com.google.guava:listenablefuture:9999.0-empty-to-avoid-conflict-with-guava - https://github.com/google/guava/listenablefuture)
+     (Apache License 2.0) Guava: Google Core Libraries for Java (com.google.guava:guava:33.7.2-jre - https://github.com/google/guava)
      (BSD 2-Clause License) (Public Domain) HdrHistogram (org.hdrhistogram:HdrHistogram:2.2.2 - http://hdrhistogram.github.io/HdrHistogram/)
      (Apache License 2.0) Hibernate Models (org.hibernate.models:hibernate-models:1.1.1 - https://github.com/hibernate/hibernate-models)
      (Apache License 2.0) Hibernate ORM - hibernate-core (org.hibernate.orm:hibernate-core:7.4.5.Final - https://hibernate.org/orm)
@@ -61,12 +62,12 @@ Lists of 238 third-party dependencies.
      (Apache License 2.0) Hibernate ORM - hibernate-jcache (org.hibernate.orm:hibernate-jcache:7.4.5.Final - https://hibernate.org/orm)
      (BSD 3-Clause License) istack common utility code runtime (com.sun.istack:istack-commons-runtime:4.1.2 - https://projects.eclipse.org/projects/ee4j/istack-commons/istack-commons-runtime)
      (Apache License 2.0) J2ObjC Annotations (com.google.j2objc:j2objc-annotations:2.8 - https://github.com/google/j2objc/)
-     (Apache License 2.0) Jackson datatype: jdk8 (com.fasterxml.jackson.datatype:jackson-datatype-jdk8:2.22.0 - https://github.com/FasterXML/jackson-modules-java8/jackson-datatype-jdk8)
-     (Apache License 2.0) Jackson datatype: JSR310 (com.fasterxml.jackson.datatype:jackson-datatype-jsr310:2.22.0 - https://github.com/FasterXML/jackson-modules-java8/jackson-datatype-jsr310)
+     (Apache License 2.0) Jackson datatype: jdk8 (com.fasterxml.jackson.datatype:jackson-datatype-jdk8:2.22.3 - https://github.com/FasterXML/jackson-modules-java8/jackson-datatype-jdk8)
+     (Apache License 2.0) Jackson datatype: JSR310 (com.fasterxml.jackson.datatype:jackson-datatype-jsr310:2.22.3 - https://github.com/FasterXML/jackson-modules-java8/jackson-datatype-jsr310)
      (Apache License 2.0) Jackson-annotations (com.fasterxml.jackson.core:jackson-annotations:2.22 - https://github.com/FasterXML/jackson)
-     (Apache License 2.0) Jackson-core (com.fasterxml.jackson.core:jackson-core:2.22.0 - https://github.com/FasterXML/jackson-core)
-     (Apache License 2.0) jackson-databind (com.fasterxml.jackson.core:jackson-databind:2.22.0 - https://github.com/FasterXML/jackson)
-     (Apache License 2.0) Jackson-module-parameter-names (com.fasterxml.jackson.module:jackson-module-parameter-names:2.22.0 - https://github.com/FasterXML/jackson-modules-java8/jackson-module-parameter-names)
+     (Apache License 2.0) Jackson-core (com.fasterxml.jackson.core:jackson-core:2.22.3 - https://github.com/FasterXML/jackson-core)
+     (Apache License 2.0) jackson-databind (com.fasterxml.jackson.core:jackson-databind:2.22.3 - https://github.com/FasterXML/jackson)
+     (Apache License 2.0) Jackson-module-parameter-names (com.fasterxml.jackson.module:jackson-module-parameter-names:2.22.3 - https://github.com/FasterXML/jackson-modules-java8/jackson-module-parameter-names)
      (BSD 3-Clause License) Jakarta Activation API (jakarta.activation:jakarta.activation-api:2.1.4 - https://github.com/jakartaee/jaf-api)
      (Eclipse Public License 2.0) (GNU General Public License v2.0 with Classpath Exception) Jakarta Annotations API (jakarta.annotation:jakarta.annotation-api:3.0.0 - https://projects.eclipse.org/projects/ee4j.ca)
      (Apache License 2.0) Jakarta Dependency Injection (jakarta.inject:jakarta.inject-api:2.0.1 - https://github.com/eclipse-ee4j/injection-api)

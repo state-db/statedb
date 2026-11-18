@@ -43,10 +43,25 @@
         <cedar-java.version>4.10.0</cedar-java.version>
         <tink.version>1.23.0</tink.version>
         <zstd-jni.version>1.5.7-6</zstd-jni.version>
+        <jackson.version>2.22.3</jackson.version>
+        <guava.version>33.7.2-jre</guava.version>
     </properties>
 
     <dependencyManagement>
         <dependencies>
+            <!-- Patched ahead of the Quarkus BOM for HIGH CVEs that fail the release scan. -->
+            <dependency>
+                <groupId>com.fasterxml.jackson</groupId>
+                <artifactId>jackson-bom</artifactId>
+                <version>${jackson.version}</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
+            <dependency>
+                <groupId>com.google.guava</groupId>
+                <artifactId>guava</artifactId>
+                <version>${guava.version}</version>
+            </dependency>
             <dependency>
                 <groupId>${quarkus.platform.group-id}</groupId>
                 <artifactId>${quarkus.platform.artifact-id}</artifactId>
