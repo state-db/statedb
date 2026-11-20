@@ -14,7 +14,7 @@ Releases are published to the GitHub Container Registry for `linux/amd64` and
 `linux/arm64`:
 
 ```sh
-docker pull ghcr.io/state-db/statedb:0.1.0
+docker pull ghcr.io/state-db/statedb:{{version}}
 ```
 
 | Tag | Meaning |
@@ -25,7 +25,7 @@ docker pull ghcr.io/state-db/statedb:0.1.0
 
 Run a specific release in production, not `latest`. For a reference that cannot
 change, pin the digest that `docker buildx imagetools inspect` reports for the
-tag, as in `ghcr.io/state-db/statedb:0.1.0@sha256:...`. Each
+tag, as in `ghcr.io/state-db/statedb:{{version}}@sha256:...`. Each
 [GitHub Release](https://github.com/state-db/statedb/releases) lists its changes
 and attaches the software bills of materials.
 
@@ -37,7 +37,7 @@ attestation, signed by the release build workflow. Verification needs the
 platform, then verify it:
 
 ```sh
-digest=$(docker buildx imagetools inspect ghcr.io/state-db/statedb:0.1.0 \
+digest=$(docker buildx imagetools inspect ghcr.io/state-db/statedb:{{version}} \
   --format '{{json .Manifest}}' |
   jq -r '.manifests[] | select(.platform.architecture == "amd64") | .digest')
 

@@ -1,9 +1,11 @@
 // @ts-check
 import { defineConfig } from "astro/config";
 import starlight from "@astrojs/starlight";
+import remarkReleaseVersion from "./src/remark-release-version.mjs";
 
 export default defineConfig({
   site: "https://statedb.app",
+  markdown: { remarkPlugins: [remarkReleaseVersion] },
   integrations: [
     starlight({
       title: "statedb",

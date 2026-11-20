@@ -14,7 +14,7 @@ bin/release [--version X.Y.Z] [--dry-run | --rehearse]
 4. Assemble the multi-architecture candidate from digest references and gate it again.
 5. Atomically publish the Git tag while asserting that `main` did not advance.
 6. Publish the immutable image, move aliases, and create the GitHub Release.
-7. Roll the changelog and `.version` forward and push `main`.
+7. Roll the changelog, `.version`, and `site/release-version` forward and push `main`.
 
 Before the Git tag is published, failures remove the temporary local tag. After it is published,
 failures identify the last completed phase and preserve the tag for manual reconciliation.

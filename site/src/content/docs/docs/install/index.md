@@ -14,7 +14,7 @@ provision.
 | [Docker Compose](/docs/quickstart/) | Available | Evaluating statedb on your own machine |
 | [Kubernetes](/docs/install/kubernetes/) | Available | A cluster you already run, via the Helm chart |
 | [Self-managed](/docs/deployment/) | Available | Any other container platform or VM |
-| [AWS CloudFormation](/docs/install/aws/) | Not yet published | A managed AWS install on ECS and RDS |
+| [AWS CloudFormation](/docs/install/aws/) | Available | A managed AWS install on ECS and RDS |
 | [Google Cloud](/docs/install/gcp/) | No installer | GKE or Cloud Run, using the Helm chart or self-managed guide |
 | [Microsoft Azure](/docs/install/azure/) | No installer | AKS or Container Apps, using the Helm chart or self-managed guide |
 
