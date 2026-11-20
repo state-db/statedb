@@ -11,10 +11,8 @@ import io.smallrye.mutiny.Uni;
 import io.vertx.ext.web.RoutingContext;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
-import java.util.Optional;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
-import org.eclipse.microprofile.config.inject.ConfigProperty;
 
 /**
  * Resolves a {@code quarkus-oidc} tenant per request from the {@code oidc_providers} table, so
@@ -46,17 +44,7 @@ public class ProviderTenantConfigResolver implements TenantConfigResolver {
   // provider name in the path. (/login needs no tenant — it just redirects to /flow.)
   private static final Pattern AUTH_ROUTE = Pattern.compile("^/api/auth/(?:flow|callback)/([^/]+)");
 
-  // The `pulumi login` browser flow lands here as a top-level navigation, so an unauthenticated
-  // hit should challenge the user to sign in — not 401 like an SPA fetch. Resolving the default
-  // provider here lets quarkus-oidc start the login and restore the cli-login URL after the
-  // callback, at which point the handler mints and redirects to the CLI's loopback listener.
-  private static final String CLI_LOGIN_PATH = "/api/auth/cli-login";
-
   @Inject EnabledOidcProviderLookup providerLookup;
-
-  @Inject
-  @ConfigProperty(name = "statedb.oidc.default-provider")
-  Optional<String> defaultProvider;
 
   // Encrypts the web-app session cookie. It must be stable across replicas; tests provide an
   // explicit value rather than relying on Quarkus's weak fallback.
@@ -84,11 +72,6 @@ public class ProviderTenantConfigResolver implements TenantConfigResolver {
     Matcher m = AUTH_ROUTE.matcher(path);
     if (m.find()) {
       return m.group(1);
-    }
-    // No session and a top-level cli-login navigation: challenge via the default provider so the
-    // user can sign in, rather than returning the SPA-style 401 that a fetch would expect.
-    if (path.startsWith(CLI_LOGIN_PATH) && defaultProvider.isPresent()) {
-      return defaultProvider.get();
     }
     return null;
   }
