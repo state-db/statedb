@@ -6,6 +6,8 @@ body.
 
 ## Unreleased
 
+## 0.1.0 — 2026-11-20
+
 First public release. statedb is at version 0.x: a minor release can include breaking changes, and
 this file states each one.
 
