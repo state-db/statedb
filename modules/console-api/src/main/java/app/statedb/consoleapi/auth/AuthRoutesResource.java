@@ -67,6 +67,9 @@ public class AuthRoutesResource {
 
   static final String CLI_LOGIN_PATH = "/api/auth/cli-login";
 
+  // Marks a cli-login URL that already went through sign-in, so an anonymous return stops here.
+  static final String AFTER_SIGN_IN = "afterSignIn";
+
   // Break-glass form-auth cookie; mirrors quarkus.http.auth.form.cookie-name in application.yml.
   private static final String GLASS_COOKIE = "state-db-glass";
 
@@ -201,13 +204,12 @@ public class AuthRoutesResource {
   }
 
   /**
-   * Authenticated half of the native {@code pulumi login} flow (see {@link CliLoginResource}). The
-   * {@code /api/*} HTTP permission plus {@link ProviderTenantConfigResolver}'s self-start establish
-   * a console session first — an anonymous hit is challenged into SSO and restored here. With a
-   * session this GET renders a human approval page and does not mint: the side effect happens only
-   * after the user clicks Allow, via {@link #approveCliLogin}. The redirect host is hard-coded to
-   * {@code 127.0.0.1} (only the port varies), so a crafted link cannot exfiltrate the token to
-   * another host; the nonce is echoed back for the CLI listener to verify.
+   * Authenticated half of the native {@code pulumi login} flow (see {@link CliLoginResource}). An
+   * anonymous hit is sent through the default provider's SSO, or the console sign-in screen, and
+   * returns here. With a session this GET renders a human approval page and does not mint: the side
+   * effect happens only after the user clicks Allow, via {@link #approveCliLogin}. The redirect
+   * host is hard-coded to {@code 127.0.0.1} (only the port varies), so a crafted link cannot
+   * exfiltrate the token to another host; the nonce is echoed back for the CLI listener to verify.
    */
   @GET
   @Path("/cli-login")
@@ -218,11 +220,15 @@ public class AuthRoutesResource {
       @CookieParam(CliLoginCsrf.COOKIE) String csrfCookie,
       @QueryParam("cliSessionPort") String port,
       @QueryParam("cliSessionNonce") String nonce,
-      @QueryParam("cliSessionDescription") String description) {
+      @QueryParam("cliSessionDescription") String description,
+      @QueryParam(AFTER_SIGN_IN) String afterSignIn) {
     int p = CliLoginResource.parsePort(port);
     if (p == -1 || CliLoginResource.isBlank(nonce)) {
       return CliLoginResource.badRequest(
           "cli-login requires a valid cliSessionPort and cliSessionNonce");
+    }
+    if (identity.isAnonymous()) {
+      return signInForCliLogin(p, nonce, description, afterSignIn != null);
     }
     JsonWebToken jwt = sessionJwt();
 
@@ -277,6 +283,30 @@ public class AuthRoutesResource {
             + "&nonce="
             + CliLoginResource.enc(approval.nonce());
     return Response.status(Response.Status.FOUND).location(URI.create(loopback)).build();
+  }
+
+  private Response signInForCliLogin(
+      int port, String nonce, String description, boolean alreadyTried) {
+    if (alreadyTried) {
+      return credentialPage(CliLoginPages.signInIncompletePage())
+          .status(Response.Status.UNAUTHORIZED)
+          .type(MediaType.TEXT_HTML)
+          .build();
+    }
+    String returnTo =
+        URLEncoder.encode(
+            CliLoginResource.handlerUrl(port, nonce, description) + "&" + AFTER_SIGN_IN + "=1",
+            StandardCharsets.UTF_8);
+    // The default provider challenges directly; the sign-in screen covers every other setup.
+    String target =
+        defaultProvider
+            .filter(name -> OidcProvider.findEnabled(name).isPresent())
+            .map(name -> "/api/auth/flow/" + name + "?returnTo=" + returnTo)
+            .orElse("/console/login?returnTo=" + returnTo);
+    return Response.seeOther(URI.create(target))
+        .header("Cache-Control", "no-store")
+        .header("Referrer-Policy", "no-referrer")
+        .build();
   }
 
   private static boolean isHttps(UriInfo uriInfo) {

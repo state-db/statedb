@@ -2,6 +2,7 @@ package app.statedb.app.console;
 
 import static io.restassured.RestAssured.given;
 import static org.hamcrest.Matchers.containsString;
+import static org.hamcrest.Matchers.nullValue;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
@@ -34,10 +35,10 @@ import org.junit.jupiter.api.Test;
 /**
  * End-to-end coverage of the native {@code pulumi login} bridge: the root {@code /cli-login} shim,
  * the authenticated {@code /api/auth/cli-login} handler that asks the user to approve CLI access,
- * the approval POST that mints and redirects to the CLI's loopback listener, and the
- * unauthenticated self-start challenge. Drives the console SSO login against the in-JVM mock IdP
- * ({@link OidcWiremockTestResource}) with RestAssured, then proves the minted token authenticates
- * the Pulumi surface — the same handshake {@code pulumi login} performs.
+ * the approval POST that mints and redirects to the CLI's loopback listener, and the sign-in
+ * redirect for anonymous callers. Drives the console SSO login against the in-JVM mock IdP ({@link
+ * OidcWiremockTestResource}) with RestAssured, then proves the minted token authenticates the
+ * Pulumi surface — the same handshake {@code pulumi login} performs.
  */
 @QuarkusTest
 @QuarkusTestResource(OidcWiremockTestResource.class)
@@ -139,22 +140,95 @@ class CliLoginFlowTest {
   }
 
   @Test
-  void unauthenticatedHandlerStartsLoginInsteadOf401() {
-    // A top-level navigation (Accept text/html) with no session must be challenged into the SSO
-    // login via the default provider, not get the SPA-style 401 a fetch would.
-    Response challenge =
+  void anonymousHandlerSignsInThroughDefaultProviderThenShowsApproval() {
+    // A top-level navigation with no session goes through SSO and lands back on the approval page,
+    // never on the SPA-style 401 a fetch would get.
+    Response anonymous = cliLoginPage(null, "my laptop");
+    anonymous.then().statusCode(303);
+    String flow = anonymous.getHeader("Location");
+    assertEquals("/api/auth/flow/" + PROVIDER, URI.create(flow).getPath());
+    String returnTo = queryParams(flow).get("returnTo");
+    assertEquals("/api/auth/cli-login", URI.create(returnTo).getPath());
+    Map<String, String> q = queryParams(returnTo);
+    assertEquals("59123", q.get("cliSessionPort"));
+    assertEquals("nonce-abc", q.get("cliSessionNonce"));
+    assertEquals("my laptop", q.get("cliSessionDescription"));
+    assertEquals("1", q.get("afterSignIn"));
+
+    SignIn signIn = signIn(pathWithQuery(flow));
+    Response restored =
         given()
+            .urlEncodingEnabled(false)
             .redirects()
             .follow(false)
+            .cookie(signIn.session().getName(), signIn.session().getValue())
             .accept("text/html")
-            .queryParam("cliSessionPort", "59123")
-            .queryParam("cliSessionNonce", "nonce-abc")
             .when()
-            .get("/api/auth/cli-login");
-    challenge.then().statusCode(302);
-    assertTrue(
-        challenge.getHeader("Location").startsWith(issuer()),
-        "challenge redirects to the IdP, got " + challenge.getHeader("Location"));
+            .get(pathWithQuery(signIn.callback().getHeader("Location")));
+    restored.then().statusCode(303);
+    assertEquals(
+        returnTo, pathWithQuery(restored.getHeader("Location")), "the flow returns to cli-login");
+
+    given()
+        .urlEncodingEnabled(false)
+        .redirects()
+        .follow(false)
+        .cookie(signIn.session().getName(), signIn.session().getValue())
+        .accept("text/html")
+        .when()
+        .get(pathWithQuery(restored.getHeader("Location")))
+        .then()
+        .statusCode(200)
+        .body(containsString("Allow CLI access?"))
+        .body(containsString("my laptop"));
+  }
+
+  @Test
+  void anonymousHandlerUsesSignInScreenWhenDefaultProviderIsDisabled() {
+    setProviderEnabled(false);
+    assertRedirectsToSignInScreen(cliLoginPage(null, null));
+  }
+
+  @Test
+  void anonymousReturnAfterSignInEndsInErrorPageNotLoop() {
+    given()
+        .redirects()
+        .follow(false)
+        .accept("text/html")
+        .queryParam("cliSessionPort", "59123")
+        .queryParam("cliSessionNonce", "nonce-abc")
+        .queryParam("afterSignIn", "1")
+        .when()
+        .get("/api/auth/cli-login")
+        .then()
+        .statusCode(401)
+        .header("Location", nullValue())
+        .contentType(containsString("text/html"))
+        .body(containsString("Sign-in was not completed"));
+  }
+
+  @Test
+  void otherConsoleRoutesStill401ForAnonymousCallers() {
+    given().redirects().follow(false).when().get("/api/user").then().statusCode(401);
+    given()
+        .redirects()
+        .follow(false)
+        .contentType("application/x-www-form-urlencoded")
+        .formParam("decision", "allow")
+        .when()
+        .post("/api/auth/cli-login/approve")
+        .then()
+        .statusCode(401);
+  }
+
+  @Test
+  void approvalPageEscapesClientDescription() {
+    Cookie session = establishSession();
+    String payload = "<script>alert(1)</script>\"><img src=x onerror=alert(2)>";
+    String page = cliLoginPage(session, payload).then().statusCode(200).extract().asString();
+    assertFalse(page.contains("<script>alert(1)</script>"), "description must not render raw");
+    assertFalse(page.contains("<img src=x"), "description must not render raw");
+    assertTrue(page.contains("&lt;script&gt;alert(1)&lt;/script&gt;"), "description is escaped");
   }
 
   @Test
@@ -400,13 +474,21 @@ class CliLoginFlowTest {
 
   // Drives the console code flow to a usable session cookie, mirroring OidcLoginFlowTest.
   private Cookie establishSession() {
+    return signIn("/api/auth/flow/" + PROVIDER).session();
+  }
+
+  private record SignIn(Cookie session, Response callback) {}
+
+  private SignIn signIn(String flowPath) {
+    // flowPath arrives already encoded.
     Response start =
         given()
+            .urlEncodingEnabled(false)
             .redirects()
             .follow(false)
             .accept("text/html")
             .when()
-            .get("/api/auth/flow/" + PROVIDER);
+            .get(flowPath);
     start.then().statusCode(302);
     String authorizeUrl = start.getHeader("Location");
     Map<String, String> stateCookies = start.getCookies();
@@ -436,7 +518,39 @@ class CliLoginFlowTest {
         QuarkusTransaction.requiringNew()
             .call(() -> User.count("iss = ?1 and sub = ?2", FIXTURE_ISS, FIXTURE_SUB));
     assertEquals(1L, provisioned, "callback provisions the user");
-    return session;
+    return new SignIn(session, callback);
+  }
+
+  private void setProviderEnabled(boolean enabled) {
+    QuarkusTransaction.requiringNew()
+        .run(() -> OidcProvider.update("enabled = ?1 where name = ?2", enabled, PROVIDER));
+  }
+
+  private static Response cliLoginPage(Cookie session, String description) {
+    RequestSpecification request =
+        given()
+            .redirects()
+            .follow(false)
+            .accept("text/html")
+            .queryParam("cliSessionPort", "59123")
+            .queryParam("cliSessionNonce", "nonce-abc");
+    if (session != null) {
+      request.cookie(session.getName(), session.getValue());
+    }
+    if (description != null) {
+      request.queryParam("cliSessionDescription", description);
+    }
+    return request.when().get("/api/auth/cli-login");
+  }
+
+  static void assertRedirectsToSignInScreen(Response response) {
+    response.then().statusCode(303);
+    String location = response.getHeader("Location");
+    assertEquals("/console/login", URI.create(location).getPath(), "got " + location);
+    String returnTo = queryParams(location).get("returnTo");
+    assertEquals("/api/auth/cli-login", URI.create(returnTo).getPath());
+    assertEquals("59123", queryParams(returnTo).get("cliSessionPort"));
+    assertEquals("1", queryParams(returnTo).get("afterSignIn"));
   }
 
   private static Cookie sessionCookie(Response response) {
@@ -457,7 +571,7 @@ class CliLoginFlowTest {
     return u.getQuery() == null ? u.getPath() : u.getPath() + "?" + u.getRawQuery();
   }
 
-  private static Response approvalPage(Cookie session, Cookie csrf, String port, String nonce) {
+  static Response approvalPage(Cookie session, Cookie csrf, String port, String nonce) {
     RequestSpecification request =
         given()
             .redirects()
@@ -474,7 +588,7 @@ class CliLoginFlowTest {
     return response;
   }
 
-  private static RequestSpecification approvalPost(Cookie session, Response confirmation) {
+  static RequestSpecification approvalPost(Cookie session, Response confirmation) {
     Cookie csrf = confirmation.getDetailedCookie("state-db-csrf");
     assertNotNull(csrf, "approval page must set a CSRF cookie");
     return given()
@@ -486,7 +600,7 @@ class CliLoginFlowTest {
         .formParam("state-db-csrf", hiddenInput(confirmation.asString(), "state-db-csrf"));
   }
 
-  private static Map<String, String> queryParams(String url) {
+  static Map<String, String> queryParams(String url) {
     Map<String, String> params = new HashMap<>();
     String query = URI.create(url).getRawQuery();
     if (query == null) {
@@ -503,7 +617,7 @@ class CliLoginFlowTest {
     return params;
   }
 
-  private static String hiddenInput(String html, String name) {
+  static String hiddenInput(String html, String name) {
     Pattern pattern =
         Pattern.compile("<input[^>]+name=\"" + Pattern.quote(name) + "\"[^>]+value=\"([^\"]+)\"");
     Matcher m = pattern.matcher(html);

@@ -27,7 +27,7 @@ export function LoginPage() {
     () => new URLSearchParams(window.location.search),
     [],
   );
-  const returnTo = searchParams.get("returnTo") ?? "/console";
+  const returnTo = safeReturnTo(searchParams.get("returnTo"));
   const failedProvider =
     searchParams.get("provider") ??
     searchParams.get("errorProvider") ??
@@ -82,7 +82,10 @@ export function LoginPage() {
                     variant="outline"
                     className="w-full justify-center"
                   >
-                    <a href={providerLoginUrl(provider.name, returnTo)}>
+                    <a
+                      href={providerLoginUrl(provider.name, returnTo)}
+                      referrerPolicy="no-referrer"
+                    >
                       {provider.displayName || provider.name}
                     </a>
                   </Button>
@@ -135,7 +138,7 @@ function BreakGlassForm({ returnTo }: { returnTo: string }) {
     setFailed(false);
     try {
       await api.auth.breakGlass(password);
-      window.location.assign(safeReturnTo(returnTo));
+      window.location.assign(returnTo);
     } catch {
       setFailed(true);
       setSubmitting(false);
@@ -181,8 +184,29 @@ function BreakGlassForm({ returnTo }: { returnTo: string }) {
   );
 }
 
-function safeReturnTo(value: string) {
-  return value.startsWith("/") && !value.startsWith("//") ? value : "/console";
+const CLI_LOGIN_PATH = "/api/auth/cli-login";
+
+// Browsers read "/\host" as "//host", so compare the parsed origin, not the string prefix.
+export function safeReturnTo(
+  value: string | null,
+  origin: string = window.location.origin,
+): string {
+  if (!value?.startsWith("/") || value.includes("\\")) {
+    return "/console";
+  }
+  let url: URL;
+  try {
+    url = new URL(value, origin);
+  } catch {
+    return "/console";
+  }
+  const allowed =
+    url.pathname === "/console" ||
+    url.pathname.startsWith("/console/") ||
+    url.pathname === CLI_LOGIN_PATH;
+  return url.origin === origin && allowed
+    ? url.pathname + url.search + url.hash
+    : "/console";
 }
 
 function providerLoginUrl(provider: string, returnTo: string) {

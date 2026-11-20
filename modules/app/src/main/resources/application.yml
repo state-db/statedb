@@ -18,6 +18,11 @@ quarkus:
         console-public:
           paths: /api/auth/providers,/api/auth/login,/api/auth/login/*,/api/auth/logout
           policy: permit
+        # Anonymous `pulumi login` navigations are sent to sign-in by the handler, not a bare 401.
+        cli-login-entry:
+          paths: /api/auth/cli-login
+          methods: GET
+          policy: permit
         console-authenticated:
           paths: /api/*
           policy: authenticated

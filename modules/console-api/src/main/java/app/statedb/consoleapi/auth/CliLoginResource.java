@@ -18,8 +18,8 @@ import java.nio.charset.StandardCharsets;
  * browser to {@code <console>/cli-login?cliSessionPort=&cliSessionNonce=} (console root — that path
  * is fixed by the Pulumi CLI; see {@code pkg/backend/httpstate/backend.go}). Because the session
  * cookie is scoped to {@code /api/}, this root entry point can't see it, so it just validates the
- * loopback parameters and bounces into the {@code /api/} space where the cookie is sent and
- * quarkus-oidc can challenge an anonymous caller.
+ * loopback parameters and bounces into the {@code /api/} space where the cookie is sent and an
+ * anonymous caller is sent to sign in.
  */
 @Path("/")
 public class CliLoginResource {
@@ -32,19 +32,25 @@ public class CliLoginResource {
       @QueryParam("cliSessionPort") String port,
       @QueryParam("cliSessionNonce") String nonce,
       @QueryParam("cliSessionDescription") String description) {
-    if (parsePort(port) == -1 || isBlank(nonce)) {
+    int p = parsePort(port);
+    if (p == -1 || isBlank(nonce)) {
       return badRequest("cli-login requires a valid cliSessionPort and cliSessionNonce");
     }
+    return Response.seeOther(URI.create(handlerUrl(p, nonce, description))).build();
+  }
+
+  // Built from validated values, never the raw request URL: it doubles as a sign-in returnTo.
+  static String handlerUrl(int port, String nonce, String description) {
     StringBuilder target =
         new StringBuilder(AuthRoutesResource.CLI_LOGIN_PATH)
             .append("?cliSessionPort=")
-            .append(enc(port))
+            .append(port)
             .append("&cliSessionNonce=")
             .append(enc(nonce));
     if (!isBlank(description)) {
       target.append("&cliSessionDescription=").append(enc(description));
     }
-    return Response.seeOther(URI.create(target.toString())).build();
+    return target.toString();
   }
 
   // Where Pulumi's listener sends the browser once it has the token; the CLI, not this page, owns
