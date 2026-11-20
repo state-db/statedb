@@ -282,13 +282,14 @@ fi
 docker rm -f "$FOLLOWER" >/dev/null
 
 step "3/8 Image contract"
-image_user=$(docker image inspect "$image" --format '{{.Config.User}}')
+# The containerd image store returns no config for a multi-arch index, so read the running container.
+image_user=$(docker inspect "$APP" --format '{{.Config.User}}')
 case "$image_user" in
 "" | "0" | "root" | "0:0" | "root:root") fail "candidate image runs as root" ;;
 *) echo "non-root runtime user: $image_user" ;;
 esac
 
-image_license=$(docker image inspect "$image" --format '{{index .Config.Labels "org.opencontainers.image.licenses"}}')
+image_license=$(docker inspect "$APP" --format '{{index .Config.Labels "org.opencontainers.image.licenses"}}')
 [[ $image_license == AGPL-3.0-only ]] || fail "candidate image license label is '$image_license', expected AGPL-3.0-only"
 
 license_dir=$(mktemp -d)
