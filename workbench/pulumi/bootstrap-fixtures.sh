@@ -138,6 +138,15 @@ history_deploy_simulator() {
   deploy "Provision deploy simulator"
 }
 
+history_encoded_documents() {
+  configure 1
+  deploy "Grant service read access"
+  configure 2
+  deploy "Tighten queue, key, and secret access"
+  configure 3
+  deploy "Deny IAM writes and reformat container definition"
+}
+
 # Bring an existing stack to the same final revision the history above ends on.
 converge() {
   case "$project" in
@@ -145,6 +154,7 @@ converge() {
     artifact-pipeline) pulumi config set publishGate pass --stack "$stack_ref"; configure 4 ;;
     application-fleet) pulumi config set rotation 2 --stack "$stack_ref"; configure 3 ;;
     deploy-simulator) configure 1 ;;
+    encoded-documents) configure 3 ;;
   esac
   deploy "Converge fixtures"
   if [ "$project" = shared-foundation ]; then
@@ -171,6 +181,7 @@ while IFS='|' read -r project stacks owner; do
         artifact-pipeline) history_artifact_pipeline ;;
         application-fleet) history_application_fleet ;;
         deploy-simulator) history_deploy_simulator ;;
+        encoded-documents) history_encoded_documents ;;
       esac
     fi
   done

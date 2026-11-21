@@ -48,7 +48,7 @@ import {
   type RunEvent,
   type RunPropertyChange,
 } from "@/lib/api";
-import { jsonDiffLines as computeJsonDiffLines, type JsonDiffLine } from "@/lib/json-diff";
+import { jsonDiffLines as computeJsonDiffLines, type DiffOptions, type JsonDiffLine } from "@/lib/json-diff";
 import { cn } from "@/lib/utils";
 
 type RunLocator = { version: number } | { previewId: string };
@@ -472,6 +472,7 @@ function RunChanges({ changes, truncated, live, preview, refresh }: {
 }) {
   const [showActivity, setShowActivity] = useState(false);
   const [showInternal, setShowInternal] = useState(false);
+  const [rawStrings, setRawStrings] = useState(false);
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
   const groups = changes;
   const backgroundActivity = useMemo(() => [...groups.unchanged, ...groups.activity], [groups]);
@@ -482,6 +483,11 @@ function RunChanges({ changes, truncated, live, preview, refresh }: {
     return visible.map((change) => ({ change, allProperties: change.properties }));
   }, [backgroundActivity, groups, showActivity]);
   const internalCount = useMemo(() => rows.reduce((sum, row) => sum + row.allProperties.filter((p) => p.internal).length, 0), [rows]);
+  const details = useMemo(() => rows.map(({ change, allProperties }) => {
+    const properties = allProperties.filter((p) => showInternal || !p.internal);
+    return { change, properties, hiddenInternal: allProperties.length - properties.length, decodedLines: jsonDiffLines(properties) };
+  }), [rows, showInternal]);
+  const encodedCount = useMemo(() => details.reduce((sum, row) => sum + row.decodedLines.filter((line) => line.encoded).length, 0), [details]);
   const empty = changesEmptyState(refresh, live, groups);
   return (
     <div className="flex flex-col gap-3">
@@ -509,6 +515,12 @@ function RunChanges({ changes, truncated, live, preview, refresh }: {
               <Label htmlFor="show-internal">Show internal properties ({internalCount})</Label>
             </div>
           )}
+          {encodedCount > 0 && (
+            <div className="flex items-center gap-2">
+              <Checkbox id="show-raw-strings" checked={rawStrings} onCheckedChange={(value) => setRawStrings(value === true)} />
+              <Label htmlFor="show-raw-strings">Show JSON strings as raw text ({encodedCount})</Label>
+            </div>
+          )}
         </div>
       </div>
       {rows.length === 0 ? (
@@ -523,12 +535,10 @@ function RunChanges({ changes, truncated, live, preview, refresh }: {
           <Table className="table-fixed">
             <TableHeader><TableRow><TableHead className="w-28">Operation</TableHead><TableHead className="w-[34%]">Type</TableHead><TableHead>Name</TableHead><TableHead className="w-40"><span className="sr-only">Property details</span></TableHead></TableRow></TableHeader>
             <TableBody>
-              {rows.map(({ change, allProperties }) => {
+              {details.map(({ change, properties, hiddenInternal, decodedLines }) => {
               const key = `${change.sequence}-${change.name}`;
-              const properties = allProperties.filter((p) => showInternal || !p.internal);
-              const hiddenInternal = allProperties.length - properties.length;
-              const lineCount = jsonDiffLines(properties).length;
-              const autoExpanded = properties.length > 0 && properties.length <= 6 && lineCount <= 12;
+              // Sized from the decoded view so the raw-text toggle never collapses or expands rows.
+              const autoExpanded = properties.length > 0 && properties.length <= 6 && decodedLines.length <= 12;
               const open = expanded[key] ?? autoExpanded;
               const detailId = `change-detail-${change.sequence}`;
               const toggle = () => setExpanded((current) => ({ ...current, [key]: !open }));
@@ -558,7 +568,13 @@ function RunChanges({ changes, truncated, live, preview, refresh }: {
                     <TableRow>
                       <TableCell colSpan={4} className="max-w-0 overflow-hidden p-0">
                         <div id={detailId}>
-                          <InlineJsonDiff properties={properties} hiddenInternal={hiddenInternal} operation={change.op} refresh={refresh} />
+                          <InlineJsonDiff
+                            properties={properties}
+                            lines={rawStrings ? jsonDiffLines(properties, { decodeStrings: false }) : decodedLines}
+                            hiddenInternal={hiddenInternal}
+                            operation={change.op}
+                            refresh={refresh}
+                          />
                         </div>
                       </TableCell>
                     </TableRow>
@@ -634,8 +650,9 @@ function useNow(active: boolean) {
   return now;
 }
 
-function InlineJsonDiff({ properties, hiddenInternal, operation, refresh }: {
+function InlineJsonDiff({ properties, lines, hiddenInternal, operation, refresh }: {
   properties: RunPropertyChange[];
+  lines: JsonDiffLine[];
   hiddenInternal: number;
   operation: string;
   refresh: boolean;
@@ -669,7 +686,7 @@ function InlineJsonDiff({ properties, hiddenInternal, operation, refresh }: {
       tabIndex={0}
     >
       <pre className="w-max min-w-full py-2 font-mono text-xs leading-5">
-        {jsonDiffLines(properties).map((line, index) => (
+        {lines.map((line, index) => (
           <span
             className={cn(
               "grid grid-cols-[1.25rem_minmax(0,1fr)] whitespace-pre px-3",
@@ -947,12 +964,12 @@ export function resourceRows(
   return [...rows.values()].sort((a, b) => a.sequence - b.sequence);
 }
 
-export function jsonDiffLines(properties: RunPropertyChange[]): JsonDiffLine[] {
+export function jsonDiffLines(properties: RunPropertyChange[], options?: DiffOptions): JsonDiffLine[] {
   return computeJsonDiffLines(properties.map((property) => ({
     path: property.path,
     oldValue: property.oldPresent ? property.oldValue : undefined,
     newValue: property.newPresent ? property.newValue : undefined,
-  })));
+  })), options);
 }
 
 function urnType(urn: string) { const parts = urn.split("::"); const types = parts[parts.length - 2]?.split("$") ?? []; return types[types.length - 1] ?? "unknown"; }

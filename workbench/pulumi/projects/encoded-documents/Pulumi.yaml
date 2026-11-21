@@ -1,0 +1,126 @@
+name: encoded-documents
+runtime: yaml
+description: Local-only resource whose inputs are JSON documents stored as strings, like IAM policies.
+
+config:
+  environment:
+    type: string
+  revision:
+    type: integer
+  servicePassword:
+    type: string
+    secret: true
+
+variables:
+  s3Read:
+    Sid: AllowS3Read
+    Effect: Allow
+    Action: ["s3:Get*", "s3:List*"]
+    Resource: ["arn:aws:s3:::app-${environment}-assets", "arn:aws:s3:::app-${environment}-assets/*"]
+  dynamodbRead:
+    Sid: AllowDynamodbRead
+    Effect: Allow
+    Action: ["dynamodb:GetItem", "dynamodb:Query", "dynamodb:Scan"]
+    Resource: ["arn:aws:dynamodb:us-east-1:123456789012:table/app-${environment}-orders"]
+  sqsAccess:
+    Sid: AllowSqsAccess
+    Effect: Allow
+    Action:
+      fn::select:
+        - ${revision}
+        - - []
+          - ["sqs:ReceiveMessage", "sqs:DeleteMessage"]
+          - ["sqs:ReceiveMessage", "sqs:DeleteMessage", "sqs:SendMessage"]
+          - ["sqs:ReceiveMessage", "sqs:DeleteMessage", "sqs:SendMessage"]
+    Resource: ["arn:aws:sqs:us-east-1:123456789012:app-${environment}-jobs"]
+  kmsDecrypt:
+    Sid: AllowKmsDecrypt
+    Effect: Allow
+    Action: ["kms:Decrypt"]
+    Resource:
+      fn::select:
+        - ${revision}
+        - - ""
+          - "arn:aws:kms:us-east-1:123456789012:key/app-${environment}-v1"
+          - "arn:aws:kms:us-east-1:123456789012:key/app-${environment}-v2"
+          - "arn:aws:kms:us-east-1:123456789012:key/app-${environment}-v2"
+  secretsRead:
+    fn::select:
+      - ${revision}
+      - - {}
+        - Sid: AllowSecretsRead
+          Effect: Allow
+          Action: ["secretsmanager:GetSecretValue"]
+          Resource: ["arn:aws:secretsmanager:us-east-1:123456789012:secret:app-${environment}-*"]
+        - Sid: AllowSecretsRead
+          Effect: Allow
+          Action: ["secretsmanager:GetSecretValue"]
+          Resource: ["arn:aws:secretsmanager:us-east-1:123456789012:secret:app-${environment}-*"]
+          Condition:
+            StringEquals:
+              aws:PrincipalTag/team: payments
+        - Sid: AllowSecretsRead
+          Effect: Allow
+          Action: ["secretsmanager:GetSecretValue"]
+          Resource: ["arn:aws:secretsmanager:us-east-1:123456789012:secret:app-${environment}-*"]
+          Condition:
+            StringEquals:
+              aws:PrincipalTag/team: payments
+  denyIamWrites:
+    Sid: DenyIamWrites
+    Effect: Deny
+    Action: "iam:*"
+    Resource: "*"
+
+resources:
+  random-provider:
+    type: pulumi:providers:random
+    defaultProvider: true
+    options:
+      version: 4.21.0
+  # Keepers are a map of strings, so each document reaches state as a JSON string, just as an IAM policy does.
+  # Revision 2 makes three small policy edits; revision 3 inserts a statement and reformats the container definition.
+  service-role:
+    type: random:RandomPet
+    properties:
+      length: 1
+      keepers:
+        policy:
+          fn::toJSON:
+            Version: "2012-10-17"
+            Statement:
+              fn::select:
+                - ${revision}
+                - - []
+                  - ["${s3Read}", "${dynamodbRead}", "${sqsAccess}", "${kmsDecrypt}", "${secretsRead}"]
+                  - ["${s3Read}", "${dynamodbRead}", "${sqsAccess}", "${kmsDecrypt}", "${secretsRead}"]
+                  - ["${denyIamWrites}", "${s3Read}", "${dynamodbRead}", "${sqsAccess}", "${kmsDecrypt}", "${secretsRead}"]
+        containerDefinition:
+          fn::select:
+            - ${revision}
+            - - ""
+              - '{"family": "api", "cpu": 256, "environment": [{"name": "LOG_LEVEL", "value": "info"}]}'
+              - '{"family": "api", "cpu": 256, "environment": [{"name": "LOG_LEVEL", "value": "debug"}]}'
+              - |
+                {
+                    "environment": [
+                        {
+                            "name": "LOG_LEVEL",
+                            "value": "debug"
+                        }
+                    ],
+                    "cpu": 256,
+                    "family": "api"
+                }
+        credentials:
+          fn::toJSON:
+            username: svc-${environment}
+            password: ${servicePassword}
+        notJson:
+          fn::select:
+            - ${revision}
+            - ["", "{draft", "{draft v2", "{draft v2"]
+        jsonScalar:
+          fn::select:
+            - ${revision}
+            - ["", "42", "43", "43"]

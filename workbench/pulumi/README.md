@@ -63,6 +63,7 @@ Override with env vars: `ORG`, `CONSOLE_PORT` (5173), `IDP_UPSTREAM_PORT`
 | `artifact-pipeline` | nightly, release | generated manifests/docs/checksums, an archive |
 | `application-fleet` | dev, staging, prod | app-shaped resources, refs to `shared-foundation` |
 | `deploy-simulator` | dev | chained sleeping commands, drives churn runs |
+| `encoded-documents` | dev | JSON documents stored as strings, like IAM policies |
 
 Each stack gets real update history (creates, config updates, a rotation,
 refresh-before-preview, refresh-before-update, a standalone refresh,
@@ -72,7 +73,7 @@ targeted destroy/restore, and a full destroy/rebuild on
 fresh refresh-before-preview and refresh-before-update runs to each existing
 `shared-foundation` stack. A fresh `shared-foundation` fixture follows the
 first-creation choreography and uses the same refresh-display messages. First
-run: ~35 real Pulumi ops, a few minutes.
+run: ~38 real Pulumi ops, a few minutes.
 
 On a `shared-foundation` fixture, use these messages to verify refresh display
 semantics in the console:
@@ -88,6 +89,11 @@ semantics in the console:
 standalone `Scheduled drift check` is part of the first-creation choreography,
 and existing stacks take the convergence path and do not acquire these three
 historical runs.
+
+On `encoded-documents/dev`, the Changes tab decodes JSON strings and marks them
+`(json)`. Revision 2 shows three small policy edits. Revision 3 shows an
+inserted statement and keeps a formatting-only change as a raw string update.
+The `credentials` document carries a secret, so it stays redacted.
 
 `cmd=fixtures-destroy` tears down resources, keeps the empty stacks.
 `cmd=force-unlock` clears a stuck lock after an interrupted run.
