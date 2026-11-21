@@ -79,7 +79,8 @@ IDP_IMAGE  := $(shell sed -n 's/^FROM //p' $(CURDIR)/mock-oauth2.Dockerfile)
 SHIM_IMAGE := alpine/socat:1.8.0.3@sha256:beb4a68d9e4fe6b0f21ea774a0fde6c31f580dde6368939ed70100c5385b015e
 ## Compose never pulls or builds (an empty DOCKER_CONFIG would also hide its plugin and context).
 COMPOSE = export DB_IMAGE=$(DB_IMAGE) DB_VOLUME=$(DB_VOLUME) DB_PORT=$(DB_PORT) DB_NAME=$(DB_NAME) DB_USER=$(DB_USER) DB_PASSWORD=$(DB_PASSWORD) \
-		IDP_IMAGE=$(IDP_IMAGE) SHIM_IMAGE=$(SHIM_IMAGE) IDP_PORT=$(IDP_PORT) ORG=$(ORG) STATEDB_IMAGE=$(STATEDB_IMAGE); \
+		IDP_IMAGE=$(IDP_IMAGE) SHIM_IMAGE=$(SHIM_IMAGE) IDP_PORT=$(IDP_PORT) ORG=$(ORG) STATEDB_IMAGE=$(STATEDB_IMAGE) \
+		GLASS_PASSWORD_HASH='$(GLASS_PASSWORD_HASH)'; \
 	docker compose -f "$(CURDIR)/compose.yml" --profile release
 ## Pull $(1) with $(2) as DOCKER_CONFIG, against the current context's daemon.
 pull-image = mkdir -p $(IDP_DOCKER_CFG); \
@@ -177,6 +178,7 @@ app: image-ready
 app-dev:
 	@$(MAKE) app-stop >/dev/null 2>&1 || true
 	ORG=$(ORG) CONSOLE_PORT=$(CONSOLE_PORT) IDP_PORT=$(IDP_PORT) OIDC_ISSUER=$(OIDC_ISSUER) \
+		GLASS_PASSWORD_HASH='$(GLASS_PASSWORD_HASH)' \
 		DB_PORT=$(DB_PORT) DB_IMAGE=$(DB_IMAGE) DB_VOLUME=$(DB_VOLUME) \
 		DB_NAME=$(DB_NAME) DB_USER=$(DB_USER) DB_PASSWORD=$(DB_PASSWORD) \
 		"$$(git rev-parse --show-toplevel)/workbench/pulumi/dev-host.sh"

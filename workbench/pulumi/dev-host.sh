@@ -74,4 +74,5 @@ STATEDB_OIDC_DEFAULT_PROVIDER=mock \
 STATEDB_SESSION_ENCRYPTION_SECRET=state-db-workbench-session-secret-32-bytes \
 STATEDB_ADMIN_SUBJECTS="$ISSUER:admin" \
 STATEDB_REPORTS_PUBLIC_BASE_URL="http://localhost:$CONSOLE_PORT/" \
+STATEDB_LOCAL_GLASS_PASSWORD_HASH="${GLASS_PASSWORD_HASH:-}" \
 mise exec -- modules/mvnw -f modules/pom.xml -pl app -am -Dquarkus.test.continuous-testing=disabled clean quarkus:dev

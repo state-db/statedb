@@ -149,6 +149,13 @@ pulumi stack ls
 `~/.pulumi` and re-prompts. Don't set `PULUMI_ACCESS_TOKEN` — that skips the
 browser flow entirely.
 
+## Break-glass login
+
+`cmd=glass-on` disables the mock provider row so the console accepts the
+local break-glass login (`admin` / `password`) in either mode; `cmd=glass-off`
+restores OIDC. The app re-enables the provider on every restart, so re-run
+`glass-on` after one. It does not exercise OIDC; use `cmd=oidc-smoke` for that.
+
 ## Defaults
 
 - Backend: `http://localhost:8080/pulumi` · org `acme` · stack `dev`

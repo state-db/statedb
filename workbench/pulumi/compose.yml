@@ -59,6 +59,9 @@ services:
       STATEDB_SESSION_ENCRYPTION_SECRET: state-db-workbench-session-secret-32-bytes
       STATEDB_ADMIN_SUBJECTS: http://localhost:${IDP_PORT:-58081}/default:admin
       STATEDB_REPORTS_PUBLIC_BASE_URL: http://localhost:8080/
+      # Break-glass (`cmd=glass-on`); published-port traffic arrives from the bridge gateway.
+      STATEDB_LOCAL_GLASS_PASSWORD_HASH: ${GLASS_PASSWORD_HASH:-}
+      STATEDB_LOCAL_GLASS_ALLOW_REMOTE: "true"
     ports:
       - "127.0.0.1:8080:8080"
       - "127.0.0.1:9000:9000"
