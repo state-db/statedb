@@ -1,13 +1,10 @@
 #!/usr/bin/env bash
-# Host-native workbench app. One command: brings up infra,
-# seeds workbench users, runs the app (foreground) and the bun console
-# (background) together. Ctrl-C stops both; infra (Postgres + mock IdP) stays
-# up — tear it down separately if needed:
-#   docker compose -f workbench/pulumi/compose.yml down
+# Host-native workbench dev mode. One command: brings up infra, seeds workbench users, runs
+# Quarkus dev mode (foreground) and the bun console (background) together. Ctrl-C stops both;
+# infra (Postgres + mock IdP) stays up — `make pulumi-workbench cmd=infra-down` tears it down.
 #
-# Internal supervisor for `make pulumi-workbench cmd=app` / `cmd=app-dev`.
-# The Make targets own stale-process cleanup and select built-image or Quarkus
-# dev mode; invoke them instead of running this script directly.
+# Internal supervisor for `make pulumi-workbench cmd=app-dev`, which owns stale-process cleanup;
+# invoke that instead of running this script directly. Release images run through `cmd=app`.
 set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
@@ -15,14 +12,14 @@ cd "$REPO_ROOT"
 
 ORG=${ORG:-acme}
 CONSOLE_PORT=${CONSOLE_PORT:-5173}
-IDP_UPSTREAM_PORT=${IDP_UPSTREAM_PORT:-58081}
+IDP_PORT=${IDP_PORT:-58081}
 DB_PORT=${DB_PORT:-55432}
 DB_IMAGE=${DB_IMAGE:-postgres:16}
 DB_VOLUME=${DB_VOLUME:-state-db-workbench-postgres-data}
 DB_NAME=${DB_NAME:-statedb}
 DB_USER=${DB_USER:-statedb}
 DB_PASSWORD=${DB_PASSWORD:-statedb}
-ISSUER="http://localhost:$CONSOLE_PORT/default"
+ISSUER=${OIDC_ISSUER:-http://localhost:$IDP_PORT/default}
 
 for p in 8080 9000; do
   if lsof -nP -iTCP:"$p" -sTCP:LISTEN >/dev/null 2>&1; then
@@ -41,7 +38,7 @@ echo "==> infra: Postgres + mock IdP"
 make -C workbench/pulumi infra-up \
   DB_IMAGE="$DB_IMAGE" DB_VOLUME="$DB_VOLUME" DB_PORT="$DB_PORT" \
   DB_NAME="$DB_NAME" DB_USER="$DB_USER" DB_PASSWORD="$DB_PASSWORD" \
-  IDP_UPSTREAM_PORT="$IDP_UPSTREAM_PORT"
+  IDP_PORT="$IDP_PORT"
 
 echo "==> seeding workbench users (background)"
 DB_CONTAINER=state-db-workbench-postgres DB_USER="$DB_USER" DB_NAME="$DB_NAME" ORG="$ORG" \
@@ -52,8 +49,7 @@ SEED_PID=$!
 
 echo "==> bun console on :$CONSOLE_PORT (background)"
 (cd modules/web && mise exec -- bun install --frozen-lockfile >/dev/null &&
-  exec env PORT="$CONSOLE_PORT" OIDC_PROXY_TARGET="http://localhost:$IDP_UPSTREAM_PORT" \
-    mise exec -- bun dev.ts) &
+  exec env PORT="$CONSOLE_PORT" mise exec -- bun dev.ts) &
 CONSOLE_PID=$!
 
 cleanup() {
@@ -64,23 +60,6 @@ cleanup() {
 trap cleanup EXIT INT TERM
 
 echo "==> console will be at http://localhost:$CONSOLE_PORT — sign in as admin/developer/viewer"
-
-if [[ -n "${STATEDB_IMAGE:-}" ]]; then
-  echo "==> $STATEDB_IMAGE on :8080 (foreground — Ctrl-C stops this and the console; infra stays up)"
-  docker run --rm --name state-db-workbench-app \
-    -p 127.0.0.1:8080:8080 -p 127.0.0.1:9000:9000 \
-    -e STATEDB_JDBC_URL="jdbc:postgresql://host.docker.internal:$DB_PORT/$DB_NAME" \
-    -e STATEDB_DB_USER="$DB_USER" -e STATEDB_DB_PASSWORD="$DB_PASSWORD" \
-    -e STATEDB_BOOTSTRAP_ORG_NAME="$ORG" -e STATEDB_BOOTSTRAP_ORG_DISPLAY_NAME="Acme Workbench" \
-    -e STATEDB_OIDC_BOOTSTRAP_NAME=mock -e STATEDB_OIDC_BOOTSTRAP_ISSUER="$ISSUER" \
-    -e STATEDB_OIDC_BOOTSTRAP_CLIENT_ID=console -e STATEDB_OIDC_BOOTSTRAP_CLIENT_SECRET=console-secret \
-    -e STATEDB_OIDC_DEFAULT_PROVIDER=mock \
-    -e STATEDB_SESSION_ENCRYPTION_SECRET=state-db-workbench-session-secret-32-bytes \
-    -e STATEDB_ADMIN_SUBJECTS="$ISSUER:admin" \
-    -e STATEDB_REPORTS_PUBLIC_BASE_URL="http://localhost:$CONSOLE_PORT/" \
-    "$STATEDB_IMAGE"
-  exit 0
-fi
 
 echo "==> clean build + Quarkus dev mode on :8080 (foreground — Ctrl-C stops this and the console; infra stays up)"
 QUARKUS_HTTP_HOST=127.0.0.1 \

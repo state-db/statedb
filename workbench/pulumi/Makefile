@@ -1,4 +1,4 @@
-.PHONY: infra-up infra-down db-up console-seed app app-dev app-stop build-image image-ready check-app login init preview up destroy fixtures-up fixtures-destroy churn-preview churn-up scale-provider-test scale-provider-build scale-provider-install scale-generate scale-preview scale-up scale-fault-up scale-destroy sql psql force-unlock reset glass-on glass-off
+.PHONY: infra-up infra-down db-up console-seed app app-dev app-stop status logs oidc-smoke build-image image-ready check-app login init preview up destroy fixtures-up fixtures-destroy churn-preview churn-up scale-provider-test scale-provider-build scale-provider-install scale-generate scale-preview scale-up scale-fault-up scale-destroy sql psql force-unlock reset glass-on glass-off
 
 REPO_ROOT := ../..
 
@@ -67,16 +67,30 @@ SCALE_FAULT_INDEX          ?= 42
 SCALE_FAULT_MODE           ?= once
 SCALE_FAULT_OPERATION      ?= create
 
-## Compose owns stable workbench infrastructure. The mock IdP is exposed only to the Bun dev server,
-## which proxies /default/* on the existing browser-facing :5173 origin, so Quarkus and the browser
-## use the same issuer without another forwarded port.
+## Compose owns stable workbench infrastructure, plus the release-mode app under the `release`
+## profile. The browser and the app reach the mock IdP at the same localhost:$(IDP_PORT) issuer.
 CONSOLE_PORT  ?= 5173
-IDP_UPSTREAM_PORT ?= 58081
-## Empty docker config dir: bypasses a credential helper that errors on anonymous ghcr.io pulls.
+IDP_PORT      ?= 58081
+APP_CONTAINER := state-db-workbench-app
+## Empty docker config dir: bypasses a credential helper that hangs or errors on anonymous pulls.
 IDP_DOCKER_CFG ?= /tmp/state-db-workbench-dockercfg
+## The release gate builds this IdP image; the workbench runs it and mounts the login page.
+IDP_IMAGE  := $(shell sed -n 's/^FROM //p' $(CURDIR)/mock-oauth2.Dockerfile)
+SHIM_IMAGE := alpine/socat:1.8.0.3@sha256:beb4a68d9e4fe6b0f21ea774a0fde6c31f580dde6368939ed70100c5385b015e
+## Compose never pulls or builds (an empty DOCKER_CONFIG would also hide its plugin and context).
+COMPOSE = export DB_IMAGE=$(DB_IMAGE) DB_VOLUME=$(DB_VOLUME) DB_PORT=$(DB_PORT) DB_NAME=$(DB_NAME) DB_USER=$(DB_USER) DB_PASSWORD=$(DB_PASSWORD) \
+		IDP_IMAGE=$(IDP_IMAGE) SHIM_IMAGE=$(SHIM_IMAGE) IDP_PORT=$(IDP_PORT) ORG=$(ORG) STATEDB_IMAGE=$(STATEDB_IMAGE); \
+	docker compose -f "$(CURDIR)/compose.yml" --profile release
+## Pull $(1) with $(2) as DOCKER_CONFIG, against the current context's daemon.
+pull-image = mkdir -p $(IDP_DOCKER_CFG); \
+	DOCKER_HOST="$$(docker context inspect -f '{{.Endpoints.docker.Host}}')" DOCKER_CONFIG=$(2) docker pull $(1)
+pull-missing = docker image inspect $(1) >/dev/null 2>&1 || { $(call pull-image,$(1),$(IDP_DOCKER_CFG)); }
+
+## Browser-facing console: the image serves its own on :8080; dev mode uses Bun on :$(CONSOLE_PORT).
+CONSOLE_DOMAIN = $(if $(filter true,$(shell docker inspect -f '{{.State.Running}}' $(APP_CONTAINER) 2>/dev/null)),localhost:8080,localhost:$(CONSOLE_PORT))
 
 OIDC_PROVIDER      ?= mock
-OIDC_ISSUER        ?= http://localhost:$(CONSOLE_PORT)/default
+OIDC_ISSUER        ?= http://localhost:$(IDP_PORT)/default
 OIDC_CLIENT_ID     ?= console
 OIDC_CLIENT_SECRET ?= console-secret
 ## Sign in to the mock IdP with this subject to be treated as an admin in /api/user.
@@ -85,37 +99,34 @@ ADMIN_SUB          ?= admin
 ## PULUMI_CONSOLE_DOMAIN points every CLI-printed permalink (e.g. "View Live: ...")
 ## at the console dev server instead of the CLI's built-in default (localhost:3000),
 ## which nothing in the workbench listens on.
-PULUMI_ENV := export \
+PULUMI_ENV = export \
 	PULUMI_ACCESS_TOKEN=$(TOKEN) \
 	PULUMI_CONFIG_PASSPHRASE=workbench \
 	PULUMI_HOME="$$(pwd)/../.pulumi-home" \
 	PULUMI_SKIP_UPDATE_CHECK=true \
 	PULUMI_SKIP_CONFIRMATIONS=true \
-	PULUMI_CONSOLE_DOMAIN=localhost:$(CONSOLE_PORT)
+	PULUMI_CONSOLE_DOMAIN=$(CONSOLE_DOMAIN)
 
 ## Start the stable Postgres and mock IdP services declared in compose.yml.
 infra-up:
-	@export DOCKER_CONFIG=$(IDP_DOCKER_CFG) \
-		DB_IMAGE=$(DB_IMAGE) DB_VOLUME=$(DB_VOLUME) DB_PORT=$(DB_PORT) DB_NAME=$(DB_NAME) DB_USER=$(DB_USER) DB_PASSWORD=$(DB_PASSWORD) \
-		IDP_UPSTREAM_PORT=$(IDP_UPSTREAM_PORT); \
-	mkdir -p "$$DOCKER_CONFIG"; \
-	postgres_state="$$(docker inspect -f '{{.State.Running}} {{if .State.Health}}{{.State.Health.Status}}{{end}}' $(DB_CONTAINER) 2>/dev/null || true)"; \
+	@docker info >/dev/null 2>&1 || { echo "error: Docker is not reachable; the workbench needs host Docker (run outside any agent sandbox)."; exit 1; }
+	@$(call pull-missing,$(DB_IMAGE)) && $(call pull-missing,$(IDP_IMAGE))
+	@postgres_state="$$(docker inspect -f '{{.State.Running}} {{if .State.Health}}{{.State.Health.Status}}{{end}}' $(DB_CONTAINER) 2>/dev/null || true)"; \
 	idp_running="$$(docker inspect -f '{{.State.Running}}' state-db-workbench-idp 2>/dev/null || true)"; \
 	if [ "$$postgres_state" = "true healthy" ] && [ "$$idp_running" = "true" ] \
-		&& curl -fsS http://localhost:$(IDP_UPSTREAM_PORT)/default/.well-known/openid-configuration >/dev/null 2>&1; then \
-		echo "Workbench infrastructure is already ready (Postgres :$(DB_PORT), mock IdP :$(IDP_UPSTREAM_PORT))"; \
+		&& curl -fsS $(OIDC_ISSUER)/.well-known/openid-configuration >/dev/null 2>&1; then \
+		echo "Workbench infrastructure is already ready (Postgres :$(DB_PORT), mock IdP :$(IDP_PORT))"; \
 		exit 0; \
 	fi; \
 	docker volume create $(DB_VOLUME) >/dev/null; \
-	docker compose -f "$$(git rev-parse --show-toplevel)/workbench/pulumi/compose.yml" up -d --wait --build; \
-	for i in $$(seq 1 30); do curl -fsS http://localhost:$(IDP_UPSTREAM_PORT)/default/.well-known/openid-configuration >/dev/null && exit 0; sleep 1; done; \
+	$(COMPOSE) up -d --wait postgres idp; \
+	for i in $$(seq 1 30); do curl -fsS $(OIDC_ISSUER)/.well-known/openid-configuration >/dev/null && exit 0; sleep 1; done; \
 	echo "Mock IdP did not become ready"; exit 1
-	@echo "Workbench infrastructure is ready (Postgres :$(DB_PORT), mock IdP behind :$(CONSOLE_PORT)/default)"
+	@echo "Workbench infrastructure is ready (Postgres :$(DB_PORT), mock IdP :$(IDP_PORT))"
 
-## Stop infrastructure while preserving the Postgres volume.
+## Stop infrastructure (and a release-mode app) while preserving the Postgres volume.
 infra-down:
-	-export DOCKER_CONFIG=$(IDP_DOCKER_CFG) DB_VOLUME=$(DB_VOLUME); \
-	docker compose -f "$$(git rev-parse --show-toplevel)/workbench/pulumi/compose.yml" down
+	-$(COMPOSE) down
 
 ## Compatibility alias for the previous granular startup command.
 db-up: infra-up
@@ -140,36 +151,64 @@ image-ready:
 			$(MAKE) build-image; \
 		}; \
 	else \
-		mkdir -p $(IDP_DOCKER_CFG); \
 		echo "==> pulling $(STATEDB_IMAGE)"; \
-		DOCKER_CONFIG=$(PULL_DOCKER_CONFIG) docker pull $(STATEDB_IMAGE) || { \
+		$(call pull-image,$(STATEDB_IMAGE),$(PULL_DOCKER_CONFIG)) || { \
 			docker image inspect $(STATEDB_IMAGE) >/dev/null 2>&1 || exit 1; \
 			echo "warning: pull failed; using the local copy of $(STATEDB_IMAGE)"; \
 		}; \
 	fi
 
-## Run the full stack from a built image (default, fast to start, matches what ships).
+## Run $(STATEDB_IMAGE) detached with its bundled console on :8080; returns once it is ready.
 ## Builds $(LOCAL_IMAGE) automatically the first time; `cmd=build-image` to refresh it.
 app: image-ready
 	@$(MAKE) app-stop >/dev/null 2>&1 || true
-	STATEDB_IMAGE=$(STATEDB_IMAGE) ORG=$(ORG) CONSOLE_PORT=$(CONSOLE_PORT) \
-		IDP_UPSTREAM_PORT=$(IDP_UPSTREAM_PORT) DB_PORT=$(DB_PORT) DB_IMAGE=$(DB_IMAGE) \
-		DB_VOLUME=$(DB_VOLUME) DB_NAME=$(DB_NAME) DB_USER=$(DB_USER) DB_PASSWORD=$(DB_PASSWORD) \
-		"$$(git rev-parse --show-toplevel)/workbench/pulumi/dev-host.sh"
+	@$(MAKE) infra-up
+	@$(call pull-missing,$(SHIM_IMAGE))
+	@echo "==> $(STATEDB_IMAGE) on :8080 (detached)"
+	@$(COMPOSE) up -d --wait --force-recreate app idp-loopback || { \
+		docker logs --tail 100 $(APP_CONTAINER) 2>&1; \
+		echo "error: $(STATEDB_IMAGE) did not become ready"; exit 1; \
+	}
+	@$(MAKE) console-seed
+	@echo "==> ready: console http://localhost:8080 (sign in as admin/developer/viewer), backend $(BACKEND_URL)"
+	@echo "    logs: cmd=logs · status: cmd=status · stop: cmd=app-stop"
 
-## Run the full stack in Quarkus dev mode (hot reload) instead of a built image.
+## Run the full stack in Quarkus dev mode (hot reload) in the foreground, console on :$(CONSOLE_PORT).
 app-dev:
 	@$(MAKE) app-stop >/dev/null 2>&1 || true
-	ORG=$(ORG) CONSOLE_PORT=$(CONSOLE_PORT) IDP_UPSTREAM_PORT=$(IDP_UPSTREAM_PORT) \
+	ORG=$(ORG) CONSOLE_PORT=$(CONSOLE_PORT) IDP_PORT=$(IDP_PORT) OIDC_ISSUER=$(OIDC_ISSUER) \
 		DB_PORT=$(DB_PORT) DB_IMAGE=$(DB_IMAGE) DB_VOLUME=$(DB_VOLUME) \
 		DB_NAME=$(DB_NAME) DB_USER=$(DB_USER) DB_PASSWORD=$(DB_PASSWORD) \
 		"$$(git rev-parse --show-toplevel)/workbench/pulumi/dev-host.sh"
 
-## Stop stale foreground workbench processes. VS Code port forwarding (and just
-## forgetting a terminal) can keep :5173/:8080/:5005/:9000 busy after the run
-## that started them is gone.
+## Report which mode is running and whether the backend answers. Exit status 0 only when it does.
+status:
+	@for c in $(DB_CONTAINER) state-db-workbench-idp $(APP_CONTAINER) state-db-workbench-idp-loopback; do \
+		printf '%-34s %s\n' "$$c" "$$(docker inspect -f '{{.State.Status}} {{if .State.Health}}{{.State.Health.Status}}{{end}}' $$c 2>/dev/null || echo absent)"; \
+	done
+	@printf '%-34s %s\n' "quarkus:dev (host)" "$$(pgrep -f '[q]uarkus:dev' >/dev/null && echo running || echo absent)"
+	@printf '%-34s %s\n' "bun console (host)" "$$(pgrep -f '[b]un dev.ts' >/dev/null && echo running || echo absent)"
+	@if curl -fs --max-time $(CHECK_TIMEOUT) -H "Authorization: token $(TOKEN)" "$(BACKEND_URL)/api/capabilities" >/dev/null; then \
+		echo "backend $(BACKEND_URL): up · console http://$(CONSOLE_DOMAIN)"; \
+	else \
+		echo "backend $(BACKEND_URL): down"; exit 1; \
+	fi
+
+## Print the release-mode app's recent logs (dev mode logs go to the terminal running app-dev).
+LINES ?= 200
+logs:
+	@docker logs --tail $(LINES) $(APP_CONTAINER) 2>&1 || echo "$(APP_CONTAINER) is not running; app-dev logs are in the terminal that runs it."
+
+## Sign in to the console headlessly through the real OIDC code flow and check /api/user.
+SUBJECT ?= $(ADMIN_SUB)
+oidc-smoke:
+	@CONSOLE_URL=http://$(CONSOLE_DOMAIN) OIDC_ISSUER=$(OIDC_ISSUER) SUBJECT=$(SUBJECT) ORG=$(ORG) \
+		"$$(git rev-parse --show-toplevel)/workbench/pulumi/oidc-smoke.sh"
+
+## Stop the workbench app in either mode. Forgetting a terminal (or an agent's background
+## run) can keep :5173/:8080/:5005/:9000 busy after the run that started it is gone.
 app-stop:
-	-docker stop state-db-workbench-app >/dev/null 2>&1 || true
+	-docker rm -f state-db-workbench-idp-loopback $(APP_CONTAINER) >/dev/null 2>&1 || true
 	-pkill -TERM -f "[b]un dev.ts" || true
 	-pkill -TERM -f "[q]uarkus:dev" || true
 	-pkill -TERM -f "[s]tate-db-app-dev.jar" || true
@@ -191,7 +230,7 @@ check-app:
 
 ## Log the local Pulumi CLI into the workbench backend.
 login: check-app
-	cd "$$(git rev-parse --show-toplevel)/workbench/pulumi" && mkdir -p ../.pulumi-home && PULUMI_ACCESS_TOKEN=$(TOKEN) PULUMI_HOME="$$(pwd)/../.pulumi-home" PULUMI_SKIP_UPDATE_CHECK=true PULUMI_CONSOLE_DOMAIN=localhost:$(CONSOLE_PORT) pulumi login $(BACKEND_URL)
+	cd "$$(git rev-parse --show-toplevel)/workbench/pulumi" && mkdir -p ../.pulumi-home && PULUMI_ACCESS_TOKEN=$(TOKEN) PULUMI_HOME="$$(pwd)/../.pulumi-home" PULUMI_SKIP_UPDATE_CHECK=true PULUMI_CONSOLE_DOMAIN=$(CONSOLE_DOMAIN) pulumi login $(BACKEND_URL)
 
 ## Create/select the workbench stack.
 init: login
@@ -212,7 +251,7 @@ destroy: init
 ## Create or update the complete local-only fixture estate. The app must already be running.
 fixtures-up: check-app
 	cd "$$(git rev-parse --show-toplevel)/workbench/pulumi" && \
-	export PULUMI_HOME="$$(pwd)/../.pulumi-home" PULUMI_CONFIG_PASSPHRASE=workbench PULUMI_CONSOLE_DOMAIN=localhost:$(CONSOLE_PORT); \
+	export PULUMI_HOME="$$(pwd)/../.pulumi-home" PULUMI_CONFIG_PASSPHRASE=workbench PULUMI_CONSOLE_DOMAIN=$(CONSOLE_DOMAIN); \
 	ORG=$(ORG) BACKEND_URL=$(BACKEND_URL) TOKEN=$(TOKEN) ./bootstrap-fixtures.sh
 
 ## Destroy resources in every fixture stack, preserving the empty stacks for inspection/reuse.
@@ -220,7 +259,7 @@ fixtures-destroy: check-app
 	cd "$$(git rev-parse --show-toplevel)/workbench/pulumi" && \
 	export PULUMI_ACCESS_TOKEN=$(TOKEN) PULUMI_CONFIG_PASSPHRASE=workbench \
 	PULUMI_HOME="$$(pwd)/../.pulumi-home" PULUMI_SKIP_UPDATE_CHECK=true PULUMI_SKIP_CONFIRMATIONS=true \
-	PULUMI_CONSOLE_DOMAIN=localhost:$(CONSOLE_PORT); \
+	PULUMI_CONSOLE_DOMAIN=$(CONSOLE_DOMAIN); \
 	pulumi login $(BACKEND_URL) >/dev/null; \
 	while IFS="|" read -r project stacks owner; do \
 		case "$$project" in ""|\#*) continue ;; esac; \
@@ -238,7 +277,7 @@ churn-preview: check-app
 	cd "$$(git rev-parse --show-toplevel)/workbench/pulumi/projects/deploy-simulator" && \
 	export PULUMI_ACCESS_TOKEN=$(TOKEN) PULUMI_CONFIG_PASSPHRASE=workbench \
 		PULUMI_HOME="$$(git rev-parse --show-toplevel)/workbench/.pulumi-home" \
-		PULUMI_SKIP_UPDATE_CHECK=true PULUMI_SKIP_CONFIRMATIONS=true PULUMI_CONSOLE_DOMAIN=localhost:$(CONSOLE_PORT); \
+		PULUMI_SKIP_UPDATE_CHECK=true PULUMI_SKIP_CONFIRMATIONS=true PULUMI_CONSOLE_DOMAIN=$(CONSOLE_DOMAIN); \
 	pulumi login $(BACKEND_URL) >/dev/null; \
 	pulumi stack select $(CHURN_STACK_REF) >/dev/null 2>&1 || pulumi stack init $(CHURN_STACK_REF); \
 	pulumi config set stepSeconds $(CHURN_SECONDS); \
@@ -251,7 +290,7 @@ churn-up: check-app
 	cd "$$(git rev-parse --show-toplevel)/workbench/pulumi/projects/deploy-simulator" && \
 	export PULUMI_ACCESS_TOKEN=$(TOKEN) PULUMI_CONFIG_PASSPHRASE=workbench \
 		PULUMI_HOME="$$(git rev-parse --show-toplevel)/workbench/.pulumi-home" \
-		PULUMI_SKIP_UPDATE_CHECK=true PULUMI_SKIP_CONFIRMATIONS=true PULUMI_CONSOLE_DOMAIN=localhost:$(CONSOLE_PORT); \
+		PULUMI_SKIP_UPDATE_CHECK=true PULUMI_SKIP_CONFIRMATIONS=true PULUMI_CONSOLE_DOMAIN=$(CONSOLE_DOMAIN); \
 	pulumi login $(BACKEND_URL) >/dev/null; \
 	pulumi stack select $(CHURN_STACK_REF) >/dev/null 2>&1 || pulumi stack init $(CHURN_STACK_REF); \
 	pulumi config set stepSeconds $(CHURN_SECONDS); \
@@ -309,7 +348,7 @@ scale-preview: check-app scale-provider-install scale-generate
 	cd "$$repo/workbench/.generated/pulumi/scale-simulator"; \
 	export PULUMI_ACCESS_TOKEN=$(TOKEN) PULUMI_CONFIG_PASSPHRASE=workbench \
 		PULUMI_HOME="$$repo/workbench/.pulumi-home" \
-		PULUMI_SKIP_UPDATE_CHECK=true PULUMI_SKIP_CONFIRMATIONS=true PULUMI_CONSOLE_DOMAIN=localhost:$(CONSOLE_PORT); \
+		PULUMI_SKIP_UPDATE_CHECK=true PULUMI_SKIP_CONFIRMATIONS=true PULUMI_CONSOLE_DOMAIN=$(CONSOLE_DOMAIN); \
 	pulumi login $(BACKEND_URL) >/dev/null; \
 	pulumi stack select $(SCALE_STACK_REF) >/dev/null 2>&1 || pulumi stack init $(SCALE_STACK_REF); \
 	pulumi preview --message "Scale simulator preview ($(SCALE_RESOURCES) resources)"
@@ -320,7 +359,7 @@ scale-up: check-app scale-provider-install scale-generate
 	cd "$$repo/workbench/.generated/pulumi/scale-simulator"; \
 	export PULUMI_ACCESS_TOKEN=$(TOKEN) PULUMI_CONFIG_PASSPHRASE=workbench \
 		PULUMI_HOME="$$repo/workbench/.pulumi-home" \
-		PULUMI_SKIP_UPDATE_CHECK=true PULUMI_SKIP_CONFIRMATIONS=true PULUMI_CONSOLE_DOMAIN=localhost:$(CONSOLE_PORT); \
+		PULUMI_SKIP_UPDATE_CHECK=true PULUMI_SKIP_CONFIRMATIONS=true PULUMI_CONSOLE_DOMAIN=$(CONSOLE_DOMAIN); \
 	pulumi login $(BACKEND_URL) >/dev/null; \
 	pulumi stack select $(SCALE_STACK_REF) >/dev/null 2>&1 || pulumi stack init $(SCALE_STACK_REF); \
 	pulumi up --yes --skip-preview --parallel $(SCALE_PARALLEL) --message "Scale simulator deployment ($(SCALE_RESOURCES) resources)"
@@ -341,7 +380,7 @@ scale-fault-up: check-app scale-provider-install
 	cd "$$repo/workbench/.generated/pulumi/scale-simulator"; \
 	export PULUMI_ACCESS_TOKEN=$(TOKEN) PULUMI_CONFIG_PASSPHRASE=workbench \
 		PULUMI_HOME="$$repo/workbench/.pulumi-home" \
-		PULUMI_SKIP_UPDATE_CHECK=true PULUMI_SKIP_CONFIRMATIONS=true PULUMI_CONSOLE_DOMAIN=localhost:$(CONSOLE_PORT); \
+		PULUMI_SKIP_UPDATE_CHECK=true PULUMI_SKIP_CONFIRMATIONS=true PULUMI_CONSOLE_DOMAIN=$(CONSOLE_DOMAIN); \
 	pulumi login $(BACKEND_URL) >/dev/null; \
 	pulumi stack select $(SCALE_STACK_REF) >/dev/null 2>&1 || pulumi stack init $(SCALE_STACK_REF); \
 	pulumi up --yes --skip-preview --parallel $(SCALE_PARALLEL) --message "Scale simulator fault injection ($(SCALE_RESOURCES) resources)"
@@ -352,7 +391,7 @@ scale-destroy: check-app scale-provider-install scale-generate
 	cd "$$repo/workbench/.generated/pulumi/scale-simulator"; \
 	export PULUMI_ACCESS_TOKEN=$(TOKEN) PULUMI_CONFIG_PASSPHRASE=workbench \
 		PULUMI_HOME="$$repo/workbench/.pulumi-home" \
-		PULUMI_SKIP_UPDATE_CHECK=true PULUMI_SKIP_CONFIRMATIONS=true PULUMI_CONSOLE_DOMAIN=localhost:$(CONSOLE_PORT); \
+		PULUMI_SKIP_UPDATE_CHECK=true PULUMI_SKIP_CONFIRMATIONS=true PULUMI_CONSOLE_DOMAIN=$(CONSOLE_DOMAIN); \
 	pulumi login $(BACKEND_URL) >/dev/null; \
 	pulumi stack select $(SCALE_STACK_REF); \
 	pulumi destroy --yes --skip-preview --message "Scale simulator destroy"
@@ -363,7 +402,7 @@ scale-destroy: check-app scale-provider-install scale-generate
 glass-on:
 	docker exec -i $(DB_CONTAINER) psql -v ON_ERROR_STOP=1 -U $(DB_USER) -d $(DB_NAME) \
 		-c "UPDATE oidc_providers SET enabled = false, updated_at = now() WHERE name = '$(OIDC_PROVIDER)'"
-	@echo "Break-glass is live: http://localhost:$(CONSOLE_PORT)/console/login — password: password"
+	@echo "Break-glass is live: http://$(CONSOLE_DOMAIN)/console/login — password: password"
 
 ## Re-enable the mock OIDC provider row (break-glass self-destructs again).
 glass-off:
@@ -388,7 +427,6 @@ force-unlock:
 
 ## Delete all workbench infrastructure, its Postgres volume, and the local Pulumi home.
 reset:
-	-export DOCKER_CONFIG=$(IDP_DOCKER_CFG) DB_VOLUME=$(DB_VOLUME); \
-	docker compose -f "$$(git rev-parse --show-toplevel)/workbench/pulumi/compose.yml" down -v --remove-orphans
+	-$(COMPOSE) down -v --remove-orphans
 	-docker volume rm -f $(DB_VOLUME)
 	rm -rf "$$(git rev-parse --show-toplevel)/workbench/.pulumi-home"

@@ -6,7 +6,6 @@
 import homepage from "./index.html";
 
 const BACKEND = "http://localhost:8080";
-const OIDC_PROXY_TARGET = process.env.OIDC_PROXY_TARGET;
 const PORT = Number(process.env.PORT ?? 5173);
 
 function proxyBackend(req: Request): Promise<Response> {
@@ -29,23 +28,6 @@ function proxyBackend(req: Request): Promise<Response> {
   });
 }
 
-function proxyOidc(req: Request): Promise<Response> {
-  if (!OIDC_PROXY_TARGET) {
-    return Promise.resolve(new Response("OIDC proxy is not configured", { status: 503 }));
-  }
-  const url = new URL(req.url);
-  const headers = new Headers(req.headers);
-  // The mock IdP derives its issuer and endpoint URLs from Host. Preserve the browser-facing origin
-  // so browser redirects and Quarkus token validation agree on http://localhost:5173/default.
-  headers.set("Host", url.host);
-  return fetch(OIDC_PROXY_TARGET + url.pathname + url.search, {
-    method: req.method,
-    headers,
-    body: req.method !== "GET" && req.method !== "HEAD" ? req.body : undefined,
-    redirect: "manual",
-  });
-}
-
 const server = Bun.serve({
   hostname: "127.0.0.1",
   port: PORT,
@@ -61,9 +43,6 @@ const server = Bun.serve({
     // them too or they'd fall through to the SPA and 404.
     "/cli-login": proxyBackend,
     "/welcome/cli": proxyBackend,
-    // Workbench-only mock IdP. Reusing the dev-server origin avoids a second VS Code forwarded port
-    // and gives Quarkus and the host browser one stable issuer URL.
-    "/default/*": proxyOidc,
 
     // SPA catch-all: Bun bundles index.html + assets and enables HMR. Must be
     // "/*" (not "/") so direct navigation to a client route still loads the app.
@@ -78,6 +57,3 @@ const server = Bun.serve({
 
 console.log(`state-db web dev server: ${server.url}`);
 console.log(`backend proxy → ${BACKEND}`);
-if (OIDC_PROXY_TARGET) {
-  console.log(`OIDC proxy /default/* → ${OIDC_PROXY_TARGET}`);
-}
