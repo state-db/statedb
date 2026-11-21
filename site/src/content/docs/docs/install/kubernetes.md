@@ -13,7 +13,7 @@ The chart is not yet published to a chart registry. Install it from a checkout
 of the release you want to run:
 
 ```sh
-git clone --branch v0.1.0 https://github.com/state-db/statedb
+git clone --branch v{{version}} https://github.com/state-db/statedb
 cd statedb
 helm install statedb examples/helm/statedb \
   --set database.jdbcUrl=jdbc:postgresql://postgres:5432/statedb \

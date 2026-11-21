@@ -137,7 +137,9 @@ runs these steps in order:
    skipped when `STATEDB_CFN_BUCKET` is unset; the template is then published
    only as a GitHub Release asset.
 7. Rollover: it moves the `Unreleased` notes under the release heading, bumps
-   `.version` to the next minor, and commits and pushes both to `main`.
+   `.version` to the next minor, writes the release to `site/release-version`,
+   and commits and pushes all three to `main`. The site fills `{{version}}` in
+   its docs from that file, and the change under `site/` triggers its deploy.
 
 `--dry-run` runs steps 1 through 3 and confirms that both candidate digests
 still exist in the registry, then stops before assembling the manifest; nothing

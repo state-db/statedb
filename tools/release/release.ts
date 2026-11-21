@@ -513,7 +513,8 @@ export function release(options: Options) {
     writeFileSync(temporaryPath, rollChangelog(changelog, version, today));
     renameSync(temporaryPath, changelogPath);
     writeFileSync(resolve(ROOT, ".version"), `${nextVersion}\n`);
-    command("git", ["add", "CHANGELOG.md", ".version"]);
+    writeFileSync(resolve(ROOT, "site/release-version"), `${version}\n`);
+    command("git", ["add", "CHANGELOG.md", ".version", "site/release-version"]);
     command("git", ["commit", "-m", `Release ${version}`]);
     command("git", ["push", "origin", "main"]);
     completedPhase = "repository rollover";

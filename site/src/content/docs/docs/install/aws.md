@@ -3,11 +3,6 @@ title: AWS CloudFormation
 description: Architecture, parameters, and installation flow of the AWS CloudFormation installer.
 ---
 
-:::caution[Not yet published]
-Do not deploy the template from source. It carries image markers that the
-release build replaces with digest-pinned images.
-:::
-
 The package is a single CloudFormation stack that owns everything statedb needs
 on AWS: the application service, the database, secrets, IAM roles, and network
 rules.
@@ -79,9 +74,30 @@ during creation, so there is nothing to prepare before you launch it.
 
 The released template pins immutable image references. Operators can replace both references with approved regional ECR copies.
 
+## Get the template
+
+Each [GitHub Release](https://github.com/state-db/statedb/releases) attaches
+the template as `state-db-X.Y.Z-cloudformation.yaml`, with the image pinned by
+digest. Download the release you want to run:
+
+```sh
+curl -LO https://github.com/state-db/statedb/releases/download/v{{version}}/state-db-{{version}}-cloudformation.yaml
+```
+
+Do not deploy `deploy/aws/cloudformation.yaml` from a checkout. It carries image
+markers that the release build replaces with digest-pinned images.
+
 ## Installation flow
 
-1. Create the stack with `CAPABILITY_IAM`.
+1. Create the stack with `CAPABILITY_IAM`:
+
+   ```sh
+   aws cloudformation create-stack --stack-name statedb \
+     --template-body file://state-db-{{version}}-cloudformation.yaml \
+     --capabilities CAPABILITY_IAM
+   ```
+
+   Add `--parameters` to override any of the defaults above.
 2. Wait for RDS and the ECS service to become ready. Expect 15 to 25 minutes,
    most of it RDS.
 3. Read `ConsoleUrl`, `PulumiLoginCommand`, and `BreakGlassPasswordCommand` from
