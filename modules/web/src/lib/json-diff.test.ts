@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 
-import { type ArrayEditOp, decodeJsonContainer, deepEqual, diffValue, ENCODED_JSON_LIMIT, type JsonDiffLine, jsonDiffLines, lcsEditScript, type ValueDiff } from "@/lib/json-diff";
+import { type ArrayEditOp, ARRAY_DIFF_LIMIT, decodeJsonContainer, deepEqual, diffValue, ENCODED_JSON_DEPTH_LIMIT, ENCODED_JSON_LIMIT, type JsonDiffLine, jsonDiffLines, lcsEditScript, type ValueDiff } from "@/lib/json-diff";
 
 describe("json-diff", () => {
   test("formats scalar property changes as single-line diffs", () => {
@@ -59,6 +59,18 @@ describe("json-diff", () => {
       { depth: 1, kind: "fold", text: "⋯ 1 unchanged" },
       { depth: 1, kind: "add", text: '1: "x"' },
       { depth: 1, kind: "fold", text: "⋯ 2 unchanged" },
+      { depth: 0, kind: "same", text: "]" },
+    ]);
+  });
+
+  test("arrays over the LCS limit still compare each position, so a changed element is never folded as unchanged", () => {
+    const oldValue = Array<string>(ARRAY_DIFF_LIMIT + 1).fill("a");
+    const newValue = oldValue.map((item, index) => (index === 200 ? "b" : item));
+    expect(jsonDiffLines([{ path: "list", oldValue, newValue }])).toEqual([
+      { depth: 0, kind: "same", text: "list: [" },
+      { depth: 1, kind: "fold", text: "⋯ 200 unchanged" },
+      { depth: 1, kind: "update", text: '200: "a" → "b"' },
+      { depth: 1, kind: "fold", text: "⋯ 200 unchanged" },
       { depth: 0, kind: "same", text: "]" },
     ]);
   });
@@ -402,6 +414,31 @@ describe("json-diff", () => {
     const oldValue = JSON.stringify({ pad, v: 1 });
     const newValue = JSON.stringify({ pad, v: 2 });
     expect(jsonDiffLines([{ path: "v", oldValue, newValue }])).toEqual(rawUpdate("v", oldValue, newValue));
+  });
+
+  test("a decoded array over the LCS limit shows its changed element alongside other changes", () => {
+    const items = Array<string>(ARRAY_DIFF_LIMIT + 1).fill("a");
+    const oldValue = JSON.stringify({ items, version: 1 });
+    const newValue = JSON.stringify({ items: ["b", ...items.slice(1)], version: 2 });
+    expect(jsonDiffLines([{ path: "doc", oldValue, newValue }])).toEqual([
+      { depth: 0, kind: "same", text: "doc: (json) {", encoded: true },
+      { depth: 1, kind: "same", text: "items: [" },
+      { depth: 2, kind: "update", text: '0: "a" → "b"' },
+      { depth: 2, kind: "fold", text: `⋯ ${ARRAY_DIFF_LIMIT} unchanged` },
+      { depth: 1, kind: "same", text: "]" },
+      { depth: 1, kind: "update", text: "version: 1 → 2" },
+      { depth: 0, kind: "same", text: "}" },
+    ]);
+  });
+
+  test("JSON nested deeper than the depth limit stays raw instead of overflowing the renderer", () => {
+    const nested = (depth: number, leaf: string) => "[".repeat(depth) + leaf + "]".repeat(depth);
+    expect(decodeJsonContainer(nested(ENCODED_JSON_DEPTH_LIMIT, "1")).ok).toBe(true);
+    expect(decodeJsonContainer(nested(ENCODED_JSON_DEPTH_LIMIT + 1, "1")).ok).toBe(false);
+    const oldValue = nested(20_000, "1");
+    const newValue = nested(20_000, "2");
+    expect(jsonDiffLines([{ path: "deep", oldValue, newValue }])).toEqual(rawUpdate("deep", oldValue, newValue));
+    expect(jsonDiffLines([{ path: "deep", oldValue: undefined, newValue }])).toEqual([{ depth: 0, kind: "add", text: `deep: ${JSON.stringify(newValue)}` }]);
   });
 
   test("renders an added or deleted JSON string as an indented (json) tree", () => {

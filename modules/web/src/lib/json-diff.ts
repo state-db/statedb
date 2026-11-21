@@ -84,11 +84,14 @@ export function decodeJsonContainer(text: string): DecodedJson {
     return { ok: false };
   }
   if (!isRecord(value) && !Array.isArray(value)) return { ok: false };
-  return hidesSourceDetail(trimmed) ? { ok: false } : { ok: true, value };
+  return unsafeToDecode(trimmed) ? { ok: false } : { ok: true, value };
 }
 
-// Finds what JSON.parse silently loses from valid JSON: duplicate keys (last wins) and numbers a double cannot hold.
-function hidesSourceDetail(json: string): boolean {
+// Rendering recurses once per level, so deeper documents stay raw.
+export const ENCODED_JSON_DEPTH_LIMIT = 64;
+
+// Finds nesting too deep to render and what JSON.parse silently loses: duplicate keys (last wins) and inexact numbers.
+function unsafeToDecode(json: string): boolean {
   const objectKeys: (Set<string> | undefined)[] = [];
   let index = 0;
   while (index < json.length) {
@@ -113,6 +116,7 @@ function hidesSourceDetail(json: string): boolean {
     } else {
       if (char === "{") objectKeys.push(new Set());
       else if (char === "[") objectKeys.push(undefined);
+      if (objectKeys.length > ENCODED_JSON_DEPTH_LIMIT) return true;
       else if (char === "}" || char === "]") objectKeys.pop();
       index++;
     }
@@ -168,9 +172,15 @@ export function lcsEditScript(oldArray: unknown[], newArray: unknown[]): ArrayEd
   const n = oldArray.length;
   const m = newArray.length;
   if (n > ARRAY_DIFF_LIMIT || m > ARRAY_DIFF_LIMIT) {
-    const length = Math.max(n, m);
-    return Array.from({ length }, (_, i) =>
-      i >= n ? { type: "add", newIndex: i } : i >= m ? { type: "delete", oldIndex: i } : { type: "same", oldIndex: i, newIndex: i });
+    const ops: ArrayEditOp[] = [];
+    for (let i = 0; i < Math.max(n, m); i++) {
+      if (i < n && i < m && deepEqual(oldArray[i], newArray[i])) ops.push({ type: "same", oldIndex: i, newIndex: i });
+      else {
+        if (i < n) ops.push({ type: "delete", oldIndex: i });
+        if (i < m) ops.push({ type: "add", newIndex: i });
+      }
+    }
+    return ops;
   }
   // Precompute equality once per (i, j) pair; reused for both the table fill and the backtrack below.
   const equal: boolean[][] = oldArray.map((oldItem) => newArray.map((newItem) => deepEqual(oldItem, newItem)));
