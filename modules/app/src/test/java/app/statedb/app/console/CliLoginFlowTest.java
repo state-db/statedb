@@ -477,9 +477,9 @@ class CliLoginFlowTest {
     return signIn("/api/auth/flow/" + PROVIDER).session();
   }
 
-  private record SignIn(Cookie session, Response callback) {}
+  record SignIn(Cookie session, Response callback) {}
 
-  private SignIn signIn(String flowPath) {
+  static SignIn signIn(String flowPath) {
     // flowPath arrives already encoded.
     Response start =
         given()
@@ -566,7 +566,7 @@ class CliLoginFlowTest {
     return u.getScheme() + "://" + authority;
   }
 
-  private static String pathWithQuery(String url) {
+  static String pathWithQuery(String url) {
     URI u = URI.create(url);
     return u.getQuery() == null ? u.getPath() : u.getPath() + "?" + u.getRawQuery();
   }
