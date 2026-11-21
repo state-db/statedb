@@ -14,4 +14,17 @@ final class CliLoginPages {
         </html>
         """;
   }
+
+  static String signInIncompletePage() {
+    return """
+        <!doctype html>
+        <html lang="en">
+          <head><meta charset="utf-8" /><title>CLI login not completed</title></head>
+          <body>
+            <h1>Sign-in was not completed.</h1>
+            <p>No token was created. Run <code>pulumi login</code> again to retry.</p>
+          </body>
+        </html>
+        """;
+  }
 }

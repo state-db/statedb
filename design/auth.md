@@ -79,8 +79,18 @@ once.
 
 `pulumi login` opens `/cli-login` with a loopback port and nonce. Because the
 session cookie is scoped to `/api/`, that route only validates the parameters
-and redirects to `/api/auth/cli-login`, where an anonymous browser is sent
-through SSO with the default provider.
+and redirects to `/api/auth/cli-login`.
+
+`GET /api/auth/cli-login` is public so that the handler, not the `/api/*`
+permission, decides what an anonymous browser sees. If the default provider is
+configured and enabled, the browser goes through that provider's SSO.
+Otherwise it goes to `/console/login`, which shows every enabled provider or
+the break-glass form. In both cases `returnTo` is rebuilt on the server from
+the validated port, nonce, and description, plus an `afterSignIn` marker. If
+the browser comes back still anonymous with that marker, the handler shows an
+error page and does not redirect again. The SPA accepts only a same-origin
+`returnTo` under `/console` or the exact `/api/auth/cli-login` path. All other
+`/api/*` routes still return 401 or 499 to anonymous callers.
 
 With a session, `/api/auth/cli-login` shows an approval page instead of minting
 on a bare `GET`. The page cannot be framed or cached. Its POST checks a CSRF
