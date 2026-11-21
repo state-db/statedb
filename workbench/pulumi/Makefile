@@ -1,4 +1,4 @@
-.PHONY: infra-up infra-down db-up console-seed app app-dev app-stop build-image build-image-if-missing check-app login init preview up destroy fixtures-up fixtures-destroy churn-preview churn-up scale-provider-test scale-provider-build scale-provider-install scale-generate scale-preview scale-up scale-fault-up scale-destroy sql psql force-unlock reset glass-on glass-off
+.PHONY: infra-up infra-down db-up console-seed app app-dev app-stop build-image image-ready check-app login init preview up destroy fixtures-up fixtures-destroy churn-preview churn-up scale-provider-test scale-provider-build scale-provider-install scale-generate scale-preview scale-up scale-fault-up scale-destroy sql psql force-unlock reset glass-on glass-off
 
 REPO_ROOT := ../..
 
@@ -23,9 +23,12 @@ BACKEND_URL  ?= http://localhost:8080/pulumi
 ## that measured 2-4s cold.
 CHECK_TIMEOUT ?= 10
 
-## `cmd=app` runs this image, building it the first time it's missing (see
-## build-image-if-missing). Rebuild after code changes with `cmd=build-image`.
-STATEDB_IMAGE ?= state-db:workbench
+## `cmd=app` runs this image. The local default is built from this checkout when missing;
+## any other ref is pulled and never built.
+LOCAL_IMAGE   := state-db:workbench
+STATEDB_IMAGE ?= $(LOCAL_IMAGE)
+## Anonymous pulls by default (see IDP_DOCKER_CFG); set to ~/.docker for a private registry.
+PULL_DOCKER_CONFIG ?= $(IDP_DOCKER_CFG)
 
 ## deploy-simulator churn runs: per-step sleep and target stack.
 CHURN_SECONDS   ?= 6
@@ -124,20 +127,30 @@ console-seed: db-up
 		OIDC_ISSUER=$(OIDC_ISSUER) ADMIN_SUB=$(ADMIN_SUB) TOKEN_HASH=$(TOKEN_HASH) \
 		sh "$$(git rev-parse --show-toplevel)/workbench/pulumi/seed-console.sh"
 
-## Build (or rebuild) the image `cmd=app` runs. Run this again after code changes —
+## Build (or rebuild) the local image from this checkout. Run this again after code changes —
 ## `cmd=app` only builds automatically when the image is missing entirely.
 build-image:
-	"$$(git rev-parse --show-toplevel)/bin/build-native-app-image" $(STATEDB_IMAGE)
+	"$$(git rev-parse --show-toplevel)/bin/build-native-app-image" $(LOCAL_IMAGE)
 
-build-image-if-missing:
-	@docker image inspect $(STATEDB_IMAGE) >/dev/null 2>&1 || { \
-		echo "==> $(STATEDB_IMAGE) not built yet — building now (first run only, several minutes)"; \
-		$(MAKE) build-image; \
-	}
+## Make $(STATEDB_IMAGE) available: build the local default when missing, otherwise pull the ref.
+image-ready:
+	@if [ "$(STATEDB_IMAGE)" = "$(LOCAL_IMAGE)" ]; then \
+		docker image inspect $(LOCAL_IMAGE) >/dev/null 2>&1 || { \
+			echo "==> $(LOCAL_IMAGE) not built yet — building now (first run only, several minutes)"; \
+			$(MAKE) build-image; \
+		}; \
+	else \
+		mkdir -p $(IDP_DOCKER_CFG); \
+		echo "==> pulling $(STATEDB_IMAGE)"; \
+		DOCKER_CONFIG=$(PULL_DOCKER_CONFIG) docker pull $(STATEDB_IMAGE) || { \
+			docker image inspect $(STATEDB_IMAGE) >/dev/null 2>&1 || exit 1; \
+			echo "warning: pull failed; using the local copy of $(STATEDB_IMAGE)"; \
+		}; \
+	fi
 
 ## Run the full stack from a built image (default, fast to start, matches what ships).
-## Builds $(STATEDB_IMAGE) automatically the first time; `cmd=build-image` to refresh it.
-app: build-image-if-missing
+## Builds $(LOCAL_IMAGE) automatically the first time; `cmd=build-image` to refresh it.
+app: image-ready
 	@$(MAKE) app-stop >/dev/null 2>&1 || true
 	STATEDB_IMAGE=$(STATEDB_IMAGE) ORG=$(ORG) CONSOLE_PORT=$(CONSOLE_PORT) \
 		IDP_UPSTREAM_PORT=$(IDP_UPSTREAM_PORT) DB_PORT=$(DB_PORT) DB_IMAGE=$(DB_IMAGE) \

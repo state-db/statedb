@@ -143,7 +143,10 @@ browser flow entirely.
   `localhost:55432`, volume `state-db-workbench-postgres-data`
 - Mock IdP upstream: `localhost:58081` (internal plumbing — sign in via the
   console URL, not this port)
-- App image: `state-db:workbench` (override with `STATEDB_IMAGE`)
+- App image: `state-db:workbench`, built from this checkout. Any other
+  `STATEDB_IMAGE` (e.g. `ghcr.io/state-db/statedb:latest`) is pulled on every
+  `cmd=app` and never built; set `PULL_DOCKER_CONFIG=~/.docker` for a private
+  registry.
 
 Override via Make args, e.g. `make pulumi-workbench cmd=up args="STACK=scratch"`.
 Stacks are addressed `<org>/<stack>`, derived as `$(ORG)/$(STACK)`.
