@@ -2,28 +2,42 @@
 
 Run the real Pulumi CLI against a local state-db backend and inspect what
 lands in Postgres. Not hermetic — edit `Pulumi.yaml`, run the CLI, check the
-DB, repeat. Everything here runs through the host-native workbench lifecycle.
+DB, repeat. Every command works the same from a terminal or an agent session.
 
 ## Quick reference
 
 | Task | Command |
 | --- | --- |
-| Run everything (built image, default) | `make pulumi-workbench cmd=app` |
-| Run everything (clean build and hot reload) | `make pulumi-workbench cmd=app-dev` |
-| Rebuild the image after code changes | `make pulumi-workbench cmd=build-image` |
+| Run a release image (detached, returns when ready) | `make pulumi-workbench cmd=app` |
+| Run this checkout with hot reload (foreground) | `make pulumi-workbench cmd=app-dev` |
+| Test a published release | `make pulumi-workbench cmd=app args="STATEDB_IMAGE=ghcr.io/state-db/statedb:latest"` |
+| Rebuild the local image after code changes | `make pulumi-workbench cmd=build-image` |
+| What is running, and is the backend up? | `cmd=status` |
+| Release-mode app logs | `cmd=logs` (`args="LINES=500"`) |
+| Headless OIDC sign-in check | `cmd=oidc-smoke` (`args="SUBJECT=viewer"`) |
 | Populate fixtures | `make pulumi-workbench cmd=fixtures-up` |
 | Pulumi preview / up / destroy | `cmd=preview\|up\|destroy` |
 | Inspect the DB | `cmd=sql` / `cmd=psql` |
-| Stop app, keep data | `Ctrl-C` |
-| Stop stray processes/containers | `cmd=app-stop` |
+| Stop the app (either mode), keep data | `cmd=app-stop` |
 | Stop infra, keep data | `cmd=infra-down` |
 | Wipe everything | `cmd=reset` |
 | Clear a stuck lock/update | `cmd=force-unlock` |
 
-`make pulumi-workbench cmd=app` is one command: infra, seeding, and the app
-all come up together, building `state-db:workbench` automatically the first
-time (several minutes; cached after that). Open `http://localhost:5173`,
-sign in as `admin` / `developer` / `viewer`:
+There are two modes. Both use the same Postgres, mock IdP, seeded users, and
+backend URL (`http://localhost:8080/pulumi`), so every other target
+(`fixtures-up`, `churn-*`, `scale-*`, `preview`/`up`) works with either.
+
+- **Release mode (`cmd=app`)** runs `STATEDB_IMAGE` in compose on the bridge
+  network with the console bundled in the image: open `http://localhost:8080`.
+  The command exits once the app is healthy and the users are seeded. The
+  default `state-db:workbench` is built from this checkout the first time
+  (several minutes; cached after that).
+- **Dev mode (`cmd=app-dev`)** runs Quarkus dev mode and the Bun console on the
+  host in the foreground: open `http://localhost:5173`. `Ctrl-C` stops both. It
+  cleans the Maven reactor first, removing classes for deleted sources. An
+  agent runs it as a background command and polls `cmd=status`.
+
+Sign in as `admin` / `developer` / `viewer`:
 
 | Subject | Role |
 | --- | --- |
@@ -31,28 +45,28 @@ sign in as `admin` / `developer` / `viewer`:
 | `developer` | org member |
 | `viewer` | org viewer |
 
-`Ctrl-C` stops the app + console; infra (Postgres + mock IdP) stays up. Every
-other target (`fixtures-up`, `churn-*`, `scale-*`, `preview`/`up`) just needs
-`cmd=app` running — no container, no extra setup.
+The OIDC issuer is `http://localhost:58081/default` in both modes, so the
+browser and the app see one issuer. In release mode the `idp-loopback` sidecar
+shares the app container's network and forwards its `localhost:58081` to the
+IdP; no host networking or Docker Desktop setting is involved, and every port
+is published on `127.0.0.1` only. `cmd=oidc-smoke` walks the code flow with
+curl, so a sign-in can be checked without a browser.
 
 Needs `mise` (`mise trust && mise install`, once) for `cmd=app-dev`'s Java/Bun
-toolchain, and `pulumi`/`docker` on `PATH`.
+toolchain, and `pulumi`/`docker` on `PATH`. Docker must be the host daemon; an
+agent sandbox without Docker access fails at `infra-up` with a clear message.
 
 The Make targets are the supported entry points. They stop stale processes,
 reuse healthy infrastructure, and run Java and Bun through the versions pinned
 by mise. `workbench/pulumi/dev-host.sh` is their internal supervisor; do not
 start Bun or Quarkus separately.
 
-`cmd=app-dev` cleans the Maven reactor before it starts Quarkus. This removes
-compiled classes for source files that were deleted since the prior run.
+Override with env vars: `ORG`, `CONSOLE_PORT` (5173), `IDP_PORT` (58081),
+`DB_PORT` (55432), `STATEDB_IMAGE` (default `state-db:workbench`).
 
-Override with env vars: `ORG`, `CONSOLE_PORT` (5173), `IDP_UPSTREAM_PORT`
-(58081), `DB_PORT` (55432), `STATEDB_IMAGE` (default `state-db:workbench`).
-
-**Port 8080/9000 already in use?** Run `cmd=app-stop` — kills stray
-`bun`/`quarkus:dev`/`state-db-app-dev.jar` processes and the
-`state-db-workbench-app` container a previous `Ctrl-C` didn't reap.
-
+**Port 8080/9000 already in use?** Run `cmd=app-stop` — removes the
+release-mode containers and kills stray `bun`/`quarkus:dev`/`state-db-app-dev.jar`
+processes.
 ## Fixture estate
 
 `make pulumi-workbench cmd=fixtures-up` drives real Pulumi ops to build:
@@ -126,7 +140,7 @@ so this only works run directly on your machine — true for everything here):
 
 ```bash
 export PULUMI_HOME="$(git rev-parse --show-toplevel)/workbench/.pulumi-home"
-export PULUMI_CONSOLE_DOMAIN=localhost:5173
+export PULUMI_CONSOLE_DOMAIN=localhost:8080   # localhost:5173 in dev mode
 pulumi login http://localhost:8080/pulumi   # press <ENTER>, don't paste a token
 pulumi stack ls
 ```
@@ -135,15 +149,25 @@ pulumi stack ls
 `~/.pulumi` and re-prompts. Don't set `PULUMI_ACCESS_TOKEN` — that skips the
 browser flow entirely.
 
+## Break-glass login
+
+`cmd=glass-on` disables the mock provider row so the console accepts the
+local break-glass login (`admin` / `password`) in either mode; `cmd=glass-off`
+restores OIDC. The app re-enables the provider on every restart, so re-run
+`glass-on` after one. It does not exercise OIDC; use `cmd=oidc-smoke` for that.
+
 ## Defaults
 
 - Backend: `http://localhost:8080/pulumi` · org `acme` · stack `dev`
   (`acme/dev` for the CLI) · token `state-db-workbench-token`
 - Postgres: container `state-db-workbench-postgres`, image `postgres:16`,
   `localhost:55432`, volume `state-db-workbench-postgres-data`
-- Mock IdP upstream: `localhost:58081` (internal plumbing — sign in via the
-  console URL, not this port)
-- App image: `state-db:workbench` (override with `STATEDB_IMAGE`)
+- Mock IdP: issuer `http://localhost:58081/default` in both modes (the
+  browser visits it during sign-in)
+- App image: `state-db:workbench`, built from this checkout. Any other
+  `STATEDB_IMAGE` (e.g. `ghcr.io/state-db/statedb:latest`) is pulled on every
+  `cmd=app` and never built; set `PULL_DOCKER_CONFIG=~/.docker` for a private
+  registry.
 
 Override via Make args, e.g. `make pulumi-workbench cmd=up args="STACK=scratch"`.
 Stacks are addressed `<org>/<stack>`, derived as `$(ORG)/$(STACK)`.

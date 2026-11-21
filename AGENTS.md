@@ -65,10 +65,14 @@ Some checked-in entrypoints intentionally own host Docker or pinned host tools
 only their documented `Makefile`/`bin` entrypoint; do not reconstruct their
 environment.
 
-For the live main-checkout application, use a managed foreground session:
+For the live main-checkout application, run dev mode as a managed foreground
+session, or a release image detached; check either headlessly:
 
 ```text
 make pulumi-workbench cmd=app-dev
+make pulumi-workbench cmd=app args="STATEDB_IMAGE=<ref>"
+make pulumi-workbench cmd=status
+make pulumi-workbench cmd=oidc-smoke
 make pulumi-workbench cmd=app-stop
 ```
 
