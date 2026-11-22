@@ -86,7 +86,7 @@ mise trust mise.toml
 
 ### Verify a change
 
-Builds and tests run through `./dev`, which copies the workspace into a disposable [Lima](https://lima-vm.io/) VM with no host mounts or credentials.
+Builds and tests run through `./dev`, which copies the workspace into a disposable [Lima](https://lima-vm.io/) VM with no host mounts or credentials. A failed run names the failing step and copies its test reports to `artifacts/dev-reports/`.
 
 | Command | Purpose |
 | --- | --- |

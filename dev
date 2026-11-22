@@ -41,29 +41,67 @@ require_isolated() {
     fail "internal verification tasks must be entered through a public ./dev command"
 }
 
+# Lets a failed guest run end by naming its step; set it in the task's shell, not a subshell.
+current_step=
+
+step() {
+  current_step=$1
+  echo "==> step: $current_step"
+}
+
+summarize_test_failures() {
+  local report found=false
+  while IFS= read -r -d '' report; do
+    grep -qE '<<< (FAILURE|ERROR)!' "$report" || continue
+    found=true
+    awk '
+      /^Tests run:/ { sub(/ -- in .*/, ""); print "  " FILENAME ": " $0; next }
+      /<<< (FAILURE|ERROR)!/ {
+        name = $0; sub(/ +(-- )?Time elapsed.*/, "", name)
+        print "    " name ($0 ~ /<<< ERROR!/ ? "  ERROR" : "  FAILURE")
+        if ((getline msg) > 0) print "      " substr(msg, 1, 300)
+      }
+    ' "$report"
+  done < <(find modules -type f -path '*/target/*-reports/*.txt' -print0 2>/dev/null | sort -z)
+  $found || echo "  no failing test reports; the cause is in the Maven [ERROR] lines above"
+}
+
+report_step_failure() {
+  local status=$?
+  [[ $status -ne 0 && -n $current_step ]] || return 0
+  echo >&2
+  echo "dev: FAILED at $current_step (exit $status)" >&2
+  case $current_step in
+  java_verify|protocol|spotless) summarize_test_failures >&2 ;;
+  esac
+}
+
 java_verify() {
   ./bin/prepare-native-agent-jvm >/dev/null
   "$MVNW" -f modules/pom.xml verify -Pnative-agent-tests
 }
 
 web_verify() {
-  (
-    cd modules/web
-    bun install --frozen-lockfile
-    bun run lint
-    bun run typecheck
-    bun test
-  )
+  step "web_verify: bun install"
+  (cd modules/web && bun install --frozen-lockfile)
+  step "web_verify: lint"
+  (cd modules/web && bun run lint)
+  step "web_verify: typecheck"
+  (cd modules/web && bun run typecheck)
+  step "web_verify: bun test"
+  (cd modules/web && bun test)
 }
 
 go_verify() {
   local module
   for module in tools/pulumi/api-extract tools/pulumi/verify tools/pulumi/recorder workbench/pulumi/providers/statedbsim; do
+    step "go_verify: $module"
     (cd "$module" && go test ./... && go build ./...)
   done
 }
 
 release_tooling_verify() {
+  step release_tooling_verify
   ./bin/verify-release-tooling
 }
 
@@ -118,10 +156,12 @@ run_isolated_task() {
   require_isolated
   local task=${1:?internal task is required}
   shift
+  trap report_step_failure EXIT
 
   case "$task" in
   quick)
     [[ $# -eq 0 ]] || fail "internal quick task takes no arguments"
+    step spotless
     "$MVNW" -f modules/pom.xml spotless:check
     web_verify
     go_verify
@@ -129,28 +169,36 @@ run_isolated_task() {
     ;;
   check)
     [[ $# -eq 0 ]] || fail "internal check task takes no arguments"
+    step java_verify
     java_verify
     web_verify
+    step notices-check
     ./bin/generate-third-party-notices --check
+    step schema-check
     ./bin/generate-db-schema --check
     for postgres_version in 14 16 18; do
+      step "schema-check: postgres $postgres_version"
       STATEDB_SCHEMA_PG_IMAGE="postgres:${postgres_version}-alpine" \
         ./bin/generate-db-schema --check
     done
+    step verify-db-schema-generator
     ./bin/verify-db-schema-generator
     go_verify
     release_tooling_verify
     ;;
   notices)
     [[ $# -eq 0 ]] || fail "internal notices task takes no arguments"
+    step notices
     ./bin/generate-third-party-notices
     ;;
   schema)
     [[ $# -eq 0 ]] || fail "internal schema task takes no arguments"
+    step schema
     ./bin/generate-db-schema
     ;;
   native-contract)
     [[ $# -eq 0 ]] || fail "internal native-contract task takes no arguments"
+    step java_verify
     java_verify
     ;;
   protocol)
@@ -160,7 +208,9 @@ run_isolated_task() {
       -Dpulumi.cli.image=*) pulumi_image=${arg#*=} ;;
       esac
     done
+    step "protocol: docker pull"
     docker pull "$pulumi_image"
+    step protocol
     "$MVNW" -f modules/pom.xml -pl pulumi-cli-smoke -am verify \
       -Dsurefire.skip=true \
       -DskipPulumiCliSmoke=false \
@@ -272,6 +322,24 @@ copy_workspace() {
   ) | limactl shell "$VERIFY_VM" tar -xf - -C "$guest_dir"
 }
 
+# Signoff resets the VM, so a failed run copies its test reports to the host before they are lost.
+copy_failure_reports() {
+  local guest_dir=$1 task=$2 dest
+  dest="artifacts/dev-reports/$task-$(date -u +%Y%m%dT%H%M%SZ)"
+  mkdir -p "$dest"
+  # Host bsdtar refuses absolute, `..`, and through-symlink paths, so guest output stays in $dest.
+  if ! limactl shell "$VERIFY_VM" sh -c 'cd "$1" && find modules -type f -path "*/target/*-reports/*" -print0 |
+      tar --null -cf - -T -' sh "$guest_dir" | tar -xf - -C "$dest"; then
+    echo "dev: could not copy test reports out of $VERIFY_VM" >&2
+  fi
+  if [[ -z $(ls -A "$dest") ]]; then
+    rmdir "$dest"
+    echo "dev: $task failed; the run left no test reports" >&2
+  else
+    echo "dev: $task failed; test reports copied to $PWD/$dest" >&2
+  fi
+}
+
 run_isolated() {
   local task=$1
   ensure_vm
@@ -282,6 +350,7 @@ run_isolated() {
   echo "==> copying workspace into $VERIFY_VM (no host mounts)"
   copy_workspace "$guest_dir"
   echo "==> running $task with a guest-only HOME and Docker daemon"
+  local status=0
   limactl shell "$VERIFY_VM" env -i \
     HOME="$guest_home" \
     USER=builder \
@@ -291,7 +360,11 @@ run_isolated() {
     DOCKER_HOST="unix:///run/user/$guest_uid/docker.sock" \
     STATEDB_ISOLATED=1 \
     bash "$guest_dir/dev" __guest-bootstrap "$guest_dir" "$MISE_VERSION" \
-      "$MISE_SHA256_LINUX_ARM64" "$MISE_SHA256_LINUX_X64" "$task"
+      "$MISE_SHA256_LINUX_ARM64" "$MISE_SHA256_LINUX_X64" "$task" || status=$?
+  if ((status != 0)); then
+    copy_failure_reports "$guest_dir" "$task"
+    return "$status"
+  fi
 }
 
 reset_vm() {
