@@ -103,7 +103,7 @@ contain pending operations from the interrupted run.
 A client can die without completing, for example when CI kills a job. Takeover
 fails the update that held the expired lease, but a stack with no later update
 would stay in progress. `AbandonedUpdateReaper` runs on every pod every
-`statedb.lock.reap-interval` (one minute). It fails each in-progress update that
+`statedb.lock.reap-interval` (five minutes). It fails each in-progress update that
 started more than a lease TTL ago by the database clock and holds no live lease,
 including one that never acquired a lease. An expired lease is already unusable,
 so this changes only what readers see.

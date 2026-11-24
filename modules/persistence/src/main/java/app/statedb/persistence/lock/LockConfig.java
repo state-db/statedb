@@ -25,6 +25,6 @@ public interface LockConfig {
   Duration compactionWait();
 
   // How often AbandonedUpdateReaper fails updates whose client stopped renewing.
-  @WithDefault("1m")
+  @WithDefault("5m")
   Duration reapInterval();
 }
