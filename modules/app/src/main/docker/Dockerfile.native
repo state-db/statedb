@@ -51,6 +51,7 @@ EOF
 # ---- native executable and Cedar JNI library ------------------------------------------------
 # Native Image cannot cross-compile. Under buildx this stage runs on TARGETPLATFORM (using
 # emulation when necessary), producing one executable and Cedar library per target architecture.
+# A Mandrel with the Native Image Base64 port (Graal 040cfd0a8) must also include GR-79579 (CVE-2026-114938).
 FROM quay.io/quarkus/ubi9-quarkus-mandrel-builder-image:jdk-25@sha256:93bcce120e35460b44c57efe2586e1d913cbfe32ddb418f0a7375a86850b54f1 AS native
 
 ARG TARGETARCH

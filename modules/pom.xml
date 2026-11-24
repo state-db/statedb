@@ -49,7 +49,7 @@
 
     <dependencyManagement>
         <dependencies>
-            <!-- Patched ahead of the Quarkus BOM for HIGH CVEs that fail the release scan. -->
+            <!-- Patched ahead of the Quarkus BOM for HIGH CVEs that fail the release scan; drop once the BOM ships Jackson >= 2.22.3 and Guava >= 33.7.2. -->
             <dependency>
                 <groupId>com.fasterxml.jackson</groupId>
                 <artifactId>jackson-bom</artifactId>
