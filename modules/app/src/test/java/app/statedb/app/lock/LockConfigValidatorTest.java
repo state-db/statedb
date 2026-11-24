@@ -45,6 +45,11 @@ class LockConfigValidatorTest {
           public Duration compactionWait() {
             return Duration.ofSeconds(30);
           }
+
+          @Override
+          public Duration reapInterval() {
+            return Duration.ofMinutes(1);
+          }
         };
     v.onStart(null);
   }

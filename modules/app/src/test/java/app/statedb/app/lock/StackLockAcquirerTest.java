@@ -183,11 +183,13 @@ class StackLockAcquirerTest {
 
     Object[] row =
         (Object[])
-            em.createNativeQuery("SELECT status, ended_at FROM stack_updates WHERE id = ?1")
+            em.createNativeQuery(
+                    "SELECT status, ended_at, end_journal_seq FROM stack_updates WHERE id = ?1")
                 .setParameter(1, firstUpdateId)
                 .getSingleResult();
     assertEquals("failed", row[0]);
     assertNotNull(row[1]);
+    assertNotNull(row[2]);
   }
 
   @Test

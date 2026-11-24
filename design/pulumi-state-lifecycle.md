@@ -100,9 +100,22 @@ the lease, mark an in-progress update `cancelled`, and clear `active_update_id`
 without discarding committed journal entries. A later export can therefore
 contain pending operations from the interrupted run.
 
-Nothing sweeps abandoned update records periodically. Takeover fails the update
-that held the expired lease, but a record created before lease acquisition can
-stay `in-progress` if its client disappears.
+A client can die without completing, for example when CI kills a job. Takeover
+fails the update that held the expired lease, but a stack with no later update
+would stay in progress. `AbandonedUpdateReaper` runs on every pod every
+`statedb.lock.reap-interval` (one minute). It fails each in-progress update that
+started more than a lease TTL ago by the database clock and holds no live lease,
+including one that never acquired a lease. An expired lease is already unusable,
+so this changes only what readers see.
+
+Takeover and the reaper end an abandoned update the way a failed completion does:
+under the `stack_state` lock they record `end_journal_seq`, count an applied
+update in `stacks.version`, clear `active_update_id`, and queue compaction. A
+versioned export can therefore still address a killed `up`. The reaper deletes
+the lease only while it is still expired, so a renewal that commits while the
+reaper waits keeps the lease and the update. Cancellation takes the same lock,
+so pods and cancels never act on a status another writer is changing.
+Acquisition refuses an update that has already ended.
 
 ## Export
 
