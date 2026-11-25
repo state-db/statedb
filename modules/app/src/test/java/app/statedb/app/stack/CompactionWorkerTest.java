@@ -1,5 +1,6 @@
 package app.statedb.app.stack;
 
+import static app.statedb.app.Races.holdThenContend;
 import static app.statedb.testsupport.TestTransactions.read;
 import static app.statedb.testsupport.TestTransactions.tx;
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -29,11 +30,6 @@ import jakarta.persistence.LockModeType;
 import java.time.Instant;
 import java.util.Map;
 import java.util.UUID;
-import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
-import java.util.concurrent.Future;
-import java.util.concurrent.TimeUnit;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -98,41 +94,21 @@ class CompactionWorkerTest {
     entry(stackId, update, 1, 1L, "{\"state\":" + res("locked") + "}");
     tx(() -> enqueuer.enqueue(stackId));
 
-    CountDownLatch locked = new CountDownLatch(1);
-    CountDownLatch release = new CountDownLatch(1);
-    ExecutorService pool = Executors.newFixedThreadPool(2);
-    try {
-      Future<?> holder =
-          pool.submit(
-              () ->
-                  tx(
-                      () -> {
-                        StackState.find("stackId", stackId)
-                            .withLock(LockModeType.PESSIMISTIC_WRITE)
-                            .<StackState>singleResult();
-                        locked.countDown();
-                        await(release);
-                      }));
+    int compacted =
+        holdThenContend(
+            em,
+            () ->
+                StackState.find("stackId", stackId)
+                    .withLock(LockModeType.PESSIMISTIC_WRITE)
+                    .<StackState>singleResult(),
+            "%select%from %stack_state%for%update%",
+            worker::drainOnce);
+    assertEquals(1, compacted);
 
-      org.junit.jupiter.api.Assertions.assertTrue(locked.await(5, TimeUnit.SECONDS));
-      Future<Integer> compacting = pool.submit(() -> worker.drainOnce());
-
-      Thread.sleep(200);
-      org.junit.jupiter.api.Assertions.assertFalse(
-          compacting.isDone(), "compaction must wait for the stack_state row lock");
-
-      release.countDown();
-      holder.get(5, TimeUnit.SECONDS);
-      assertEquals(1, compacting.get(5, TimeUnit.SECONDS));
-
-      StackState state = stackState(stackId);
-      assertEquals(0L, state.journalEntriesSinceCompaction);
-      Snapshot snapshot = Snapshot.find("stackId", stackId).<Snapshot>singleResult();
-      assertEquals(state.journalSeq, snapshot.compactedFromJournalSeq);
-    } finally {
-      release.countDown();
-      pool.shutdownNow();
-    }
+    StackState state = stackState(stackId);
+    assertEquals(0L, state.journalEntriesSinceCompaction);
+    Snapshot snapshot = Snapshot.find("stackId", stackId).<Snapshot>singleResult();
+    assertEquals(state.journalSeq, snapshot.compactedFromJournalSeq);
   }
 
   @Test
@@ -518,16 +494,5 @@ class CompactionWorkerTest {
         + "\"ciphertext\":\""
         + ciphertext
         + "\"}";
-  }
-
-  private static void await(CountDownLatch latch) {
-    try {
-      if (!latch.await(5, TimeUnit.SECONDS)) {
-        throw new IllegalStateException("timed out waiting for latch");
-      }
-    } catch (InterruptedException e) {
-      Thread.currentThread().interrupt();
-      throw new RuntimeException(e);
-    }
   }
 }

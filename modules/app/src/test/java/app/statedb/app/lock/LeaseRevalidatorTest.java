@@ -1,9 +1,9 @@
 package app.statedb.app.lock;
 
+import static app.statedb.app.Races.holdThenContend;
 import static app.statedb.testsupport.TestTransactions.read;
 import static app.statedb.testsupport.TestTransactions.tx;
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
-import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -142,34 +142,14 @@ class LeaseRevalidatorTest {
 
   @Test
   void concurrentCancelStillWaitsForRequireLiveHolder() throws Exception {
-    CountDownLatch locked = new CountDownLatch(1);
-    CountDownLatch release = new CountDownLatch(1);
-    ExecutorService pool = Executors.newFixedThreadPool(2);
-    try {
-      Future<?> holder =
-          pool.submit(
-              () ->
-                  tx(
-                      () -> {
-                        revalidator.requireLive(leaseId);
-                        locked.countDown();
-                        await(release);
-                      }));
-
-      assertTrue(locked.await(5, TimeUnit.SECONDS));
-      Future<?> cancelling =
-          pool.submit(() -> canceller.gracefulCancel(leaseId, stackId, updateId));
-
-      Thread.sleep(200);
-      assertFalse(cancelling.isDone(), "cancel must wait for the FOR SHARE holder to commit");
-
-      release.countDown();
-      holder.get(5, TimeUnit.SECONDS);
-      cancelling.get(5, TimeUnit.SECONDS);
-    } finally {
-      release.countDown();
-      pool.shutdownNow();
-    }
+    holdThenContend(
+        em,
+        () -> revalidator.requireLive(leaseId),
+        "%delete%from %stack_locks%",
+        () -> {
+          canceller.gracefulCancel(leaseId, stackId, updateId);
+          return null;
+        });
   }
 
   private static void await(CountDownLatch latch) {

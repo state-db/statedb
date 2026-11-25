@@ -1,13 +1,12 @@
 package app.statedb.app.update;
 
+import static app.statedb.app.Races.holdThenContend;
 import static app.statedb.testsupport.TestTransactions.read;
 import static app.statedb.testsupport.TestTransactions.tx;
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
-import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import app.statedb.persistence.events.EventBatchAppender;
 import app.statedb.persistence.events.UpdateEvent;
@@ -37,11 +36,6 @@ import jakarta.persistence.LockModeType;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
-import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
-import java.util.concurrent.Future;
-import java.util.concurrent.TimeUnit;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 
@@ -312,44 +306,23 @@ class StackUpdateCompleterTest {
   @Test
   void completeWaitsForStackStateLockBeforeStampingBoundary() throws Exception {
     Fixture f = seed(StackUpdate.Kind.UPDATE, "complete-waits");
-    CountDownLatch locked = new CountDownLatch(1);
-    CountDownLatch release = new CountDownLatch(1);
-    ExecutorService pool = Executors.newFixedThreadPool(2);
-    try {
-      Future<?> holder =
-          pool.submit(
-              () ->
-                  tx(
-                      () -> {
-                        StackState state =
-                            StackState.find("stackId", f.stackId())
-                                .withLock(LockModeType.PESSIMISTIC_WRITE)
-                                .<StackState>singleResult();
-                        state.journalSeq = 21;
-                        locked.countDown();
-                        await(release);
-                      }));
+    holdThenContend(
+        em,
+        () -> {
+          StackState state =
+              StackState.find("stackId", f.stackId())
+                  .withLock(LockModeType.PESSIMISTIC_WRITE)
+                  .<StackState>singleResult();
+          state.journalSeq = 21;
+        },
+        "%select%from %stack_state%for%update%",
+        () -> {
+          completer.complete(f.leaseId(), f.stackId(), f.updateId(), StackUpdate.Status.SUCCEEDED);
+          return null;
+        });
 
-      assertTrue(locked.await(5, TimeUnit.SECONDS));
-      Future<?> completing =
-          pool.submit(
-              () ->
-                  completer.complete(
-                      f.leaseId(), f.stackId(), f.updateId(), StackUpdate.Status.SUCCEEDED));
-
-      Thread.sleep(200);
-      assertFalse(completing.isDone(), "complete must wait for the stack_state row lock");
-
-      release.countDown();
-      holder.get(5, TimeUnit.SECONDS);
-      completing.get(5, TimeUnit.SECONDS);
-
-      StackUpdate update = StackUpdate.findById(f.updateId());
-      assertEquals(21L, update.endJournalSeq);
-    } finally {
-      release.countDown();
-      pool.shutdownNow();
-    }
+    StackUpdate update = StackUpdate.findById(f.updateId());
+    assertEquals(21L, update.endJournalSeq);
   }
 
   @Test
@@ -478,16 +451,5 @@ class StackUpdateCompleterTest {
 
   private static String urn(String name) {
     return "urn:pulumi:dev::proj::pkg:index:" + name + "::" + name;
-  }
-
-  private static void await(CountDownLatch latch) {
-    try {
-      if (!latch.await(5, TimeUnit.SECONDS)) {
-        throw new IllegalStateException("timed out waiting for latch");
-      }
-    } catch (InterruptedException e) {
-      Thread.currentThread().interrupt();
-      throw new RuntimeException(e);
-    }
   }
 }
