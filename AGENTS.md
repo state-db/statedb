@@ -104,6 +104,17 @@ the owning target if it fails.
   Keep the reason in nearby Javadoc or a comment. Raw SQL in tests is reserved
   for database behavior or setup that entities cannot represent accurately.
 
+## Java test transactions
+
+- If a test needs a fresh transaction, statically import `read` or `tx` from
+  `app.statedb.testsupport.TestTransactions`. Use `read(() -> ...)` if the
+  callback returns a value. Use `tx(() -> ...)` for a void callback. Both
+  helpers use `QuarkusTransaction.requiringNew()`.
+- Use `app.statedb.app.Races.holdThenContend` in app tests that must verify
+  a contender waits on the holder's PostgreSQL lock. Keep dedicated
+  coordination for tests that start peers together or verify they can proceed
+  while a lock is held.
+
 ## Concurrency invariants
 
 - Run-once startup work uses `AdvisoryLock#runExclusive` with a named constant
