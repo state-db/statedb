@@ -53,46 +53,10 @@ class AdminUsersResourceTest {
 
   @Test
   void listsHumansAndServiceAccountsWithIdentityAndRole() {
-    tx(
-        () -> {
-          Organization org = new Organization();
-          org.name = ORG;
-          org.displayName = "S12 Users Test";
-          org.persist();
-          orgId = org.id;
-
-          User human = new User();
-          human.iss = HUMAN_ISS;
-          human.sub = HUMAN_SUB;
-          human.email = "s12@example.com";
-          human.displayName = "S12 Human";
-          human.lastLoginAt = Instant.now();
-          human.persist();
-          humanId = human.id;
-
-          OrgMember membership = new OrgMember();
-          membership.orgId = orgId;
-          membership.userId = humanId;
-          membership.role = OrgMember.Role.member;
-          membership.persist();
-        });
+    seedHumanMembership();
     // ServiceAccountCreator manages its own transaction and mints a users row + service membership.
     serviceId = serviceAccounts.create(orgId, "s12-ci-bot", 30, humanId).accountId();
-    tx(
-        () -> {
-          ApiToken current =
-              ApiToken.<ApiToken>find(
-                      "userId = ?1 and kind = ?2", serviceId, ApiToken.Kind.service_account)
-                  .singleResult();
-          ApiToken rotated = new ApiToken();
-          rotated.tokenHash = "sha256:" + "b".repeat(64);
-          rotated.description = "s12-ci-bot rotated";
-          rotated.userId = current.userId;
-          rotated.orgId = current.orgId;
-          rotated.kind = ApiToken.Kind.service_account;
-          rotated.expiresAt = Instant.now().plusSeconds(60 * 60);
-          rotated.persistAndFlush();
-        });
+    addSecondServiceCredential();
 
     String cookie = login(PASSWORD).statusCode(200).extract().cookie(COOKIE);
     String human = humanId.toString();
@@ -129,5 +93,49 @@ class AdminUsersResourceTest {
         .statusCode(200)
         .body("users.find { it.id == '" + human + "' }.id", is(human))
         .body("users.find { it.id == '" + service + "' }", nullValue());
+  }
+
+  private void seedHumanMembership() {
+    tx(
+        () -> {
+          Organization org = new Organization();
+          org.name = ORG;
+          org.displayName = "S12 Users Test";
+          org.persist();
+          orgId = org.id;
+
+          User human = new User();
+          human.iss = HUMAN_ISS;
+          human.sub = HUMAN_SUB;
+          human.email = "s12@example.com";
+          human.displayName = "S12 Human";
+          human.lastLoginAt = Instant.now();
+          human.persist();
+          humanId = human.id;
+
+          OrgMember membership = new OrgMember();
+          membership.orgId = orgId;
+          membership.userId = humanId;
+          membership.role = OrgMember.Role.member;
+          membership.persist();
+        });
+  }
+
+  private void addSecondServiceCredential() {
+    tx(
+        () -> {
+          ApiToken current =
+              ApiToken.<ApiToken>find(
+                      "userId = ?1 and kind = ?2", serviceId, ApiToken.Kind.service_account)
+                  .singleResult();
+          ApiToken rotated = new ApiToken();
+          rotated.tokenHash = "sha256:" + "b".repeat(64);
+          rotated.description = "s12-ci-bot rotated";
+          rotated.userId = current.userId;
+          rotated.orgId = current.orgId;
+          rotated.kind = ApiToken.Kind.service_account;
+          rotated.expiresAt = Instant.now().plusSeconds(60 * 60);
+          rotated.persistAndFlush();
+        });
   }
 }
