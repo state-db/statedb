@@ -29,6 +29,7 @@ import com.cedarpolicy.model.entity.Entity;
 import com.cedarpolicy.value.EntityTypeName;
 import com.cedarpolicy.value.EntityUID;
 import com.cedarpolicy.value.PrimString;
+import io.quarkus.test.TestTransaction;
 import io.quarkus.test.junit.QuarkusTest;
 import jakarta.inject.Inject;
 import jakarta.persistence.EntityManager;
@@ -148,6 +149,7 @@ class StackSharingVisibilityTest {
   }
 
   @Test
+  @TestTransaction
   void targetedLookupPreservesVisibilityTenantAndExactNameSemantics() {
     assertTrue(targetedVisible(ownerId, ACME, PROJECT, INTERNAL_STACK));
     assertTrue(targetedVisible(ownerId, ACME, PROJECT, PRIVATE_STACK));
@@ -292,7 +294,7 @@ class StackSharingVisibilityTest {
   }
 
   private boolean targetedVisible(UUID userId, String org, String project, String stack) {
-    return read(() -> stackListFinder.findVisibleToUser(userId, org, project, stack).isPresent());
+    return stackListFinder.findVisibleToUser(userId, org, project, stack).isPresent();
   }
 
   private boolean decideOnOrg(AuthenticatedPrincipal p, String action) {
