@@ -23,4 +23,8 @@ public interface LockConfig {
   // How long acquisition waits for a queued compaction before proceeding anyway. Zero disables.
   @WithDefault("30s")
   Duration compactionWait();
+
+  // How often AbandonedUpdateReaper fails updates whose client stopped renewing.
+  @WithDefault("5m")
+  Duration reapInterval();
 }

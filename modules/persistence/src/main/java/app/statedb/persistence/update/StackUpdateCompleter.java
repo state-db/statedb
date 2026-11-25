@@ -4,6 +4,7 @@ import app.statedb.persistence.lock.StackLock;
 import app.statedb.persistence.lock.StackLockedException;
 import app.statedb.persistence.stack.CompactionJobEnqueuer;
 import app.statedb.persistence.stack.Stack;
+import app.statedb.persistence.stack.StackState;
 import app.statedb.persistence.vcs.ReportDeliveryWorker;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
@@ -85,5 +86,26 @@ public class StackUpdateCompleter {
 
     compactionJobEnqueuer.enqueue(stackId);
     reportDeliveryWorker.enqueue(u);
+  }
+
+  /**
+   * Ends an update whose client is gone the way a failed completion would, so a versioned export
+   * can still address it. The caller holds the {@code stack_state} row lock {@code state} came
+   * from. No report is queued: the run may have ended long before anyone notices.
+   */
+  public void failAbandoned(StackState state, Stack stack, StackUpdate u) {
+    if (u.status != StackUpdate.Status.IN_PROGRESS) {
+      return;
+    }
+    u.status = StackUpdate.Status.FAILED;
+    u.endedAt = Instant.now();
+    u.endJournalSeq = state.journalSeq;
+    if (!u.dryRun) {
+      stack.version++;
+    }
+    if (u.id.equals(stack.activeUpdateId)) {
+      stack.activeUpdateId = null;
+    }
+    compactionJobEnqueuer.enqueue(stack.id);
   }
 }

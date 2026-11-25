@@ -5,6 +5,7 @@ import app.statedb.persistence.stack.CompactionJob;
 import app.statedb.persistence.stack.Stack;
 import app.statedb.persistence.stack.StackState;
 import app.statedb.persistence.update.StackUpdate;
+import app.statedb.persistence.update.StackUpdateCompleter;
 import io.quarkus.narayana.jta.QuarkusTransaction;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
@@ -42,6 +43,8 @@ public class StackLockAcquirer {
   @Inject EntityManager em;
 
   @Inject LockConfig lockConfig;
+
+  @Inject StackUpdateCompleter completer;
 
   public Optional<Lease> acquire(
       UUID stackId,
@@ -102,9 +105,16 @@ public class StackLockAcquirer {
       Map<String, Object> tags) {
 
     // Shared serialization point with compaction.
-    StackState.find("stackId", stackId)
-        .withLock(LockModeType.PESSIMISTIC_WRITE)
-        .<StackState>firstResult();
+    StackState state =
+        StackState.find("stackId", stackId)
+            .withLock(LockModeType.PESSIMISTIC_WRITE)
+            .<StackState>firstResult();
+
+    // A lease for an ended update would set active_update_id that its completion never clears.
+    StackUpdate target = StackUpdate.findById(updateId);
+    if (target == null || target.status != StackUpdate.Status.IN_PROGRESS) {
+      return Optional.empty();
+    }
 
     UUID lockId = PersistenceIds.newId();
     // 122 random bits from SecureRandom. The bearer is a short-lived secret
@@ -174,14 +184,11 @@ public class StackLockAcquirer {
     Stack stack = Stack.findById(stackId);
     UUID abandonedUpdateId = stack.activeUpdateId;
     if (abandonedUpdateId != null && !abandonedUpdateId.equals(updateId)) {
-      // Nothing else ever terminates an update whose lease expired mid-run.
-      StackUpdate.update(
-          "status = ?1, endedAt = current_timestamp"
-              + " where id = ?2 and stackId = ?3 and status = ?4",
-          StackUpdate.Status.FAILED,
-          abandonedUpdateId,
-          stackId,
-          StackUpdate.Status.IN_PROGRESS);
+      // Takeover can beat AbandonedUpdateReaper to an update whose lease expired mid-run.
+      StackUpdate abandoned = StackUpdate.findById(abandonedUpdateId);
+      if (abandoned != null && stackId.equals(abandoned.stackId)) {
+        completer.failAbandoned(state, stack, abandoned);
+      }
     }
     stack.activeUpdateId = updateId;
 
