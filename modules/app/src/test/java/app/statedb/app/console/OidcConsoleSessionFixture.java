@@ -1,11 +1,11 @@
 package app.statedb.app.console;
 
+import static app.statedb.testsupport.TestTransactions.tx;
 import static io.restassured.RestAssured.given;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 
 import app.statedb.persistence.identity.OidcProvider;
 import app.statedb.persistence.identity.User;
-import io.quarkus.narayana.jta.QuarkusTransaction;
 import io.restassured.http.Cookie;
 import io.restassured.response.Response;
 import java.net.URI;
@@ -22,28 +22,26 @@ final class OidcConsoleSessionFixture {
   static final String FIXTURE_SUB = "123456";
 
   static void seedProvider() {
-    QuarkusTransaction.requiringNew()
-        .run(
-            () -> {
-              OidcProvider.delete("name", PROVIDER);
-              OidcProvider provider = new OidcProvider();
-              provider.name = PROVIDER;
-              provider.issuerUrl = issuer();
-              provider.clientId = "quarkus-app";
-              provider.clientSecret = "secret";
-              provider.scopes = List.of("openid", "profile", "email");
-              provider.enabled = true;
-              provider.persistAndFlush();
-            });
+    tx(
+        () -> {
+          OidcProvider.delete("name", PROVIDER);
+          OidcProvider provider = new OidcProvider();
+          provider.name = PROVIDER;
+          provider.issuerUrl = issuer();
+          provider.clientId = "quarkus-app";
+          provider.clientSecret = "secret";
+          provider.scopes = List.of("openid", "profile", "email");
+          provider.enabled = true;
+          provider.persistAndFlush();
+        });
   }
 
   static void cleanup() {
-    QuarkusTransaction.requiringNew()
-        .run(
-            () -> {
-              OidcProvider.delete("name", PROVIDER);
-              User.delete("iss = ?1 and sub = ?2", FIXTURE_ISS, FIXTURE_SUB);
-            });
+    tx(
+        () -> {
+          OidcProvider.delete("name", PROVIDER);
+          User.delete("iss = ?1 and sub = ?2", FIXTURE_ISS, FIXTURE_SUB);
+        });
   }
 
   static Cookie login() {

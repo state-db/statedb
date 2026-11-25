@@ -1,5 +1,6 @@
 package app.statedb.pulumiclismoke;
 
+import static app.statedb.testsupport.TestTransactions.tx;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.fail;
@@ -14,7 +15,6 @@ import app.statedb.testsupport.RepoRoot;
 import app.statedb.testsupport.TestIdentity;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import io.quarkus.narayana.jta.QuarkusTransaction;
 import io.quarkus.test.common.http.TestHTTPResource;
 import jakarta.inject.Inject;
 import jakarta.persistence.EntityManager;
@@ -233,63 +233,61 @@ public abstract class PulumiSmokeBase {
 
   private void seedAcmeIdentity() {
     cleanupAcmeIdentity();
-    QuarkusTransaction.requiringNew()
-        .run(
-            () -> {
-              Organization org = new Organization();
-              org.name = ORG;
-              org.displayName = ORG;
-              org.persistAndFlush();
+    tx(
+        () -> {
+          Organization org = new Organization();
+          org.name = ORG;
+          org.displayName = ORG;
+          org.persistAndFlush();
 
-              if (useServiceAccountLifecycleCredential()) {
-                ServiceAccountCreator.MintedServiceAccount account =
-                    serviceAccountCreator.create(
-                        org.id, "Acme Test User", 30, ApiToken.AccessProfile.stack_lifecycle, null);
-                serviceAccountId = account.accountId();
-                rawToken = account.rawToken();
-                return;
-              }
+          if (useServiceAccountLifecycleCredential()) {
+            ServiceAccountCreator.MintedServiceAccount account =
+                serviceAccountCreator.create(
+                    org.id, "Acme Test User", 30, ApiToken.AccessProfile.stack_lifecycle, null);
+            serviceAccountId = account.accountId();
+            rawToken = account.rawToken();
+            return;
+          }
 
-              User user = new User();
-              user.iss = "local:pulumi-cli-smoke";
-              user.sub = ORG;
-              user.email = "acme@example.com";
-              user.displayName = "Acme Test User";
-              user.persistAndFlush();
+          User user = new User();
+          user.iss = "local:pulumi-cli-smoke";
+          user.sub = ORG;
+          user.email = "acme@example.com";
+          user.displayName = "Acme Test User";
+          user.persistAndFlush();
 
-              OrgMember member = new OrgMember();
-              member.orgId = org.id;
-              member.userId = user.id;
-              member.role = OrgMember.Role.owner;
-              member.persistAndFlush();
+          OrgMember member = new OrgMember();
+          member.orgId = org.id;
+          member.userId = user.id;
+          member.role = OrgMember.Role.owner;
+          member.persistAndFlush();
 
-              ApiToken token = new ApiToken();
-              token.tokenHash = TestIdentity.sha256Hex(RAW_TOKEN);
-              token.userId = user.id;
-              token.kind = ApiToken.Kind.oidc;
-              token.orgId = null;
-              token.expiresAt = java.time.Instant.now().plusSeconds(60 * 60);
-              token.description = "pulumi cli smoke fixture";
-              token.persistAndFlush();
-            });
+          ApiToken token = new ApiToken();
+          token.tokenHash = TestIdentity.sha256Hex(RAW_TOKEN);
+          token.userId = user.id;
+          token.kind = ApiToken.Kind.oidc;
+          token.orgId = null;
+          token.expiresAt = java.time.Instant.now().plusSeconds(60 * 60);
+          token.description = "pulumi cli smoke fixture";
+          token.persistAndFlush();
+        });
   }
 
   private void cleanupAcmeIdentity() {
     UUID accountId = serviceAccountId;
-    QuarkusTransaction.requiringNew()
-        .run(
-            () -> {
-              em.createNativeQuery("DELETE FROM organizations WHERE name = ?1")
-                  .setParameter(1, ORG)
-                  .executeUpdate();
-              em.createNativeQuery("DELETE FROM users WHERE iss = ?1 AND sub = ?2")
-                  .setParameter(1, "local:pulumi-cli-smoke")
-                  .setParameter(2, ORG)
-                  .executeUpdate();
-              if (accountId != null) {
-                User.deleteById(accountId);
-              }
-            });
+    tx(
+        () -> {
+          em.createNativeQuery("DELETE FROM organizations WHERE name = ?1")
+              .setParameter(1, ORG)
+              .executeUpdate();
+          em.createNativeQuery("DELETE FROM users WHERE iss = ?1 AND sub = ?2")
+              .setParameter(1, "local:pulumi-cli-smoke")
+              .setParameter(2, ORG)
+              .executeUpdate();
+          if (accountId != null) {
+            User.deleteById(accountId);
+          }
+        });
     serviceAccountId = null;
     rawToken = RAW_TOKEN;
   }

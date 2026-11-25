@@ -1,5 +1,7 @@
 package app.statedb.app.stack;
 
+import static app.statedb.testsupport.TestTransactions.read;
+import static app.statedb.testsupport.TestTransactions.tx;
 import static io.restassured.RestAssured.given;
 import static org.hamcrest.Matchers.anEmptyMap;
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -19,7 +21,6 @@ import app.statedb.persistence.stack.Workspace;
 import app.statedb.persistence.update.StackUpdate;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import io.quarkus.narayana.jta.QuarkusTransaction;
 import io.quarkus.test.junit.QuarkusTest;
 import jakarta.inject.Inject;
 import jakarta.persistence.EntityManager;
@@ -56,59 +57,57 @@ class StackDeleteContractTest {
   @BeforeEach
   void seed() {
     orgId =
-        QuarkusTransaction.requiringNew()
-            .call(
-                () -> {
-                  Organization org = new Organization();
-                  org.name = ORG_NAME;
-                  org.displayName = "Stack Delete Test";
-                  org.persistAndFlush();
+        read(
+            () -> {
+              Organization org = new Organization();
+              org.name = ORG_NAME;
+              org.displayName = "Stack Delete Test";
+              org.persistAndFlush();
 
-                  Organization other = new Organization();
-                  other.name = OTHER_ORG_NAME;
-                  other.displayName = "Other Org";
-                  other.persistAndFlush();
+              Organization other = new Organization();
+              other.name = OTHER_ORG_NAME;
+              other.displayName = "Other Org";
+              other.persistAndFlush();
 
-                  User user = new User();
-                  user.iss = "local:test";
-                  user.sub = "stack-delete";
-                  user.email = "delete@example.com";
-                  user.displayName = "Stack Delete Tester";
-                  user.persistAndFlush();
+              User user = new User();
+              user.iss = "local:test";
+              user.sub = "stack-delete";
+              user.email = "delete@example.com";
+              user.displayName = "Stack Delete Tester";
+              user.persistAndFlush();
 
-                  OrgMember m = new OrgMember();
-                  m.orgId = org.id;
-                  m.userId = user.id;
-                  m.role = OrgMember.Role.owner;
-                  m.persistAndFlush();
+              OrgMember m = new OrgMember();
+              m.orgId = org.id;
+              m.userId = user.id;
+              m.role = OrgMember.Role.owner;
+              m.persistAndFlush();
 
-                  ApiToken t = new ApiToken();
-                  t.tokenHash = sha256Hex(RAW_TOKEN);
-                  t.userId = user.id;
-                  t.orgId = org.id;
-                  t.kind = ApiToken.Kind.service_account;
-                  t.expiresAt = java.time.Instant.now().plusSeconds(60 * 60);
-                  t.description = "stack-delete";
-                  t.persistAndFlush();
+              ApiToken t = new ApiToken();
+              t.tokenHash = sha256Hex(RAW_TOKEN);
+              t.userId = user.id;
+              t.orgId = org.id;
+              t.kind = ApiToken.Kind.service_account;
+              t.expiresAt = java.time.Instant.now().plusSeconds(60 * 60);
+              t.description = "stack-delete";
+              t.persistAndFlush();
 
-                  return org.id;
-                });
+              return org.id;
+            });
   }
 
   @AfterEach
   void cleanup() {
-    QuarkusTransaction.requiringNew()
-        .run(
-            () -> {
-              em.createNativeQuery("DELETE FROM organizations WHERE name IN (?1, ?2)")
-                  .setParameter(1, ORG_NAME)
-                  .setParameter(2, OTHER_ORG_NAME)
-                  .executeUpdate();
-              em.createNativeQuery("DELETE FROM users WHERE iss = ?1 AND sub = ?2")
-                  .setParameter(1, "local:test")
-                  .setParameter(2, "stack-delete")
-                  .executeUpdate();
-            });
+    tx(
+        () -> {
+          em.createNativeQuery("DELETE FROM organizations WHERE name IN (?1, ?2)")
+              .setParameter(1, ORG_NAME)
+              .setParameter(2, OTHER_ORG_NAME)
+              .executeUpdate();
+          em.createNativeQuery("DELETE FROM users WHERE iss = ?1 AND sub = ?2")
+              .setParameter(1, "local:test")
+              .setParameter(2, "stack-delete")
+              .executeUpdate();
+        });
   }
 
   @Test
@@ -125,15 +124,14 @@ class StackDeleteContractTest {
         .statusCode(200)
         .body("$", anEmptyMap());
 
-    QuarkusTransaction.requiringNew()
-        .run(
-            () -> {
-              assertEquals(
-                  0L, count("SELECT count(*) FROM workspaces WHERE id = ?1", ref.workspaceId()));
-              assertEquals(0L, count("SELECT count(*) FROM stacks WHERE id = ?1", ref.stackId()));
-              assertEquals(
-                  0L, count("SELECT count(*) FROM stack_state WHERE stack_id = ?1", ref.stackId()));
-            });
+    tx(
+        () -> {
+          assertEquals(
+              0L, count("SELECT count(*) FROM workspaces WHERE id = ?1", ref.workspaceId()));
+          assertEquals(0L, count("SELECT count(*) FROM stacks WHERE id = ?1", ref.stackId()));
+          assertEquals(
+              0L, count("SELECT count(*) FROM stack_state WHERE stack_id = ?1", ref.stackId()));
+        });
   }
 
   @Test
@@ -154,15 +152,14 @@ class StackDeleteContractTest {
         .then()
         .statusCode(409);
 
-    QuarkusTransaction.requiringNew()
-        .run(
-            () -> {
-              assertEquals(
-                  1L, count("SELECT count(*) FROM workspaces WHERE id = ?1", ref.workspaceId()));
-              assertEquals(1L, count("SELECT count(*) FROM stacks WHERE id = ?1", ref.stackId()));
-              assertEquals(
-                  1L, count("SELECT count(*) FROM stack_state WHERE stack_id = ?1", ref.stackId()));
-            });
+    tx(
+        () -> {
+          assertEquals(
+              1L, count("SELECT count(*) FROM workspaces WHERE id = ?1", ref.workspaceId()));
+          assertEquals(1L, count("SELECT count(*) FROM stacks WHERE id = ?1", ref.stackId()));
+          assertEquals(
+              1L, count("SELECT count(*) FROM stack_state WHERE stack_id = ?1", ref.stackId()));
+        });
   }
 
   @Test
@@ -184,15 +181,14 @@ class StackDeleteContractTest {
         .statusCode(200)
         .body("$", anEmptyMap());
 
-    QuarkusTransaction.requiringNew()
-        .run(
-            () -> {
-              assertEquals(
-                  0L, count("SELECT count(*) FROM workspaces WHERE id = ?1", ref.workspaceId()));
-              assertEquals(0L, count("SELECT count(*) FROM stacks WHERE id = ?1", ref.stackId()));
-              assertEquals(
-                  0L, count("SELECT count(*) FROM stack_state WHERE stack_id = ?1", ref.stackId()));
-            });
+    tx(
+        () -> {
+          assertEquals(
+              0L, count("SELECT count(*) FROM workspaces WHERE id = ?1", ref.workspaceId()));
+          assertEquals(0L, count("SELECT count(*) FROM stacks WHERE id = ?1", ref.stackId()));
+          assertEquals(
+              0L, count("SELECT count(*) FROM stack_state WHERE stack_id = ?1", ref.stackId()));
+        });
   }
 
   @Test
@@ -214,15 +210,14 @@ class StackDeleteContractTest {
         .statusCode(200)
         .body("$", anEmptyMap());
 
-    QuarkusTransaction.requiringNew()
-        .run(
-            () -> {
-              assertEquals(
-                  0L, count("SELECT count(*) FROM workspaces WHERE id = ?1", ref.workspaceId()));
-              assertEquals(0L, count("SELECT count(*) FROM stacks WHERE id = ?1", ref.stackId()));
-              assertEquals(
-                  0L, count("SELECT count(*) FROM stack_state WHERE stack_id = ?1", ref.stackId()));
-            });
+    tx(
+        () -> {
+          assertEquals(
+              0L, count("SELECT count(*) FROM workspaces WHERE id = ?1", ref.workspaceId()));
+          assertEquals(0L, count("SELECT count(*) FROM stacks WHERE id = ?1", ref.stackId()));
+          assertEquals(
+              0L, count("SELECT count(*) FROM stack_state WHERE stack_id = ?1", ref.stackId()));
+        });
   }
 
   @Test
@@ -239,18 +234,17 @@ class StackDeleteContractTest {
         .then()
         .statusCode(409);
 
-    QuarkusTransaction.requiringNew()
-        .run(
-            () -> {
-              assertEquals(
-                  1L, count("SELECT count(*) FROM workspaces WHERE id = ?1", ref.workspaceId()));
-              assertEquals(1L, count("SELECT count(*) FROM stacks WHERE id = ?1", ref.stackId()));
-              assertEquals(
-                  1L, count("SELECT count(*) FROM stack_state WHERE stack_id = ?1", ref.stackId()));
-              assertEquals(1L, count("SELECT count(*) FROM stack_updates WHERE id = ?1", updateId));
-              assertEquals(
-                  1L, count("SELECT count(*) FROM stack_locks WHERE stack_id = ?1", ref.stackId()));
-            });
+    tx(
+        () -> {
+          assertEquals(
+              1L, count("SELECT count(*) FROM workspaces WHERE id = ?1", ref.workspaceId()));
+          assertEquals(1L, count("SELECT count(*) FROM stacks WHERE id = ?1", ref.stackId()));
+          assertEquals(
+              1L, count("SELECT count(*) FROM stack_state WHERE stack_id = ?1", ref.stackId()));
+          assertEquals(1L, count("SELECT count(*) FROM stack_updates WHERE id = ?1", updateId));
+          assertEquals(
+              1L, count("SELECT count(*) FROM stack_locks WHERE stack_id = ?1", ref.stackId()));
+        });
   }
 
   @Test
@@ -268,18 +262,17 @@ class StackDeleteContractTest {
         .statusCode(200)
         .body("$", anEmptyMap());
 
-    QuarkusTransaction.requiringNew()
-        .run(
-            () -> {
-              assertEquals(
-                  0L, count("SELECT count(*) FROM workspaces WHERE id = ?1", ref.workspaceId()));
-              assertEquals(0L, count("SELECT count(*) FROM stacks WHERE id = ?1", ref.stackId()));
-              assertEquals(
-                  0L, count("SELECT count(*) FROM stack_state WHERE stack_id = ?1", ref.stackId()));
-              assertEquals(0L, count("SELECT count(*) FROM stack_updates WHERE id = ?1", updateId));
-              assertEquals(
-                  0L, count("SELECT count(*) FROM stack_locks WHERE stack_id = ?1", ref.stackId()));
-            });
+    tx(
+        () -> {
+          assertEquals(
+              0L, count("SELECT count(*) FROM workspaces WHERE id = ?1", ref.workspaceId()));
+          assertEquals(0L, count("SELECT count(*) FROM stacks WHERE id = ?1", ref.stackId()));
+          assertEquals(
+              0L, count("SELECT count(*) FROM stack_state WHERE stack_id = ?1", ref.stackId()));
+          assertEquals(0L, count("SELECT count(*) FROM stack_updates WHERE id = ?1", updateId));
+          assertEquals(
+              0L, count("SELECT count(*) FROM stack_locks WHERE stack_id = ?1", ref.stackId()));
+        });
   }
 
   @Test
@@ -295,29 +288,28 @@ class StackDeleteContractTest {
 
   @Test
   void crossOrgCollapsesTo404() {
-    QuarkusTransaction.requiringNew()
-        .run(
-            () -> {
-              Organization other =
-                  Organization.find("name", OTHER_ORG_NAME).<Organization>firstResult();
-              Project p = new Project();
-              p.orgId = other.id;
-              p.name = "secret-proj";
-              p.persistAndFlush();
-              Workspace w = new Workspace();
-              w.orgId = other.id;
-              w.kind = Workspace.Kind.pulumi;
-              w.persistAndFlush();
-              Stack s = new Stack();
-              s.orgId = other.id;
-              s.projectId = p.id;
-              s.name = "secret";
-              s.workspaceId = w.id;
-              s.persistAndFlush();
-              StackState st = new StackState();
-              st.stackId = s.id;
-              st.persistAndFlush();
-            });
+    tx(
+        () -> {
+          Organization other =
+              Organization.find("name", OTHER_ORG_NAME).<Organization>firstResult();
+          Project p = new Project();
+          p.orgId = other.id;
+          p.name = "secret-proj";
+          p.persistAndFlush();
+          Workspace w = new Workspace();
+          w.orgId = other.id;
+          w.kind = Workspace.Kind.pulumi;
+          w.persistAndFlush();
+          Stack s = new Stack();
+          s.orgId = other.id;
+          s.projectId = p.id;
+          s.name = "secret";
+          s.workspaceId = w.id;
+          s.persistAndFlush();
+          StackState st = new StackState();
+          st.stackId = s.id;
+          st.persistAndFlush();
+        });
 
     given()
         .header("Authorization", "token " + RAW_TOKEN)
@@ -329,38 +321,36 @@ class StackDeleteContractTest {
   }
 
   private void setBaseSnapshot(UUID stackId, long journalSeq, String resourcesJson) {
-    QuarkusTransaction.requiringNew()
-        .run(
-            () -> {
-              Snapshot snapshot = new Snapshot();
-              snapshot.stackId = stackId;
-              snapshot.version = 1;
-              snapshot.checkpoint = deployment(resourcesJson);
-              snapshot.compactedFromJournalSeq = journalSeq;
-              snapshot.persistAndFlush();
+    tx(
+        () -> {
+          Snapshot snapshot = new Snapshot();
+          snapshot.stackId = stackId;
+          snapshot.version = 1;
+          snapshot.checkpoint = deployment(resourcesJson);
+          snapshot.compactedFromJournalSeq = journalSeq;
+          snapshot.persistAndFlush();
 
-              StackState state = StackState.find("stackId", stackId).firstResult();
-              state.baseSnapshotId = snapshot.id;
-              state.baseSnapshotVersion = snapshot.version;
-              state.journalSeq = journalSeq;
-              state.persistAndFlush();
-            });
+          StackState state = StackState.find("stackId", stackId).firstResult();
+          state.baseSnapshotId = snapshot.id;
+          state.baseSnapshotVersion = snapshot.version;
+          state.journalSeq = journalSeq;
+          state.persistAndFlush();
+        });
   }
 
   private UUID seedActiveUpdate(UUID stackId) {
     UUID updateId =
-        QuarkusTransaction.requiringNew()
-            .call(
-                () -> {
-                  StackUpdate update = new StackUpdate();
-                  update.stackId = stackId;
-                  update.version = 1;
-                  update.kind = StackUpdate.Kind.UPDATE;
-                  update.status = StackUpdate.Status.IN_PROGRESS;
-                  update.startedAt = java.time.Instant.now();
-                  update.persistAndFlush();
-                  return update.id;
-                });
+        read(
+            () -> {
+              StackUpdate update = new StackUpdate();
+              update.stackId = stackId;
+              update.version = 1;
+              update.kind = StackUpdate.Kind.UPDATE;
+              update.status = StackUpdate.Status.IN_PROGRESS;
+              update.startedAt = java.time.Instant.now();
+              update.persistAndFlush();
+              return update.id;
+            });
     stackLockAcquirer
         .acquire(stackId, updateId, "stack-delete-test", null, null)
         .orElseThrow(() -> new AssertionError("expected active update lease"));

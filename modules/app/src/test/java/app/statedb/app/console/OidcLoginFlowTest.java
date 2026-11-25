@@ -1,5 +1,7 @@
 package app.statedb.app.console;
 
+import static app.statedb.testsupport.TestTransactions.read;
+import static app.statedb.testsupport.TestTransactions.tx;
 import static io.restassured.RestAssured.given;
 import static org.hamcrest.Matchers.emptyOrNullString;
 import static org.hamcrest.Matchers.equalTo;
@@ -11,7 +13,6 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import app.statedb.persistence.identity.OidcProvider;
 import app.statedb.persistence.identity.User;
-import io.quarkus.narayana.jta.QuarkusTransaction;
 import io.quarkus.test.common.QuarkusTestResource;
 import io.quarkus.test.junit.QuarkusTest;
 import io.quarkus.test.oidc.server.OidcWiremockTestResource;
@@ -52,36 +53,34 @@ class OidcLoginFlowTest {
 
   @BeforeEach
   void seedProvider() {
-    QuarkusTransaction.requiringNew()
-        .run(
-            () -> {
-              em.createNativeQuery("DELETE FROM oidc_providers WHERE name = ?1")
-                  .setParameter(1, PROVIDER)
-                  .executeUpdate();
-              OidcProvider p = new OidcProvider();
-              p.name = PROVIDER;
-              p.issuerUrl = issuer();
-              p.clientId = "quarkus-app"; // the mock IdP's registered client + audience
-              p.clientSecret = "secret";
-              p.scopes = List.of("openid", "profile", "email");
-              p.enabled = true;
-              p.persist();
-            });
+    tx(
+        () -> {
+          em.createNativeQuery("DELETE FROM oidc_providers WHERE name = ?1")
+              .setParameter(1, PROVIDER)
+              .executeUpdate();
+          OidcProvider p = new OidcProvider();
+          p.name = PROVIDER;
+          p.issuerUrl = issuer();
+          p.clientId = "quarkus-app"; // the mock IdP's registered client + audience
+          p.clientSecret = "secret";
+          p.scopes = List.of("openid", "profile", "email");
+          p.enabled = true;
+          p.persist();
+        });
   }
 
   @AfterEach
   void cleanup() {
-    QuarkusTransaction.requiringNew()
-        .run(
-            () -> {
-              em.createNativeQuery("DELETE FROM oidc_providers WHERE name = ?1")
-                  .setParameter(1, PROVIDER)
-                  .executeUpdate();
-              // OidcWiremockTestResource signs its fixture ID token with this fixed issuer/subject.
-              em.createNativeQuery(
-                      "DELETE FROM users WHERE iss = 'https://server.example.com' AND sub = '123456'")
-                  .executeUpdate();
-            });
+    tx(
+        () -> {
+          em.createNativeQuery("DELETE FROM oidc_providers WHERE name = ?1")
+              .setParameter(1, PROVIDER)
+              .executeUpdate();
+          // OidcWiremockTestResource signs its fixture ID token with this fixed issuer/subject.
+          em.createNativeQuery(
+                  "DELETE FROM users WHERE iss = 'https://server.example.com' AND sub = '123456'")
+              .executeUpdate();
+        });
   }
 
   @Test
@@ -169,9 +168,7 @@ class OidcLoginFlowTest {
     // Provisioning is part of authentication completion, not a later browser navigation. If the
     // browser never follows the restored /flow redirect, the issued session must still be usable.
     long provisionedUsers =
-        QuarkusTransaction.requiringNew()
-            .call(
-                () -> User.count("iss = ?1 and sub = ?2", "https://server.example.com", "123456"));
+        read(() -> User.count("iss = ?1 and sub = ?2", "https://server.example.com", "123456"));
     assertEquals(1L, provisionedUsers, "callback completion provisions the user atomically");
 
     // 4. /api/user works immediately with the callback's session, without following /flow. The mock

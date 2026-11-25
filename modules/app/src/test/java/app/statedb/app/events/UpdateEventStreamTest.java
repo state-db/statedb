@@ -1,5 +1,7 @@
 package app.statedb.app.events;
 
+import static app.statedb.testsupport.TestTransactions.read;
+import static app.statedb.testsupport.TestTransactions.tx;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
@@ -15,7 +17,6 @@ import app.statedb.persistence.stack.Stack;
 import app.statedb.persistence.stack.Workspace;
 import app.statedb.persistence.update.StackUpdate;
 import com.fasterxml.jackson.databind.JsonNode;
-import io.quarkus.narayana.jta.QuarkusTransaction;
 import io.quarkus.test.junit.QuarkusTest;
 import jakarta.inject.Inject;
 import java.time.Instant;
@@ -49,7 +50,7 @@ class UpdateEventStreamTest {
     }
     String name = org;
     org = null;
-    QuarkusTransaction.requiringNew().run(() -> Organization.delete("name", name));
+    tx(() -> Organization.delete("name", name));
   }
 
   @Test
@@ -65,7 +66,7 @@ class UpdateEventStreamTest {
     // The page reader is the established answer for the same window; the stream must agree.
     assertEquals(inTx(() -> reader.page(stackId, updateId, -1, 10_000).events()), live.events());
 
-    QuarkusTransaction.requiringNew().run(() -> folder.fold(updateId, Instant.now()));
+    tx(() -> folder.fold(updateId, Instant.now()));
     assertNotNull(inTx(() -> UpdateEventArchive.<UpdateEventArchive>findById(updateId)));
 
     UpdateEventReader.EventStream archived = inTx(() -> reader.stream(stackId, updateId, 10_000));
@@ -107,7 +108,7 @@ class UpdateEventStreamTest {
     List<JsonNode> corpus = EventArchiveFixture.recordedEvents();
     UUID stackId = seedStack("event-stream-bound-archived");
     UUID updateId = seedUpdate(stackId, corpus, 50);
-    QuarkusTransaction.requiringNew().run(() -> folder.fold(updateId, Instant.now()));
+    tx(() -> folder.fold(updateId, Instant.now()));
 
     UpdateEventReader.EventStream bounded = inTx(() -> reader.stream(stackId, updateId, 10));
     assertTrue(bounded.archived());
@@ -140,49 +141,47 @@ class UpdateEventStreamTest {
   private UUID seedStack(String orgName) {
     this.org = orgName + "-" + System.nanoTime();
     String name = this.org;
-    return QuarkusTransaction.requiringNew()
-        .call(
-            () -> {
-              Organization organization = new Organization();
-              organization.name = name;
-              organization.displayName = name;
-              organization.persist();
-              Project project = new Project();
-              project.orgId = organization.id;
-              project.name = "project";
-              project.persist();
-              Workspace workspace = new Workspace();
-              workspace.orgId = organization.id;
-              workspace.kind = Workspace.Kind.pulumi;
-              workspace.persist();
-              Stack stack = new Stack();
-              stack.orgId = organization.id;
-              stack.projectId = project.id;
-              stack.workspaceId = workspace.id;
-              stack.name = "dev";
-              stack.persistAndFlush();
-              return stack.id;
-            });
+    return read(
+        () -> {
+          Organization organization = new Organization();
+          organization.name = name;
+          organization.displayName = name;
+          organization.persist();
+          Project project = new Project();
+          project.orgId = organization.id;
+          project.name = "project";
+          project.persist();
+          Workspace workspace = new Workspace();
+          workspace.orgId = organization.id;
+          workspace.kind = Workspace.Kind.pulumi;
+          workspace.persist();
+          Stack stack = new Stack();
+          stack.orgId = organization.id;
+          stack.projectId = project.id;
+          stack.workspaceId = workspace.id;
+          stack.name = "dev";
+          stack.persistAndFlush();
+          return stack.id;
+        });
   }
 
   private UUID seedUpdate(UUID stackId, List<JsonNode> corpus, int eventCount) {
-    return QuarkusTransaction.requiringNew()
-        .call(
-            () -> {
-              StackUpdate update = new StackUpdate();
-              update.stackId = stackId;
-              update.kind = StackUpdate.Kind.UPDATE;
-              update.status = StackUpdate.Status.SUCCEEDED;
-              update.version = 1;
-              update.startedAt = LONG_AGO;
-              update.endedAt = LONG_AGO;
-              update.persistAndFlush();
-              EventArchiveFixture.persistEvents(stackId, update.id, corpus, eventCount);
-              return update.id;
-            });
+    return read(
+        () -> {
+          StackUpdate update = new StackUpdate();
+          update.stackId = stackId;
+          update.kind = StackUpdate.Kind.UPDATE;
+          update.status = StackUpdate.Status.SUCCEEDED;
+          update.version = 1;
+          update.startedAt = LONG_AGO;
+          update.endedAt = LONG_AGO;
+          update.persistAndFlush();
+          EventArchiveFixture.persistEvents(stackId, update.id, corpus, eventCount);
+          return update.id;
+        });
   }
 
   private <T> T inTx(Supplier<T> work) {
-    return QuarkusTransaction.requiringNew().call(work::get);
+    return read(work::get);
   }
 }

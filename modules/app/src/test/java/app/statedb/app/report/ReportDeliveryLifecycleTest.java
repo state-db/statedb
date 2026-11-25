@@ -1,5 +1,6 @@
 package app.statedb.app.report;
 
+import static app.statedb.testsupport.TestTransactions.tx;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -19,7 +20,6 @@ import app.statedb.persistence.vcs.ReportDelivery;
 import app.statedb.persistence.vcs.ReportDeliveryWorker;
 import app.statedb.persistence.vcs.VcsConnection;
 import app.statedb.testsupport.InMemoryVcs;
-import io.quarkus.narayana.jta.QuarkusTransaction;
 import io.quarkus.test.junit.QuarkusTest;
 import jakarta.inject.Inject;
 import jakarta.persistence.EntityManager;
@@ -59,32 +59,30 @@ class ReportDeliveryLifecycleTest {
   @BeforeEach
   void seed() {
     vcs.reset();
-    QuarkusTransaction.requiringNew()
-        .run(
-            () -> {
-              Organization org = new Organization();
-              org.name = ORG_NAME;
-              org.displayName = "Report delivery";
-              org.persistAndFlush();
-              stack = stackCreator.create(org.id, ORG_NAME, "project", "dev", Map.of());
+    tx(
+        () -> {
+          Organization org = new Organization();
+          org.name = ORG_NAME;
+          org.displayName = "Report delivery";
+          org.persistAndFlush();
+          stack = stackCreator.create(org.id, ORG_NAME, "project", "dev", Map.of());
 
-              VcsConnection connection = new VcsConnection();
-              connection.orgId = org.id;
-              connection.kind = "memory";
-              connection.host = HOST;
-              connection.persistAndFlush();
-            });
+          VcsConnection connection = new VcsConnection();
+          connection.orgId = org.id;
+          connection.kind = "memory";
+          connection.host = HOST;
+          connection.persistAndFlush();
+        });
   }
 
   @AfterEach
   void cleanup() {
     vcs.reset();
-    QuarkusTransaction.requiringNew()
-        .run(
-            () ->
-                em.createNativeQuery("DELETE FROM organizations WHERE name = ?1")
-                    .setParameter(1, ORG_NAME)
-                    .executeUpdate());
+    tx(
+        () ->
+            em.createNativeQuery("DELETE FROM organizations WHERE name = ?1")
+                .setParameter(1, ORG_NAME)
+                .executeUpdate());
   }
 
   @Test
@@ -173,8 +171,7 @@ class ReportDeliveryLifecycleTest {
     vcs.addPullRequest(REPOSITORY_ID, 17, HEAD_1, true);
     Running run = running("disconnected", HEAD_1);
     complete(run);
-    QuarkusTransaction.requiringNew()
-        .run(() -> VcsConnection.update("enabled = false where host = ?1", HOST));
+    tx(() -> VcsConnection.update("enabled = false where host = ?1", HOST));
     assertEquals(0, worker.deliverOnce());
     ReportDelivery row = delivery(run.update().updateId());
     assertEquals("failed", row.state);
@@ -191,12 +188,11 @@ class ReportDeliveryLifecycleTest {
 
   @Test
   void orgWithoutConnectionCompletesWithoutQueueing() {
-    QuarkusTransaction.requiringNew()
-        .run(
-            () ->
-                VcsConnection.update(
-                    "enabled = false where orgId = ?1",
-                    Organization.<Organization>find("name", ORG_NAME).singleResult().id));
+    tx(
+        () ->
+            VcsConnection.update(
+                "enabled = false where orgId = ?1",
+                Organization.<Organization>find("name", ORG_NAME).singleResult().id));
     Running run = running("no-connection", HEAD_1);
     complete(run);
     assertEquals(StackUpdate.Status.SUCCEEDED, status(run.update().updateId()));
@@ -227,11 +223,10 @@ class ReportDeliveryLifecycleTest {
     Running run = running("retention", HEAD_1);
     complete(run);
     worker.deliverOnce();
-    QuarkusTransaction.requiringNew()
-        .run(
-            () ->
-                ReportDelivery.update(
-                    "settledAt = ?1 where updateId = ?2", Instant.EPOCH, run.update().updateId()));
+    tx(
+        () ->
+            ReportDelivery.update(
+                "settledAt = ?1 where updateId = ?2", Instant.EPOCH, run.update().updateId()));
     worker.deliverOnce();
     assertEquals(0, ReportDelivery.count("updateId", run.update().updateId()));
     assertTrue(StackUpdate.findById(run.update().updateId()) != null);
@@ -245,14 +240,13 @@ class ReportDeliveryLifecycleTest {
     worker.deliverOnce();
     String commentId = vcs.comments().getFirst().id;
     // Simulate rollback of the final database transaction after GitHub accepted its writes.
-    QuarkusTransaction.requiringNew()
-        .run(
-            () ->
-                ReportDelivery.update(
-                    "state = 'pending', externalId = null, settledAt = null, nextAttemptAt = ?1"
-                        + " where updateId = ?2",
-                    Instant.EPOCH,
-                    run.update().updateId()));
+    tx(
+        () ->
+            ReportDelivery.update(
+                "state = 'pending', externalId = null, settledAt = null, nextAttemptAt = ?1"
+                    + " where updateId = ?2",
+                Instant.EPOCH,
+                run.update().updateId()));
     assertEquals(1, worker.deliverOnce());
     assertEquals(1, vcs.comments().size());
     assertEquals(commentId, delivery(run.update().updateId()).externalId);
@@ -286,8 +280,7 @@ class ReportDeliveryLifecycleTest {
             .orElseThrow();
     assertEquals(0, ReportDelivery.count("updateId", run.updateId()));
     complete(new Running(run, lease));
-    QuarkusTransaction.requiringNew()
-        .run(() -> worker.enqueue(StackUpdate.findById(run.updateId())));
+    tx(() -> worker.enqueue(StackUpdate.findById(run.updateId())));
     assertEquals(1, ReportDelivery.count("updateId", run.updateId()));
     assertEquals(REPOSITORY, delivery(run.updateId()).repositoryName);
   }
@@ -301,11 +294,9 @@ class ReportDeliveryLifecycleTest {
   }
 
   private void due(UUID update) {
-    QuarkusTransaction.requiringNew()
-        .run(
-            () ->
-                ReportDelivery.update(
-                    "nextAttemptAt = ?1 where updateId = ?2", Instant.EPOCH, update));
+    tx(
+        () ->
+            ReportDelivery.update("nextAttemptAt = ?1 where updateId = ?2", Instant.EPOCH, update));
   }
 
   private StackUpdate.Status status(UUID update) {
@@ -342,12 +333,11 @@ class ReportDeliveryLifecycleTest {
             key,
             new StartUpdateRequest(
                 Map.of(), Map.of("environment", environment), Map.of(), null, "yaml", null, key));
-    QuarkusTransaction.requiringNew()
-        .run(
-            () -> {
-              StackUpdate update = StackUpdate.findById(started.updateId());
-              update.tags = Map.of("vcs:kind", HOST, "vcs:owner", OWNER, "vcs:repo", REPOSITORY);
-            });
+    tx(
+        () -> {
+          StackUpdate update = StackUpdate.findById(started.updateId());
+          update.tags = Map.of("vcs:kind", HOST, "vcs:owner", OWNER, "vcs:repo", REPOSITORY);
+        });
     return started;
   }
 

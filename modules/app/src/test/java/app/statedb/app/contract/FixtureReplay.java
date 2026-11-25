@@ -1,5 +1,6 @@
 package app.statedb.app.contract;
 
+import static app.statedb.testsupport.TestTransactions.tx;
 import static io.restassured.RestAssured.given;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -17,7 +18,6 @@ import com.fasterxml.jackson.core.JsonPointer;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
-import io.quarkus.narayana.jta.QuarkusTransaction;
 import io.restassured.response.Response;
 import io.restassured.specification.RequestSpecification;
 import jakarta.persistence.EntityManager;
@@ -502,12 +502,11 @@ public final class FixtureReplay {
 
   public static void seedIdentityWithStack(EntityManager em) {
     TestIdentity.seed(em, DEFAULT_TOKEN);
-    QuarkusTransaction.requiringNew()
-        .run(
-            () -> {
-              Organization org = Organization.find("name", TestIdentity.ORG).firstResult();
-              seedStack(org);
-            });
+    tx(
+        () -> {
+          Organization org = Organization.find("name", TestIdentity.ORG).firstResult();
+          seedStack(org);
+        });
   }
 
   public static void cleanup(EntityManager em) {

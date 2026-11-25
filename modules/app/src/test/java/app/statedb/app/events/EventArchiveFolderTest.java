@@ -1,5 +1,7 @@
 package app.statedb.app.events;
 
+import static app.statedb.testsupport.TestTransactions.read;
+import static app.statedb.testsupport.TestTransactions.tx;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
@@ -17,7 +19,6 @@ import app.statedb.persistence.stack.Stack;
 import app.statedb.persistence.stack.Workspace;
 import app.statedb.persistence.update.StackUpdate;
 import com.fasterxml.jackson.databind.JsonNode;
-import io.quarkus.narayana.jta.QuarkusTransaction;
 import io.quarkus.test.junit.QuarkusTest;
 import jakarta.inject.Inject;
 import jakarta.persistence.EntityManager;
@@ -53,12 +54,11 @@ class EventArchiveFolderTest {
     if (org == null) return;
     String name = org;
     org = null;
-    QuarkusTransaction.requiringNew()
-        .run(
-            () ->
-                em.createNativeQuery("DELETE FROM organizations WHERE name = ?1")
-                    .setParameter(1, name)
-                    .executeUpdate());
+    tx(
+        () ->
+            em.createNativeQuery("DELETE FROM organizations WHERE name = ?1")
+                .setParameter(1, name)
+                .executeUpdate());
   }
 
   @Test
@@ -133,7 +133,7 @@ class EventArchiveFolderTest {
         inTx(() -> reader.page(stackId, updateId, 617, 250).events());
     assertEquals(618, midPageFromRows.getFirst().sequence());
 
-    QuarkusTransaction.requiringNew().run(() -> folder.fold(updateId, Instant.now()));
+    tx(() -> folder.fold(updateId, Instant.now()));
 
     assertEquals(fromRows, walk(stackId, updateId, 250));
     assertEquals(midPageFromRows, inTx(() -> reader.page(stackId, updateId, 617, 250).events()));
@@ -154,14 +154,13 @@ class EventArchiveFolderTest {
     List<StoredEvent> full = events(stackId, updateId);
 
     // Fold, then put the rows back without removing the archive: both sources now hold the stream.
-    QuarkusTransaction.requiringNew().run(() -> folder.fold(updateId, Instant.now()));
+    tx(() -> folder.fold(updateId, Instant.now()));
     UpdateEventArchive archive = archive(updateId);
-    QuarkusTransaction.requiringNew()
-        .run(
-            () -> {
-              UpdateEvent.delete("updateId", updateId);
-              EventArchiveFixture.persistEvents(stackId, updateId, corpus, 40);
-            });
+    tx(
+        () -> {
+          UpdateEvent.delete("updateId", updateId);
+          EventArchiveFixture.persistEvents(stackId, updateId, corpus, 40);
+        });
     assertEquals(40L, rowCount(updateId), "rows and archive coexist");
     assertNotNull(archive(updateId));
 
@@ -222,7 +221,7 @@ class EventArchiveFolderTest {
     UUID stackId = seedStack("evt-archive-unfold-pending");
     UUID updateId = seedUpdate(stackId, 1, StackUpdate.Status.SUCCEEDED, LONG_AGO, corpus, 40);
 
-    QuarkusTransaction.requiringNew().run(() -> folder.fold(updateId, Instant.now()));
+    tx(() -> folder.fold(updateId, Instant.now()));
     assertTrue(pending().isEmpty(), "folding settles it");
 
     folder.unfold(updateId);
@@ -300,30 +299,29 @@ class EventArchiveFolderTest {
   private UUID seedStack(String orgName) {
     this.org = orgName + "-" + System.nanoTime();
     String name = this.org;
-    return QuarkusTransaction.requiringNew()
-        .call(
-            () -> {
-              Organization organization = new Organization();
-              organization.name = name;
-              organization.displayName = name;
-              organization.persist();
-              Project project = new Project();
-              project.orgId = organization.id;
-              project.name = "project";
-              project.persist();
-              Workspace workspace = new Workspace();
-              workspace.orgId = organization.id;
-              workspace.kind = Workspace.Kind.pulumi;
-              workspace.persist();
-              Stack stack = new Stack();
-              stack.orgId = organization.id;
-              stack.projectId = project.id;
-              stack.workspaceId = workspace.id;
-              stack.name = "dev";
-              stack.persistAndFlush();
-              currentStackId = stack.id;
-              return stack.id;
-            });
+    return read(
+        () -> {
+          Organization organization = new Organization();
+          organization.name = name;
+          organization.displayName = name;
+          organization.persist();
+          Project project = new Project();
+          project.orgId = organization.id;
+          project.name = "project";
+          project.persist();
+          Workspace workspace = new Workspace();
+          workspace.orgId = organization.id;
+          workspace.kind = Workspace.Kind.pulumi;
+          workspace.persist();
+          Stack stack = new Stack();
+          stack.orgId = organization.id;
+          stack.projectId = project.id;
+          stack.workspaceId = workspace.id;
+          stack.name = "dev";
+          stack.persistAndFlush();
+          currentStackId = stack.id;
+          return stack.id;
+        });
   }
 
   private UUID seedUpdate(
@@ -333,24 +331,23 @@ class EventArchiveFolderTest {
       Instant endedAt,
       List<JsonNode> corpus,
       int eventCount) {
-    return QuarkusTransaction.requiringNew()
-        .call(
-            () -> {
-              StackUpdate update = new StackUpdate();
-              update.stackId = stackId;
-              update.kind = StackUpdate.Kind.UPDATE;
-              update.status = status;
-              update.version = version;
-              update.startedAt = LONG_AGO;
-              update.endedAt = endedAt;
-              update.persistAndFlush();
-              EventArchiveFixture.persistEvents(stackId, update.id, corpus, eventCount);
-              em.flush();
-              return update.id;
-            });
+    return read(
+        () -> {
+          StackUpdate update = new StackUpdate();
+          update.stackId = stackId;
+          update.kind = StackUpdate.Kind.UPDATE;
+          update.status = status;
+          update.version = version;
+          update.startedAt = LONG_AGO;
+          update.endedAt = endedAt;
+          update.persistAndFlush();
+          EventArchiveFixture.persistEvents(stackId, update.id, corpus, eventCount);
+          em.flush();
+          return update.id;
+        });
   }
 
   private <T> T inTx(Supplier<T> work) {
-    return QuarkusTransaction.requiringNew().call(work::get);
+    return read(work::get);
   }
 }

@@ -1,5 +1,6 @@
 package app.statedb.pulumiclismoke.faults;
 
+import static app.statedb.testsupport.TestTransactions.read;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -7,7 +8,6 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import app.statedb.persistence.update.StackUpdate;
 import app.statedb.testsupport.pulumi.PulumiDeploymentAssert;
 import com.fasterxml.jackson.databind.JsonNode;
-import io.quarkus.narayana.jta.QuarkusTransaction;
 import io.quarkus.test.junit.QuarkusTest;
 import java.time.Duration;
 import java.util.List;
@@ -67,11 +67,10 @@ class FailedDeploymentFaultIT extends PulumiFaultBase {
         "the failed update to be recorded as failed",
         Duration.ofMinutes(1),
         () ->
-            QuarkusTransaction.requiringNew()
-                    .call(
-                        () ->
-                            StackUpdate.count(
-                                "stackId = ?1 and status = ?2", stackId, StackUpdate.Status.FAILED))
+            read(
+                    () ->
+                        StackUpdate.count(
+                            "stackId = ?1 and status = ?2", stackId, StackUpdate.Status.FAILED))
                 > 0);
 
     JsonNode exportAfterFailure = execJson("pulumi stack export");
@@ -96,11 +95,10 @@ class FailedDeploymentFaultIT extends PulumiFaultBase {
     assertTrue(fixedUrns.stream().anyMatch(urn -> urn.endsWith("::bad")));
     assertEquals(
         1L,
-        QuarkusTransaction.requiringNew()
-            .call(
-                () ->
-                    StackUpdate.count(
-                        "stackId = ?1 and status = ?2", stackId, StackUpdate.Status.SUCCEEDED)),
+        read(
+            () ->
+                StackUpdate.count(
+                    "stackId = ?1 and status = ?2", stackId, StackUpdate.Status.SUCCEEDED)),
         "the corrected up must be recorded as succeeded");
   }
 }

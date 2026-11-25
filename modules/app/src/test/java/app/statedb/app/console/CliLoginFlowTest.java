@@ -1,5 +1,7 @@
 package app.statedb.app.console;
 
+import static app.statedb.testsupport.TestTransactions.read;
+import static app.statedb.testsupport.TestTransactions.tx;
 import static io.restassured.RestAssured.given;
 import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.nullValue;
@@ -10,7 +12,6 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import app.statedb.persistence.identity.OidcProvider;
 import app.statedb.persistence.identity.User;
-import io.quarkus.narayana.jta.QuarkusTransaction;
 import io.quarkus.test.common.QuarkusTestResource;
 import io.quarkus.test.junit.QuarkusTest;
 import io.quarkus.test.oidc.server.OidcWiremockTestResource;
@@ -56,42 +57,40 @@ class CliLoginFlowTest {
 
   @BeforeEach
   void seedProvider() {
-    QuarkusTransaction.requiringNew()
-        .run(
-            () -> {
-              em.createNativeQuery("DELETE FROM oidc_providers WHERE name = ?1")
-                  .setParameter(1, PROVIDER)
-                  .executeUpdate();
-              OidcProvider p = new OidcProvider();
-              p.name = PROVIDER;
-              p.issuerUrl = issuer();
-              p.clientId = "quarkus-app";
-              p.clientSecret = "secret";
-              p.scopes = List.of("openid", "profile", "email");
-              p.enabled = true;
-              p.persist();
-            });
+    tx(
+        () -> {
+          em.createNativeQuery("DELETE FROM oidc_providers WHERE name = ?1")
+              .setParameter(1, PROVIDER)
+              .executeUpdate();
+          OidcProvider p = new OidcProvider();
+          p.name = PROVIDER;
+          p.issuerUrl = issuer();
+          p.clientId = "quarkus-app";
+          p.clientSecret = "secret";
+          p.scopes = List.of("openid", "profile", "email");
+          p.enabled = true;
+          p.persist();
+        });
   }
 
   @AfterEach
   void cleanup() {
-    QuarkusTransaction.requiringNew()
-        .run(
-            () -> {
-              em.createNativeQuery("DELETE FROM oidc_providers WHERE name = ?1")
-                  .setParameter(1, PROVIDER)
-                  .executeUpdate();
-              em.createNativeQuery(
-                      "DELETE FROM api_tokens WHERE user_id IN"
-                          + " (SELECT id FROM users WHERE iss = ?1 AND sub = ?2)")
-                  .setParameter(1, FIXTURE_ISS)
-                  .setParameter(2, FIXTURE_SUB)
-                  .executeUpdate();
-              em.createNativeQuery("DELETE FROM users WHERE iss = ?1 AND sub = ?2")
-                  .setParameter(1, FIXTURE_ISS)
-                  .setParameter(2, FIXTURE_SUB)
-                  .executeUpdate();
-            });
+    tx(
+        () -> {
+          em.createNativeQuery("DELETE FROM oidc_providers WHERE name = ?1")
+              .setParameter(1, PROVIDER)
+              .executeUpdate();
+          em.createNativeQuery(
+                  "DELETE FROM api_tokens WHERE user_id IN"
+                      + " (SELECT id FROM users WHERE iss = ?1 AND sub = ?2)")
+              .setParameter(1, FIXTURE_ISS)
+              .setParameter(2, FIXTURE_SUB)
+              .executeUpdate();
+          em.createNativeQuery("DELETE FROM users WHERE iss = ?1 AND sub = ?2")
+              .setParameter(1, FIXTURE_ISS)
+              .setParameter(2, FIXTURE_SUB)
+              .executeUpdate();
+        });
   }
 
   @Test
@@ -254,16 +253,15 @@ class CliLoginFlowTest {
         .body(containsString("127.0.0.1:59123"));
 
     long tokensAfterGet =
-        QuarkusTransaction.requiringNew()
-            .call(
-                () ->
-                    (Long)
-                        em.createQuery(
-                                "select count(t) from ApiToken t join User u on u.id = t.userId"
-                                    + " where u.iss = :iss and u.sub = :sub")
-                            .setParameter("iss", FIXTURE_ISS)
-                            .setParameter("sub", FIXTURE_SUB)
-                            .getSingleResult());
+        read(
+            () ->
+                (Long)
+                    em.createQuery(
+                            "select count(t) from ApiToken t join User u on u.id = t.userId"
+                                + " where u.iss = :iss and u.sub = :sub")
+                        .setParameter("iss", FIXTURE_ISS)
+                        .setParameter("sub", FIXTURE_SUB)
+                        .getSingleResult());
     assertEquals(0L, tokensAfterGet, "GET confirmation must not mint a token");
 
     String signedRequest = hiddenInput(confirmation.asString(), "request");
@@ -416,16 +414,15 @@ class CliLoginFlowTest {
         .statusCode(400);
 
     long tokens =
-        QuarkusTransaction.requiringNew()
-            .call(
-                () ->
-                    (Long)
-                        em.createQuery(
-                                "select count(t) from ApiToken t join User u on u.id = t.userId"
-                                    + " where u.iss = :iss and u.sub = :sub")
-                            .setParameter("iss", FIXTURE_ISS)
-                            .setParameter("sub", FIXTURE_SUB)
-                            .getSingleResult());
+        read(
+            () ->
+                (Long)
+                    em.createQuery(
+                            "select count(t) from ApiToken t join User u on u.id = t.userId"
+                                + " where u.iss = :iss and u.sub = :sub")
+                        .setParameter("iss", FIXTURE_ISS)
+                        .setParameter("sub", FIXTURE_SUB)
+                        .getSingleResult());
     assertEquals(1L, tokens, "replay must not mint a second token");
   }
 
@@ -454,16 +451,15 @@ class CliLoginFlowTest {
         .body(containsString("No token was created"));
 
     long tokens =
-        QuarkusTransaction.requiringNew()
-            .call(
-                () ->
-                    (Long)
-                        em.createQuery(
-                                "select count(t) from ApiToken t join User u on u.id = t.userId"
-                                    + " where u.iss = :iss and u.sub = :sub")
-                            .setParameter("iss", FIXTURE_ISS)
-                            .setParameter("sub", FIXTURE_SUB)
-                            .getSingleResult());
+        read(
+            () ->
+                (Long)
+                    em.createQuery(
+                            "select count(t) from ApiToken t join User u on u.id = t.userId"
+                                + " where u.iss = :iss and u.sub = :sub")
+                        .setParameter("iss", FIXTURE_ISS)
+                        .setParameter("sub", FIXTURE_SUB)
+                        .getSingleResult());
     assertEquals(0L, tokens);
   }
 
@@ -514,16 +510,13 @@ class CliLoginFlowTest {
     Cookie session = sessionCookie(callback);
     assertNotNull(session, "session cookie set on callback");
 
-    long provisioned =
-        QuarkusTransaction.requiringNew()
-            .call(() -> User.count("iss = ?1 and sub = ?2", FIXTURE_ISS, FIXTURE_SUB));
+    long provisioned = read(() -> User.count("iss = ?1 and sub = ?2", FIXTURE_ISS, FIXTURE_SUB));
     assertEquals(1L, provisioned, "callback provisions the user");
     return new SignIn(session, callback);
   }
 
   private void setProviderEnabled(boolean enabled) {
-    QuarkusTransaction.requiringNew()
-        .run(() -> OidcProvider.update("enabled = ?1 where name = ?2", enabled, PROVIDER));
+    tx(() -> OidcProvider.update("enabled = ?1 where name = ?2", enabled, PROVIDER));
   }
 
   private static Response cliLoginPage(Cookie session, String description) {

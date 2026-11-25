@@ -1,5 +1,6 @@
 package app.statedb.app.auth;
 
+import static app.statedb.testsupport.TestTransactions.tx;
 import static io.restassured.RestAssured.given;
 import static org.hamcrest.Matchers.equalTo;
 
@@ -10,7 +11,6 @@ import app.statedb.persistence.identity.Organization;
 import app.statedb.persistence.identity.User;
 import app.statedb.persistence.stack.StackCreator;
 import app.statedb.testsupport.TestIdentity;
-import io.quarkus.narayana.jta.QuarkusTransaction;
 import io.quarkus.test.junit.QuarkusTest;
 import jakarta.inject.Inject;
 import jakarta.persistence.EntityManager;
@@ -40,65 +40,62 @@ class AuthorizationContractTest {
 
   @BeforeEach
   void seed() {
-    QuarkusTransaction.requiringNew()
-        .run(
-            () -> {
-              Organization org = org(ORG);
-              orgId = org.id;
-              Organization other = org(OTHER_ORG);
-              otherOrgId = other.id;
+    tx(
+        () -> {
+          Organization org = org(ORG);
+          orgId = org.id;
+          Organization other = org(OTHER_ORG);
+          otherOrgId = other.id;
 
-              userWithToken("viewer", OrgMember.Role.viewer, org, VIEWER_TOKEN);
-              userWithToken("member", OrgMember.Role.member, org, MEMBER_TOKEN);
-              stackCreator.create(org.id, ORG, PROJECT, "member-delete", Map.of());
-              stackCreator.create(org.id, ORG, PROJECT, "secrets", Map.of());
-              stackCreator.create(org.id, ORG, PROJECT, "prod", Map.of());
+          userWithToken("viewer", OrgMember.Role.viewer, org, VIEWER_TOKEN);
+          userWithToken("member", OrgMember.Role.member, org, MEMBER_TOKEN);
+          stackCreator.create(org.id, ORG, PROJECT, "member-delete", Map.of());
+          stackCreator.create(org.id, ORG, PROJECT, "secrets", Map.of());
+          stackCreator.create(org.id, ORG, PROJECT, "prod", Map.of());
 
-              User admin = new User();
-              admin.iss = BootstrapProvisioner.BOOTSTRAP_ISS;
-              admin.sub = BootstrapProvisioner.BOOTSTRAP_SUB;
-              admin.email = "admin@example.com";
-              admin.displayName = "Bootstrap Admin";
-              admin.persistAndFlush();
+          User admin = new User();
+          admin.iss = BootstrapProvisioner.BOOTSTRAP_ISS;
+          admin.sub = BootstrapProvisioner.BOOTSTRAP_SUB;
+          admin.email = "admin@example.com";
+          admin.displayName = "Bootstrap Admin";
+          admin.persistAndFlush();
 
-              OrgMember adminMember = new OrgMember();
-              adminMember.orgId = org.id;
-              adminMember.userId = admin.id;
-              adminMember.role = OrgMember.Role.viewer;
-              adminMember.persistAndFlush();
+          OrgMember adminMember = new OrgMember();
+          adminMember.orgId = org.id;
+          adminMember.userId = admin.id;
+          adminMember.role = OrgMember.Role.viewer;
+          adminMember.persistAndFlush();
 
-              ApiToken token = new ApiToken();
-              token.tokenHash = TestIdentity.sha256Hex(ADMIN_TOKEN);
-              token.userId = admin.id;
-              token.orgId = org.id;
-              token.kind = ApiToken.Kind.service_account;
-              token.expiresAt = java.time.Instant.now().plusSeconds(60 * 60);
-              token.description = "admin";
-              token.persistAndFlush();
-            });
+          ApiToken token = new ApiToken();
+          token.tokenHash = TestIdentity.sha256Hex(ADMIN_TOKEN);
+          token.userId = admin.id;
+          token.orgId = org.id;
+          token.kind = ApiToken.Kind.service_account;
+          token.expiresAt = java.time.Instant.now().plusSeconds(60 * 60);
+          token.description = "admin";
+          token.persistAndFlush();
+        });
 
-    QuarkusTransaction.requiringNew()
-        .run(
-            () -> {
-              stackCreator.create(otherOrgId, OTHER_ORG, PROJECT, "secret", Map.of());
-              stackCreator.create(otherOrgId, OTHER_ORG, PROJECT, "delete-me", Map.of());
-            });
+    tx(
+        () -> {
+          stackCreator.create(otherOrgId, OTHER_ORG, PROJECT, "secret", Map.of());
+          stackCreator.create(otherOrgId, OTHER_ORG, PROJECT, "delete-me", Map.of());
+        });
   }
 
   @AfterEach
   void cleanup() {
-    QuarkusTransaction.requiringNew()
-        .run(
-            () -> {
-              em.createNativeQuery("DELETE FROM organizations WHERE name IN (?1, ?2)")
-                  .setParameter(1, ORG)
-                  .setParameter(2, OTHER_ORG)
-                  .executeUpdate();
-              em.createNativeQuery("DELETE FROM users WHERE iss IN (?1, ?2)")
-                  .setParameter(1, "local:test")
-                  .setParameter(2, BootstrapProvisioner.BOOTSTRAP_ISS)
-                  .executeUpdate();
-            });
+    tx(
+        () -> {
+          em.createNativeQuery("DELETE FROM organizations WHERE name IN (?1, ?2)")
+              .setParameter(1, ORG)
+              .setParameter(2, OTHER_ORG)
+              .executeUpdate();
+          em.createNativeQuery("DELETE FROM users WHERE iss IN (?1, ?2)")
+              .setParameter(1, "local:test")
+              .setParameter(2, BootstrapProvisioner.BOOTSTRAP_ISS)
+              .executeUpdate();
+        });
   }
 
   @Test

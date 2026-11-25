@@ -1,5 +1,7 @@
 package app.statedb.app.lock;
 
+import static app.statedb.testsupport.TestTransactions.read;
+import static app.statedb.testsupport.TestTransactions.tx;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
@@ -18,7 +20,6 @@ import app.statedb.persistence.stack.StackRef;
 import app.statedb.persistence.update.StackUpdate;
 import app.statedb.persistence.update.StackUpdateStarter;
 import app.statedb.persistence.update.StartUpdateRequest;
-import io.quarkus.narayana.jta.QuarkusTransaction;
 import io.quarkus.test.junit.QuarkusTest;
 import jakarta.inject.Inject;
 import jakarta.persistence.EntityManager;
@@ -47,16 +48,15 @@ class StackLockCancellerTest {
   @BeforeEach
   void seed() {
     stackId =
-        QuarkusTransaction.requiringNew()
-            .call(
-                () -> {
-                  Organization org = new Organization();
-                  org.name = ORG_NAME;
-                  org.displayName = "Canceller Test";
-                  org.persistAndFlush();
-                  StackRef ref = stackCreator.create(org.id, ORG_NAME, "proj", "dev", Map.of());
-                  return ref.stackId();
-                });
+        read(
+            () -> {
+              Organization org = new Organization();
+              org.name = ORG_NAME;
+              org.displayName = "Canceller Test";
+              org.persistAndFlush();
+              StackRef ref = stackCreator.create(org.id, ORG_NAME, "proj", "dev", Map.of());
+              return ref.stackId();
+            });
     updateId =
         starter
             .start(
@@ -74,12 +74,11 @@ class StackLockCancellerTest {
 
   @AfterEach
   void cleanup() {
-    QuarkusTransaction.requiringNew()
-        .run(
-            () ->
-                em.createNativeQuery("DELETE FROM organizations WHERE name = ?1")
-                    .setParameter(1, ORG_NAME)
-                    .executeUpdate());
+    tx(
+        () ->
+            em.createNativeQuery("DELETE FROM organizations WHERE name = ?1")
+                .setParameter(1, ORG_NAME)
+                .executeUpdate());
   }
 
   @Test
@@ -122,14 +121,13 @@ class StackLockCancellerTest {
     // Simulate a status that some other code path has already moved to a terminal value. The
     // status flip is guarded on IN_PROGRESS, so cancel must still release the lock but leave
     // the terminal status alone.
-    QuarkusTransaction.requiringNew()
-        .run(
-            () ->
-                em.createNativeQuery(
-                        "UPDATE stack_updates SET status = 'failed', ended_at = now()"
-                            + " WHERE id = ?1")
-                    .setParameter(1, updateId)
-                    .executeUpdate());
+    tx(
+        () ->
+            em.createNativeQuery(
+                    "UPDATE stack_updates SET status = 'failed', ended_at = now()"
+                        + " WHERE id = ?1")
+                .setParameter(1, updateId)
+                .executeUpdate());
 
     canceller.gracefulCancel(leaseId, stackId, updateId);
 

@@ -3,6 +3,7 @@ package app.statedb.app.console;
 import static app.statedb.app.console.LocalGlassTestSupport.COOKIE;
 import static app.statedb.app.console.LocalGlassTestSupport.PASSWORD;
 import static app.statedb.app.console.LocalGlassTestSupport.login;
+import static app.statedb.testsupport.TestTransactions.tx;
 import static io.restassured.RestAssured.given;
 import static org.hamcrest.Matchers.is;
 import static org.hamcrest.Matchers.nullValue;
@@ -12,7 +13,6 @@ import app.statedb.persistence.identity.OrgMember;
 import app.statedb.persistence.identity.Organization;
 import app.statedb.persistence.identity.ServiceAccountCreator;
 import app.statedb.persistence.identity.User;
-import io.quarkus.narayana.jta.QuarkusTransaction;
 import io.quarkus.test.junit.QuarkusTest;
 import io.quarkus.test.junit.TestProfile;
 import jakarta.inject.Inject;
@@ -37,65 +37,62 @@ class AdminUsersResourceTest {
 
   @AfterEach
   void cleanup() {
-    QuarkusTransaction.requiringNew()
-        .run(
-            () -> {
-              if (orgId != null) {
-                ApiToken.delete("orgId", orgId);
-                OrgMember.delete("orgId", orgId);
-                Organization.deleteById(orgId);
-              }
-              User.delete("iss = ?1 and sub = ?2", HUMAN_ISS, HUMAN_SUB);
-              if (serviceId != null) {
-                User.deleteById(serviceId);
-              }
-            });
+    tx(
+        () -> {
+          if (orgId != null) {
+            ApiToken.delete("orgId", orgId);
+            OrgMember.delete("orgId", orgId);
+            Organization.deleteById(orgId);
+          }
+          User.delete("iss = ?1 and sub = ?2", HUMAN_ISS, HUMAN_SUB);
+          if (serviceId != null) {
+            User.deleteById(serviceId);
+          }
+        });
   }
 
   @Test
   void listsHumansAndServiceAccountsWithIdentityAndRole() {
-    QuarkusTransaction.requiringNew()
-        .run(
-            () -> {
-              Organization org = new Organization();
-              org.name = ORG;
-              org.displayName = "S12 Users Test";
-              org.persist();
-              orgId = org.id;
+    tx(
+        () -> {
+          Organization org = new Organization();
+          org.name = ORG;
+          org.displayName = "S12 Users Test";
+          org.persist();
+          orgId = org.id;
 
-              User human = new User();
-              human.iss = HUMAN_ISS;
-              human.sub = HUMAN_SUB;
-              human.email = "s12@example.com";
-              human.displayName = "S12 Human";
-              human.lastLoginAt = Instant.now();
-              human.persist();
-              humanId = human.id;
+          User human = new User();
+          human.iss = HUMAN_ISS;
+          human.sub = HUMAN_SUB;
+          human.email = "s12@example.com";
+          human.displayName = "S12 Human";
+          human.lastLoginAt = Instant.now();
+          human.persist();
+          humanId = human.id;
 
-              OrgMember membership = new OrgMember();
-              membership.orgId = orgId;
-              membership.userId = humanId;
-              membership.role = OrgMember.Role.member;
-              membership.persist();
-            });
+          OrgMember membership = new OrgMember();
+          membership.orgId = orgId;
+          membership.userId = humanId;
+          membership.role = OrgMember.Role.member;
+          membership.persist();
+        });
     // ServiceAccountCreator manages its own transaction and mints a users row + service membership.
     serviceId = serviceAccounts.create(orgId, "s12-ci-bot", 30, humanId).accountId();
-    QuarkusTransaction.requiringNew()
-        .run(
-            () -> {
-              ApiToken current =
-                  ApiToken.<ApiToken>find(
-                          "userId = ?1 and kind = ?2", serviceId, ApiToken.Kind.service_account)
-                      .singleResult();
-              ApiToken rotated = new ApiToken();
-              rotated.tokenHash = "sha256:" + "b".repeat(64);
-              rotated.description = "s12-ci-bot rotated";
-              rotated.userId = current.userId;
-              rotated.orgId = current.orgId;
-              rotated.kind = ApiToken.Kind.service_account;
-              rotated.expiresAt = Instant.now().plusSeconds(60 * 60);
-              rotated.persistAndFlush();
-            });
+    tx(
+        () -> {
+          ApiToken current =
+              ApiToken.<ApiToken>find(
+                      "userId = ?1 and kind = ?2", serviceId, ApiToken.Kind.service_account)
+                  .singleResult();
+          ApiToken rotated = new ApiToken();
+          rotated.tokenHash = "sha256:" + "b".repeat(64);
+          rotated.description = "s12-ci-bot rotated";
+          rotated.userId = current.userId;
+          rotated.orgId = current.orgId;
+          rotated.kind = ApiToken.Kind.service_account;
+          rotated.expiresAt = Instant.now().plusSeconds(60 * 60);
+          rotated.persistAndFlush();
+        });
 
     String cookie = login(PASSWORD).statusCode(200).extract().cookie(COOKIE);
     String human = humanId.toString();

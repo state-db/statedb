@@ -1,5 +1,6 @@
 package app.statedb.app.events;
 
+import static app.statedb.testsupport.TestTransactions.tx;
 import static io.restassured.RestAssured.given;
 import static io.restassured.http.ContentType.JSON;
 import static org.hamcrest.Matchers.containsString;
@@ -15,7 +16,6 @@ import app.statedb.persistence.stack.StackCreator;
 import app.statedb.testsupport.RepoRoot;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import io.quarkus.narayana.jta.QuarkusTransaction;
 import io.quarkus.test.junit.QuarkusTest;
 import jakarta.inject.Inject;
 import jakarta.persistence.EntityManager;
@@ -68,17 +68,16 @@ class RecordedEventsBatchReplayTest {
   void cleanup() {
     if (org == null) return;
     String orgName = org;
-    QuarkusTransaction.requiringNew()
-        .run(
-            () -> {
-              em.createNativeQuery("DELETE FROM organizations WHERE name = ?1")
-                  .setParameter(1, orgName)
-                  .executeUpdate();
-              em.createNativeQuery("DELETE FROM users WHERE iss = ?1 AND sub = ?2")
-                  .setParameter(1, "local:test")
-                  .setParameter(2, orgName)
-                  .executeUpdate();
-            });
+    tx(
+        () -> {
+          em.createNativeQuery("DELETE FROM organizations WHERE name = ?1")
+              .setParameter(1, orgName)
+              .executeUpdate();
+          em.createNativeQuery("DELETE FROM users WHERE iss = ?1 AND sub = ?2")
+              .setParameter(1, "local:test")
+              .setParameter(2, orgName)
+              .executeUpdate();
+        });
   }
 
   // Filenames embed the upstream update slug, e.g. ".../update_update-0002_events_batch.json".
@@ -147,29 +146,27 @@ class RecordedEventsBatchReplayTest {
       long expectedRows = expectedRowCount;
       int expectedMaxWire = maxWireSeq;
       UUID upd = UUID.fromString(updateId);
-      QuarkusTransaction.requiringNew()
-          .run(
-              () -> {
-                long actualRows =
-                    ((Number)
-                            em.createNativeQuery(
-                                    "SELECT count(*) FROM update_events WHERE update_id = ?1")
-                                .setParameter(1, upd)
-                                .getSingleResult())
-                        .longValue();
-                assertEquals(
-                    expectedRows, actualRows, command + "/" + slug + ": event row count mismatch");
+      tx(
+          () -> {
+            long actualRows =
+                ((Number)
+                        em.createNativeQuery(
+                                "SELECT count(*) FROM update_events WHERE update_id = ?1")
+                            .setParameter(1, upd)
+                            .getSingleResult())
+                    .longValue();
+            assertEquals(
+                expectedRows, actualRows, command + "/" + slug + ": event row count mismatch");
 
-                int maxSeq =
-                    ((Number)
-                            em.createNativeQuery(
-                                    "SELECT MAX(sequence) FROM update_events WHERE update_id = ?1")
-                                .setParameter(1, upd)
-                                .getSingleResult())
-                        .intValue();
-                assertEquals(
-                    expectedMaxWire, maxSeq, command + "/" + slug + ": max sequence mismatch");
-              });
+            int maxSeq =
+                ((Number)
+                        em.createNativeQuery(
+                                "SELECT MAX(sequence) FROM update_events WHERE update_id = ?1")
+                            .setParameter(1, upd)
+                            .getSingleResult())
+                    .intValue();
+            assertEquals(expectedMaxWire, maxSeq, command + "/" + slug + ": max sequence mismatch");
+          });
     }
   }
 
@@ -237,18 +234,17 @@ class RecordedEventsBatchReplayTest {
         .statusCode(400);
 
     UUID upd = UUID.fromString(updateId);
-    QuarkusTransaction.requiringNew()
-        .run(
-            () -> {
-              long actualRows =
-                  ((Number)
-                          em.createNativeQuery(
-                                  "SELECT count(*) FROM update_events WHERE update_id = ?1")
-                              .setParameter(1, upd)
-                              .getSingleResult())
-                      .longValue();
-              assertEquals(0L, actualRows, "no rows should land for a malformed gzip body");
-            });
+    tx(
+        () -> {
+          long actualRows =
+              ((Number)
+                      em.createNativeQuery(
+                              "SELECT count(*) FROM update_events WHERE update_id = ?1")
+                          .setParameter(1, upd)
+                          .getSingleResult())
+                  .longValue();
+          assertEquals(0L, actualRows, "no rows should land for a malformed gzip body");
+        });
   }
 
   @Test
@@ -310,38 +306,37 @@ class RecordedEventsBatchReplayTest {
   }
 
   private void seedIdentityAndStack(String orgName, String project, String stack) {
-    QuarkusTransaction.requiringNew()
-        .run(
-            () -> {
-              Organization o = new Organization();
-              o.name = orgName;
-              o.displayName = orgName;
-              o.persistAndFlush();
+    tx(
+        () -> {
+          Organization o = new Organization();
+          o.name = orgName;
+          o.displayName = orgName;
+          o.persistAndFlush();
 
-              User user = new User();
-              user.iss = "local:test";
-              user.sub = orgName;
-              user.email = orgName + "@example.com";
-              user.displayName = orgName;
-              user.persistAndFlush();
+          User user = new User();
+          user.iss = "local:test";
+          user.sub = orgName;
+          user.email = orgName + "@example.com";
+          user.displayName = orgName;
+          user.persistAndFlush();
 
-              OrgMember m = new OrgMember();
-              m.orgId = o.id;
-              m.userId = user.id;
-              m.role = OrgMember.Role.owner;
-              m.persistAndFlush();
+          OrgMember m = new OrgMember();
+          m.orgId = o.id;
+          m.userId = user.id;
+          m.role = OrgMember.Role.owner;
+          m.persistAndFlush();
 
-              ApiToken t = new ApiToken();
-              t.tokenHash = sha256Hex(RAW_TOKEN);
-              t.userId = user.id;
-              t.orgId = o.id;
-              t.kind = ApiToken.Kind.service_account;
-              t.expiresAt = java.time.Instant.now().plusSeconds(60 * 60);
-              t.description = "events-replay";
-              t.persistAndFlush();
+          ApiToken t = new ApiToken();
+          t.tokenHash = sha256Hex(RAW_TOKEN);
+          t.userId = user.id;
+          t.orgId = o.id;
+          t.kind = ApiToken.Kind.service_account;
+          t.expiresAt = java.time.Instant.now().plusSeconds(60 * 60);
+          t.description = "events-replay";
+          t.persistAndFlush();
 
-              stackCreator.create(o.id, orgName, project, stack, Map.of());
-            });
+          stackCreator.create(o.id, orgName, project, stack, Map.of());
+        });
   }
 
   private String startUpdate(String orgName, String project, String stack) {
@@ -358,19 +353,18 @@ class RecordedEventsBatchReplayTest {
   }
 
   private void releaseLock(String orgName, String project, String stack) {
-    QuarkusTransaction.requiringNew()
-        .run(
-            () ->
-                em.createNativeQuery(
-                        "DELETE FROM stack_locks WHERE stack_id = "
-                            + "(SELECT s.id FROM stacks s "
-                            + "  JOIN projects p ON p.id = s.project_id "
-                            + "  JOIN organizations o ON o.id = p.org_id "
-                            + " WHERE o.name = ?1 AND p.name = ?2 AND s.name = ?3)")
-                    .setParameter(1, orgName)
-                    .setParameter(2, project)
-                    .setParameter(3, stack)
-                    .executeUpdate());
+    tx(
+        () ->
+            em.createNativeQuery(
+                    "DELETE FROM stack_locks WHERE stack_id = "
+                        + "(SELECT s.id FROM stacks s "
+                        + "  JOIN projects p ON p.id = s.project_id "
+                        + "  JOIN organizations o ON o.id = p.org_id "
+                        + " WHERE o.name = ?1 AND p.name = ?2 AND s.name = ?3)")
+                .setParameter(1, orgName)
+                .setParameter(2, project)
+                .setParameter(3, stack)
+                .executeUpdate());
   }
 
   private String acquireLock(String orgName, String project, String stack, String updateId) {

@@ -1,5 +1,7 @@
 package app.statedb.app.update;
 
+import static app.statedb.testsupport.TestTransactions.read;
+import static app.statedb.testsupport.TestTransactions.tx;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
@@ -28,7 +30,6 @@ import app.statedb.persistence.update.StartUpdateRequest;
 import app.statedb.testsupport.pulumi.PulumiDeploymentAssert;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import io.quarkus.narayana.jta.QuarkusTransaction;
 import io.quarkus.test.junit.QuarkusTest;
 import jakarta.inject.Inject;
 import jakarta.persistence.EntityManager;
@@ -65,28 +66,26 @@ class StackUpdateCompleterTest {
   }
 
   private void cleanupOrg() {
-    QuarkusTransaction.requiringNew()
-        .run(
-            () ->
-                em.createNativeQuery("DELETE FROM organizations WHERE name = ?1")
-                    .setParameter(1, ORG_NAME)
-                    .executeUpdate());
+    tx(
+        () ->
+            em.createNativeQuery("DELETE FROM organizations WHERE name = ?1")
+                .setParameter(1, ORG_NAME)
+                .executeUpdate());
   }
 
   private record Fixture(UUID stackId, UUID updateId, UUID leaseId) {}
 
   private Fixture seed(StackUpdate.Kind kind, String key) {
     UUID stackId =
-        QuarkusTransaction.requiringNew()
-            .call(
-                () -> {
-                  Organization org = new Organization();
-                  org.name = ORG_NAME;
-                  org.displayName = "Completer Test";
-                  org.persistAndFlush();
-                  StackRef ref = stackCreator.create(org.id, ORG_NAME, "proj", "dev", Map.of());
-                  return ref.stackId();
-                });
+        read(
+            () -> {
+              Organization org = new Organization();
+              org.name = ORG_NAME;
+              org.displayName = "Completer Test";
+              org.persistAndFlush();
+              StackRef ref = stackCreator.create(org.id, ORG_NAME, "proj", "dev", Map.of());
+              return ref.stackId();
+            });
     UUID updateId =
         starter
             .start(
@@ -117,12 +116,11 @@ class StackUpdateCompleterTest {
   }
 
   private void bumpJournalSeq(UUID stackId, long to) {
-    QuarkusTransaction.requiringNew()
-        .run(
-            () -> {
-              StackState state = StackState.find("stackId", stackId).<StackState>singleResult();
-              state.journalSeq = to;
-            });
+    tx(
+        () -> {
+          StackState state = StackState.find("stackId", stackId).<StackState>singleResult();
+          state.journalSeq = to;
+        });
   }
 
   @Test
@@ -321,17 +319,16 @@ class StackUpdateCompleterTest {
       Future<?> holder =
           pool.submit(
               () ->
-                  QuarkusTransaction.requiringNew()
-                      .run(
-                          () -> {
-                            StackState state =
-                                StackState.find("stackId", f.stackId())
-                                    .withLock(LockModeType.PESSIMISTIC_WRITE)
-                                    .<StackState>singleResult();
-                            state.journalSeq = 21;
-                            locked.countDown();
-                            await(release);
-                          }));
+                  tx(
+                      () -> {
+                        StackState state =
+                            StackState.find("stackId", f.stackId())
+                                .withLock(LockModeType.PESSIMISTIC_WRITE)
+                                .<StackState>singleResult();
+                        state.journalSeq = 21;
+                        locked.countDown();
+                        await(release);
+                      }));
 
       assertTrue(locked.await(5, TimeUnit.SECONDS));
       Future<?> completing =
@@ -382,13 +379,12 @@ class StackUpdateCompleterTest {
     assertThrows(
         RuntimeException.class,
         () ->
-            QuarkusTransaction.requiringNew()
-                .run(
-                    () -> {
-                      completer.complete(
-                          f.leaseId(), f.stackId(), f.updateId(), StackUpdate.Status.SUCCEEDED);
-                      throw new RuntimeException("forced rollback");
-                    }));
+            tx(
+                () -> {
+                  completer.complete(
+                      f.leaseId(), f.stackId(), f.updateId(), StackUpdate.Status.SUCCEEDED);
+                  throw new RuntimeException("forced rollback");
+                }));
 
     assertEquals(1L, count("SELECT count(*) FROM stack_locks WHERE stack_id = ?1", f.stackId()));
     assertEquals(
@@ -406,18 +402,17 @@ class StackUpdateCompleterTest {
     // Simulate a concurrent cancel: status flipped, active_update_id cleared, lock still present
     // (in the real cancel path the lock is gone too — here we test the "lock + terminal status"
     // window, which is what makes this branch worth defending).
-    QuarkusTransaction.requiringNew()
-        .run(
-            () -> {
-              em.createNativeQuery(
-                      "UPDATE stack_updates SET status = 'cancelled', ended_at = now()"
-                          + " WHERE id = ?1")
-                  .setParameter(1, f.updateId())
-                  .executeUpdate();
-              em.createNativeQuery("UPDATE stacks SET active_update_id = NULL WHERE id = ?1")
-                  .setParameter(1, f.stackId())
-                  .executeUpdate();
-            });
+    tx(
+        () -> {
+          em.createNativeQuery(
+                  "UPDATE stack_updates SET status = 'cancelled', ended_at = now()"
+                      + " WHERE id = ?1")
+              .setParameter(1, f.updateId())
+              .executeUpdate();
+          em.createNativeQuery("UPDATE stacks SET active_update_id = NULL WHERE id = ?1")
+              .setParameter(1, f.stackId())
+              .executeUpdate();
+        });
 
     completer.complete(f.leaseId(), f.stackId(), f.updateId(), StackUpdate.Status.SUCCEEDED);
 

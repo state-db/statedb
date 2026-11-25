@@ -1,11 +1,13 @@
 package app.statedb.pulumiclismoke.faults;
 
+import static app.statedb.testsupport.TestTransactions.read;
+import static app.statedb.testsupport.TestTransactions.tx;
+
 import app.statedb.persistence.identity.Organization;
 import app.statedb.persistence.journal.JournalEntry;
 import app.statedb.persistence.stack.Project;
 import app.statedb.persistence.stack.Stack;
 import app.statedb.pulumiclismoke.PulumiSmokeBase;
-import io.quarkus.narayana.jta.QuarkusTransaction;
 import java.time.Instant;
 import java.util.UUID;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -28,21 +30,17 @@ public abstract class PulumiFaultBase extends PulumiSmokeBase {
   }
 
   protected UUID stackId(String project, String stack) {
-    return QuarkusTransaction.requiringNew()
-        .call(
-            () -> {
-              Organization org = Organization.<Organization>find("name", ORG).singleResult();
-              Project p =
-                  Project.<Project>find("orgId = ?1 and name = ?2", org.id, project).singleResult();
-              return Stack.<Stack>find("projectId = ?1 and name = ?2", p.id, stack)
-                  .singleResult()
-                  .id;
-            });
+    return read(
+        () -> {
+          Organization org = Organization.<Organization>find("name", ORG).singleResult();
+          Project p =
+              Project.<Project>find("orgId = ?1 and name = ?2", org.id, project).singleResult();
+          return Stack.<Stack>find("projectId = ?1 and name = ?2", p.id, stack).singleResult().id;
+        });
   }
 
   protected boolean lockExists(UUID stackId) {
-    return QuarkusTransaction.requiringNew()
-        .call(() -> app.statedb.persistence.lock.StackLock.count("stackId", stackId) > 0);
+    return read(() -> app.statedb.persistence.lock.StackLock.count("stackId", stackId) > 0);
   }
 
   /**
@@ -50,13 +48,12 @@ public abstract class PulumiFaultBase extends PulumiSmokeBase {
    * elapsing after the holder died (the TTL itself is an hour — too long to wait in a test).
    */
   protected void expireLease(UUID stackId) {
-    QuarkusTransaction.requiringNew()
-        .run(
-            () ->
-                app.statedb.persistence.lock.StackLock.update(
-                    "expiresAt = ?1, maxExpiresAt = ?1 where stackId = ?2",
-                    Instant.now().minusSeconds(1),
-                    stackId));
+    tx(
+        () ->
+            app.statedb.persistence.lock.StackLock.update(
+                "expiresAt = ?1, maxExpiresAt = ?1 where stackId = ?2",
+                Instant.now().minusSeconds(1),
+                stackId));
   }
 
   /**
@@ -65,19 +62,18 @@ public abstract class PulumiFaultBase extends PulumiSmokeBase {
    * window deterministic.
    */
   protected boolean journalBeginObserved(UUID stackId, String resourceTypePrefix) {
-    return QuarkusTransaction.requiringNew()
-        .call(
-            () ->
-                JournalEntry.<JournalEntry>list("stackId = ?1 and kind = ?2", stackId, (short) 0)
-                    .stream()
-                    .anyMatch(
-                        entry ->
-                            entry
-                                .payload
-                                .path("operation")
-                                .path("resource")
-                                .path("type")
-                                .asText()
-                                .startsWith(resourceTypePrefix)));
+    return read(
+        () ->
+            JournalEntry.<JournalEntry>list("stackId = ?1 and kind = ?2", stackId, (short) 0)
+                .stream()
+                .anyMatch(
+                    entry ->
+                        entry
+                            .payload
+                            .path("operation")
+                            .path("resource")
+                            .path("type")
+                            .asText()
+                            .startsWith(resourceTypePrefix)));
   }
 }

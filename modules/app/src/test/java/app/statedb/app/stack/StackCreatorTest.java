@@ -1,5 +1,7 @@
 package app.statedb.app.stack;
 
+import static app.statedb.testsupport.TestTransactions.read;
+import static app.statedb.testsupport.TestTransactions.tx;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -9,7 +11,6 @@ import app.statedb.persistence.stack.Stack;
 import app.statedb.persistence.stack.StackAlreadyExistsException;
 import app.statedb.persistence.stack.StackCreator;
 import app.statedb.persistence.stack.StackRef;
-import io.quarkus.narayana.jta.QuarkusTransaction;
 import io.quarkus.test.junit.QuarkusTest;
 import jakarta.inject.Inject;
 import jakarta.persistence.EntityManager;
@@ -38,25 +39,23 @@ class StackCreatorTest {
   @BeforeEach
   void seed() {
     orgId =
-        QuarkusTransaction.requiringNew()
-            .call(
-                () -> {
-                  Organization org = new Organization();
-                  org.name = ORG_NAME;
-                  org.displayName = "Stack Creator Test";
-                  org.persistAndFlush();
-                  return org.id;
-                });
+        read(
+            () -> {
+              Organization org = new Organization();
+              org.name = ORG_NAME;
+              org.displayName = "Stack Creator Test";
+              org.persistAndFlush();
+              return org.id;
+            });
   }
 
   @AfterEach
   void cleanup() {
-    QuarkusTransaction.requiringNew()
-        .run(
-            () ->
-                em.createNativeQuery("DELETE FROM organizations WHERE name = ?1")
-                    .setParameter(1, ORG_NAME)
-                    .executeUpdate());
+    tx(
+        () ->
+            em.createNativeQuery("DELETE FROM organizations WHERE name = ?1")
+                .setParameter(1, ORG_NAME)
+                .executeUpdate());
   }
 
   @Test
@@ -65,25 +64,24 @@ class StackCreatorTest {
     assertEquals(orgId, ref.orgId());
     assertEquals("dev", ref.stackName());
 
-    QuarkusTransaction.requiringNew()
-        .run(
-            () -> {
-              Stack stack = Stack.findById(ref.stackId());
-              assertEquals("dev", stack.name);
-              assertEquals(0, stack.version);
-              UUID projectId =
-                  (UUID)
-                      em.createNativeQuery("SELECT project_id FROM stacks WHERE id = ?1")
-                          .setParameter(1, ref.stackId())
-                          .getSingleResult();
-              assertEquals(7, projectId.version());
-              Number states =
-                  (Number)
-                      em.createNativeQuery("SELECT count(*) FROM stack_state WHERE stack_id = ?1")
-                          .setParameter(1, ref.stackId())
-                          .getSingleResult();
-              assertEquals(1L, states.longValue());
-            });
+    tx(
+        () -> {
+          Stack stack = Stack.findById(ref.stackId());
+          assertEquals("dev", stack.name);
+          assertEquals(0, stack.version);
+          UUID projectId =
+              (UUID)
+                  em.createNativeQuery("SELECT project_id FROM stacks WHERE id = ?1")
+                      .setParameter(1, ref.stackId())
+                      .getSingleResult();
+          assertEquals(7, projectId.version());
+          Number states =
+              (Number)
+                  em.createNativeQuery("SELECT count(*) FROM stack_state WHERE stack_id = ?1")
+                      .setParameter(1, ref.stackId())
+                      .getSingleResult();
+          assertEquals(1L, states.longValue());
+        });
   }
 
   @Test
@@ -101,17 +99,16 @@ class StackCreatorTest {
     stackCreator.create(orgId, ORG_NAME, "shared-proj", "alpha", Map.of());
     stackCreator.create(orgId, ORG_NAME, "shared-proj", "beta", Map.of());
 
-    QuarkusTransaction.requiringNew()
-        .run(
-            () -> {
-              Number projects =
-                  (Number)
-                      em.createNativeQuery(
-                              "SELECT count(*) FROM projects WHERE org_id = ?1 AND name = ?2")
-                          .setParameter(1, orgId)
-                          .setParameter(2, "shared-proj")
-                          .getSingleResult();
-              assertEquals(1L, projects.longValue());
-            });
+    tx(
+        () -> {
+          Number projects =
+              (Number)
+                  em.createNativeQuery(
+                          "SELECT count(*) FROM projects WHERE org_id = ?1 AND name = ?2")
+                      .setParameter(1, orgId)
+                      .setParameter(2, "shared-proj")
+                      .getSingleResult();
+          assertEquals(1L, projects.longValue());
+        });
   }
 }

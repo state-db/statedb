@@ -1,8 +1,9 @@
 package app.statedb.pulumiclismoke.faults;
 
+import static app.statedb.testsupport.TestTransactions.read;
+
 import app.statedb.persistence.lock.StackLock;
 import app.statedb.persistence.update.StackUpdate;
-import io.quarkus.narayana.jta.QuarkusTransaction;
 import io.quarkus.test.junit.QuarkusTest;
 import java.time.Duration;
 import java.time.Instant;
@@ -59,18 +60,14 @@ class LeaseRenewalFaultIT extends PulumiFaultBase {
         "the up to finish now that the slow create has completed",
         Duration.ofMinutes(2),
         () ->
-            QuarkusTransaction.requiringNew()
-                .call(
-                    () ->
-                        StackUpdate.count(
-                                "stackId = ?1 and status = ?2",
-                                stackId,
-                                StackUpdate.Status.SUCCEEDED)
-                            == 1));
+            read(
+                () ->
+                    StackUpdate.count(
+                            "stackId = ?1 and status = ?2", stackId, StackUpdate.Status.SUCCEEDED)
+                        == 1));
   }
 
   private StackLock readLock(UUID stackId) {
-    return QuarkusTransaction.requiringNew()
-        .call(() -> StackLock.<StackLock>find("stackId", stackId).singleResult());
+    return read(() -> StackLock.<StackLock>find("stackId", stackId).singleResult());
   }
 }

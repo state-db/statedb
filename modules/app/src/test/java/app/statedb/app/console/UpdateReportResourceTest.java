@@ -1,5 +1,7 @@
 package app.statedb.app.console;
 
+import static app.statedb.testsupport.TestTransactions.read;
+import static app.statedb.testsupport.TestTransactions.tx;
 import static io.restassured.RestAssured.given;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -18,7 +20,6 @@ import app.statedb.persistence.stack.StackCreator;
 import app.statedb.persistence.update.StackUpdate;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import io.quarkus.narayana.jta.QuarkusTransaction;
 import io.quarkus.test.common.QuarkusTestResource;
 import io.quarkus.test.junit.QuarkusTest;
 import io.quarkus.test.junit.TestProfile;
@@ -68,12 +69,11 @@ class UpdateReportResourceTest {
 
   @AfterEach
   void cleanup() {
-    QuarkusTransaction.requiringNew()
-        .run(
-            () -> {
-              Organization.delete("name", ORG);
-              Organization.delete("name", OTHER_ORG);
-            });
+    tx(
+        () -> {
+          Organization.delete("name", ORG);
+          Organization.delete("name", OTHER_ORG);
+        });
     OidcConsoleSessionFixture.cleanup();
   }
 
@@ -128,10 +128,9 @@ class UpdateReportResourceTest {
 
     String before = report(session, updateId, null).asString();
 
-    QuarkusTransaction.requiringNew().run(() -> folder.fold(updateId, Instant.now()));
+    tx(() -> folder.fold(updateId, Instant.now()));
     assertNotNull(
-        QuarkusTransaction.requiringNew().call(() -> UpdateEventArchive.findById(updateId)),
-        "precondition: the run was folded");
+        read(() -> UpdateEventArchive.findById(updateId)), "precondition: the run was folded");
 
     String after = report(session, updateId, null).asString();
     assertEquals(before, after, "a folded run must report identically");
@@ -152,12 +151,11 @@ class UpdateReportResourceTest {
   void refusesAPrivateStackInTheCallersOrgWithoutAReadGrant() {
     Cookie session = session(ORG, OrgMember.Role.member);
     UUID stackId = createStack(ORG);
-    QuarkusTransaction.requiringNew()
-        .run(
-            () -> {
-              Stack stack = Stack.findById(stackId);
-              stack.visibility = Stack.VISIBILITY_PRIVATE;
-            });
+    tx(
+        () -> {
+          Stack stack = Stack.findById(stackId);
+          stack.visibility = Stack.VISIBILITY_PRIVATE;
+        });
     UUID updateId = seedRun(stackId);
 
     report(session, updateId, null).then().statusCode(404);
@@ -201,48 +199,46 @@ class UpdateReportResourceTest {
   }
 
   private UUID createStack(String orgName, boolean createOrg) {
-    return QuarkusTransaction.requiringNew()
-        .call(
-            () -> {
-              Organization org = Organization.<Organization>find("name", orgName).firstResult();
-              if (org == null && createOrg) {
-                org = new Organization();
-                org.name = orgName;
-                org.displayName = orgName;
-                org.persistAndFlush();
-              }
-              stackCreator.create(org.id, orgName, PROJECT, STACK, Map.of());
-              return Stack.<Stack>find("orgId = ?1 and name = ?2", org.id, STACK).firstResult().id;
-            });
+    return read(
+        () -> {
+          Organization org = Organization.<Organization>find("name", orgName).firstResult();
+          if (org == null && createOrg) {
+            org = new Organization();
+            org.name = orgName;
+            org.displayName = orgName;
+            org.persistAndFlush();
+          }
+          stackCreator.create(org.id, orgName, PROJECT, STACK, Map.of());
+          return Stack.<Stack>find("orgId = ?1 and name = ?2", org.id, STACK).firstResult().id;
+        });
   }
 
   private UUID seedRun(UUID stackId) {
     List<JsonNode> corpus = corpus();
-    return QuarkusTransaction.requiringNew()
-        .call(
-            () -> {
-              StackUpdate update = new StackUpdate();
-              update.stackId = stackId;
-              update.kind = StackUpdate.Kind.PREVIEW;
-              update.status = StackUpdate.Status.SUCCEEDED;
-              update.dryRun = true;
-              update.version = 0;
-              update.startedAt = LONG_AGO;
-              update.endedAt = LONG_AGO;
-              update.persistAndFlush();
-              for (JsonNode raw : corpus) {
-                UpdateEventView view = new UpdateEventView(raw);
-                UpdateEvent event = new UpdateEvent();
-                event.stackId = stackId;
-                event.updateId = update.id;
-                event.sequence = view.sequence();
-                event.kind = view.kind();
-                event.severity = view.severity();
-                event.payload = raw;
-                event.persist();
-              }
-              return update.id;
-            });
+    return read(
+        () -> {
+          StackUpdate update = new StackUpdate();
+          update.stackId = stackId;
+          update.kind = StackUpdate.Kind.PREVIEW;
+          update.status = StackUpdate.Status.SUCCEEDED;
+          update.dryRun = true;
+          update.version = 0;
+          update.startedAt = LONG_AGO;
+          update.endedAt = LONG_AGO;
+          update.persistAndFlush();
+          for (JsonNode raw : corpus) {
+            UpdateEventView view = new UpdateEventView(raw);
+            UpdateEvent event = new UpdateEvent();
+            event.stackId = stackId;
+            event.updateId = update.id;
+            event.sequence = view.sequence();
+            event.kind = view.kind();
+            event.severity = view.severity();
+            event.payload = raw;
+            event.persist();
+          }
+          return update.id;
+        });
   }
 
   private static List<JsonNode> corpus() {
@@ -261,37 +257,34 @@ class UpdateReportResourceTest {
   }
 
   private static Cookie session(String orgName, OrgMember.Role role) {
-    QuarkusTransaction.requiringNew()
-        .run(
-            () -> {
-              if (Organization.find("name", orgName).firstResult() == null) {
-                Organization org = new Organization();
-                org.name = orgName;
-                org.displayName = orgName;
-                org.persistAndFlush();
-              }
-            });
+    tx(
+        () -> {
+          if (Organization.find("name", orgName).firstResult() == null) {
+            Organization org = new Organization();
+            org.name = orgName;
+            org.displayName = orgName;
+            org.persistAndFlush();
+          }
+        });
     OidcConsoleSessionFixture.seedProvider();
     Cookie session = OidcConsoleSessionFixture.login();
-    QuarkusTransaction.requiringNew()
-        .run(
-            () -> {
-              User user =
-                  User.<User>find(
-                          "iss = ?1 and sub = ?2",
-                          OidcConsoleSessionFixture.FIXTURE_ISS,
-                          OidcConsoleSessionFixture.FIXTURE_SUB)
-                      .firstResult();
-              Organization org = Organization.<Organization>find("name", orgName).firstResult();
-              if (OrgMember.find("orgId = ?1 and userId = ?2", org.id, user.id).firstResult()
-                  == null) {
-                OrgMember membership = new OrgMember();
-                membership.orgId = org.id;
-                membership.userId = user.id;
-                membership.role = role;
-                membership.persistAndFlush();
-              }
-            });
+    tx(
+        () -> {
+          User user =
+              User.<User>find(
+                      "iss = ?1 and sub = ?2",
+                      OidcConsoleSessionFixture.FIXTURE_ISS,
+                      OidcConsoleSessionFixture.FIXTURE_SUB)
+                  .firstResult();
+          Organization org = Organization.<Organization>find("name", orgName).firstResult();
+          if (OrgMember.find("orgId = ?1 and userId = ?2", org.id, user.id).firstResult() == null) {
+            OrgMember membership = new OrgMember();
+            membership.orgId = org.id;
+            membership.userId = user.id;
+            membership.role = role;
+            membership.persistAndFlush();
+          }
+        });
     return session;
   }
 }

@@ -1,5 +1,6 @@
 package app.statedb.app.stack;
 
+import static app.statedb.testsupport.TestTransactions.tx;
 import static io.restassured.RestAssured.given;
 import static org.hamcrest.Matchers.equalTo;
 import static org.hamcrest.Matchers.notNullValue;
@@ -10,7 +11,6 @@ import app.statedb.persistence.identity.OrgMember;
 import app.statedb.persistence.identity.Organization;
 import app.statedb.persistence.identity.User;
 import app.statedb.persistence.stack.StackCreator;
-import io.quarkus.narayana.jta.QuarkusTransaction;
 import io.quarkus.test.junit.QuarkusTest;
 import jakarta.inject.Inject;
 import jakarta.persistence.EntityManager;
@@ -38,53 +38,51 @@ class StackImportContractTest {
 
   @BeforeEach
   void seed() {
-    QuarkusTransaction.requiringNew()
-        .run(
-            () -> {
-              Organization org = new Organization();
-              org.name = ORG;
-              org.displayName = ORG;
-              org.persistAndFlush();
+    tx(
+        () -> {
+          Organization org = new Organization();
+          org.name = ORG;
+          org.displayName = ORG;
+          org.persistAndFlush();
 
-              User user = new User();
-              user.iss = "local:test";
-              user.sub = "import";
-              user.email = "import@example.com";
-              user.displayName = "Import Tester";
-              user.persistAndFlush();
+          User user = new User();
+          user.iss = "local:test";
+          user.sub = "import";
+          user.email = "import@example.com";
+          user.displayName = "Import Tester";
+          user.persistAndFlush();
 
-              OrgMember member = new OrgMember();
-              member.orgId = org.id;
-              member.userId = user.id;
-              member.role = OrgMember.Role.owner;
-              member.persistAndFlush();
+          OrgMember member = new OrgMember();
+          member.orgId = org.id;
+          member.userId = user.id;
+          member.role = OrgMember.Role.owner;
+          member.persistAndFlush();
 
-              ApiToken token = new ApiToken();
-              token.tokenHash = sha256Hex(RAW_TOKEN);
-              token.userId = user.id;
-              token.orgId = org.id;
-              token.kind = ApiToken.Kind.service_account;
-              token.expiresAt = java.time.Instant.now().plusSeconds(60 * 60);
-              token.description = "import";
-              token.persistAndFlush();
+          ApiToken token = new ApiToken();
+          token.tokenHash = sha256Hex(RAW_TOKEN);
+          token.userId = user.id;
+          token.orgId = org.id;
+          token.kind = ApiToken.Kind.service_account;
+          token.expiresAt = java.time.Instant.now().plusSeconds(60 * 60);
+          token.description = "import";
+          token.persistAndFlush();
 
-              stackCreator.create(org.id, ORG, PROJECT, STACK, Map.of());
-            });
+          stackCreator.create(org.id, ORG, PROJECT, STACK, Map.of());
+        });
   }
 
   @AfterEach
   void cleanup() {
-    QuarkusTransaction.requiringNew()
-        .run(
-            () -> {
-              em.createNativeQuery("DELETE FROM organizations WHERE name = ?1")
-                  .setParameter(1, ORG)
-                  .executeUpdate();
-              em.createNativeQuery("DELETE FROM users WHERE iss = ?1 AND sub = ?2")
-                  .setParameter(1, "local:test")
-                  .setParameter(2, "import")
-                  .executeUpdate();
-            });
+    tx(
+        () -> {
+          em.createNativeQuery("DELETE FROM organizations WHERE name = ?1")
+              .setParameter(1, ORG)
+              .executeUpdate();
+          em.createNativeQuery("DELETE FROM users WHERE iss = ?1 AND sub = ?2")
+              .setParameter(1, "local:test")
+              .setParameter(2, "import")
+              .executeUpdate();
+        });
   }
 
   @Test
@@ -122,21 +120,20 @@ class StackImportContractTest {
         .body("deployment.resources[0].outputs.message", equalTo("imported"));
 
     UUID updateUuid = UUID.fromString(updateId);
-    QuarkusTransaction.requiringNew()
-        .run(
-            () -> {
-              Object[] row =
-                  (Object[])
-                      em.createNativeQuery(
-                              "SELECT kind, status, start_journal_seq, end_journal_seq "
-                                  + "FROM stack_updates WHERE id = ?1")
-                          .setParameter(1, updateUuid)
-                          .getSingleResult();
-              assertEquals("import", row[0]);
-              assertEquals("succeeded", row[1]);
-              assertEquals(0L, ((Number) row[2]).longValue());
-              assertEquals(0L, ((Number) row[3]).longValue());
-            });
+    tx(
+        () -> {
+          Object[] row =
+              (Object[])
+                  em.createNativeQuery(
+                          "SELECT kind, status, start_journal_seq, end_journal_seq "
+                              + "FROM stack_updates WHERE id = ?1")
+                      .setParameter(1, updateUuid)
+                      .getSingleResult();
+          assertEquals("import", row[0]);
+          assertEquals("succeeded", row[1]);
+          assertEquals(0L, ((Number) row[2]).longValue());
+          assertEquals(0L, ((Number) row[3]).longValue());
+        });
   }
 
   @Test

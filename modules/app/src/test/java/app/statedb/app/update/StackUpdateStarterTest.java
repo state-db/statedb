@@ -1,5 +1,7 @@
 package app.statedb.app.update;
 
+import static app.statedb.testsupport.TestTransactions.read;
+import static app.statedb.testsupport.TestTransactions.tx;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -15,7 +17,6 @@ import app.statedb.persistence.update.StackUpdateStarter;
 import app.statedb.persistence.update.StartUpdateRequest;
 import app.statedb.persistence.update.StartedUpdate;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import io.quarkus.narayana.jta.QuarkusTransaction;
 import io.quarkus.test.junit.QuarkusTest;
 import jakarta.inject.Inject;
 import jakarta.persistence.EntityManager;
@@ -49,26 +50,24 @@ class StackUpdateStarterTest {
   @BeforeEach
   void seed() {
     stackId =
-        QuarkusTransaction.requiringNew()
-            .call(
-                () -> {
-                  Organization org = new Organization();
-                  org.name = ORG_NAME;
-                  org.displayName = "Starter Test";
-                  org.persistAndFlush();
-                  stackRef = stackCreator.create(org.id, ORG_NAME, "proj", "dev", Map.of());
-                  return stackRef.stackId();
-                });
+        read(
+            () -> {
+              Organization org = new Organization();
+              org.name = ORG_NAME;
+              org.displayName = "Starter Test";
+              org.persistAndFlush();
+              stackRef = stackCreator.create(org.id, ORG_NAME, "proj", "dev", Map.of());
+              return stackRef.stackId();
+            });
   }
 
   @AfterEach
   void cleanup() {
-    QuarkusTransaction.requiringNew()
-        .run(
-            () ->
-                em.createNativeQuery("DELETE FROM organizations WHERE name = ?1")
-                    .setParameter(1, ORG_NAME)
-                    .executeUpdate());
+    tx(
+        () ->
+            em.createNativeQuery("DELETE FROM organizations WHERE name = ?1")
+                .setParameter(1, ORG_NAME)
+                .executeUpdate());
   }
 
   @Test
@@ -110,14 +109,13 @@ class StackUpdateStarterTest {
 
     // These operations are terminal before import/rename in the real protocol. Marking them
     // terminal here keeps this test focused on version allocation rather than update completion.
-    QuarkusTransaction.requiringNew()
-        .run(
-            () ->
-                StackUpdate.update(
-                    "status = ?1 where id in (?2, ?3)",
-                    StackUpdate.Status.SUCCEEDED,
-                    dryRun.updateId(),
-                    apply.updateId()));
+    tx(
+        () ->
+            StackUpdate.update(
+                "status = ?1 where id in (?2, ?3)",
+                StackUpdate.Status.SUCCEEDED,
+                dryRun.updateId(),
+                apply.updateId()));
 
     UUID importId =
         stackImporter.importDeployment(stackId, null, null, MAPPER.readTree("{\"resources\":[]}"));
@@ -138,19 +136,18 @@ class StackUpdateStarterTest {
     assertEquals(first.updateId(), replay.updateId());
     assertEquals(first.version(), replay.version());
 
-    QuarkusTransaction.requiringNew()
-        .run(
-            () -> {
-              Number n =
-                  (Number)
-                      em.createNativeQuery(
-                              "SELECT count(*) FROM stack_updates WHERE stack_id = ?1"
-                                  + " AND client_request_id = ?2")
-                          .setParameter(1, stackId)
-                          .setParameter(2, "dup-key")
-                          .getSingleResult();
-              assertEquals(1L, n.longValue());
-            });
+    tx(
+        () -> {
+          Number n =
+              (Number)
+                  em.createNativeQuery(
+                          "SELECT count(*) FROM stack_updates WHERE stack_id = ?1"
+                              + " AND client_request_id = ?2")
+                      .setParameter(1, stackId)
+                      .setParameter(2, "dup-key")
+                      .getSingleResult();
+          assertEquals(1L, n.longValue());
+        });
   }
 
   @Test
@@ -189,24 +186,22 @@ class StackUpdateStarterTest {
   void terminalStatusGuardRejectsRevert() {
     StartedUpdate s = starter.start(stackId, StackUpdate.Kind.UPDATE, null, null, "term", req());
 
-    QuarkusTransaction.requiringNew()
-        .run(
-            () ->
-                em.createNativeQuery("UPDATE stack_updates SET status = 'succeeded' WHERE id = ?1")
-                    .setParameter(1, s.updateId())
-                    .executeUpdate());
+    tx(
+        () ->
+            em.createNativeQuery("UPDATE stack_updates SET status = 'succeeded' WHERE id = ?1")
+                .setParameter(1, s.updateId())
+                .executeUpdate());
 
     PersistenceException ex =
         assertThrows(
             PersistenceException.class,
             () ->
-                QuarkusTransaction.requiringNew()
-                    .run(
-                        () ->
-                            em.createNativeQuery(
-                                    "UPDATE stack_updates SET status = 'in-progress' WHERE id = ?1")
-                                .setParameter(1, s.updateId())
-                                .executeUpdate()));
+                tx(
+                    () ->
+                        em.createNativeQuery(
+                                "UPDATE stack_updates SET status = 'in-progress' WHERE id = ?1")
+                            .setParameter(1, s.updateId())
+                            .executeUpdate()));
     String msg = rootMessage(ex);
     assertTrue(
         msg.contains("terminal") || msg.contains("Cannot revert"),
@@ -218,8 +213,7 @@ class StackUpdateStarterTest {
   }
 
   private static int updateVersion(UUID updateId) {
-    return QuarkusTransaction.requiringNew()
-        .call(() -> StackUpdate.<StackUpdate>findById(updateId).version);
+    return read(() -> StackUpdate.<StackUpdate>findById(updateId).version);
   }
 
   private static String rootMessage(Throwable t) {

@@ -1,9 +1,9 @@
 package app.statedb.app.console;
 
+import static app.statedb.testsupport.TestTransactions.tx;
 import static org.junit.jupiter.api.Assertions.*;
 
 import app.statedb.persistence.identity.*;
-import io.quarkus.narayana.jta.QuarkusTransaction;
 import io.quarkus.test.junit.QuarkusTest;
 import jakarta.inject.Inject;
 import java.util.UUID;
@@ -20,32 +20,30 @@ class OrgMembershipWriterTest {
 
   @BeforeEach
   void seed() {
-    QuarkusTransaction.requiringNew()
-        .run(
-            () -> {
-              Organization org = new Organization();
-              org.name = "membership-writer-org";
-              org.displayName = "Membership writer";
-              org.persistAndFlush();
-              orgId = org.id;
-              ownerId = user("membership-owner");
-              otherId = user("membership-other");
-              OrgMember owner = new OrgMember();
-              owner.orgId = orgId;
-              owner.userId = ownerId;
-              owner.role = OrgMember.Role.owner;
-              owner.persistAndFlush();
-            });
+    tx(
+        () -> {
+          Organization org = new Organization();
+          org.name = "membership-writer-org";
+          org.displayName = "Membership writer";
+          org.persistAndFlush();
+          orgId = org.id;
+          ownerId = user("membership-owner");
+          otherId = user("membership-other");
+          OrgMember owner = new OrgMember();
+          owner.orgId = orgId;
+          owner.userId = ownerId;
+          owner.role = OrgMember.Role.owner;
+          owner.persistAndFlush();
+        });
   }
 
   @AfterEach
   void cleanup() {
-    QuarkusTransaction.requiringNew()
-        .run(
-            () -> {
-              Organization.delete("id", orgId);
-              User.delete("sub in ?1", java.util.List.of("membership-owner", "membership-other"));
-            });
+    tx(
+        () -> {
+          Organization.delete("id", orgId);
+          User.delete("sub in ?1", java.util.List.of("membership-owner", "membership-other"));
+        });
   }
 
   @Test

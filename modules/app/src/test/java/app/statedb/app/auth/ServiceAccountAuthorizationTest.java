@@ -1,5 +1,7 @@
 package app.statedb.app.auth;
 
+import static app.statedb.testsupport.TestTransactions.read;
+import static app.statedb.testsupport.TestTransactions.tx;
 import static io.restassured.RestAssured.given;
 import static org.hamcrest.Matchers.notNullValue;
 
@@ -9,7 +11,6 @@ import app.statedb.persistence.identity.Organization;
 import app.statedb.persistence.identity.ServiceAccountCreator;
 import app.statedb.persistence.identity.ServiceAccountRevoker;
 import app.statedb.persistence.identity.User;
-import io.quarkus.narayana.jta.QuarkusTransaction;
 import io.quarkus.test.junit.QuarkusTest;
 import jakarta.inject.Inject;
 import jakarta.persistence.EntityManager;
@@ -47,41 +48,38 @@ class ServiceAccountAuthorizationTest {
 
   @BeforeEach
   void seed() {
-    QuarkusTransaction.requiringNew()
-        .run(
-            () -> {
-              Organization org = new Organization();
-              org.name = ORG;
-              org.displayName = "Service Account Test";
-              org.persistAndFlush();
-              orgId = org.id;
+    tx(
+        () -> {
+          Organization org = new Organization();
+          org.name = ORG;
+          org.displayName = "Service Account Test";
+          org.persistAndFlush();
+          orgId = org.id;
 
-              Organization other = new Organization();
-              other.name = OTHER_ORG;
-              other.displayName = "Other Org";
-              other.persistAndFlush();
+          Organization other = new Organization();
+          other.name = OTHER_ORG;
+          other.displayName = "Other Org";
+          other.persistAndFlush();
 
-              stackCreator.create(org.id, ORG, PROJECT, STACK, Map.of());
-              stackCreator.create(other.id, OTHER_ORG, PROJECT, "secret", Map.of());
-            });
+          stackCreator.create(org.id, ORG, PROJECT, STACK, Map.of());
+          stackCreator.create(other.id, OTHER_ORG, PROJECT, "secret", Map.of());
+        });
 
-    var minted =
-        QuarkusTransaction.requiringNew().call(() -> creator.create(orgId, "ci-deploy", 90, null));
+    var minted = read(() -> creator.create(orgId, "ci-deploy", 90, null));
     accountId = minted.accountId();
     rawToken = minted.rawToken();
   }
 
   @AfterEach
   void cleanup() {
-    QuarkusTransaction.requiringNew()
-        .run(
-            () -> {
-              em.createNativeQuery("DELETE FROM users WHERE iss = 'local:service'").executeUpdate();
-              em.createNativeQuery("DELETE FROM organizations WHERE name IN (?1, ?2)")
-                  .setParameter(1, ORG)
-                  .setParameter(2, OTHER_ORG)
-                  .executeUpdate();
-            });
+    tx(
+        () -> {
+          em.createNativeQuery("DELETE FROM users WHERE iss = 'local:service'").executeUpdate();
+          em.createNativeQuery("DELETE FROM organizations WHERE name IN (?1, ?2)")
+              .setParameter(1, ORG)
+              .setParameter(2, OTHER_ORG)
+              .executeUpdate();
+        });
   }
 
   @Test
@@ -135,12 +133,11 @@ class ServiceAccountAuthorizationTest {
   @Test
   void optedInStackLifecycleIsAllowedWithoutRenameOrTagAuthority() {
     String lifecycleToken =
-        QuarkusTransaction.requiringNew()
-            .call(
-                () ->
-                    creator
-                        .create(orgId, "migration-bot", 30, AccessProfile.stack_lifecycle, null)
-                        .rawToken());
+        read(
+            () ->
+                creator
+                    .create(orgId, "migration-bot", 30, AccessProfile.stack_lifecycle, null)
+                    .rawToken());
 
     asToken(lifecycleToken)
         .contentType("application/json")
@@ -179,13 +176,11 @@ class ServiceAccountAuthorizationTest {
   @Test
   void lifecycleProfileDoesNotOverrideProtectedStackGuardrail() {
     String lifecycleToken =
-        QuarkusTransaction.requiringNew()
-            .call(
-                () ->
-                    creator
-                        .create(
-                            orgId, "migration-protected", 30, AccessProfile.stack_lifecycle, null)
-                        .rawToken());
+        read(
+            () ->
+                creator
+                    .create(orgId, "migration-protected", 30, AccessProfile.stack_lifecycle, null)
+                    .rawToken());
 
     asToken(lifecycleToken)
         .contentType("application/json")
@@ -212,19 +207,17 @@ class ServiceAccountAuthorizationTest {
   void revokedAccountStopsAuthenticating() {
     asService().get(BASE).then().statusCode(200);
 
-    boolean revoked =
-        QuarkusTransaction.requiringNew().call(() -> revoker.revoke(orgId, accountId, null));
+    boolean revoked = read(() -> revoker.revoke(orgId, accountId, null));
     org.junit.jupiter.api.Assertions.assertTrue(revoked);
 
-    QuarkusTransaction.requiringNew()
-        .run(
-            () -> {
-              User account = User.findById(accountId);
-              ApiToken token = ApiToken.find("userId", accountId).firstResult();
-              org.junit.jupiter.api.Assertions.assertNotNull(account);
-              org.junit.jupiter.api.Assertions.assertNotNull(account.deactivatedAt);
-              org.junit.jupiter.api.Assertions.assertNotNull(token.revokedAt);
-            });
+    tx(
+        () -> {
+          User account = User.findById(accountId);
+          ApiToken token = ApiToken.find("userId", accountId).firstResult();
+          org.junit.jupiter.api.Assertions.assertNotNull(account);
+          org.junit.jupiter.api.Assertions.assertNotNull(account.deactivatedAt);
+          org.junit.jupiter.api.Assertions.assertNotNull(token.revokedAt);
+        });
 
     asService().get(BASE).then().statusCode(401);
   }

@@ -1,10 +1,10 @@
 package app.statedb.pulumiclismoke.faults;
 
+import static app.statedb.testsupport.TestTransactions.read;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import app.statedb.persistence.update.StackUpdate;
-import io.quarkus.narayana.jta.QuarkusTransaction;
 import io.quarkus.test.junit.QuarkusTest;
 import java.time.Duration;
 import java.util.UUID;
@@ -66,11 +66,10 @@ class ConcurrentUpdateFaultIT extends PulumiFaultBase {
       // The winner's lease and update are untouched; the loser's orphaned attempt is terminal.
       assertTrue(lockExists(stackId), "winner's lease must survive the losing attempt");
       long inProgress =
-          QuarkusTransaction.requiringNew()
-              .call(
-                  () ->
-                      StackUpdate.count(
-                          "stackId = ?1 and status = ?2", stackId, StackUpdate.Status.IN_PROGRESS));
+          read(
+              () ->
+                  StackUpdate.count(
+                      "stackId = ?1 and status = ?2", stackId, StackUpdate.Status.IN_PROGRESS));
       assertTrue(
           inProgress <= 1, "at most the winning update may remain in progress, got " + inProgress);
     } finally {

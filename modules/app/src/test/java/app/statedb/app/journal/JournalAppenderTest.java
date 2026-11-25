@@ -1,5 +1,7 @@
 package app.statedb.app.journal;
 
+import static app.statedb.testsupport.TestTransactions.read;
+import static app.statedb.testsupport.TestTransactions.tx;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
@@ -26,7 +28,6 @@ import app.statedb.persistence.update.StartedUpdate;
 import app.statedb.testsupport.pulumi.PulumiDeploymentAssert;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import io.quarkus.narayana.jta.QuarkusTransaction;
 import io.quarkus.test.junit.QuarkusTest;
 import jakarta.inject.Inject;
 import jakarta.persistence.EntityManager;
@@ -64,16 +65,15 @@ class JournalAppenderTest {
   @BeforeEach
   void seed() {
     stackId =
-        QuarkusTransaction.requiringNew()
-            .call(
-                () -> {
-                  Organization org = new Organization();
-                  org.name = ORG_NAME;
-                  org.displayName = "Journal Test";
-                  org.persistAndFlush();
-                  StackRef ref = stackCreator.create(org.id, ORG_NAME, "proj", "dev", Map.of());
-                  return ref.stackId();
-                });
+        read(
+            () -> {
+              Organization org = new Organization();
+              org.name = ORG_NAME;
+              org.displayName = "Journal Test";
+              org.persistAndFlush();
+              StackRef ref = stackCreator.create(org.id, ORG_NAME, "proj", "dev", Map.of());
+              return ref.stackId();
+            });
     StartedUpdate u =
         starter.start(
             stackId,
@@ -90,12 +90,11 @@ class JournalAppenderTest {
 
   @AfterEach
   void cleanup() {
-    QuarkusTransaction.requiringNew()
-        .run(
-            () ->
-                em.createNativeQuery("DELETE FROM organizations WHERE name = ?1")
-                    .setParameter(1, ORG_NAME)
-                    .executeUpdate());
+    tx(
+        () ->
+            em.createNativeQuery("DELETE FROM organizations WHERE name = ?1")
+                .setParameter(1, ORG_NAME)
+                .executeUpdate());
   }
 
   @Test
@@ -117,46 +116,44 @@ class JournalAppenderTest {
                 "{\"operation\":{\"resource\":{\"urn\":\"urn:b\",\"type\":\"t:b\"},\"type\":\"creating\"}}"),
             entry(3, 1, 1L, "{\"state\":{\"urn\":\"urn:a\"}}")));
 
-    QuarkusTransaction.requiringNew()
-        .run(
-            () -> {
-              Long offset =
-                  ((Number)
-                          em.createNativeQuery(
-                                  "SELECT start_journal_seq FROM stack_updates WHERE id = ?1")
-                              .setParameter(1, updateId)
-                              .getSingleResult())
-                      .longValue();
-              assertEquals(0L, offset);
+    tx(
+        () -> {
+          Long offset =
+              ((Number)
+                      em.createNativeQuery(
+                              "SELECT start_journal_seq FROM stack_updates WHERE id = ?1")
+                          .setParameter(1, updateId)
+                          .getSingleResult())
+                  .longValue();
+          assertEquals(0L, offset);
 
-              List<?> rows =
-                  em.createNativeQuery(
-                          "SELECT sequence_id, wire_sequence_id, kind, resource_urn "
-                              + "FROM journal_entries WHERE update_id = ?1 ORDER BY sequence_id")
-                      .setParameter(1, updateId)
-                      .getResultList();
-              assertEquals(3, rows.size());
+          List<?> rows =
+              em.createNativeQuery(
+                      "SELECT sequence_id, wire_sequence_id, kind, resource_urn "
+                          + "FROM journal_entries WHERE update_id = ?1 ORDER BY sequence_id")
+                  .setParameter(1, updateId)
+                  .getResultList();
+          assertEquals(3, rows.size());
 
-              long stateSeq =
-                  ((Number)
-                          em.createNativeQuery(
-                                  "SELECT journal_seq FROM stack_state WHERE stack_id = ?1")
-                              .setParameter(1, stackId)
-                              .getSingleResult())
-                      .longValue();
-              assertEquals(4L, stateSeq);
-            });
+          long stateSeq =
+              ((Number)
+                      em.createNativeQuery(
+                              "SELECT journal_seq FROM stack_state WHERE stack_id = ?1")
+                          .setParameter(1, stackId)
+                          .getSingleResult())
+                  .longValue();
+          assertEquals(4L, stateSeq);
+        });
   }
 
   @Test
   void crossStackUpdateIdIsNotReportedAsASequenceConflict() {
     UUID otherStackId =
-        QuarkusTransaction.requiringNew()
-            .call(
-                () -> {
-                  Organization org = Organization.find("name", ORG_NAME).singleResult();
-                  return stackCreator.create(org.id, ORG_NAME, "proj", "other", Map.of()).stackId();
-                });
+        read(
+            () -> {
+              Organization org = Organization.find("name", ORG_NAME).singleResult();
+              return stackCreator.create(org.id, ORG_NAME, "proj", "other", Map.of()).stackId();
+            });
 
     RuntimeException thrown =
         assertThrows(
@@ -175,12 +172,11 @@ class JournalAppenderTest {
 
   @Test
   void dryRunUpdateCannotAppendAuthoritativeJournalEntries() {
-    QuarkusTransaction.requiringNew()
-        .run(
-            () -> {
-              StackUpdate update = StackUpdate.findById(updateId);
-              update.dryRun = true;
-            });
+    tx(
+        () -> {
+          StackUpdate update = StackUpdate.findById(updateId);
+          update.dryRun = true;
+        });
 
     RequestValidationException error =
         assertThrows(
@@ -220,22 +216,21 @@ class JournalAppenderTest {
             entry(5, 1, 5L, "{\"state\":{\"urn\":\"urn:5\"}}"),
             entry(7, 1, 7L, "{\"state\":{\"urn\":\"urn:7\"}}")));
 
-    QuarkusTransaction.requiringNew()
-        .run(
-            () -> {
-              @SuppressWarnings("unchecked")
-              List<Object[]> rows =
-                  em.createNativeQuery(
-                          "SELECT wire_sequence_id, resource_urn FROM journal_entries "
-                              + "WHERE update_id = ?1 ORDER BY sequence_id")
-                      .setParameter(1, updateId)
-                      .getResultList();
-              assertEquals(3, rows.size());
-              assertEquals(5L, ((Number) rows.get(0)[0]).longValue());
-              assertEquals(6L, ((Number) rows.get(1)[0]).longValue());
-              assertEquals(7L, ((Number) rows.get(2)[0]).longValue());
-              assertEquals("urn:5", rows.get(0)[1]);
-            });
+    tx(
+        () -> {
+          @SuppressWarnings("unchecked")
+          List<Object[]> rows =
+              em.createNativeQuery(
+                      "SELECT wire_sequence_id, resource_urn FROM journal_entries "
+                          + "WHERE update_id = ?1 ORDER BY sequence_id")
+                  .setParameter(1, updateId)
+                  .getResultList();
+          assertEquals(3, rows.size());
+          assertEquals(5L, ((Number) rows.get(0)[0]).longValue());
+          assertEquals(6L, ((Number) rows.get(1)[0]).longValue());
+          assertEquals(7L, ((Number) rows.get(2)[0]).longValue());
+          assertEquals("urn:5", rows.get(0)[1]);
+        });
   }
 
   @Test
@@ -255,28 +250,26 @@ class JournalAppenderTest {
             entry(4, 1, 4L, "{\"state\":{\"urn\":\"urn:4\"}}"),
             entry(6, 1, 6L, "{\"state\":{\"urn\":\"urn:6\"}}")));
 
-    QuarkusTransaction.requiringNew()
-        .run(
-            () -> {
-              @SuppressWarnings("unchecked")
-              List<Number> wireSeqs =
-                  em.createNativeQuery(
-                          "SELECT wire_sequence_id FROM journal_entries WHERE update_id = ?1 "
-                              + "ORDER BY sequence_id")
-                      .setParameter(1, updateId)
-                      .getResultList();
-              assertEquals(
-                  List.of(3L, 4L, 5L, 6L), wireSeqs.stream().map(Number::longValue).toList());
+    tx(
+        () -> {
+          @SuppressWarnings("unchecked")
+          List<Number> wireSeqs =
+              em.createNativeQuery(
+                      "SELECT wire_sequence_id FROM journal_entries WHERE update_id = ?1 "
+                          + "ORDER BY sequence_id")
+                  .setParameter(1, updateId)
+                  .getResultList();
+          assertEquals(List.of(3L, 4L, 5L, 6L), wireSeqs.stream().map(Number::longValue).toList());
 
-              long stateSeq =
-                  ((Number)
-                          em.createNativeQuery(
-                                  "SELECT journal_seq FROM stack_state WHERE stack_id = ?1")
-                              .setParameter(1, stackId)
-                              .getSingleResult())
-                      .longValue();
-              assertEquals(7L, stateSeq);
-            });
+          long stateSeq =
+              ((Number)
+                      em.createNativeQuery(
+                              "SELECT journal_seq FROM stack_state WHERE stack_id = ?1")
+                          .setParameter(1, stackId)
+                          .getSingleResult())
+                  .longValue();
+          assertEquals(7L, stateSeq);
+        });
   }
 
   @Test
@@ -286,37 +279,36 @@ class JournalAppenderTest {
     appender.append(
         stackId, updateId, leaseId, List.of(entry(1, 1, 1L, "{\"state\":{\"urn\":\"urn:1\"}}")));
 
-    QuarkusTransaction.requiringNew()
-        .run(
-            () -> {
-              long count =
-                  ((Number)
-                          em.createNativeQuery(
-                                  "SELECT count(*) FROM journal_entries WHERE update_id = ?1")
-                              .setParameter(1, updateId)
-                              .getSingleResult())
-                      .longValue();
-              assertEquals(1L, count);
+    tx(
+        () -> {
+          long count =
+              ((Number)
+                      em.createNativeQuery(
+                              "SELECT count(*) FROM journal_entries WHERE update_id = ?1")
+                          .setParameter(1, updateId)
+                          .getSingleResult())
+                  .longValue();
+          assertEquals(1L, count);
 
-              long stateSeq =
-                  ((Number)
-                          em.createNativeQuery(
-                                  "SELECT journal_seq FROM stack_state WHERE stack_id = ?1")
-                              .setParameter(1, stackId)
-                              .getSingleResult())
-                      .longValue();
-              assertEquals(2L, stateSeq);
+          long stateSeq =
+              ((Number)
+                      em.createNativeQuery(
+                              "SELECT journal_seq FROM stack_state WHERE stack_id = ?1")
+                          .setParameter(1, stackId)
+                          .getSingleResult())
+                  .longValue();
+          assertEquals(2L, stateSeq);
 
-              long sinceCompaction =
-                  ((Number)
-                          em.createNativeQuery(
-                                  "SELECT journal_entries_since_compaction FROM stack_state "
-                                      + "WHERE stack_id = ?1")
-                              .setParameter(1, stackId)
-                              .getSingleResult())
-                      .longValue();
-              assertEquals(1L, sinceCompaction);
-            });
+          long sinceCompaction =
+              ((Number)
+                      em.createNativeQuery(
+                              "SELECT journal_entries_since_compaction FROM stack_state "
+                                  + "WHERE stack_id = ?1")
+                          .setParameter(1, stackId)
+                          .getSingleResult())
+                  .longValue();
+          assertEquals(1L, sinceCompaction);
+        });
   }
 
   @Test
@@ -336,37 +328,36 @@ class JournalAppenderTest {
             entry(2, 1, 2L, "{\"state\":{\"urn\":\"urn:2\"}}"),
             entry(3, 1, 3L, "{\"state\":{\"urn\":\"urn:3\"}}")));
 
-    QuarkusTransaction.requiringNew()
-        .run(
-            () -> {
-              long count =
-                  ((Number)
-                          em.createNativeQuery(
-                                  "SELECT count(*) FROM journal_entries WHERE update_id = ?1")
-                              .setParameter(1, updateId)
-                              .getSingleResult())
-                      .longValue();
-              assertEquals(3L, count);
+    tx(
+        () -> {
+          long count =
+              ((Number)
+                      em.createNativeQuery(
+                              "SELECT count(*) FROM journal_entries WHERE update_id = ?1")
+                          .setParameter(1, updateId)
+                          .getSingleResult())
+                  .longValue();
+          assertEquals(3L, count);
 
-              long stateSeq =
-                  ((Number)
-                          em.createNativeQuery(
-                                  "SELECT journal_seq FROM stack_state WHERE stack_id = ?1")
-                              .setParameter(1, stackId)
-                              .getSingleResult())
-                      .longValue();
-              assertEquals(4L, stateSeq);
+          long stateSeq =
+              ((Number)
+                      em.createNativeQuery(
+                              "SELECT journal_seq FROM stack_state WHERE stack_id = ?1")
+                          .setParameter(1, stackId)
+                          .getSingleResult())
+                  .longValue();
+          assertEquals(4L, stateSeq);
 
-              long sinceCompaction =
-                  ((Number)
-                          em.createNativeQuery(
-                                  "SELECT journal_entries_since_compaction FROM stack_state "
-                                      + "WHERE stack_id = ?1")
-                              .setParameter(1, stackId)
-                              .getSingleResult())
-                      .longValue();
-              assertEquals(3L, sinceCompaction);
-            });
+          long sinceCompaction =
+              ((Number)
+                      em.createNativeQuery(
+                              "SELECT journal_entries_since_compaction FROM stack_state "
+                                  + "WHERE stack_id = ?1")
+                          .setParameter(1, stackId)
+                          .getSingleResult())
+                  .longValue();
+          assertEquals(3L, sinceCompaction);
+        });
   }
 
   @Test
@@ -382,18 +373,17 @@ class JournalAppenderTest {
         leaseId,
         List.of(entry(1, 1, 1L, "{\"state\":{\"urn\":\"urn:1\",\"value\":1}}")));
 
-    QuarkusTransaction.requiringNew()
-        .run(
-            () -> {
-              long count =
-                  ((Number)
-                          em.createNativeQuery(
-                                  "SELECT count(*) FROM journal_entries WHERE update_id = ?1")
-                              .setParameter(1, updateId)
-                              .getSingleResult())
-                      .longValue();
-              assertEquals(1L, count);
-            });
+    tx(
+        () -> {
+          long count =
+              ((Number)
+                      em.createNativeQuery(
+                              "SELECT count(*) FROM journal_entries WHERE update_id = ?1")
+                          .setParameter(1, updateId)
+                          .getSingleResult())
+                  .longValue();
+          assertEquals(1L, count);
+        });
   }
 
   @Test
@@ -416,18 +406,17 @@ class JournalAppenderTest {
         RequestValidationException.class,
         () -> appender.append(stackId, updateId, leaseId, List.of(entry(1, 8, null, "{}"))));
 
-    QuarkusTransaction.requiringNew()
-        .run(
-            () -> {
-              long count =
-                  ((Number)
-                          em.createNativeQuery(
-                                  "SELECT count(*) FROM journal_entries WHERE update_id = ?1")
-                              .setParameter(1, updateId)
-                              .getSingleResult())
-                      .longValue();
-              assertEquals(0L, count);
-            });
+    tx(
+        () -> {
+          long count =
+              ((Number)
+                      em.createNativeQuery(
+                              "SELECT count(*) FROM journal_entries WHERE update_id = ?1")
+                          .setParameter(1, updateId)
+                          .getSingleResult())
+                  .longValue();
+          assertEquals(0L, count);
+        });
   }
 
   @Test
@@ -475,18 +464,17 @@ class JournalAppenderTest {
                 7L,
                 "{\"operation\":{\"resource\":{\"urn\":\"urn:r\",\"type\":\"t:x\"},\"type\":\"bogus\"}}")));
 
-    QuarkusTransaction.requiringNew()
-        .run(
-            () -> {
-              long count =
-                  ((Number)
-                          em.createNativeQuery(
-                                  "SELECT count(*) FROM journal_entries WHERE update_id = ?1")
-                              .setParameter(1, updateId)
-                              .getSingleResult())
-                      .longValue();
-              assertEquals(1L, count);
-            });
+    tx(
+        () -> {
+          long count =
+              ((Number)
+                      em.createNativeQuery(
+                              "SELECT count(*) FROM journal_entries WHERE update_id = ?1")
+                          .setParameter(1, updateId)
+                          .getSingleResult())
+                  .longValue();
+          assertEquals(1L, count);
+        });
 
     JsonNode pending = assemble(stackId).deployment().required("pending_operations");
     assertEquals(1, pending.size());
@@ -503,44 +491,43 @@ class JournalAppenderTest {
         List.of(
             entry(1, 3, 9L, "{\"state\":{\"urn\":\"urn:s\"},\"isRefresh\":true,\"removeOld\":5}")));
 
-    QuarkusTransaction.requiringNew()
-        .run(
-            () -> {
-              String payloadJson =
-                  (String)
-                      em.createNativeQuery(
-                              "SELECT payload::text FROM journal_entries WHERE update_id = ?1")
-                          .setParameter(1, updateId)
-                          .getSingleResult();
-              JsonNode payload;
-              try {
-                payload = MAPPER.readTree(payloadJson);
-              } catch (Exception e) {
-                throw new RuntimeException(e);
-              }
-              // state remains in payload; promoted columns are removed.
-              assertNotNull(payload.get("state"));
-              assertNull(payload.get("isRefresh"));
-              assertNull(payload.get("removeOld"));
-              assertNull(payload.get("sequenceID"));
-              assertNull(payload.get("kind"));
+    tx(
+        () -> {
+          String payloadJson =
+              (String)
+                  em.createNativeQuery(
+                          "SELECT payload::text FROM journal_entries WHERE update_id = ?1")
+                      .setParameter(1, updateId)
+                      .getSingleResult();
+          JsonNode payload;
+          try {
+            payload = MAPPER.readTree(payloadJson);
+          } catch (Exception e) {
+            throw new RuntimeException(e);
+          }
+          // state remains in payload; promoted columns are removed.
+          assertNotNull(payload.get("state"));
+          assertNull(payload.get("isRefresh"));
+          assertNull(payload.get("removeOld"));
+          assertNull(payload.get("sequenceID"));
+          assertNull(payload.get("kind"));
 
-              Boolean isRefresh =
-                  (Boolean)
-                      em.createNativeQuery(
-                              "SELECT is_refresh FROM journal_entries WHERE update_id = ?1")
-                          .setParameter(1, updateId)
-                          .getSingleResult();
-              assertTrue(isRefresh);
+          Boolean isRefresh =
+              (Boolean)
+                  em.createNativeQuery(
+                          "SELECT is_refresh FROM journal_entries WHERE update_id = ?1")
+                      .setParameter(1, updateId)
+                      .getSingleResult();
+          assertTrue(isRefresh);
 
-              Number removeOld =
-                  (Number)
-                      em.createNativeQuery(
-                              "SELECT remove_old FROM journal_entries WHERE update_id = ?1")
-                          .setParameter(1, updateId)
-                          .getSingleResult();
-              assertEquals(5L, removeOld.longValue());
-            });
+          Number removeOld =
+              (Number)
+                  em.createNativeQuery(
+                          "SELECT remove_old FROM journal_entries WHERE update_id = ?1")
+                      .setParameter(1, updateId)
+                      .getSingleResult();
+          assertEquals(5L, removeOld.longValue());
+        });
   }
 
   @Test
@@ -572,27 +559,25 @@ class JournalAppenderTest {
                 }
                 """)));
 
-    QuarkusTransaction.requiringNew()
-        .run(
-            () -> {
-              String payloadJson =
-                  (String)
-                      em.createNativeQuery(
-                              "SELECT payload::text FROM journal_entries WHERE update_id = ?1")
-                          .setParameter(1, updateId)
-                          .getSingleResult();
-              JsonNode payload;
-              try {
-                payload = MAPPER.readTree(payloadJson);
-              } catch (Exception e) {
-                throw new RuntimeException(e);
-              }
-              JsonNode state = payload.required("state");
-              assertEquals(
-                  "file:///work/Pulumi.yaml:12:3", state.required("sourcePosition").asText());
-              assertNull(state.get("stackTrace"));
-              assertNull(state.required("outputs").required("nested").get("stackTrace"));
-            });
+    tx(
+        () -> {
+          String payloadJson =
+              (String)
+                  em.createNativeQuery(
+                          "SELECT payload::text FROM journal_entries WHERE update_id = ?1")
+                      .setParameter(1, updateId)
+                      .getSingleResult();
+          JsonNode payload;
+          try {
+            payload = MAPPER.readTree(payloadJson);
+          } catch (Exception e) {
+            throw new RuntimeException(e);
+          }
+          JsonNode state = payload.required("state");
+          assertEquals("file:///work/Pulumi.yaml:12:3", state.required("sourcePosition").asText());
+          assertNull(state.get("stackTrace"));
+          assertNull(state.required("outputs").required("nested").get("stackTrace"));
+        });
   }
 
   @Test
@@ -635,18 +620,17 @@ class JournalAppenderTest {
       f1.get(10, TimeUnit.SECONDS);
       f2.get(10, TimeUnit.SECONDS);
 
-      QuarkusTransaction.requiringNew()
-          .run(
-              () -> {
-                long count =
-                    ((Number)
-                            em.createNativeQuery(
-                                    "SELECT count(*) FROM journal_entries WHERE update_id = ?1")
-                                .setParameter(1, updateId)
-                                .getSingleResult())
-                        .longValue();
-                assertEquals(2L, count);
-              });
+      tx(
+          () -> {
+            long count =
+                ((Number)
+                        em.createNativeQuery(
+                                "SELECT count(*) FROM journal_entries WHERE update_id = ?1")
+                            .setParameter(1, updateId)
+                            .getSingleResult())
+                    .longValue();
+            assertEquals(2L, count);
+          });
     } finally {
       pool.shutdownNow();
     }
@@ -668,27 +652,26 @@ class JournalAppenderTest {
                 leaseId,
                 List.of(entry(1, 1, 1L, "{\"state\":{\"urn\":\"u:after\"}}"))));
 
-    QuarkusTransaction.requiringNew()
-        .run(
-            () -> {
-              long count =
-                  ((Number)
-                          em.createNativeQuery(
-                                  "SELECT count(*) FROM journal_entries WHERE update_id = ?1")
-                              .setParameter(1, updateId)
-                              .getSingleResult())
-                      .longValue();
-              assertEquals(0L, count);
+    tx(
+        () -> {
+          long count =
+              ((Number)
+                      em.createNativeQuery(
+                              "SELECT count(*) FROM journal_entries WHERE update_id = ?1")
+                          .setParameter(1, updateId)
+                          .getSingleResult())
+                  .longValue();
+          assertEquals(0L, count);
 
-              long seq =
-                  ((Number)
-                          em.createNativeQuery(
-                                  "SELECT journal_seq FROM stack_state WHERE stack_id = ?1")
-                              .setParameter(1, stackId)
-                              .getSingleResult())
-                      .longValue();
-              assertEquals(0L, seq);
-            });
+          long seq =
+              ((Number)
+                      em.createNativeQuery(
+                              "SELECT journal_seq FROM stack_state WHERE stack_id = ?1")
+                          .setParameter(1, stackId)
+                          .getSingleResult())
+                  .longValue();
+          assertEquals(0L, seq);
+        });
   }
 
   @Test
@@ -721,29 +704,28 @@ class JournalAppenderTest {
         lease2,
         List.of(entry(1, 1, 1L, "{\"state\":{\"urn\":\"u:2-1\"}}")));
 
-    QuarkusTransaction.requiringNew()
-        .run(
-            () -> {
-              Long offset2 =
-                  ((Number)
-                          em.createNativeQuery(
-                                  "SELECT start_journal_seq FROM stack_updates WHERE id = ?1")
-                              .setParameter(1, u2.updateId())
-                              .getSingleResult())
-                      .longValue();
-              // First update wrote sequence_id 1 and 2; journal_seq = 3 when update 2's first PATCH
-              // arrives, so its offset is 3 and its first entry lands at sequence_id 4.
-              assertEquals(3L, offset2);
+    tx(
+        () -> {
+          Long offset2 =
+              ((Number)
+                      em.createNativeQuery(
+                              "SELECT start_journal_seq FROM stack_updates WHERE id = ?1")
+                          .setParameter(1, u2.updateId())
+                          .getSingleResult())
+                  .longValue();
+          // First update wrote sequence_id 1 and 2; journal_seq = 3 when update 2's first PATCH
+          // arrives, so its offset is 3 and its first entry lands at sequence_id 4.
+          assertEquals(3L, offset2);
 
-              long seq =
-                  ((Number)
-                          em.createNativeQuery(
-                                  "SELECT sequence_id FROM journal_entries WHERE update_id = ?1")
-                              .setParameter(1, u2.updateId())
-                              .getSingleResult())
-                      .longValue();
-              assertEquals(4L, seq);
-            });
+          long seq =
+              ((Number)
+                      em.createNativeQuery(
+                              "SELECT sequence_id FROM journal_entries WHERE update_id = ?1")
+                          .setParameter(1, u2.updateId())
+                          .getSingleResult())
+                  .longValue();
+          assertEquals(4L, seq);
+        });
   }
 
   // Assembled exports must pass Pulumi's own integrity rules even mid-race.

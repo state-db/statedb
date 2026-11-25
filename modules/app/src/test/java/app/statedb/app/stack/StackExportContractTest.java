@@ -1,5 +1,6 @@
 package app.statedb.app.stack;
 
+import static app.statedb.testsupport.TestTransactions.tx;
 import static io.restassured.RestAssured.given;
 import static org.hamcrest.Matchers.containsInAnyOrder;
 import static org.hamcrest.Matchers.equalTo;
@@ -16,7 +17,6 @@ import app.statedb.persistence.stack.StackImporter;
 import app.statedb.persistence.stack.StackState;
 import app.statedb.persistence.update.StackUpdate;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import io.quarkus.narayana.jta.QuarkusTransaction;
 import io.quarkus.test.junit.QuarkusTest;
 import jakarta.inject.Inject;
 import jakarta.persistence.EntityManager;
@@ -49,53 +49,51 @@ class StackExportContractTest {
 
   @BeforeEach
   void seed() {
-    QuarkusTransaction.requiringNew()
-        .run(
-            () -> {
-              Organization org = org(ORG);
-              Organization other = org(OTHER_ORG);
+    tx(
+        () -> {
+          Organization org = org(ORG);
+          Organization other = org(OTHER_ORG);
 
-              User user = new User();
-              user.iss = "local:test";
-              user.sub = "export";
-              user.email = "export@example.com";
-              user.displayName = "Export Tester";
-              user.persistAndFlush();
+          User user = new User();
+          user.iss = "local:test";
+          user.sub = "export";
+          user.email = "export@example.com";
+          user.displayName = "Export Tester";
+          user.persistAndFlush();
 
-              OrgMember member = new OrgMember();
-              member.orgId = org.id;
-              member.userId = user.id;
-              member.role = OrgMember.Role.owner;
-              member.persistAndFlush();
+          OrgMember member = new OrgMember();
+          member.orgId = org.id;
+          member.userId = user.id;
+          member.role = OrgMember.Role.owner;
+          member.persistAndFlush();
 
-              ApiToken token = new ApiToken();
-              token.tokenHash = sha256Hex(RAW_TOKEN);
-              token.userId = user.id;
-              token.orgId = org.id;
-              token.kind = ApiToken.Kind.service_account;
-              token.expiresAt = java.time.Instant.now().plusSeconds(60 * 60);
-              token.description = "export";
-              token.persistAndFlush();
+          ApiToken token = new ApiToken();
+          token.tokenHash = sha256Hex(RAW_TOKEN);
+          token.userId = user.id;
+          token.orgId = org.id;
+          token.kind = ApiToken.Kind.service_account;
+          token.expiresAt = java.time.Instant.now().plusSeconds(60 * 60);
+          token.description = "export";
+          token.persistAndFlush();
 
-              stackId = stackCreator.create(org.id, ORG, PROJECT, STACK, Map.of()).stackId();
-              stackCreator.create(other.id, OTHER_ORG, PROJECT, STACK, Map.of());
-            });
+          stackId = stackCreator.create(org.id, ORG, PROJECT, STACK, Map.of()).stackId();
+          stackCreator.create(other.id, OTHER_ORG, PROJECT, STACK, Map.of());
+        });
   }
 
   @AfterEach
   void cleanup() {
-    QuarkusTransaction.requiringNew()
-        .run(
-            () -> {
-              em.createNativeQuery("DELETE FROM organizations WHERE name IN (?1, ?2)")
-                  .setParameter(1, ORG)
-                  .setParameter(2, OTHER_ORG)
-                  .executeUpdate();
-              em.createNativeQuery("DELETE FROM users WHERE iss = ?1 AND sub = ?2")
-                  .setParameter(1, "local:test")
-                  .setParameter(2, "export")
-                  .executeUpdate();
-            });
+    tx(
+        () -> {
+          em.createNativeQuery("DELETE FROM organizations WHERE name IN (?1, ?2)")
+              .setParameter(1, ORG)
+              .setParameter(2, OTHER_ORG)
+              .executeUpdate();
+          em.createNativeQuery("DELETE FROM users WHERE iss = ?1 AND sub = ?2")
+              .setParameter(1, "local:test")
+              .setParameter(2, "export")
+              .executeUpdate();
+        });
   }
 
   @Test
@@ -173,8 +171,7 @@ class StackExportContractTest {
 
   @Test
   void versionedExportInProgressUpdateReturns404() {
-    QuarkusTransaction.requiringNew()
-        .run(() -> appliedUpdate(1, StackUpdate.Status.IN_PROGRESS, 0L, null));
+    tx(() -> appliedUpdate(1, StackUpdate.Status.IN_PROGRESS, 0L, null));
 
     given()
         .header("Authorization", "token " + RAW_TOKEN)
@@ -201,12 +198,11 @@ class StackExportContractTest {
   @Test
   void versionedExportDistinguishesImportSharingJournalBoundary() throws Exception {
     seedTwoAppliedVersions();
-    QuarkusTransaction.requiringNew()
-        .run(
-            () -> {
-              StackState state = StackState.<StackState>find("stackId", stackId).firstResult();
-              state.journalSeq = 4L;
-            });
+    tx(
+        () -> {
+          StackState state = StackState.<StackState>find("stackId", stackId).firstResult();
+          state.journalSeq = 4L;
+        });
     stackImporter.importDeployment(
         stackId,
         null,
@@ -248,14 +244,13 @@ class StackExportContractTest {
   // Two applied versions with production boundary semantics: end_journal_seq is one past the
   // update's last journal entry (the gap JournalAppender's counter advance leaves).
   private void seedTwoAppliedVersions() {
-    QuarkusTransaction.requiringNew()
-        .run(
-            () -> {
-              UUID first = appliedUpdate(1, StackUpdate.Status.SUCCEEDED, 0L, 2L);
-              successEntry(first, 1L, "a");
-              UUID second = appliedUpdate(2, StackUpdate.Status.SUCCEEDED, 2L, 4L);
-              successEntry(second, 3L, "b");
-            });
+    tx(
+        () -> {
+          UUID first = appliedUpdate(1, StackUpdate.Status.SUCCEEDED, 0L, 2L);
+          successEntry(first, 1L, "a");
+          UUID second = appliedUpdate(2, StackUpdate.Status.SUCCEEDED, 2L, 4L);
+          successEntry(second, 3L, "b");
+        });
   }
 
   private UUID appliedUpdate(int version, StackUpdate.Status status, Long startSeq, Long endSeq) {

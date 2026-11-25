@@ -1,5 +1,7 @@
 package app.statedb.app.lock;
 
+import static app.statedb.testsupport.TestTransactions.read;
+import static app.statedb.testsupport.TestTransactions.tx;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -16,7 +18,6 @@ import app.statedb.persistence.stack.StackRef;
 import app.statedb.persistence.update.StackUpdate;
 import app.statedb.persistence.update.StackUpdateStarter;
 import app.statedb.persistence.update.StartUpdateRequest;
-import io.quarkus.narayana.jta.QuarkusTransaction;
 import io.quarkus.test.junit.QuarkusTest;
 import jakarta.inject.Inject;
 import jakarta.persistence.EntityManager;
@@ -48,16 +49,15 @@ class StackLockRenewerTest {
   @BeforeEach
   void seed() {
     stackId =
-        QuarkusTransaction.requiringNew()
-            .call(
-                () -> {
-                  Organization org = new Organization();
-                  org.name = ORG_NAME;
-                  org.displayName = "Renewer Test";
-                  org.persistAndFlush();
-                  StackRef ref = stackCreator.create(org.id, ORG_NAME, "proj", "dev", Map.of());
-                  return ref.stackId();
-                });
+        read(
+            () -> {
+              Organization org = new Organization();
+              org.name = ORG_NAME;
+              org.displayName = "Renewer Test";
+              org.persistAndFlush();
+              StackRef ref = stackCreator.create(org.id, ORG_NAME, "proj", "dev", Map.of());
+              return ref.stackId();
+            });
     updateId =
         starter
             .start(
@@ -75,28 +75,26 @@ class StackLockRenewerTest {
 
   @AfterEach
   void cleanup() {
-    QuarkusTransaction.requiringNew()
-        .run(
-            () ->
-                em.createNativeQuery("DELETE FROM organizations WHERE name = ?1")
-                    .setParameter(1, ORG_NAME)
-                    .executeUpdate());
+    tx(
+        () ->
+            em.createNativeQuery("DELETE FROM organizations WHERE name = ?1")
+                .setParameter(1, ORG_NAME)
+                .executeUpdate());
   }
 
   @Test
   void renewAdvancesExpiresAtAndHeartbeatAndRotatesToken() {
     // Back-date both timestamps so we can detect forward movement deterministically without
     // depending on millisecond-level clock resolution.
-    QuarkusTransaction.requiringNew()
-        .run(
-            () ->
-                em.createNativeQuery(
-                        "UPDATE stack_locks"
-                            + "    SET expires_at = now() + interval '5 minutes',"
-                            + "        heartbeat_at = now() - interval '5 minutes'"
-                            + "  WHERE id = ?1")
-                    .setParameter(1, leaseId)
-                    .executeUpdate());
+    tx(
+        () ->
+            em.createNativeQuery(
+                    "UPDATE stack_locks"
+                        + "    SET expires_at = now() + interval '5 minutes',"
+                        + "        heartbeat_at = now() - interval '5 minutes'"
+                        + "  WHERE id = ?1")
+                .setParameter(1, leaseId)
+                .executeUpdate());
 
     byte[] hashBefore = readHash();
     Instant beforeExpires = readExpiresAt();
@@ -120,16 +118,15 @@ class StackLockRenewerTest {
   void renewPastMaxLifetimeIsRejected() {
     // Push the ceiling into the past while leaving expires_at in the future. Renew should
     // refuse — the bearer cannot be kept alive past max_expires_at even if currently valid.
-    QuarkusTransaction.requiringNew()
-        .run(
-            () ->
-                em.createNativeQuery(
-                        "UPDATE stack_locks"
-                            + "    SET expires_at = now() + interval '5 minutes',"
-                            + "        max_expires_at = now() - interval '1 second'"
-                            + "  WHERE id = ?1")
-                    .setParameter(1, leaseId)
-                    .executeUpdate());
+    tx(
+        () ->
+            em.createNativeQuery(
+                    "UPDATE stack_locks"
+                        + "    SET expires_at = now() + interval '5 minutes',"
+                        + "        max_expires_at = now() - interval '1 second'"
+                        + "  WHERE id = ?1")
+                .setParameter(1, leaseId)
+                .executeUpdate());
 
     assertThrows(LeaseExpiredException.class, () -> renewer.renew(leaseId, null));
   }
@@ -138,16 +135,15 @@ class StackLockRenewerTest {
   void renewClampsExpiresAtToMaxLifetime() {
     // Ceiling is only one second away; the next renew would normally push expires_at out by
     // the TTL but must clamp to max_expires_at instead.
-    QuarkusTransaction.requiringNew()
-        .run(
-            () ->
-                em.createNativeQuery(
-                        "UPDATE stack_locks"
-                            + "    SET expires_at = now() + interval '5 minutes',"
-                            + "        max_expires_at = now() + interval '1 second'"
-                            + "  WHERE id = ?1")
-                    .setParameter(1, leaseId)
-                    .executeUpdate());
+    tx(
+        () ->
+            em.createNativeQuery(
+                    "UPDATE stack_locks"
+                        + "    SET expires_at = now() + interval '5 minutes',"
+                        + "        max_expires_at = now() + interval '1 second'"
+                        + "  WHERE id = ?1")
+                .setParameter(1, leaseId)
+                .executeUpdate());
 
     Instant maxBefore = readMaxExpiresAt();
     Lease renewed = renewer.renew(leaseId, null);
@@ -159,14 +155,13 @@ class StackLockRenewerTest {
 
   @Test
   void renewOnExpiredLockIsRejected() {
-    QuarkusTransaction.requiringNew()
-        .run(
-            () ->
-                em.createNativeQuery(
-                        "UPDATE stack_locks SET expires_at = now() - interval '1 second'"
-                            + " WHERE id = ?1")
-                    .setParameter(1, leaseId)
-                    .executeUpdate());
+    tx(
+        () ->
+            em.createNativeQuery(
+                    "UPDATE stack_locks SET expires_at = now() - interval '1 second'"
+                        + " WHERE id = ?1")
+                .setParameter(1, leaseId)
+                .executeUpdate());
 
     assertThrows(LeaseExpiredException.class, () -> renewer.renew(leaseId, null));
   }
@@ -196,12 +191,11 @@ class StackLockRenewerTest {
 
   @Test
   void renewOnMissingLockIsRejected() {
-    QuarkusTransaction.requiringNew()
-        .run(
-            () ->
-                em.createNativeQuery("DELETE FROM stack_locks WHERE id = ?1")
-                    .setParameter(1, leaseId)
-                    .executeUpdate());
+    tx(
+        () ->
+            em.createNativeQuery("DELETE FROM stack_locks WHERE id = ?1")
+                .setParameter(1, leaseId)
+                .executeUpdate());
 
     assertThrows(LeaseExpiredException.class, () -> renewer.renew(leaseId, null));
   }

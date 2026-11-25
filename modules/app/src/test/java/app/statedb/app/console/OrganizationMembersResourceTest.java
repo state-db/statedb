@@ -3,6 +3,8 @@ package app.statedb.app.console;
 import static app.statedb.app.console.LocalGlassTestSupport.COOKIE;
 import static app.statedb.app.console.LocalGlassTestSupport.PASSWORD;
 import static app.statedb.app.console.LocalGlassTestSupport.login;
+import static app.statedb.testsupport.TestTransactions.read;
+import static app.statedb.testsupport.TestTransactions.tx;
 import static io.restassured.RestAssured.given;
 import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.is;
@@ -14,7 +16,6 @@ import app.statedb.persistence.identity.User;
 import app.statedb.persistence.policy.PolicyGrant;
 import app.statedb.persistence.stack.StackCreator;
 import app.statedb.persistence.stack.StackRef;
-import io.quarkus.narayana.jta.QuarkusTransaction;
 import io.quarkus.test.common.QuarkusTestResource;
 import io.quarkus.test.junit.QuarkusTest;
 import io.quarkus.test.junit.TestProfile;
@@ -40,29 +41,26 @@ class OrganizationMembersResourceTest {
 
   @BeforeEach
   void seedOrganizations() {
-    QuarkusTransaction.requiringNew()
-        .run(
-            () -> {
-              Organization.delete("name in ?1", List.of(ORG, OTHER_ORG));
-              User.delete("iss", "local:membership-resource");
-            });
+    tx(
+        () -> {
+          Organization.delete("name in ?1", List.of(ORG, OTHER_ORG));
+          User.delete("iss", "local:membership-resource");
+        });
     OidcConsoleSessionFixture.cleanup();
-    QuarkusTransaction.requiringNew()
-        .run(
-            () -> {
-              persistOrganization(ORG);
-              persistOrganization(OTHER_ORG);
-            });
+    tx(
+        () -> {
+          persistOrganization(ORG);
+          persistOrganization(OTHER_ORG);
+        });
   }
 
   @AfterEach
   void cleanup() {
-    QuarkusTransaction.requiringNew()
-        .run(
-            () -> {
-              Organization.delete("name in ?1", List.of(ORG, OTHER_ORG));
-              User.delete("iss", "local:membership-resource");
-            });
+    tx(
+        () -> {
+          Organization.delete("name in ?1", List.of(ORG, OTHER_ORG));
+          User.delete("iss", "local:membership-resource");
+        });
     OidcConsoleSessionFixture.cleanup();
   }
 
@@ -174,9 +172,7 @@ class OrganizationMembersResourceTest {
   @Test
   void siteAdminManagesMembershipWithoutBelongingToOrganization() {
     String cookie = login(PASSWORD).statusCode(200).extract().cookie(COOKIE);
-    UUID orgId =
-        QuarkusTransaction.requiringNew()
-            .call(() -> Organization.<Organization>find("name", ORG).firstResult().id);
+    UUID orgId = read(() -> Organization.<Organization>find("name", ORG).firstResult().id);
     UUID userId = candidate("admin-added-user", "admin-added@example.com");
     UUID serviceUserId = candidate("admin-service-user", "service@example.com");
 
@@ -189,15 +185,14 @@ class OrganizationMembersResourceTest {
         .then()
         .statusCode(200)
         .body("role", is("owner"));
-    QuarkusTransaction.requiringNew()
-        .run(
-            () -> {
-              OrgMember service = new OrgMember();
-              service.orgId = orgId;
-              service.userId = serviceUserId;
-              service.role = OrgMember.Role.service;
-              service.persistAndFlush();
-            });
+    tx(
+        () -> {
+          OrgMember service = new OrgMember();
+          service.orgId = orgId;
+          service.userId = serviceUserId;
+          service.role = OrgMember.Role.service;
+          service.persistAndFlush();
+        });
     given()
         .cookie(COOKIE, cookie)
         .when()
@@ -230,18 +225,16 @@ class OrganizationMembersResourceTest {
         .statusCode(200)
         .body("grants.size()", is(0));
 
-    QuarkusTransaction.requiringNew()
-        .run(
-            () -> {
-              Organization org = Organization.<Organization>find("name", ORG).firstResult();
-              Organization other = Organization.<Organization>find("name", OTHER_ORG).firstResult();
-              StackRef app = stackCreator.create(org.id, org.name, "apps", "prod", Map.of());
-              StackRef otherStack =
-                  stackCreator.create(other.id, other.name, "apps", "prod", Map.of());
-              grant(org.id, guestId, app.stackId(), "StackReadResourcePolicy");
-              grant(org.id, guestId, app.stackId(), "StackWriteResourcePolicy");
-              grant(other.id, guestId, otherStack.stackId(), "StackReadResourcePolicy");
-            });
+    tx(
+        () -> {
+          Organization org = Organization.<Organization>find("name", ORG).firstResult();
+          Organization other = Organization.<Organization>find("name", OTHER_ORG).firstResult();
+          StackRef app = stackCreator.create(org.id, org.name, "apps", "prod", Map.of());
+          StackRef otherStack = stackCreator.create(other.id, other.name, "apps", "prod", Map.of());
+          grant(org.id, guestId, app.stackId(), "StackReadResourcePolicy");
+          grant(org.id, guestId, app.stackId(), "StackWriteResourcePolicy");
+          grant(other.id, guestId, otherStack.stackId(), "StackReadResourcePolicy");
+        });
 
     given()
         .cookie(session.getName(), session.getValue())
@@ -258,22 +251,21 @@ class OrganizationMembersResourceTest {
   private static Cookie ownerSession() {
     OidcConsoleSessionFixture.seedProvider();
     Cookie session = OidcConsoleSessionFixture.login();
-    QuarkusTransaction.requiringNew()
-        .run(
-            () -> {
-              User user = fixtureUser();
-              Organization org = Organization.<Organization>find("name", ORG).firstResult();
-              OrgMember membership = new OrgMember();
-              membership.orgId = org.id;
-              membership.userId = user.id;
-              membership.role = OrgMember.Role.owner;
-              membership.persistAndFlush();
-            });
+    tx(
+        () -> {
+          User user = fixtureUser();
+          Organization org = Organization.<Organization>find("name", ORG).firstResult();
+          OrgMember membership = new OrgMember();
+          membership.orgId = org.id;
+          membership.userId = user.id;
+          membership.role = OrgMember.Role.owner;
+          membership.persistAndFlush();
+        });
     return session;
   }
 
   private static UUID fixtureUserId() {
-    return QuarkusTransaction.requiringNew().call(() -> fixtureUser().id);
+    return read(() -> fixtureUser().id);
   }
 
   private static User fixtureUser() {
@@ -288,16 +280,15 @@ class OrganizationMembersResourceTest {
   }
 
   private static UUID candidate(String sub, String email) {
-    return QuarkusTransaction.requiringNew()
-        .call(
-            () -> {
-              User user = new User();
-              user.iss = "local:membership-resource";
-              user.sub = sub;
-              user.email = email;
-              user.persistAndFlush();
-              return user.id;
-            });
+    return read(
+        () -> {
+          User user = new User();
+          user.iss = "local:membership-resource";
+          user.sub = sub;
+          user.email = email;
+          user.persistAndFlush();
+          return user.id;
+        });
   }
 
   private static void persistOrganization(String name) {

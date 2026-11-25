@@ -1,5 +1,6 @@
 package app.statedb.app.stack;
 
+import static app.statedb.testsupport.TestTransactions.tx;
 import static io.restassured.RestAssured.given;
 import static org.hamcrest.Matchers.equalTo;
 import static org.hamcrest.Matchers.is;
@@ -13,7 +14,6 @@ import app.statedb.persistence.stack.Project;
 import app.statedb.persistence.stack.Stack;
 import app.statedb.persistence.stack.StackState;
 import app.statedb.persistence.stack.Workspace;
-import io.quarkus.narayana.jta.QuarkusTransaction;
 import io.quarkus.test.junit.QuarkusTest;
 import jakarta.inject.Inject;
 import jakarta.persistence.EntityManager;
@@ -41,57 +41,55 @@ class StackCreateContractTest {
 
   @BeforeEach
   void seed() {
-    QuarkusTransaction.requiringNew()
-        .run(
-            () -> {
-              Organization org = new Organization();
-              org.name = ORG_NAME;
-              org.displayName = "Stack Create Test";
-              org.persistAndFlush();
+    tx(
+        () -> {
+          Organization org = new Organization();
+          org.name = ORG_NAME;
+          org.displayName = "Stack Create Test";
+          org.persistAndFlush();
 
-              Organization other = new Organization();
-              other.name = OTHER_ORG_NAME;
-              other.displayName = "Other Org";
-              other.persistAndFlush();
+          Organization other = new Organization();
+          other.name = OTHER_ORG_NAME;
+          other.displayName = "Other Org";
+          other.persistAndFlush();
 
-              User user = new User();
-              user.iss = "local:test";
-              user.sub = "stack-create";
-              user.email = "stack@example.com";
-              user.displayName = "Stack Create Tester";
-              user.persistAndFlush();
+          User user = new User();
+          user.iss = "local:test";
+          user.sub = "stack-create";
+          user.email = "stack@example.com";
+          user.displayName = "Stack Create Tester";
+          user.persistAndFlush();
 
-              OrgMember m = new OrgMember();
-              m.orgId = org.id;
-              m.userId = user.id;
-              m.role = OrgMember.Role.owner;
-              m.persistAndFlush();
+          OrgMember m = new OrgMember();
+          m.orgId = org.id;
+          m.userId = user.id;
+          m.role = OrgMember.Role.owner;
+          m.persistAndFlush();
 
-              ApiToken t = new ApiToken();
-              t.tokenHash = sha256Hex(RAW_TOKEN);
-              t.userId = user.id;
-              t.orgId = org.id;
-              t.kind = ApiToken.Kind.service_account;
-              t.expiresAt = java.time.Instant.now().plusSeconds(60 * 60);
-              t.description = "stack-create";
-              t.persistAndFlush();
-            });
+          ApiToken t = new ApiToken();
+          t.tokenHash = sha256Hex(RAW_TOKEN);
+          t.userId = user.id;
+          t.orgId = org.id;
+          t.kind = ApiToken.Kind.service_account;
+          t.expiresAt = java.time.Instant.now().plusSeconds(60 * 60);
+          t.description = "stack-create";
+          t.persistAndFlush();
+        });
   }
 
   @AfterEach
   void cleanup() {
-    QuarkusTransaction.requiringNew()
-        .run(
-            () -> {
-              em.createNativeQuery("DELETE FROM organizations WHERE name IN (?1, ?2)")
-                  .setParameter(1, ORG_NAME)
-                  .setParameter(2, OTHER_ORG_NAME)
-                  .executeUpdate();
-              em.createNativeQuery("DELETE FROM users WHERE iss = ?1 AND sub = ?2")
-                  .setParameter(1, "local:test")
-                  .setParameter(2, "stack-create")
-                  .executeUpdate();
-            });
+    tx(
+        () -> {
+          em.createNativeQuery("DELETE FROM organizations WHERE name IN (?1, ?2)")
+              .setParameter(1, ORG_NAME)
+              .setParameter(2, OTHER_ORG_NAME)
+              .executeUpdate();
+          em.createNativeQuery("DELETE FROM users WHERE iss = ?1 AND sub = ?2")
+              .setParameter(1, "local:test")
+              .setParameter(2, "stack-create")
+              .executeUpdate();
+        });
   }
 
   @Test
@@ -124,36 +122,35 @@ class StackCreateContractTest {
         .body("tags.\"pulumi:runtime\"", equalTo("yaml"));
 
     // The workspace, stack, and stack_state rows must all have been created.
-    QuarkusTransaction.requiringNew()
-        .run(
-            () -> {
-              Number stacks =
-                  (Number)
-                      em.createNativeQuery(
-                              "SELECT count(*) FROM stacks s "
-                                  + "JOIN projects p ON p.id = s.project_id "
-                                  + "JOIN organizations o ON o.id = s.org_id "
-                                  + "WHERE o.name = ?1 AND p.name = ?2 AND s.name = ?3")
-                          .setParameter(1, ORG_NAME)
-                          .setParameter(2, PROJECT)
-                          .setParameter(3, "dev")
-                          .getSingleResult();
-              org.junit.jupiter.api.Assertions.assertEquals(1L, stacks.longValue());
+    tx(
+        () -> {
+          Number stacks =
+              (Number)
+                  em.createNativeQuery(
+                          "SELECT count(*) FROM stacks s "
+                              + "JOIN projects p ON p.id = s.project_id "
+                              + "JOIN organizations o ON o.id = s.org_id "
+                              + "WHERE o.name = ?1 AND p.name = ?2 AND s.name = ?3")
+                      .setParameter(1, ORG_NAME)
+                      .setParameter(2, PROJECT)
+                      .setParameter(3, "dev")
+                      .getSingleResult();
+          org.junit.jupiter.api.Assertions.assertEquals(1L, stacks.longValue());
 
-              Number states =
-                  (Number)
-                      em.createNativeQuery(
-                              "SELECT count(*) FROM stack_state ss "
-                                  + "JOIN stacks s ON s.id = ss.stack_id "
-                                  + "JOIN projects p ON p.id = s.project_id "
-                                  + "JOIN organizations o ON o.id = s.org_id "
-                                  + "WHERE o.name = ?1 AND p.name = ?2 AND s.name = ?3")
-                          .setParameter(1, ORG_NAME)
-                          .setParameter(2, PROJECT)
-                          .setParameter(3, "dev")
-                          .getSingleResult();
-              org.junit.jupiter.api.Assertions.assertEquals(1L, states.longValue());
-            });
+          Number states =
+              (Number)
+                  em.createNativeQuery(
+                          "SELECT count(*) FROM stack_state ss "
+                              + "JOIN stacks s ON s.id = ss.stack_id "
+                              + "JOIN projects p ON p.id = s.project_id "
+                              + "JOIN organizations o ON o.id = s.org_id "
+                              + "WHERE o.name = ?1 AND p.name = ?2 AND s.name = ?3")
+                      .setParameter(1, ORG_NAME)
+                      .setParameter(2, PROJECT)
+                      .setParameter(3, "dev")
+                      .getSingleResult();
+          org.junit.jupiter.api.Assertions.assertEquals(1L, states.longValue());
+        });
   }
 
   @Test
@@ -227,29 +224,28 @@ class StackCreateContractTest {
   @Test
   void crossOrgGetCollapsesTo404() {
     // Seed a stack owned by the *other* org directly via Hibernate (skipping the auth-gated POST).
-    QuarkusTransaction.requiringNew()
-        .run(
-            () -> {
-              Organization other =
-                  Organization.find("name", OTHER_ORG_NAME).<Organization>firstResult();
-              Project p = new Project();
-              p.orgId = other.id;
-              p.name = "other-proj";
-              p.persistAndFlush();
-              Workspace w = new Workspace();
-              w.orgId = other.id;
-              w.kind = Workspace.Kind.pulumi;
-              w.persistAndFlush();
-              Stack s = new Stack();
-              s.orgId = other.id;
-              s.projectId = p.id;
-              s.name = "secret";
-              s.workspaceId = w.id;
-              s.persistAndFlush();
-              StackState st = new StackState();
-              st.stackId = s.id;
-              st.persistAndFlush();
-            });
+    tx(
+        () -> {
+          Organization other =
+              Organization.find("name", OTHER_ORG_NAME).<Organization>firstResult();
+          Project p = new Project();
+          p.orgId = other.id;
+          p.name = "other-proj";
+          p.persistAndFlush();
+          Workspace w = new Workspace();
+          w.orgId = other.id;
+          w.kind = Workspace.Kind.pulumi;
+          w.persistAndFlush();
+          Stack s = new Stack();
+          s.orgId = other.id;
+          s.projectId = p.id;
+          s.name = "secret";
+          s.workspaceId = w.id;
+          s.persistAndFlush();
+          StackState st = new StackState();
+          st.stackId = s.id;
+          st.persistAndFlush();
+        });
 
     // A token scoped to ORG_NAME must not see the stack in OTHER_ORG_NAME — collapse to 404,
     // not 403 (a 403 would confirm existence in another tenant).

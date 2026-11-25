@@ -1,5 +1,8 @@
 package app.statedb.app.stack;
 
+import static app.statedb.testsupport.TestTransactions.read;
+import static app.statedb.testsupport.TestTransactions.tx;
+
 import app.statedb.persistence.identity.Organization;
 import app.statedb.persistence.journal.JournalEntry;
 import app.statedb.persistence.stack.CompactionJob;
@@ -17,7 +20,6 @@ import app.statedb.persistence.update.StackUpdate;
 import app.statedb.testsupport.pulumi.DeploymentNormalizer;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import io.quarkus.narayana.jta.QuarkusTransaction;
 import jakarta.inject.Inject;
 import java.time.Instant;
 import java.util.List;
@@ -52,21 +54,20 @@ abstract class AbstractSnapshotPruningTest {
   @BeforeEach
   void seed() {
     stackId =
-        QuarkusTransaction.requiringNew()
-            .call(
-                () -> {
-                  Organization org = new Organization();
-                  org.name = orgName();
-                  org.displayName = "Snapshot pruning";
-                  org.persistAndFlush();
-                  StackRef ref = stackCreator.create(org.id, orgName(), "proj", "dev", Map.of());
-                  return ref.stackId();
-                });
+        read(
+            () -> {
+              Organization org = new Organization();
+              org.name = orgName();
+              org.displayName = "Snapshot pruning";
+              org.persistAndFlush();
+              StackRef ref = stackCreator.create(org.id, orgName(), "proj", "dev", Map.of());
+              return ref.stackId();
+            });
   }
 
   @AfterEach
   void cleanup() {
-    QuarkusTransaction.requiringNew().run(() -> Organization.delete("name", orgName()));
+    tx(() -> Organization.delete("name", orgName()));
   }
 
   /**
@@ -78,38 +79,36 @@ abstract class AbstractSnapshotPruningTest {
     int version = ++updateVersion;
     long seq = ++sequence;
     UUID updateId =
-        QuarkusTransaction.requiringNew()
-            .call(
-                () -> {
-                  StackUpdate update = new StackUpdate();
-                  update.stackId = stackId;
-                  update.version = version;
-                  update.kind = StackUpdate.Kind.UPDATE;
-                  update.status = StackUpdate.Status.SUCCEEDED;
-                  update.startJournalSeq = seq - 1;
-                  update.endJournalSeq = seq;
-                  update.startedAt = Instant.now();
-                  update.persistAndFlush();
-                  return update.id;
-                });
-
-    QuarkusTransaction.requiringNew()
-        .run(
+        read(
             () -> {
-              JournalEntry entry = new JournalEntry();
-              entry.stackId = stackId;
-              entry.updateId = updateId;
-              entry.sequenceId = seq;
-              entry.wireSequenceId = seq;
-              entry.kind = (short) 1;
-              entry.operationId = seq;
-              entry.payload = readTree("{\"state\":" + resource(resourceName) + "}");
-              entry.persistAndFlush();
-
-              StackState state = StackState.find("stackId", stackId).<StackState>firstResult();
-              state.journalSeq = Math.max(state.journalSeq, seq);
-              state.journalEntriesSinceCompaction++;
+              StackUpdate update = new StackUpdate();
+              update.stackId = stackId;
+              update.version = version;
+              update.kind = StackUpdate.Kind.UPDATE;
+              update.status = StackUpdate.Status.SUCCEEDED;
+              update.startJournalSeq = seq - 1;
+              update.endJournalSeq = seq;
+              update.startedAt = Instant.now();
+              update.persistAndFlush();
+              return update.id;
             });
+
+    tx(
+        () -> {
+          JournalEntry entry = new JournalEntry();
+          entry.stackId = stackId;
+          entry.updateId = updateId;
+          entry.sequenceId = seq;
+          entry.wireSequenceId = seq;
+          entry.kind = (short) 1;
+          entry.operationId = seq;
+          entry.payload = readTree("{\"state\":" + resource(resourceName) + "}");
+          entry.persistAndFlush();
+
+          StackState state = StackState.find("stackId", stackId).<StackState>firstResult();
+          state.journalSeq = Math.max(state.journalSeq, seq);
+          state.journalEntriesSinceCompaction++;
+        });
 
     compact();
   }
@@ -118,57 +117,51 @@ abstract class AbstractSnapshotPruningTest {
   void importDeployment(String resourceName) {
     JsonNode deployment =
         readTree("{\"resources\":[" + resource(resourceName) + "],\"pending_operations\":[]}");
-    QuarkusTransaction.requiringNew()
-        .run(() -> importer.importDeployment(stackId, null, null, deployment));
+    tx(() -> importer.importDeployment(stackId, null, null, deployment));
     updateVersion++;
   }
 
   void compact() {
-    QuarkusTransaction.requiringNew().run(() -> enqueuer.enqueue(stackId));
+    tx(() -> enqueuer.enqueue(stackId));
     worker.drainOnce();
   }
 
   /** Re-runs retention against the settled state; a converged ladder must delete nothing. */
   int pruneAgain() {
-    return QuarkusTransaction.requiringNew()
-        .call(
-            () -> {
-              StackState state = StackState.find("stackId", stackId).<StackState>firstResult();
-              return pruner.prune(stackId, state.baseSnapshotId);
-            });
+    return read(
+        () -> {
+          StackState state = StackState.find("stackId", stackId).<StackState>firstResult();
+          return pruner.prune(stackId, state.baseSnapshotId);
+        });
   }
 
   CompactionJob latestJob() {
-    return QuarkusTransaction.requiringNew()
-        .call(
-            () ->
-                CompactionJob.<CompactionJob>find("stackId = ?1 order by createdAt desc", stackId)
-                    .firstResult());
+    return read(
+        () ->
+            CompactionJob.<CompactionJob>find("stackId = ?1 order by createdAt desc", stackId)
+                .firstResult());
   }
 
   /** Compaction boundaries of the surviving snapshots, ascending. */
   List<Long> snapshotBoundaries() {
-    return QuarkusTransaction.requiringNew()
-        .call(
-            () ->
-                Snapshot.<Snapshot>find("stackId", stackId)
-                    .project(SnapshotRetentionRow.class)
-                    .list()
-                    .stream()
-                    .map(SnapshotRetentionRow::compactedFromJournalSeq)
-                    .sorted()
-                    .toList());
+    return read(
+        () ->
+            Snapshot.<Snapshot>find("stackId", stackId)
+                .project(SnapshotRetentionRow.class)
+                .list()
+                .stream()
+                .map(SnapshotRetentionRow::compactedFromJournalSeq)
+                .sorted()
+                .toList());
   }
 
   JsonNode exportAt(long endJournalSeq, int version) {
     return DeploymentNormalizer.normalize(
-        QuarkusTransaction.requiringNew()
-            .call(() -> assembler.assembleAt(stackId, endJournalSeq, version).deployment()));
+        read(() -> assembler.assembleAt(stackId, endJournalSeq, version).deployment()));
   }
 
   JsonNode exportHead() {
-    return DeploymentNormalizer.normalize(
-        QuarkusTransaction.requiringNew().call(() -> assembler.assemble(stackId).deployment()));
+    return DeploymentNormalizer.normalize(read(() -> assembler.assemble(stackId).deployment()));
   }
 
   private static String resource(String name) {

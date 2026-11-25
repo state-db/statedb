@@ -1,5 +1,6 @@
 package app.statedb.app.stack;
 
+import static app.statedb.testsupport.TestTransactions.tx;
 import static io.restassured.RestAssured.given;
 import static org.hamcrest.Matchers.equalTo;
 import static org.hamcrest.Matchers.not;
@@ -9,7 +10,6 @@ import app.statedb.persistence.identity.OrgMember;
 import app.statedb.persistence.identity.Organization;
 import app.statedb.persistence.identity.User;
 import app.statedb.persistence.update.StackUpdate;
-import io.quarkus.narayana.jta.QuarkusTransaction;
 import io.quarkus.test.junit.QuarkusTest;
 import jakarta.inject.Inject;
 import jakarta.persistence.EntityManager;
@@ -41,53 +41,51 @@ class StackRenameContractTest {
 
   @BeforeEach
   void seed() {
-    QuarkusTransaction.requiringNew()
-        .run(
-            () -> {
-              Organization org = new Organization();
-              org.name = ORG_NAME;
-              org.displayName = "Stack Rename Test";
-              org.persistAndFlush();
+    tx(
+        () -> {
+          Organization org = new Organization();
+          org.name = ORG_NAME;
+          org.displayName = "Stack Rename Test";
+          org.persistAndFlush();
 
-              User user = new User();
-              user.iss = "local:test";
-              user.sub = "stack-rename";
-              user.email = "rename@example.com";
-              user.displayName = "Stack Rename Tester";
-              user.persistAndFlush();
+          User user = new User();
+          user.iss = "local:test";
+          user.sub = "stack-rename";
+          user.email = "rename@example.com";
+          user.displayName = "Stack Rename Tester";
+          user.persistAndFlush();
 
-              OrgMember m = new OrgMember();
-              m.orgId = org.id;
-              m.userId = user.id;
-              m.role = OrgMember.Role.owner;
-              m.persistAndFlush();
+          OrgMember m = new OrgMember();
+          m.orgId = org.id;
+          m.userId = user.id;
+          m.role = OrgMember.Role.owner;
+          m.persistAndFlush();
 
-              ApiToken t = new ApiToken();
-              t.tokenHash = sha256Hex(RAW_TOKEN);
-              t.userId = user.id;
-              t.orgId = org.id;
-              t.kind = ApiToken.Kind.service_account;
-              t.expiresAt = java.time.Instant.now().plusSeconds(60 * 60);
-              t.description = "stack-rename";
-              t.persistAndFlush();
-            });
+          ApiToken t = new ApiToken();
+          t.tokenHash = sha256Hex(RAW_TOKEN);
+          t.userId = user.id;
+          t.orgId = org.id;
+          t.kind = ApiToken.Kind.service_account;
+          t.expiresAt = java.time.Instant.now().plusSeconds(60 * 60);
+          t.description = "stack-rename";
+          t.persistAndFlush();
+        });
 
     createStack(STACK);
   }
 
   @AfterEach
   void cleanup() {
-    QuarkusTransaction.requiringNew()
-        .run(
-            () -> {
-              em.createNativeQuery("DELETE FROM organizations WHERE name = ?1")
-                  .setParameter(1, ORG_NAME)
-                  .executeUpdate();
-              em.createNativeQuery("DELETE FROM users WHERE iss = ?1 AND sub = ?2")
-                  .setParameter(1, "local:test")
-                  .setParameter(2, "stack-rename")
-                  .executeUpdate();
-            });
+    tx(
+        () -> {
+          em.createNativeQuery("DELETE FROM organizations WHERE name = ?1")
+              .setParameter(1, ORG_NAME)
+              .executeUpdate();
+          em.createNativeQuery("DELETE FROM users WHERE iss = ?1 AND sub = ?2")
+              .setParameter(1, "local:test")
+              .setParameter(2, "stack-rename")
+              .executeUpdate();
+        });
   }
 
   @Test
@@ -200,15 +198,14 @@ class StackRenameContractTest {
             .path("updateId");
 
     // The returned id must point at a terminal `rename` update — the audit record of the move.
-    QuarkusTransaction.requiringNew()
-        .run(
-            () -> {
-              StackUpdate update = StackUpdate.findById(UUID.fromString(updateId));
-              org.junit.jupiter.api.Assertions.assertNotNull(update, "rename recorded no update");
-              org.junit.jupiter.api.Assertions.assertEquals(StackUpdate.Kind.RENAME, update.kind);
-              org.junit.jupiter.api.Assertions.assertEquals(
-                  StackUpdate.Status.SUCCEEDED, update.status);
-            });
+    tx(
+        () -> {
+          StackUpdate update = StackUpdate.findById(UUID.fromString(updateId));
+          org.junit.jupiter.api.Assertions.assertNotNull(update, "rename recorded no update");
+          org.junit.jupiter.api.Assertions.assertEquals(StackUpdate.Kind.RENAME, update.kind);
+          org.junit.jupiter.api.Assertions.assertEquals(
+              StackUpdate.Status.SUCCEEDED, update.status);
+        });
   }
 
   @Test

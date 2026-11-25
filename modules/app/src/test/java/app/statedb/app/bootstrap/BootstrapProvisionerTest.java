@@ -1,5 +1,6 @@
 package app.statedb.app.bootstrap;
 
+import static app.statedb.testsupport.TestTransactions.tx;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
@@ -12,7 +13,6 @@ import app.statedb.persistence.identity.OrgMember;
 import app.statedb.persistence.identity.Organization;
 import app.statedb.persistence.identity.User;
 import io.quarkus.arc.Arc;
-import io.quarkus.narayana.jta.QuarkusTransaction;
 import io.quarkus.test.TestTransaction;
 import io.quarkus.test.junit.QuarkusTest;
 import jakarta.inject.Inject;
@@ -151,23 +151,22 @@ class BootstrapProvisionerTest {
       pool.shutdownNow();
     }
 
-    QuarkusTransaction.requiringNew()
-        .run(
-            () -> {
-              assertEquals(1, Organization.count("name", CONCURRENT_ORG));
-              Organization org = Organization.find("name", CONCURRENT_ORG).firstResult();
-              User user =
-                  User.find(
-                          "iss = ?1 and sub = ?2",
-                          BootstrapProvisioner.BOOTSTRAP_ISS,
-                          BootstrapProvisioner.BOOTSTRAP_SUB)
-                      .firstResult();
-              assertNotNull(user, "bootstrap user must exist");
-              assertEquals(
-                  1,
-                  OrgMember.count("orgId = ?1 and userId = ?2", org.id, user.id),
-                  "exactly one membership for org+user");
-            });
+    tx(
+        () -> {
+          assertEquals(1, Organization.count("name", CONCURRENT_ORG));
+          Organization org = Organization.find("name", CONCURRENT_ORG).firstResult();
+          User user =
+              User.find(
+                      "iss = ?1 and sub = ?2",
+                      BootstrapProvisioner.BOOTSTRAP_ISS,
+                      BootstrapProvisioner.BOOTSTRAP_SUB)
+                  .firstResult();
+          assertNotNull(user, "bootstrap user must exist");
+          assertEquals(
+              1,
+              OrgMember.count("orgId = ?1 and userId = ?2", org.id, user.id),
+              "exactly one membership for org+user");
+        });
   }
 
   /**
@@ -176,17 +175,16 @@ class BootstrapProvisionerTest {
    */
   @AfterEach
   void cleanupConcurrentBootstrapRows() {
-    QuarkusTransaction.requiringNew()
-        .run(
-            () -> {
-              em.createNativeQuery(
-                      "DELETE FROM org_members WHERE org_id IN"
-                          + " (SELECT id FROM organizations WHERE name = ?1)")
-                  .setParameter(1, CONCURRENT_ORG)
-                  .executeUpdate();
-              em.createNativeQuery("DELETE FROM organizations WHERE name = ?1")
-                  .setParameter(1, CONCURRENT_ORG)
-                  .executeUpdate();
-            });
+    tx(
+        () -> {
+          em.createNativeQuery(
+                  "DELETE FROM org_members WHERE org_id IN"
+                      + " (SELECT id FROM organizations WHERE name = ?1)")
+              .setParameter(1, CONCURRENT_ORG)
+              .executeUpdate();
+          em.createNativeQuery("DELETE FROM organizations WHERE name = ?1")
+              .setParameter(1, CONCURRENT_ORG)
+              .executeUpdate();
+        });
   }
 }

@@ -1,5 +1,7 @@
 package app.statedb.app.lock;
 
+import static app.statedb.testsupport.TestTransactions.read;
+import static app.statedb.testsupport.TestTransactions.tx;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
@@ -22,7 +24,6 @@ import app.statedb.persistence.update.StartUpdateRequest;
 import app.statedb.persistence.update.StartedUpdate;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import io.quarkus.narayana.jta.QuarkusTransaction;
 import io.quarkus.test.junit.QuarkusTest;
 import jakarta.inject.Inject;
 import jakarta.persistence.EntityManager;
@@ -52,26 +53,24 @@ class StackLockAcquirerTest {
   @BeforeEach
   void seed() {
     stackId =
-        QuarkusTransaction.requiringNew()
-            .call(
-                () -> {
-                  Organization org = new Organization();
-                  org.name = ORG_NAME;
-                  org.displayName = "Acquirer Test";
-                  org.persistAndFlush();
-                  StackRef ref = stackCreator.create(org.id, ORG_NAME, "proj", "dev", Map.of());
-                  return ref.stackId();
-                });
+        read(
+            () -> {
+              Organization org = new Organization();
+              org.name = ORG_NAME;
+              org.displayName = "Acquirer Test";
+              org.persistAndFlush();
+              StackRef ref = stackCreator.create(org.id, ORG_NAME, "proj", "dev", Map.of());
+              return ref.stackId();
+            });
   }
 
   @AfterEach
   void cleanup() {
-    QuarkusTransaction.requiringNew()
-        .run(
-            () ->
-                em.createNativeQuery("DELETE FROM organizations WHERE name = ?1")
-                    .setParameter(1, ORG_NAME)
-                    .executeUpdate());
+    tx(
+        () ->
+            em.createNativeQuery("DELETE FROM organizations WHERE name = ?1")
+                .setParameter(1, ORG_NAME)
+                .executeUpdate());
   }
 
   @Test
@@ -147,12 +146,11 @@ class StackLockAcquirerTest {
     UUID firstUpdateId = startUpdate("k-orig");
     Lease first = acquirer.acquire(stackId, firstUpdateId, "user:a", null, null).orElseThrow();
 
-    QuarkusTransaction.requiringNew()
-        .run(
-            () -> {
-              StackLock lock = StackLock.find("stackId", stackId).<StackLock>singleResult();
-              lock.expiresAt = Instant.now().minusSeconds(1);
-            });
+    tx(
+        () -> {
+          StackLock lock = StackLock.find("stackId", stackId).<StackLock>singleResult();
+          lock.expiresAt = Instant.now().minusSeconds(1);
+        });
 
     UUID secondUpdateId = startUpdate("k-stolen");
     Lease second = acquirer.acquire(stackId, secondUpdateId, "user:b", null, null).orElseThrow();
@@ -171,12 +169,11 @@ class StackLockAcquirerTest {
     UUID firstUpdateId = startUpdate("k-abandoned");
     acquirer.acquire(stackId, firstUpdateId, "user:a", null, null).orElseThrow();
 
-    QuarkusTransaction.requiringNew()
-        .run(
-            () -> {
-              StackLock lock = StackLock.find("stackId", stackId).<StackLock>singleResult();
-              lock.expiresAt = Instant.now().minusSeconds(1);
-            });
+    tx(
+        () -> {
+          StackLock lock = StackLock.find("stackId", stackId).<StackLock>singleResult();
+          lock.expiresAt = Instant.now().minusSeconds(1);
+        });
 
     UUID secondUpdateId = startUpdate("k-taken-over");
     acquirer.acquire(stackId, secondUpdateId, "user:b", null, null).orElseThrow();
@@ -195,12 +192,11 @@ class StackLockAcquirerTest {
     UUID firstUpdateId = startUpdate("k-old-append");
     Lease first = acquirer.acquire(stackId, firstUpdateId, "user:a", null, null).orElseThrow();
 
-    QuarkusTransaction.requiringNew()
-        .run(
-            () -> {
-              StackLock lock = StackLock.find("stackId", stackId).<StackLock>singleResult();
-              lock.expiresAt = Instant.now().minusSeconds(1);
-            });
+    tx(
+        () -> {
+          StackLock lock = StackLock.find("stackId", stackId).<StackLock>singleResult();
+          lock.expiresAt = Instant.now().minusSeconds(1);
+        });
 
     UUID secondUpdateId = startUpdate("k-new-owner");
     assertTrue(acquirer.acquire(stackId, secondUpdateId, "user:b", null, null).isPresent());
@@ -222,17 +218,16 @@ class StackLockAcquirerTest {
     UUID updateId = startUpdate("k-cascade");
     acquirer.acquire(stackId, updateId, "user:a", null, null).orElseThrow();
 
-    QuarkusTransaction.requiringNew()
-        .run(
-            () -> {
-              // Break the deferred FK to stack_updates first by clearing active_update_id.
-              em.createNativeQuery("UPDATE stacks SET active_update_id = NULL WHERE id = ?1")
-                  .setParameter(1, stackId)
-                  .executeUpdate();
-              em.createNativeQuery("DELETE FROM stacks WHERE id = ?1")
-                  .setParameter(1, stackId)
-                  .executeUpdate();
-            });
+    tx(
+        () -> {
+          // Break the deferred FK to stack_updates first by clearing active_update_id.
+          em.createNativeQuery("UPDATE stacks SET active_update_id = NULL WHERE id = ?1")
+              .setParameter(1, stackId)
+              .executeUpdate();
+          em.createNativeQuery("DELETE FROM stacks WHERE id = ?1")
+              .setParameter(1, stackId)
+              .executeUpdate();
+        });
 
     Number n =
         (Number)

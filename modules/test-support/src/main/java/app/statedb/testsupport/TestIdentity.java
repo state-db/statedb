@@ -1,10 +1,11 @@
 package app.statedb.testsupport;
 
+import static app.statedb.testsupport.TestTransactions.tx;
+
 import app.statedb.persistence.auth.ApiToken;
 import app.statedb.persistence.identity.OrgMember;
 import app.statedb.persistence.identity.Organization;
 import app.statedb.persistence.identity.User;
-import io.quarkus.narayana.jta.QuarkusTransaction;
 import jakarta.persistence.EntityManager;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
@@ -27,51 +28,49 @@ public final class TestIdentity {
   /** Wipes the canonical identity and seeds it fresh. Idempotent. */
   public static void seed(EntityManager em, String rawToken) {
     cleanup(em);
-    QuarkusTransaction.requiringNew()
-        .run(
-            () -> {
-              Organization org = new Organization();
-              org.name = ORG;
-              org.displayName = ORG;
-              org.persistAndFlush();
+    tx(
+        () -> {
+          Organization org = new Organization();
+          org.name = ORG;
+          org.displayName = ORG;
+          org.persistAndFlush();
 
-              User user = new User();
-              user.iss = USER_ISS;
-              user.sub = USER_SUB;
-              user.email = "test@example.com";
-              user.displayName = "Test User";
-              user.persistAndFlush();
+          User user = new User();
+          user.iss = USER_ISS;
+          user.sub = USER_SUB;
+          user.email = "test@example.com";
+          user.displayName = "Test User";
+          user.persistAndFlush();
 
-              OrgMember member = new OrgMember();
-              member.orgId = org.id;
-              member.userId = user.id;
-              member.role = OrgMember.Role.owner;
-              member.persistAndFlush();
+          OrgMember member = new OrgMember();
+          member.orgId = org.id;
+          member.userId = user.id;
+          member.role = OrgMember.Role.owner;
+          member.persistAndFlush();
 
-              ApiToken token = new ApiToken();
-              token.tokenHash = sha256Hex(rawToken);
-              token.userId = user.id;
-              token.orgId = org.id;
-              token.kind = ApiToken.Kind.service_account;
-              token.expiresAt = java.time.Instant.now().plusSeconds(60 * 60);
-              token.description = "test fixture";
-              token.persistAndFlush();
-            });
+          ApiToken token = new ApiToken();
+          token.tokenHash = sha256Hex(rawToken);
+          token.userId = user.id;
+          token.orgId = org.id;
+          token.kind = ApiToken.Kind.service_account;
+          token.expiresAt = java.time.Instant.now().plusSeconds(60 * 60);
+          token.description = "test fixture";
+          token.persistAndFlush();
+        });
   }
 
   /** Deletes the canonical identity rows. Safe to call when nothing has been seeded yet. */
   public static void cleanup(EntityManager em) {
-    QuarkusTransaction.requiringNew()
-        .run(
-            () -> {
-              em.createNativeQuery("DELETE FROM organizations WHERE name = ?1")
-                  .setParameter(1, ORG)
-                  .executeUpdate();
-              em.createNativeQuery("DELETE FROM users WHERE iss = ?1 AND sub = ?2")
-                  .setParameter(1, USER_ISS)
-                  .setParameter(2, USER_SUB)
-                  .executeUpdate();
-            });
+    tx(
+        () -> {
+          em.createNativeQuery("DELETE FROM organizations WHERE name = ?1")
+              .setParameter(1, ORG)
+              .executeUpdate();
+          em.createNativeQuery("DELETE FROM users WHERE iss = ?1 AND sub = ?2")
+              .setParameter(1, USER_ISS)
+              .setParameter(2, USER_SUB)
+              .executeUpdate();
+        });
   }
 
   public static String sha256Hex(String input) {

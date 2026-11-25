@@ -1,5 +1,6 @@
 package app.statedb.app.auth;
 
+import static app.statedb.testsupport.TestTransactions.tx;
 import static io.restassured.RestAssured.given;
 import static org.hamcrest.Matchers.equalTo;
 
@@ -7,7 +8,6 @@ import app.statedb.persistence.auth.ApiToken;
 import app.statedb.persistence.identity.OrgMember;
 import app.statedb.persistence.identity.Organization;
 import app.statedb.persistence.identity.User;
-import io.quarkus.narayana.jta.QuarkusTransaction;
 import io.quarkus.test.junit.QuarkusTest;
 import jakarta.inject.Inject;
 import jakarta.persistence.EntityManager;
@@ -35,53 +35,48 @@ class TokenAuthFilterTest {
 
   @BeforeEach
   void seed() {
-    QuarkusTransaction.requiringNew()
-        .run(
-            () -> {
-              Organization org = new Organization();
-              org.name = ORG_NAME;
-              org.displayName = "Auth Filter Test";
-              org.persistAndFlush();
+    tx(
+        () -> {
+          Organization org = new Organization();
+          org.name = ORG_NAME;
+          org.displayName = "Auth Filter Test";
+          org.persistAndFlush();
 
-              User user = new User();
-              user.iss = "local:test";
-              user.sub = "auth-filter";
-              user.email = "auth@example.com";
-              user.displayName = "Auth Tester";
-              user.persistAndFlush();
+          User user = new User();
+          user.iss = "local:test";
+          user.sub = "auth-filter";
+          user.email = "auth@example.com";
+          user.displayName = "Auth Tester";
+          user.persistAndFlush();
 
-              OrgMember m = new OrgMember();
-              m.orgId = org.id;
-              m.userId = user.id;
-              m.role = OrgMember.Role.owner;
-              m.persistAndFlush();
+          OrgMember m = new OrgMember();
+          m.orgId = org.id;
+          m.userId = user.id;
+          m.role = OrgMember.Role.owner;
+          m.persistAndFlush();
 
-              insertToken(
-                  user.id,
-                  org.id,
-                  sha256Hex(VALID_RAW_TOKEN),
-                  Instant.now().plus(1, ChronoUnit.HOURS));
-              insertToken(
-                  user.id,
-                  org.id,
-                  sha256Hex(EXPIRED_RAW_TOKEN),
-                  Instant.now().minus(1, ChronoUnit.MINUTES));
-            });
+          insertToken(
+              user.id, org.id, sha256Hex(VALID_RAW_TOKEN), Instant.now().plus(1, ChronoUnit.HOURS));
+          insertToken(
+              user.id,
+              org.id,
+              sha256Hex(EXPIRED_RAW_TOKEN),
+              Instant.now().minus(1, ChronoUnit.MINUTES));
+        });
   }
 
   @AfterEach
   void cleanup() {
-    QuarkusTransaction.requiringNew()
-        .run(
-            () -> {
-              em.createNativeQuery("DELETE FROM organizations WHERE name = ?1")
-                  .setParameter(1, ORG_NAME)
-                  .executeUpdate();
-              em.createNativeQuery("DELETE FROM users WHERE iss = ?1 AND sub = ?2")
-                  .setParameter(1, "local:test")
-                  .setParameter(2, "auth-filter")
-                  .executeUpdate();
-            });
+    tx(
+        () -> {
+          em.createNativeQuery("DELETE FROM organizations WHERE name = ?1")
+              .setParameter(1, ORG_NAME)
+              .executeUpdate();
+          em.createNativeQuery("DELETE FROM users WHERE iss = ?1 AND sub = ?2")
+              .setParameter(1, "local:test")
+              .setParameter(2, "auth-filter")
+              .executeUpdate();
+        });
   }
 
   @Test
@@ -121,14 +116,13 @@ class TokenAuthFilterTest {
 
   @Test
   void revokedMembershipReturns401() {
-    QuarkusTransaction.requiringNew()
-        .run(
-            () ->
-                em.createNativeQuery(
-                        "DELETE FROM org_members WHERE org_id ="
-                            + " (SELECT id FROM organizations WHERE name = ?1)")
-                    .setParameter(1, ORG_NAME)
-                    .executeUpdate());
+    tx(
+        () ->
+            em.createNativeQuery(
+                    "DELETE FROM org_members WHERE org_id ="
+                        + " (SELECT id FROM organizations WHERE name = ?1)")
+                .setParameter(1, ORG_NAME)
+                .executeUpdate());
 
     given()
         .header("Authorization", "token " + VALID_RAW_TOKEN)
@@ -161,14 +155,13 @@ class TokenAuthFilterTest {
         .then()
         .statusCode(200);
 
-    QuarkusTransaction.requiringNew()
-        .run(
-            () -> {
-              ApiToken token =
-                  ApiToken.<ApiToken>find("tokenHash", sha256Hex(VALID_RAW_TOKEN)).firstResult();
-              org.junit.jupiter.api.Assertions.assertNotNull(
-                  token.lastUsedAt, "auth must record last_used_at");
-            });
+    tx(
+        () -> {
+          ApiToken token =
+              ApiToken.<ApiToken>find("tokenHash", sha256Hex(VALID_RAW_TOKEN)).firstResult();
+          org.junit.jupiter.api.Assertions.assertNotNull(
+              token.lastUsedAt, "auth must record last_used_at");
+        });
   }
 
   @Test

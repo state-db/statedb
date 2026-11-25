@@ -1,5 +1,6 @@
 package app.statedb.app.console;
 
+import static app.statedb.testsupport.TestTransactions.tx;
 import static io.restassured.RestAssured.given;
 import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.equalTo;
@@ -8,7 +9,6 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 
 import app.statedb.persistence.identity.OidcProvider;
 import app.statedb.persistence.identity.User;
-import io.quarkus.narayana.jta.QuarkusTransaction;
 import io.quarkus.test.common.QuarkusTestResource;
 import io.quarkus.test.junit.QuarkusTest;
 import io.quarkus.test.junit.QuarkusTestProfile;
@@ -44,35 +44,33 @@ class CliLoginWithoutDefaultProviderTest {
 
   @BeforeEach
   void seedProviders() {
-    QuarkusTransaction.requiringNew()
-        .run(
-            () -> {
-              OidcProvider.delete("name in ?1", PROVIDERS);
-              for (String name : PROVIDERS) {
-                OidcProvider p = new OidcProvider();
-                p.name = name;
-                p.issuerUrl =
-                    name.equals(PROVIDERS.get(1))
-                        ? ConfigProvider.getConfig().getValue("keycloak.url", String.class)
-                            + "/realms/quarkus"
-                        : "https://" + name + ".example";
-                p.clientId = "quarkus-app";
-                p.clientSecret = "secret";
-                p.scopes = List.of("openid");
-                p.enabled = true;
-                p.persist();
-              }
-            });
+    tx(
+        () -> {
+          OidcProvider.delete("name in ?1", PROVIDERS);
+          for (String name : PROVIDERS) {
+            OidcProvider p = new OidcProvider();
+            p.name = name;
+            p.issuerUrl =
+                name.equals(PROVIDERS.get(1))
+                    ? ConfigProvider.getConfig().getValue("keycloak.url", String.class)
+                        + "/realms/quarkus"
+                    : "https://" + name + ".example";
+            p.clientId = "quarkus-app";
+            p.clientSecret = "secret";
+            p.scopes = List.of("openid");
+            p.enabled = true;
+            p.persist();
+          }
+        });
   }
 
   @AfterEach
   void cleanup() {
-    QuarkusTransaction.requiringNew()
-        .run(
-            () -> {
-              OidcProvider.delete("name in ?1", PROVIDERS);
-              User.delete("iss = ?1 and sub = ?2", "https://server.example.com", "123456");
-            });
+    tx(
+        () -> {
+          OidcProvider.delete("name in ?1", PROVIDERS);
+          User.delete("iss = ?1 and sub = ?2", "https://server.example.com", "123456");
+        });
   }
 
   @Test

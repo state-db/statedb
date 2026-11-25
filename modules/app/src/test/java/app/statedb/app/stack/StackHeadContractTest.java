@@ -1,5 +1,7 @@
 package app.statedb.app.stack;
 
+import static app.statedb.testsupport.TestTransactions.read;
+import static app.statedb.testsupport.TestTransactions.tx;
 import static io.restassured.RestAssured.given;
 import static org.hamcrest.Matchers.equalTo;
 import static org.hamcrest.Matchers.hasKey;
@@ -16,7 +18,6 @@ import app.statedb.persistence.stack.StackCreator;
 import app.statedb.persistence.stack.StackState;
 import app.statedb.persistence.stack.Workspace;
 import app.statedb.persistence.update.StackUpdate;
-import io.quarkus.narayana.jta.QuarkusTransaction;
 import io.quarkus.test.junit.QuarkusTest;
 import jakarta.inject.Inject;
 import jakarta.persistence.EntityManager;
@@ -48,57 +49,55 @@ class StackHeadContractTest {
 
   @BeforeEach
   void seed() {
-    QuarkusTransaction.requiringNew()
-        .run(
-            () -> {
-              Organization org = new Organization();
-              org.name = ORG_NAME;
-              org.displayName = "Stack Head Test";
-              org.persistAndFlush();
+    tx(
+        () -> {
+          Organization org = new Organization();
+          org.name = ORG_NAME;
+          org.displayName = "Stack Head Test";
+          org.persistAndFlush();
 
-              Organization other = new Organization();
-              other.name = OTHER_ORG_NAME;
-              other.displayName = "Other Org";
-              other.persistAndFlush();
+          Organization other = new Organization();
+          other.name = OTHER_ORG_NAME;
+          other.displayName = "Other Org";
+          other.persistAndFlush();
 
-              User user = new User();
-              user.iss = "local:test";
-              user.sub = "stack-head";
-              user.email = "head@example.com";
-              user.displayName = "Stack Head Tester";
-              user.persistAndFlush();
+          User user = new User();
+          user.iss = "local:test";
+          user.sub = "stack-head";
+          user.email = "head@example.com";
+          user.displayName = "Stack Head Tester";
+          user.persistAndFlush();
 
-              OrgMember m = new OrgMember();
-              m.orgId = org.id;
-              m.userId = user.id;
-              m.role = OrgMember.Role.owner;
-              m.persistAndFlush();
+          OrgMember m = new OrgMember();
+          m.orgId = org.id;
+          m.userId = user.id;
+          m.role = OrgMember.Role.owner;
+          m.persistAndFlush();
 
-              ApiToken t = new ApiToken();
-              t.tokenHash = sha256Hex(RAW_TOKEN);
-              t.userId = user.id;
-              t.orgId = org.id;
-              t.kind = ApiToken.Kind.service_account;
-              t.expiresAt = java.time.Instant.now().plusSeconds(60 * 60);
-              t.description = "stack-head";
-              t.persistAndFlush();
-            });
+          ApiToken t = new ApiToken();
+          t.tokenHash = sha256Hex(RAW_TOKEN);
+          t.userId = user.id;
+          t.orgId = org.id;
+          t.kind = ApiToken.Kind.service_account;
+          t.expiresAt = java.time.Instant.now().plusSeconds(60 * 60);
+          t.description = "stack-head";
+          t.persistAndFlush();
+        });
   }
 
   @AfterEach
   void cleanup() {
-    QuarkusTransaction.requiringNew()
-        .run(
-            () -> {
-              em.createNativeQuery("DELETE FROM organizations WHERE name IN (?1, ?2)")
-                  .setParameter(1, ORG_NAME)
-                  .setParameter(2, OTHER_ORG_NAME)
-                  .executeUpdate();
-              em.createNativeQuery("DELETE FROM users WHERE iss = ?1 AND sub = ?2")
-                  .setParameter(1, "local:test")
-                  .setParameter(2, "stack-head")
-                  .executeUpdate();
-            });
+    tx(
+        () -> {
+          em.createNativeQuery("DELETE FROM organizations WHERE name IN (?1, ?2)")
+              .setParameter(1, ORG_NAME)
+              .setParameter(2, OTHER_ORG_NAME)
+              .executeUpdate();
+          em.createNativeQuery("DELETE FROM users WHERE iss = ?1 AND sub = ?2")
+              .setParameter(1, "local:test")
+              .setParameter(2, "stack-head")
+              .executeUpdate();
+        });
   }
 
   @Test
@@ -155,34 +154,33 @@ class StackHeadContractTest {
 
   @Test
   void sameNamesAcrossOrgsResolveOwnStackAndHideOther() {
-    QuarkusTransaction.requiringNew()
-        .run(
-            () -> {
-              Organization org = Organization.find("name", ORG_NAME).<Organization>firstResult();
-              stackCreator.create(
-                  org.id, ORG_NAME, "shared-proj", "shared-stack", Map.of("tenant", "authorized"));
+    tx(
+        () -> {
+          Organization org = Organization.find("name", ORG_NAME).<Organization>firstResult();
+          stackCreator.create(
+              org.id, ORG_NAME, "shared-proj", "shared-stack", Map.of("tenant", "authorized"));
 
-              Organization other =
-                  Organization.find("name", OTHER_ORG_NAME).<Organization>firstResult();
-              Project p = new Project();
-              p.orgId = other.id;
-              p.name = "shared-proj";
-              p.persistAndFlush();
-              Workspace w = new Workspace();
-              w.orgId = other.id;
-              w.kind = Workspace.Kind.pulumi;
-              w.persistAndFlush();
-              Stack s = new Stack();
-              s.orgId = other.id;
-              s.projectId = p.id;
-              s.name = "shared-stack";
-              s.workspaceId = w.id;
-              s.tags = Map.of("tenant", "hidden");
-              s.persistAndFlush();
-              StackState st = new StackState();
-              st.stackId = s.id;
-              st.persistAndFlush();
-            });
+          Organization other =
+              Organization.find("name", OTHER_ORG_NAME).<Organization>firstResult();
+          Project p = new Project();
+          p.orgId = other.id;
+          p.name = "shared-proj";
+          p.persistAndFlush();
+          Workspace w = new Workspace();
+          w.orgId = other.id;
+          w.kind = Workspace.Kind.pulumi;
+          w.persistAndFlush();
+          Stack s = new Stack();
+          s.orgId = other.id;
+          s.projectId = p.id;
+          s.name = "shared-stack";
+          s.workspaceId = w.id;
+          s.tags = Map.of("tenant", "hidden");
+          s.persistAndFlush();
+          StackState st = new StackState();
+          st.stackId = s.id;
+          st.persistAndFlush();
+        });
 
     given()
         .header("Authorization", "token " + RAW_TOKEN)
@@ -214,28 +212,25 @@ class StackHeadContractTest {
   @Test
   void activeUpdateReturnsCurrentUpdateId() {
     UUID updateId =
-        QuarkusTransaction.requiringNew()
-            .call(
-                () -> {
-                  Organization org =
-                      Organization.<Organization>find("name", ORG_NAME).singleResult();
-                  stackCreator.create(org.id, ORG_NAME, PROJECT, STACK, Map.of());
-                  Project p =
-                      Project.<Project>find("orgId = ?1 and name = ?2", org.id, PROJECT)
-                          .singleResult();
-                  Stack s =
-                      Stack.<Stack>find("projectId = ?1 and name = ?2", p.id, STACK).singleResult();
-                  StackUpdate u = new StackUpdate();
-                  u.stackId = s.id;
-                  u.kind = StackUpdate.Kind.UPDATE;
-                  u.status = StackUpdate.Status.IN_PROGRESS;
-                  u.version = 0;
-                  u.dryRun = false;
-                  u.startedAt = Instant.now();
-                  u.persistAndFlush();
-                  s.activeUpdateId = u.id;
-                  return u.id;
-                });
+        read(
+            () -> {
+              Organization org = Organization.<Organization>find("name", ORG_NAME).singleResult();
+              stackCreator.create(org.id, ORG_NAME, PROJECT, STACK, Map.of());
+              Project p =
+                  Project.<Project>find("orgId = ?1 and name = ?2", org.id, PROJECT).singleResult();
+              Stack s =
+                  Stack.<Stack>find("projectId = ?1 and name = ?2", p.id, STACK).singleResult();
+              StackUpdate u = new StackUpdate();
+              u.stackId = s.id;
+              u.kind = StackUpdate.Kind.UPDATE;
+              u.status = StackUpdate.Status.IN_PROGRESS;
+              u.version = 0;
+              u.dryRun = false;
+              u.startedAt = Instant.now();
+              u.persistAndFlush();
+              s.activeUpdateId = u.id;
+              return u.id;
+            });
 
     given()
         .header("Authorization", "token " + RAW_TOKEN)

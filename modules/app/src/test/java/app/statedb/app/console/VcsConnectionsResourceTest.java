@@ -1,5 +1,6 @@
 package app.statedb.app.console;
 
+import static app.statedb.testsupport.TestTransactions.tx;
 import static io.restassured.RestAssured.given;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
@@ -9,7 +10,6 @@ import app.statedb.persistence.identity.OrgMember;
 import app.statedb.persistence.identity.Organization;
 import app.statedb.persistence.identity.User;
 import app.statedb.testsupport.InMemoryGitHubAppManager;
-import io.quarkus.narayana.jta.QuarkusTransaction;
 import io.quarkus.test.common.QuarkusTestResource;
 import io.quarkus.test.junit.QuarkusTest;
 import io.quarkus.test.oidc.server.OidcWiremockTestResource;
@@ -45,25 +45,23 @@ class VcsConnectionsResourceTest {
             "test-client",
             "test-secret"));
     OidcConsoleSessionFixture.seedProvider();
-    QuarkusTransaction.requiringNew()
-        .run(
-            () -> {
-              Organization org = new Organization();
-              org.name = ORG;
-              org.displayName = "VCS Console Test";
-              org.persistAndFlush();
-            });
+    tx(
+        () -> {
+          Organization org = new Organization();
+          org.name = ORG;
+          org.displayName = "VCS Console Test";
+          org.persistAndFlush();
+        });
   }
 
   @AfterEach
   void cleanup() {
-    QuarkusTransaction.requiringNew()
-        .run(
-            () -> {
-              Organization.delete("name", ORG);
-              app.statedb.persistence.vcs.VcsAppRegistration.deleteAll();
-              User.delete("iss", "local:service");
-            });
+    tx(
+        () -> {
+          Organization.delete("name", ORG);
+          app.statedb.persistence.vcs.VcsAppRegistration.deleteAll();
+          User.delete("iss", "local:service");
+        });
     OidcConsoleSessionFixture.cleanup();
   }
 
@@ -166,13 +164,12 @@ class VcsConnectionsResourceTest {
   void membershipIsRecheckedAfterReturningFromGithub() {
     Cookie session = establishSession(OrgMember.Role.owner);
     String oauth = install(session, begin(session), 9876);
-    QuarkusTransaction.requiringNew()
-        .run(
-            () ->
-                OrgMember.update(
-                    "role = ?1 where orgId = ?2",
-                    OrgMember.Role.member,
-                    Organization.<Organization>find("name", ORG).firstResult().id));
+    tx(
+        () ->
+            OrgMember.update(
+                "role = ?1 where orgId = ?2",
+                OrgMember.Role.member,
+                Organization.<Organization>find("name", ORG).firstResult().id));
     given()
         .cookie(session)
         .queryParam("state", oauth)
@@ -288,23 +285,22 @@ class VcsConnectionsResourceTest {
 
   private Cookie establishSession(OrgMember.Role role) {
     Cookie session = OidcConsoleSessionFixture.login();
-    QuarkusTransaction.requiringNew()
-        .run(
-            () -> {
-              User user =
-                  User.<User>find(
-                          "iss = ?1 and sub = ?2",
-                          OidcConsoleSessionFixture.FIXTURE_ISS,
-                          OidcConsoleSessionFixture.FIXTURE_SUB)
-                      .firstResult();
-              assertNotNull(user);
-              Organization org = Organization.<Organization>find("name", ORG).firstResult();
-              OrgMember member = new OrgMember();
-              member.orgId = org.id;
-              member.userId = user.id;
-              member.role = role;
-              member.persistAndFlush();
-            });
+    tx(
+        () -> {
+          User user =
+              User.<User>find(
+                      "iss = ?1 and sub = ?2",
+                      OidcConsoleSessionFixture.FIXTURE_ISS,
+                      OidcConsoleSessionFixture.FIXTURE_SUB)
+                  .firstResult();
+          assertNotNull(user);
+          Organization org = Organization.<Organization>find("name", ORG).firstResult();
+          OrgMember member = new OrgMember();
+          member.orgId = org.id;
+          member.userId = user.id;
+          member.role = role;
+          member.persistAndFlush();
+        });
     return session;
   }
 }

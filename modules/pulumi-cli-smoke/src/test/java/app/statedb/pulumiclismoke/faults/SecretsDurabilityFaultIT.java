@@ -1,5 +1,6 @@
 package app.statedb.pulumiclismoke.faults;
 
+import static app.statedb.testsupport.TestTransactions.tx;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
 import app.statedb.persistence.stack.CompactionJobEnqueuer;
@@ -7,7 +8,6 @@ import app.statedb.persistence.stack.CompactionWorker;
 import app.statedb.testsupport.pulumi.DeploymentNormalizer;
 import app.statedb.testsupport.pulumi.PulumiDeploymentAssert;
 import com.fasterxml.jackson.databind.JsonNode;
-import io.quarkus.narayana.jta.QuarkusTransaction;
 import io.quarkus.test.junit.QuarkusTest;
 import jakarta.inject.Inject;
 import java.util.UUID;
@@ -58,7 +58,7 @@ class SecretsDurabilityFaultIT extends PulumiFaultBase {
     JsonNode exportBefore = execJson("pulumi stack export");
     PulumiDeploymentAssert.assertIntegrityPasses(exportBefore);
 
-    QuarkusTransaction.requiringNew().run(() -> enqueuer.enqueue(stackId));
+    tx(() -> enqueuer.enqueue(stackId));
     assertEquals(1, worker.drainOnce(), "compaction should process the enqueued job");
 
     JsonNode exportAfter = execJson("pulumi stack export");

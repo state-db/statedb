@@ -1,5 +1,7 @@
 package app.statedb.app.update;
 
+import static app.statedb.testsupport.TestTransactions.read;
+import static app.statedb.testsupport.TestTransactions.tx;
 import static io.restassured.RestAssured.given;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
@@ -13,7 +15,6 @@ import app.statedb.persistence.lock.StackLock;
 import app.statedb.persistence.stack.Stack;
 import app.statedb.persistence.stack.StackCreator;
 import app.statedb.persistence.update.StackUpdate;
-import io.quarkus.narayana.jta.QuarkusTransaction;
 import io.quarkus.test.junit.QuarkusTest;
 import jakarta.inject.Inject;
 import jakarta.persistence.EntityManager;
@@ -40,53 +41,51 @@ class ForcedCancelContractTest {
 
   @BeforeEach
   void seed() {
-    QuarkusTransaction.requiringNew()
-        .run(
-            () -> {
-              Organization org = new Organization();
-              org.name = ORG;
-              org.displayName = "Forced Cancel Test";
-              org.persistAndFlush();
+    tx(
+        () -> {
+          Organization org = new Organization();
+          org.name = ORG;
+          org.displayName = "Forced Cancel Test";
+          org.persistAndFlush();
 
-              User user = new User();
-              user.iss = "local:test";
-              user.sub = "forced-cancel";
-              user.email = "forced-cancel@example.com";
-              user.displayName = "Forced Cancel Tester";
-              user.persistAndFlush();
+          User user = new User();
+          user.iss = "local:test";
+          user.sub = "forced-cancel";
+          user.email = "forced-cancel@example.com";
+          user.displayName = "Forced Cancel Tester";
+          user.persistAndFlush();
 
-              OrgMember m = new OrgMember();
-              m.orgId = org.id;
-              m.userId = user.id;
-              m.role = OrgMember.Role.owner;
-              m.persistAndFlush();
+          OrgMember m = new OrgMember();
+          m.orgId = org.id;
+          m.userId = user.id;
+          m.role = OrgMember.Role.owner;
+          m.persistAndFlush();
 
-              ApiToken t = new ApiToken();
-              t.tokenHash = sha256Hex(RAW_TOKEN);
-              t.userId = user.id;
-              t.orgId = org.id;
-              t.kind = ApiToken.Kind.service_account;
-              t.expiresAt = java.time.Instant.now().plusSeconds(60 * 60);
-              t.description = "forced cancel";
-              t.persistAndFlush();
+          ApiToken t = new ApiToken();
+          t.tokenHash = sha256Hex(RAW_TOKEN);
+          t.userId = user.id;
+          t.orgId = org.id;
+          t.kind = ApiToken.Kind.service_account;
+          t.expiresAt = java.time.Instant.now().plusSeconds(60 * 60);
+          t.description = "forced cancel";
+          t.persistAndFlush();
 
-              stackCreator.create(org.id, ORG, PROJECT, STACK, Map.of());
-            });
+          stackCreator.create(org.id, ORG, PROJECT, STACK, Map.of());
+        });
   }
 
   @AfterEach
   void cleanup() {
-    QuarkusTransaction.requiringNew()
-        .run(
-            () -> {
-              em.createNativeQuery("DELETE FROM organizations WHERE name = ?1")
-                  .setParameter(1, ORG)
-                  .executeUpdate();
-              em.createNativeQuery("DELETE FROM users WHERE iss = ?1 AND sub = ?2")
-                  .setParameter(1, "local:test")
-                  .setParameter(2, "forced-cancel")
-                  .executeUpdate();
-            });
+    tx(
+        () -> {
+          em.createNativeQuery("DELETE FROM organizations WHERE name = ?1")
+              .setParameter(1, ORG)
+              .executeUpdate();
+          em.createNativeQuery("DELETE FROM users WHERE iss = ?1 AND sub = ?2")
+              .setParameter(1, "local:test")
+              .setParameter(2, "forced-cancel")
+              .executeUpdate();
+        });
   }
 
   @Test
@@ -253,41 +252,37 @@ class ForcedCancelContractTest {
   }
 
   private StackUpdate.Status updateStatus(String updateId) {
-    return QuarkusTransaction.requiringNew()
-        .call(() -> StackUpdate.<StackUpdate>findById(UUID.fromString(updateId)).status);
+    return read(() -> StackUpdate.<StackUpdate>findById(UUID.fromString(updateId)).status);
   }
 
   private UUID activeUpdateId() {
-    return QuarkusTransaction.requiringNew()
-        .call(
-            () ->
-                Stack.<Stack>find(
-                        "project.organization.name = ?1 and project.name = ?2 and name = ?3",
-                        ORG,
-                        PROJECT,
-                        STACK)
-                    .singleResult()
-                    .activeUpdateId);
+    return read(
+        () ->
+            Stack.<Stack>find(
+                    "project.organization.name = ?1 and project.name = ?2 and name = ?3",
+                    ORG,
+                    PROJECT,
+                    STACK)
+                .singleResult()
+                .activeUpdateId);
   }
 
   private long lockCount() {
-    return QuarkusTransaction.requiringNew().call(() -> StackLock.count("stackId", stackId()));
+    return read(() -> StackLock.count("stackId", stackId()));
   }
 
   private long journalEntryCount(String updateId) {
-    return QuarkusTransaction.requiringNew()
-        .call(
-            () ->
-                JournalEntry.count(
-                    "stackId = ?1 and updateId = ?2", stackId(), UUID.fromString(updateId)));
+    return read(
+        () ->
+            JournalEntry.count(
+                "stackId = ?1 and updateId = ?2", stackId(), UUID.fromString(updateId)));
   }
 
   private long updateEventCount(String updateId) {
-    return QuarkusTransaction.requiringNew()
-        .call(
-            () ->
-                UpdateEvent.count(
-                    "stackId = ?1 and updateId = ?2", stackId(), UUID.fromString(updateId)));
+    return read(
+        () ->
+            UpdateEvent.count(
+                "stackId = ?1 and updateId = ?2", stackId(), UUID.fromString(updateId)));
   }
 
   private UUID stackId() {

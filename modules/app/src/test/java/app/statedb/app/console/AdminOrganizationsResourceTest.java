@@ -3,12 +3,12 @@ package app.statedb.app.console;
 import static app.statedb.app.console.LocalGlassTestSupport.COOKIE;
 import static app.statedb.app.console.LocalGlassTestSupport.PASSWORD;
 import static app.statedb.app.console.LocalGlassTestSupport.login;
+import static app.statedb.testsupport.TestTransactions.tx;
 import static io.restassured.RestAssured.given;
 import static org.hamcrest.Matchers.is;
 
 import app.statedb.persistence.identity.Organization;
 import app.statedb.persistence.stack.StackCreator;
-import io.quarkus.narayana.jta.QuarkusTransaction;
 import io.quarkus.test.junit.QuarkusTest;
 import io.quarkus.test.junit.TestProfile;
 import jakarta.inject.Inject;
@@ -27,7 +27,7 @@ class AdminOrganizationsResourceTest {
 
   @AfterEach
   void cleanup() {
-    QuarkusTransaction.requiringNew().run(() -> Organization.delete("name in ?1", TEST_ORGS));
+    tx(() -> Organization.delete("name in ?1", TEST_ORGS));
   }
 
   @Test
@@ -35,13 +35,12 @@ class AdminOrganizationsResourceTest {
     String cookie = login(PASSWORD).statusCode(200).extract().cookie(COOKIE);
     String emptyId = createOrg(cookie, TEST_ORGS.get(0));
     String populatedId = createOrg(cookie, TEST_ORGS.get(1));
-    QuarkusTransaction.requiringNew()
-        .run(
-            () -> {
-              Organization populated =
-                  Organization.<Organization>find("name", TEST_ORGS.get(1)).firstResult();
-              stackCreator.create(populated.id, populated.name, "project", "stack", Map.of());
-            });
+    tx(
+        () -> {
+          Organization populated =
+              Organization.<Organization>find("name", TEST_ORGS.get(1)).firstResult();
+          stackCreator.create(populated.id, populated.name, "project", "stack", Map.of());
+        });
 
     given()
         .cookie(COOKIE, cookie)

@@ -3,6 +3,8 @@ package app.statedb.app.console;
 import static app.statedb.app.console.LocalGlassTestSupport.COOKIE;
 import static app.statedb.app.console.LocalGlassTestSupport.PASSWORD;
 import static app.statedb.app.console.LocalGlassTestSupport.login;
+import static app.statedb.testsupport.TestTransactions.read;
+import static app.statedb.testsupport.TestTransactions.tx;
 import static io.restassured.RestAssured.given;
 import static io.restassured.http.ContentType.JSON;
 import static org.hamcrest.Matchers.hasSize;
@@ -22,7 +24,6 @@ import app.statedb.persistence.stack.Stack;
 import app.statedb.persistence.stack.StackCreator;
 import app.statedb.persistence.stack.StackRef;
 import app.statedb.persistence.update.StackUpdate;
-import io.quarkus.narayana.jta.QuarkusTransaction;
 import io.quarkus.test.junit.QuarkusTest;
 import io.quarkus.test.junit.TestProfile;
 import jakarta.inject.Inject;
@@ -46,14 +47,13 @@ class AdminOperationsResourceTest {
 
   @AfterEach
   void cleanup() {
-    QuarkusTransaction.requiringNew()
-        .run(
-            () -> {
-              Organization.delete("name", ORG);
-              if (serviceHolderId != null) {
-                User.deleteById(serviceHolderId);
-              }
-            });
+    tx(
+        () -> {
+          Organization.delete("name", ORG);
+          if (serviceHolderId != null) {
+            User.deleteById(serviceHolderId);
+          }
+        });
   }
 
   @Test
@@ -136,108 +136,105 @@ class AdminOperationsResourceTest {
         .then()
         .statusCode(204);
 
-    QuarkusTransaction.requiringNew()
-        .run(
-            () -> {
-              assertEquals(0L, StackLock.count("id", seed.lockId()));
-              StackUpdate update = StackUpdate.findById(seed.updateId());
-              assertEquals(StackUpdate.Status.CANCELLED, update.status);
-              assertNotNull(update.endedAt);
-              assertNull(Stack.<Stack>findById(seed.stackId()).activeUpdateId);
-            });
+    tx(
+        () -> {
+          assertEquals(0L, StackLock.count("id", seed.lockId()));
+          StackUpdate update = StackUpdate.findById(seed.updateId());
+          assertEquals(StackUpdate.Status.CANCELLED, update.status);
+          assertNotNull(update.endedAt);
+          assertNull(Stack.<Stack>findById(seed.stackId()).activeUpdateId);
+        });
   }
 
   private Seed seed() {
-    return QuarkusTransaction.requiringNew()
-        .call(
-            () -> {
-              User bootstrap =
-                  User.<User>find(
-                          "iss = ?1 and sub = ?2",
-                          BootstrapProvisioner.BOOTSTRAP_ISS,
-                          BootstrapProvisioner.BOOTSTRAP_SUB)
-                      .singleResult();
+    return read(
+        () -> {
+          User bootstrap =
+              User.<User>find(
+                      "iss = ?1 and sub = ?2",
+                      BootstrapProvisioner.BOOTSTRAP_ISS,
+                      BootstrapProvisioner.BOOTSTRAP_SUB)
+                  .singleResult();
 
-              Organization org = new Organization();
-              org.name = ORG;
-              org.displayName = "S14 operations";
-              org.persist();
-              StackRef stack = stackCreator.create(org.id, ORG, PROJECT, STACK, Map.of());
+          Organization org = new Organization();
+          org.name = ORG;
+          org.displayName = "S14 operations";
+          org.persist();
+          StackRef stack = stackCreator.create(org.id, ORG, PROJECT, STACK, Map.of());
 
-              User service = new User();
-              service.iss = ServiceAccountCreator.SERVICE_ISS;
-              service.sub = UUID.randomUUID().toString();
-              service.displayName = "deploy-bot";
-              service.persist();
-              serviceHolderId = service.id;
+          User service = new User();
+          service.iss = ServiceAccountCreator.SERVICE_ISS;
+          service.sub = UUID.randomUUID().toString();
+          service.displayName = "deploy-bot";
+          service.persist();
+          serviceHolderId = service.id;
 
-              Instant now = Instant.now();
-              StackUpdate update = new StackUpdate();
-              update.stackId = stack.stackId();
-              update.version = 1;
-              update.dryRun = false;
-              update.kind = StackUpdate.Kind.UPDATE;
-              update.status = StackUpdate.Status.IN_PROGRESS;
-              update.startedByUserId = service.id;
-              update.startedAt = now;
-              update.persist();
+          Instant now = Instant.now();
+          StackUpdate update = new StackUpdate();
+          update.stackId = stack.stackId();
+          update.version = 1;
+          update.dryRun = false;
+          update.kind = StackUpdate.Kind.UPDATE;
+          update.status = StackUpdate.Status.IN_PROGRESS;
+          update.startedByUserId = service.id;
+          update.startedAt = now;
+          update.persist();
 
-              Stack stackEntity = Stack.findById(stack.stackId());
-              stackEntity.activeUpdateId = update.id;
+          Stack stackEntity = Stack.findById(stack.stackId());
+          stackEntity.activeUpdateId = update.id;
 
-              StackLock live = new StackLock();
-              live.stackId = stack.stackId();
-              live.updateId = update.id;
-              live.lockedBy = "user:" + service.id;
-              live.lockTokenHash = UUID.randomUUID().toString().getBytes();
-              live.lockedAt = now.minusSeconds(60);
-              live.heartbeatAt = now.minusSeconds(5);
-              live.expiresAt = now.plusSeconds(300);
-              live.maxExpiresAt = now.plusSeconds(600);
-              live.persist();
+          StackLock live = new StackLock();
+          live.stackId = stack.stackId();
+          live.updateId = update.id;
+          live.lockedBy = "user:" + service.id;
+          live.lockTokenHash = UUID.randomUUID().toString().getBytes();
+          live.lockedAt = now.minusSeconds(60);
+          live.heartbeatAt = now.minusSeconds(5);
+          live.expiresAt = now.plusSeconds(300);
+          live.maxExpiresAt = now.plusSeconds(600);
+          live.persist();
 
-              CompactionJob failed = new CompactionJob();
-              failed.stackId = stack.stackId();
-              failed.status = CompactionJob.Status.FAILED;
-              failed.attempts = 3;
-              failed.errorMessage = "snapshot integrity check failed";
-              failed.startedAt = now.minusSeconds(20);
-              failed.completedAt = now.minusSeconds(10);
-              failed.persist();
+          CompactionJob failed = new CompactionJob();
+          failed.stackId = stack.stackId();
+          failed.status = CompactionJob.Status.FAILED;
+          failed.attempts = 3;
+          failed.errorMessage = "snapshot integrity check failed";
+          failed.startedAt = now.minusSeconds(20);
+          failed.completedAt = now.minusSeconds(10);
+          failed.persist();
 
-              CompactionJob retrying = new CompactionJob();
-              retrying.stackId = stack.stackId();
-              retrying.status = CompactionJob.Status.PENDING;
-              retrying.attempts = 1;
-              retrying.errorMessage = "database was temporarily unavailable";
-              retrying.persist();
+          CompactionJob retrying = new CompactionJob();
+          retrying.stackId = stack.stackId();
+          retrying.status = CompactionJob.Status.PENDING;
+          retrying.attempts = 1;
+          retrying.errorMessage = "database was temporarily unavailable";
+          retrying.persist();
 
-              // An expired row remains physically present until a later acquisition steals it,
-              // but it is not an active lock and must not appear in the inventory.
-              StackRef expiredStack =
-                  stackCreator.create(org.id, ORG, PROJECT, "expired", Map.of());
-              StackUpdate expiredUpdate = new StackUpdate();
-              expiredUpdate.stackId = expiredStack.stackId();
-              expiredUpdate.version = 1;
-              expiredUpdate.dryRun = false;
-              expiredUpdate.kind = StackUpdate.Kind.UPDATE;
-              expiredUpdate.status = StackUpdate.Status.IN_PROGRESS;
-              expiredUpdate.startedByUserId = bootstrap.id;
-              expiredUpdate.startedAt = now.minusSeconds(600);
-              expiredUpdate.persist();
-              StackLock expired = new StackLock();
-              expired.stackId = expiredStack.stackId();
-              expired.updateId = expiredUpdate.id;
-              expired.lockedBy = "user:" + bootstrap.id;
-              expired.lockTokenHash = UUID.randomUUID().toString().getBytes();
-              expired.lockedAt = now.minusSeconds(600);
-              expired.heartbeatAt = now.minusSeconds(400);
-              expired.expiresAt = now.minusSeconds(300);
-              expired.maxExpiresAt = now.minusSeconds(200);
-              expired.persist();
+          // An expired row remains physically present until a later acquisition steals it,
+          // but it is not an active lock and must not appear in the inventory.
+          StackRef expiredStack = stackCreator.create(org.id, ORG, PROJECT, "expired", Map.of());
+          StackUpdate expiredUpdate = new StackUpdate();
+          expiredUpdate.stackId = expiredStack.stackId();
+          expiredUpdate.version = 1;
+          expiredUpdate.dryRun = false;
+          expiredUpdate.kind = StackUpdate.Kind.UPDATE;
+          expiredUpdate.status = StackUpdate.Status.IN_PROGRESS;
+          expiredUpdate.startedByUserId = bootstrap.id;
+          expiredUpdate.startedAt = now.minusSeconds(600);
+          expiredUpdate.persist();
+          StackLock expired = new StackLock();
+          expired.stackId = expiredStack.stackId();
+          expired.updateId = expiredUpdate.id;
+          expired.lockedBy = "user:" + bootstrap.id;
+          expired.lockTokenHash = UUID.randomUUID().toString().getBytes();
+          expired.lockedAt = now.minusSeconds(600);
+          expired.heartbeatAt = now.minusSeconds(400);
+          expired.expiresAt = now.minusSeconds(300);
+          expired.maxExpiresAt = now.minusSeconds(200);
+          expired.persist();
 
-              return new Seed(stack.stackId(), update.id, live.id);
-            });
+          return new Seed(stack.stackId(), update.id, live.id);
+        });
   }
 
   private record Seed(UUID stackId, UUID updateId, UUID lockId) {}

@@ -1,9 +1,9 @@
 package app.statedb.app.console;
 
+import static app.statedb.testsupport.TestTransactions.tx;
 import static io.restassured.RestAssured.given;
 
 import app.statedb.persistence.identity.OidcProvider;
-import io.quarkus.narayana.jta.QuarkusTransaction;
 import io.quarkus.test.junit.QuarkusTest;
 import jakarta.inject.Inject;
 import jakarta.persistence.EntityManager;
@@ -26,28 +26,26 @@ class ProviderLoginRejectionTest {
 
   @BeforeEach
   void seedDisabledProvider() {
-    QuarkusTransaction.requiringNew()
-        .run(
-            () -> {
-              OidcProvider p = new OidcProvider();
-              p.name = DISABLED;
-              p.issuerUrl = "https://disabled.example";
-              p.clientId = "cid";
-              p.clientSecret = "sec";
-              p.scopes = List.of("openid");
-              p.enabled = false;
-              p.persist();
-            });
+    tx(
+        () -> {
+          OidcProvider p = new OidcProvider();
+          p.name = DISABLED;
+          p.issuerUrl = "https://disabled.example";
+          p.clientId = "cid";
+          p.clientSecret = "sec";
+          p.scopes = List.of("openid");
+          p.enabled = false;
+          p.persist();
+        });
   }
 
   @AfterEach
   void cleanup() {
-    QuarkusTransaction.requiringNew()
-        .run(
-            () ->
-                em.createNativeQuery("DELETE FROM oidc_providers WHERE name = ?1")
-                    .setParameter(1, DISABLED)
-                    .executeUpdate());
+    tx(
+        () ->
+            em.createNativeQuery("DELETE FROM oidc_providers WHERE name = ?1")
+                .setParameter(1, DISABLED)
+                .executeUpdate());
   }
 
   @Test

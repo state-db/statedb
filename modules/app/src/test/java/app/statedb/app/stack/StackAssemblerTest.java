@@ -1,5 +1,7 @@
 package app.statedb.app.stack;
 
+import static app.statedb.testsupport.TestTransactions.read;
+import static app.statedb.testsupport.TestTransactions.tx;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -16,7 +18,6 @@ import app.statedb.persistence.update.StackUpdate;
 import app.statedb.testsupport.pulumi.PulumiDeploymentAssert;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import io.quarkus.narayana.jta.QuarkusTransaction;
 import io.quarkus.test.junit.QuarkusTest;
 import jakarta.inject.Inject;
 import java.time.Instant;
@@ -63,21 +64,20 @@ class StackAssemblerTest {
   @BeforeEach
   void seed() {
     stackId =
-        QuarkusTransaction.requiringNew()
-            .call(
-                () -> {
-                  Organization org = new Organization();
-                  org.name = ORG_NAME;
-                  org.displayName = "Assembler Test";
-                  org.persistAndFlush();
-                  StackRef ref = stackCreator.create(org.id, ORG_NAME, "proj", "dev", Map.of());
-                  return ref.stackId();
-                });
+        read(
+            () -> {
+              Organization org = new Organization();
+              org.name = ORG_NAME;
+              org.displayName = "Assembler Test";
+              org.persistAndFlush();
+              StackRef ref = stackCreator.create(org.id, ORG_NAME, "proj", "dev", Map.of());
+              return ref.stackId();
+            });
   }
 
   @AfterEach
   void cleanup() {
-    QuarkusTransaction.requiringNew().run(() -> Organization.delete("name = ?1", ORG_NAME));
+    tx(() -> Organization.delete("name = ?1", ORG_NAME));
   }
 
   // Every assembled export must be a deployment Pulumi itself would load; routing all assembly
@@ -902,17 +902,16 @@ class StackAssemblerTest {
   private void persistSnapshot(long boundary, String resources) throws Exception {
     JsonNode checkpoint = MAPPER.readTree("{\"resources\":" + resources + "}");
     int version = ++snapshotVersion;
-    QuarkusTransaction.requiringNew()
-        .run(
-            () -> {
-              Snapshot snapshot = new Snapshot();
-              snapshot.stackId = stackId;
-              snapshot.version = version;
-              snapshot.checkpoint = checkpoint;
-              snapshot.compactedFromJournalSeq = boundary;
-              snapshot.resourceCount = checkpoint.path("resources").size();
-              snapshot.persistAndFlush();
-            });
+    tx(
+        () -> {
+          Snapshot snapshot = new Snapshot();
+          snapshot.stackId = stackId;
+          snapshot.version = version;
+          snapshot.checkpoint = checkpoint;
+          snapshot.compactedFromJournalSeq = boundary;
+          snapshot.resourceCount = checkpoint.path("resources").size();
+          snapshot.persistAndFlush();
+        });
   }
 
   // Mirrors StackImporter/StackRenamer: an applied version that installs a snapshot at the
@@ -921,37 +920,35 @@ class StackAssemblerTest {
     persistSnapshot(boundary, resources);
     int version = ++updateVersion;
     int installedSnapshotVersion = snapshotVersion;
-    QuarkusTransaction.requiringNew()
-        .run(
-            () -> {
-              StackUpdate update = new StackUpdate();
-              update.stackId = stackId;
-              update.version = version;
-              update.kind = StackUpdate.Kind.IMPORT;
-              update.status = StackUpdate.Status.SUCCEEDED;
-              update.startJournalSeq = boundary;
-              update.endJournalSeq = boundary;
-              update.baseSnapshotVersion = installedSnapshotVersion;
-              update.startedAt = Instant.now();
-              update.persistAndFlush();
-            });
+    tx(
+        () -> {
+          StackUpdate update = new StackUpdate();
+          update.stackId = stackId;
+          update.version = version;
+          update.kind = StackUpdate.Kind.IMPORT;
+          update.status = StackUpdate.Status.SUCCEEDED;
+          update.startJournalSeq = boundary;
+          update.endJournalSeq = boundary;
+          update.baseSnapshotVersion = installedSnapshotVersion;
+          update.startedAt = Instant.now();
+          update.persistAndFlush();
+        });
   }
 
   private UUID update() {
     int version = ++updateVersion;
-    return QuarkusTransaction.requiringNew()
-        .call(
-            () -> {
-              StackUpdate update = new StackUpdate();
-              update.stackId = stackId;
-              update.version = version;
-              update.kind = StackUpdate.Kind.UPDATE;
-              update.status = StackUpdate.Status.SUCCEEDED;
-              update.startJournalSeq = sequence;
-              update.startedAt = Instant.now();
-              update.persistAndFlush();
-              return update.id;
-            });
+    return read(
+        () -> {
+          StackUpdate update = new StackUpdate();
+          update.stackId = stackId;
+          update.version = version;
+          update.kind = StackUpdate.Kind.UPDATE;
+          update.status = StackUpdate.Status.SUCCEEDED;
+          update.startJournalSeq = sequence;
+          update.startedAt = Instant.now();
+          update.persistAndFlush();
+          return update.id;
+        });
   }
 
   private void begin(UUID updateId, long operationId, String operationType, String resource)
@@ -997,20 +994,19 @@ class StackAssemblerTest {
       throws Exception {
     long seq = ++sequence;
     JsonNode parsed = MAPPER.readTree(payload);
-    QuarkusTransaction.requiringNew()
-        .run(
-            () -> {
-              JournalEntry entry = new JournalEntry();
-              entry.stackId = stackId;
-              entry.updateId = updateId;
-              entry.sequenceId = seq;
-              entry.wireSequenceId = seq;
-              entry.kind = (short) kind.wireValue;
-              entry.operationId = operationId;
-              entry.payload = parsed;
-              setPromotedField(entry, promoted, value);
-              entry.persistAndFlush();
-            });
+    tx(
+        () -> {
+          JournalEntry entry = new JournalEntry();
+          entry.stackId = stackId;
+          entry.updateId = updateId;
+          entry.sequenceId = seq;
+          entry.wireSequenceId = seq;
+          entry.kind = (short) kind.wireValue;
+          entry.operationId = operationId;
+          entry.payload = parsed;
+          setPromotedField(entry, promoted, value);
+          entry.persistAndFlush();
+        });
   }
 
   private static void setPromotedField(JournalEntry entry, String promoted, Long value) {

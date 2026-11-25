@@ -1,5 +1,7 @@
 package app.statedb.app.console;
 
+import static app.statedb.testsupport.TestTransactions.read;
+import static app.statedb.testsupport.TestTransactions.tx;
 import static io.restassured.RestAssured.given;
 import static org.hamcrest.Matchers.notNullValue;
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -18,7 +20,6 @@ import app.statedb.persistence.stack.StackCreator;
 import app.statedb.persistence.update.StackUpdate;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import io.quarkus.narayana.jta.QuarkusTransaction;
 import io.quarkus.test.common.QuarkusTestResource;
 import io.quarkus.test.junit.QuarkusTest;
 import io.quarkus.test.junit.TestProfile;
@@ -63,7 +64,7 @@ class ConsoleRunEventsArchiveTest {
 
   @AfterEach
   void cleanup() {
-    QuarkusTransaction.requiringNew().run(() -> Organization.delete("name", ORG));
+    tx(() -> Organization.delete("name", ORG));
     OidcConsoleSessionFixture.cleanup();
   }
 
@@ -77,20 +78,17 @@ class ConsoleRunEventsArchiveTest {
     assertTrue(beforeFold.size() > 1, "corpus should span more than one page");
     String runDetail = runDetail(session);
 
-    QuarkusTransaction.requiringNew().run(() -> folder.fold(updateId, Instant.now()));
-    assertNotNull(
-        QuarkusTransaction.requiringNew().call(() -> UpdateEventArchive.findById(updateId)),
-        "update was folded");
+    tx(() -> folder.fold(updateId, Instant.now()));
+    assertNotNull(read(() -> UpdateEventArchive.findById(updateId)), "update was folded");
 
     assertEquals(beforeFold, pageThrough(session, updateId), "pages differ once archived");
 
     // The summary is answered from the row the folder left behind, not by inflating the blob.
     assertTrue(
-        QuarkusTransaction.requiringNew()
-                .call(
-                    () ->
-                        UpdateEvent.count(
-                            "updateId = ?1 and kind = ?2", updateId, UpdateEvent.SUMMARY_KIND))
+        read(
+                () ->
+                    UpdateEvent.count(
+                        "updateId = ?1 and kind = ?2", updateId, UpdateEvent.SUMMARY_KIND))
             > 0,
         "summary rows stay hot");
     assertEquals(runDetail, runDetail(session), "run detail differs once archived");
@@ -134,12 +132,11 @@ class ConsoleRunEventsArchiveTest {
     assertRefreshActivity(
         session, "/api/pulumi/stacks/%s/%s/%s/updates/1".formatted(ORG, PROJECT, STACK));
 
-    QuarkusTransaction.requiringNew()
-        .run(
-            () -> {
-              assertTrue(folder.fold(previewId, Instant.now()));
-              assertTrue(folder.fold(updateId, Instant.now()));
-            });
+    tx(
+        () -> {
+          assertTrue(folder.fold(previewId, Instant.now()));
+          assertTrue(folder.fold(updateId, Instant.now()));
+        });
 
     assertRefreshActivity(
         session,
@@ -202,13 +199,12 @@ class ConsoleRunEventsArchiveTest {
   }
 
   private UUID createStack() {
-    return QuarkusTransaction.requiringNew()
-        .call(
-            () -> {
-              Organization org = Organization.<Organization>find("name", ORG).firstResult();
-              stackCreator.create(org.id, ORG, PROJECT, STACK, Map.of());
-              return Stack.<Stack>find("orgId = ?1 and name = ?2", org.id, STACK).firstResult().id;
-            });
+    return read(
+        () -> {
+          Organization org = Organization.<Organization>find("name", ORG).firstResult();
+          stackCreator.create(org.id, ORG, PROJECT, STACK, Map.of());
+          return Stack.<Stack>find("orgId = ?1 and name = ?2", org.id, STACK).firstResult().id;
+        });
   }
 
   private UUID seedUpdate(UUID stackId) {
@@ -217,20 +213,19 @@ class ConsoleRunEventsArchiveTest {
 
   private UUID seedUpdate(UUID stackId, StackUpdate.Status status) {
     List<JsonNode> corpus = EventArchiveFixture.recordedEvents();
-    return QuarkusTransaction.requiringNew()
-        .call(
-            () -> {
-              StackUpdate update = new StackUpdate();
-              update.stackId = stackId;
-              update.kind = StackUpdate.Kind.UPDATE;
-              update.status = status;
-              update.version = 1;
-              update.startedAt = LONG_AGO;
-              update.endedAt = LONG_AGO;
-              update.persistAndFlush();
-              EventArchiveFixture.persistEvents(stackId, update.id, corpus, EVENT_COUNT);
-              return update.id;
-            });
+    return read(
+        () -> {
+          StackUpdate update = new StackUpdate();
+          update.stackId = stackId;
+          update.kind = StackUpdate.Kind.UPDATE;
+          update.status = status;
+          update.version = 1;
+          update.startedAt = LONG_AGO;
+          update.endedAt = LONG_AGO;
+          update.persistAndFlush();
+          EventArchiveFixture.persistEvents(stackId, update.id, corpus, EVENT_COUNT);
+          return update.id;
+        });
   }
 
   private UUID seedRefreshRun(
@@ -244,59 +239,58 @@ class ConsoleRunEventsArchiveTest {
     // pre/output events followed by the program's same pre/output events. A standalone refresh
     // instead completes its refresh pre-event with a terminal same output event.
     String urn = "urn:pulumi:dev::project::test:index:Resource::unchanged";
-    return QuarkusTransaction.requiringNew()
-        .call(
-            () -> {
-              StackUpdate update = new StackUpdate();
-              update.stackId = stackId;
-              update.kind = kind;
-              update.status = StackUpdate.Status.SUCCEEDED;
-              update.dryRun = dryRun;
-              update.version = version;
-              update.startedAt = LONG_AGO;
-              update.endedAt = LONG_AGO;
-              update.persistAndFlush();
+    return read(
+        () -> {
+          StackUpdate update = new StackUpdate();
+          update.stackId = stackId;
+          update.kind = kind;
+          update.status = StackUpdate.Status.SUCCEEDED;
+          update.dryRun = dryRun;
+          update.version = version;
+          update.startedAt = LONG_AGO;
+          update.endedAt = LONG_AGO;
+          update.persistAndFlush();
 
-              int sequence = 1;
-              persistEvent(
-                  stackId,
-                  update.id,
-                  sequence++,
-                  "resourcePre",
-                  resourceEvent("resourcePre", "refresh", urn));
-              persistEvent(
-                  stackId,
-                  update.id,
-                  sequence++,
-                  "resOutputs",
-                  resourceEvent("resOutputs", followedByProgramPlan ? "refresh" : "same", urn));
-              if (followedByProgramPlan) {
-                persistEvent(
-                    stackId,
-                    update.id,
-                    sequence++,
-                    "resourcePre",
-                    resourceEvent("resourcePre", "same", urn));
-                persistEvent(
-                    stackId,
-                    update.id,
-                    sequence++,
-                    "resOutputs",
-                    resourceEvent("resOutputs", "same", urn));
-              }
-              persistEvent(
-                  stackId,
-                  update.id,
-                  sequence,
-                  UpdateEvent.SUMMARY_KIND,
-                  MAPPER.readTree(
-                      """
+          int sequence = 1;
+          persistEvent(
+              stackId,
+              update.id,
+              sequence++,
+              "resourcePre",
+              resourceEvent("resourcePre", "refresh", urn));
+          persistEvent(
+              stackId,
+              update.id,
+              sequence++,
+              "resOutputs",
+              resourceEvent("resOutputs", followedByProgramPlan ? "refresh" : "same", urn));
+          if (followedByProgramPlan) {
+            persistEvent(
+                stackId,
+                update.id,
+                sequence++,
+                "resourcePre",
+                resourceEvent("resourcePre", "same", urn));
+            persistEvent(
+                stackId,
+                update.id,
+                sequence++,
+                "resOutputs",
+                resourceEvent("resOutputs", "same", urn));
+          }
+          persistEvent(
+              stackId,
+              update.id,
+              sequence,
+              UpdateEvent.SUMMARY_KIND,
+              MAPPER.readTree(
+                  """
                       {"summaryEvent":{"isPreview":%s,"resourceChanges":{"same":1},
                        "result":"succeeded"}}
                       """
-                          .formatted(dryRun)));
-              return update.id;
-            });
+                      .formatted(dryRun)));
+          return update.id;
+        });
   }
 
   private static JsonNode resourceEvent(String kind, String op, String urn) throws Exception {
@@ -328,32 +322,30 @@ class ConsoleRunEventsArchiveTest {
   }
 
   private static Cookie ownerSession() {
-    QuarkusTransaction.requiringNew()
-        .run(
-            () -> {
-              Organization org = new Organization();
-              org.name = ORG;
-              org.displayName = ORG;
-              org.persistAndFlush();
-            });
+    tx(
+        () -> {
+          Organization org = new Organization();
+          org.name = ORG;
+          org.displayName = ORG;
+          org.persistAndFlush();
+        });
     OidcConsoleSessionFixture.seedProvider();
     Cookie session = OidcConsoleSessionFixture.login();
-    QuarkusTransaction.requiringNew()
-        .run(
-            () -> {
-              User user =
-                  User.<User>find(
-                          "iss = ?1 and sub = ?2",
-                          OidcConsoleSessionFixture.FIXTURE_ISS,
-                          OidcConsoleSessionFixture.FIXTURE_SUB)
-                      .firstResult();
-              Organization org = Organization.<Organization>find("name", ORG).firstResult();
-              OrgMember membership = new OrgMember();
-              membership.orgId = org.id;
-              membership.userId = user.id;
-              membership.role = OrgMember.Role.owner;
-              membership.persistAndFlush();
-            });
+    tx(
+        () -> {
+          User user =
+              User.<User>find(
+                      "iss = ?1 and sub = ?2",
+                      OidcConsoleSessionFixture.FIXTURE_ISS,
+                      OidcConsoleSessionFixture.FIXTURE_SUB)
+                  .firstResult();
+          Organization org = Organization.<Organization>find("name", ORG).firstResult();
+          OrgMember membership = new OrgMember();
+          membership.orgId = org.id;
+          membership.userId = user.id;
+          membership.role = OrgMember.Role.owner;
+          membership.persistAndFlush();
+        });
     return session;
   }
 }

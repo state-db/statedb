@@ -3,6 +3,8 @@ package app.statedb.app.console;
 import static app.statedb.app.console.LocalGlassTestSupport.COOKIE;
 import static app.statedb.app.console.LocalGlassTestSupport.PASSWORD;
 import static app.statedb.app.console.LocalGlassTestSupport.login;
+import static app.statedb.testsupport.TestTransactions.read;
+import static app.statedb.testsupport.TestTransactions.tx;
 import static io.restassured.RestAssured.given;
 import static org.hamcrest.Matchers.empty;
 import static org.hamcrest.Matchers.is;
@@ -18,7 +20,6 @@ import app.statedb.persistence.stack.Stack;
 import app.statedb.persistence.stack.StackState;
 import app.statedb.persistence.stack.Workspace;
 import app.statedb.persistence.update.StackUpdate;
-import io.quarkus.narayana.jta.QuarkusTransaction;
 import io.quarkus.test.junit.QuarkusTest;
 import io.quarkus.test.junit.TestProfile;
 import jakarta.inject.Inject;
@@ -104,9 +105,7 @@ class LocalGlassLoginTest {
   void adminCanForceUnlockAndQueueCompaction() {
     String cookie = login(PASSWORD).statusCode(200).extract().cookie(COOKIE);
     UUID stackId = seedOperationalStack();
-    UUID lockId =
-        QuarkusTransaction.requiringNew()
-            .call(() -> StackLock.<StackLock>find("stackId", stackId).singleResult().id);
+    UUID lockId = read(() -> StackLock.<StackLock>find("stackId", stackId).singleResult().id);
     String base = "/api/admin/stacks/ops-org/ops-project/ops-stack";
 
     given()
@@ -118,14 +117,13 @@ class LocalGlassLoginTest {
         .statusCode(204);
     given().cookie(COOKIE, cookie).when().post(base + "/compact").then().statusCode(202);
 
-    QuarkusTransaction.requiringNew()
-        .run(
-            () -> {
-              assertEquals(0L, StackLock.count("stackId", stackId));
-              assertEquals(1L, CompactionJob.count("stackId", stackId));
-            });
+    tx(
+        () -> {
+          assertEquals(0L, StackLock.count("stackId", stackId));
+          assertEquals(1L, CompactionJob.count("stackId", stackId));
+        });
 
-    QuarkusTransaction.requiringNew().run(() -> Organization.delete("name", "ops-org"));
+    tx(() -> Organization.delete("name", "ops-org"));
   }
 
   @Test
@@ -186,10 +184,9 @@ class LocalGlassLoginTest {
           .delete("/api/admin/providers/" + id)
           .then()
           .statusCode(204);
-      assertEquals(
-          0L, QuarkusTransaction.requiringNew().call(() -> OidcProvider.count("name", name)));
+      assertEquals(0L, read(() -> OidcProvider.count("name", name)));
     } finally {
-      QuarkusTransaction.requiringNew().run(() -> OidcProvider.delete("name", name));
+      tx(() -> OidcProvider.delete("name", name));
     }
   }
 
@@ -215,9 +212,7 @@ class LocalGlassLoginTest {
         .then()
         .statusCode(403);
 
-    assertEquals(
-        0L,
-        QuarkusTransaction.requiringNew().call(() -> OidcProvider.count("name", "env-provider")));
+    assertEquals(0L, read(() -> OidcProvider.count("name", "env-provider")));
   }
 
   @Test
@@ -256,11 +251,9 @@ class LocalGlassLoginTest {
           .then()
           .statusCode(403);
 
-      assertEquals(
-          0L,
-          QuarkusTransaction.requiringNew().call(() -> OidcProvider.count("name", "env-provider")));
+      assertEquals(0L, read(() -> OidcProvider.count("name", "env-provider")));
     } finally {
-      QuarkusTransaction.requiringNew().run(() -> OidcProvider.delete("name", name));
+      tx(() -> OidcProvider.delete("name", name));
     }
   }
 
@@ -283,81 +276,78 @@ class LocalGlassLoginTest {
   }
 
   private void seedEnabledProvider() {
-    QuarkusTransaction.requiringNew()
-        .run(
-            () -> {
-              OidcProvider p = new OidcProvider();
-              p.name = PROVIDER;
-              p.issuerUrl = "https://glass-test.invalid";
-              p.clientId = "cid";
-              p.clientSecret = "sec";
-              p.scopes = List.of("openid");
-              p.enabled = true;
-              p.persist();
-            });
+    tx(
+        () -> {
+          OidcProvider p = new OidcProvider();
+          p.name = PROVIDER;
+          p.issuerUrl = "https://glass-test.invalid";
+          p.clientId = "cid";
+          p.clientSecret = "sec";
+          p.scopes = List.of("openid");
+          p.enabled = true;
+          p.persist();
+        });
   }
 
   private void deleteProvider() {
-    QuarkusTransaction.requiringNew()
-        .run(
-            () ->
-                em.createNativeQuery("DELETE FROM oidc_providers WHERE name = ?1")
-                    .setParameter(1, PROVIDER)
-                    .executeUpdate());
+    tx(
+        () ->
+            em.createNativeQuery("DELETE FROM oidc_providers WHERE name = ?1")
+                .setParameter(1, PROVIDER)
+                .executeUpdate());
   }
 
   private UUID seedOperationalStack() {
-    return QuarkusTransaction.requiringNew()
-        .call(
-            () -> {
-              Organization org = new Organization();
-              org.name = "ops-org";
-              org.displayName = "Operations test";
-              org.persist();
+    return read(
+        () -> {
+          Organization org = new Organization();
+          org.name = "ops-org";
+          org.displayName = "Operations test";
+          org.persist();
 
-              Project project = new Project();
-              project.orgId = org.id;
-              project.name = "ops-project";
-              project.persist();
+          Project project = new Project();
+          project.orgId = org.id;
+          project.name = "ops-project";
+          project.persist();
 
-              Workspace workspace = new Workspace();
-              workspace.orgId = org.id;
-              workspace.kind = Workspace.Kind.pulumi;
-              workspace.persist();
+          Workspace workspace = new Workspace();
+          workspace.orgId = org.id;
+          workspace.kind = Workspace.Kind.pulumi;
+          workspace.persist();
 
-              Stack stack = new Stack();
-              stack.orgId = org.id;
-              stack.projectId = project.id;
-              stack.workspaceId = workspace.id;
-              stack.name = "ops-stack";
-              stack.persist();
+          Stack stack = new Stack();
+          stack.orgId = org.id;
+          stack.projectId = project.id;
+          stack.workspaceId = workspace.id;
+          stack.name = "ops-stack";
+          stack.persist();
 
-              StackState state = new StackState();
-              state.stackId = stack.id;
-              state.persist();
+          StackState state = new StackState();
+          state.stackId = stack.id;
+          state.persist();
 
-              Instant now = Instant.now();
-              StackUpdate update = new StackUpdate();
-              update.stackId = stack.id;
-              update.version = 1;
-              update.dryRun = false;
-              update.kind = StackUpdate.Kind.UPDATE;
-              update.status = StackUpdate.Status.IN_PROGRESS;
-              update.startedAt = now;
-              update.persist();
-              stack.activeUpdateId = update.id;
+          Instant now = Instant.now();
+          StackUpdate update = new StackUpdate();
+          update.stackId = stack.id;
+          update.version = 1;
+          update.dryRun = false;
+          update.kind = StackUpdate.Kind.UPDATE;
+          update.status = StackUpdate.Status.IN_PROGRESS;
+          update.startedAt = now;
+          update.persist();
+          stack.activeUpdateId = update.id;
 
-              StackLock lock = new StackLock();
-              lock.stackId = stack.id;
-              lock.updateId = update.id;
-              lock.lockedBy = "stuck-update";
-              lock.lockTokenHash = UUID.randomUUID().toString().getBytes();
-              lock.lockedAt = now;
-              lock.heartbeatAt = now;
-              lock.expiresAt = now.plusSeconds(300);
-              lock.maxExpiresAt = now.plusSeconds(600);
-              lock.persist();
-              return stack.id;
-            });
+          StackLock lock = new StackLock();
+          lock.stackId = stack.id;
+          lock.updateId = update.id;
+          lock.lockedBy = "stuck-update";
+          lock.lockTokenHash = UUID.randomUUID().toString().getBytes();
+          lock.lockedAt = now;
+          lock.heartbeatAt = now;
+          lock.expiresAt = now.plusSeconds(300);
+          lock.maxExpiresAt = now.plusSeconds(600);
+          lock.persist();
+          return stack.id;
+        });
   }
 }

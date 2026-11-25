@@ -1,5 +1,7 @@
 package app.statedb.app.lock;
 
+import static app.statedb.testsupport.TestTransactions.read;
+import static app.statedb.testsupport.TestTransactions.tx;
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -16,7 +18,6 @@ import app.statedb.persistence.stack.StackRef;
 import app.statedb.persistence.update.StackUpdate;
 import app.statedb.persistence.update.StackUpdateStarter;
 import app.statedb.persistence.update.StartUpdateRequest;
-import io.quarkus.narayana.jta.QuarkusTransaction;
 import io.quarkus.test.junit.QuarkusTest;
 import jakarta.inject.Inject;
 import jakarta.persistence.EntityManager;
@@ -50,16 +51,15 @@ class LeaseRevalidatorTest {
   @BeforeEach
   void seed() {
     stackId =
-        QuarkusTransaction.requiringNew()
-            .call(
-                () -> {
-                  Organization org = new Organization();
-                  org.name = ORG_NAME;
-                  org.displayName = "Revalidator Test";
-                  org.persistAndFlush();
-                  StackRef ref = stackCreator.create(org.id, ORG_NAME, "proj", "dev", Map.of());
-                  return ref.stackId();
-                });
+        read(
+            () -> {
+              Organization org = new Organization();
+              org.name = ORG_NAME;
+              org.displayName = "Revalidator Test";
+              org.persistAndFlush();
+              StackRef ref = stackCreator.create(org.id, ORG_NAME, "proj", "dev", Map.of());
+              return ref.stackId();
+            });
     updateId =
         starter
             .start(
@@ -76,12 +76,11 @@ class LeaseRevalidatorTest {
 
   @AfterEach
   void cleanup() {
-    QuarkusTransaction.requiringNew()
-        .run(
-            () ->
-                em.createNativeQuery("DELETE FROM organizations WHERE name = ?1")
-                    .setParameter(1, ORG_NAME)
-                    .executeUpdate());
+    tx(
+        () ->
+            em.createNativeQuery("DELETE FROM organizations WHERE name = ?1")
+                .setParameter(1, ORG_NAME)
+                .executeUpdate());
   }
 
   @Test
@@ -91,25 +90,23 @@ class LeaseRevalidatorTest {
 
   @Test
   void expiredLeaseThrows() {
-    QuarkusTransaction.requiringNew()
-        .run(
-            () ->
-                em.createNativeQuery(
-                        "UPDATE stack_locks SET expires_at = now() - interval '1 second'"
-                            + " WHERE id = ?1")
-                    .setParameter(1, leaseId)
-                    .executeUpdate());
+    tx(
+        () ->
+            em.createNativeQuery(
+                    "UPDATE stack_locks SET expires_at = now() - interval '1 second'"
+                        + " WHERE id = ?1")
+                .setParameter(1, leaseId)
+                .executeUpdate());
     assertThrows(LeaseExpiredException.class, () -> revalidator.requireLive(leaseId));
   }
 
   @Test
   void missingLeaseThrows() {
-    QuarkusTransaction.requiringNew()
-        .run(
-            () ->
-                em.createNativeQuery("DELETE FROM stack_locks WHERE id = ?1")
-                    .setParameter(1, leaseId)
-                    .executeUpdate());
+    tx(
+        () ->
+            em.createNativeQuery("DELETE FROM stack_locks WHERE id = ?1")
+                .setParameter(1, leaseId)
+                .executeUpdate());
     assertThrows(LeaseExpiredException.class, () -> revalidator.requireLive(UUID.randomUUID()));
     assertThrows(LeaseExpiredException.class, () -> revalidator.requireLive(leaseId));
   }
@@ -123,18 +120,15 @@ class LeaseRevalidatorTest {
       Future<?> holder =
           pool.submit(
               () ->
-                  QuarkusTransaction.requiringNew()
-                      .run(
-                          () -> {
-                            revalidator.requireLive(leaseId);
-                            locked.countDown();
-                            await(release);
-                          }));
+                  tx(
+                      () -> {
+                        revalidator.requireLive(leaseId);
+                        locked.countDown();
+                        await(release);
+                      }));
 
       assertTrue(locked.await(5, TimeUnit.SECONDS));
-      Future<?> second =
-          pool.submit(
-              () -> QuarkusTransaction.requiringNew().run(() -> revalidator.requireLive(leaseId)));
+      Future<?> second = pool.submit(() -> tx(() -> revalidator.requireLive(leaseId)));
 
       second.get(2, TimeUnit.SECONDS);
 
@@ -155,13 +149,12 @@ class LeaseRevalidatorTest {
       Future<?> holder =
           pool.submit(
               () ->
-                  QuarkusTransaction.requiringNew()
-                      .run(
-                          () -> {
-                            revalidator.requireLive(leaseId);
-                            locked.countDown();
-                            await(release);
-                          }));
+                  tx(
+                      () -> {
+                        revalidator.requireLive(leaseId);
+                        locked.countDown();
+                        await(release);
+                      }));
 
       assertTrue(locked.await(5, TimeUnit.SECONDS));
       Future<?> cancelling =

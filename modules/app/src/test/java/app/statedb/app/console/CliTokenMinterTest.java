@@ -1,5 +1,7 @@
 package app.statedb.app.console;
 
+import static app.statedb.testsupport.TestTransactions.read;
+import static app.statedb.testsupport.TestTransactions.tx;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -14,7 +16,6 @@ import app.statedb.persistence.auth.CliTokenMinter;
 import app.statedb.persistence.identity.OrgMember;
 import app.statedb.persistence.identity.Organization;
 import app.statedb.persistence.identity.User;
-import io.quarkus.narayana.jta.QuarkusTransaction;
 import io.quarkus.test.junit.QuarkusTest;
 import jakarta.inject.Inject;
 import jakarta.persistence.EntityManager;
@@ -47,43 +48,41 @@ class CliTokenMinterTest {
   @BeforeEach
   void seed() {
     cleanup();
-    QuarkusTransaction.requiringNew()
-        .run(
-            () -> {
-              Organization org = new Organization();
-              org.name = ORG;
-              org.displayName = ORG;
-              org.persistAndFlush();
-              orgId = org.id;
+    tx(
+        () -> {
+          Organization org = new Organization();
+          org.name = ORG;
+          org.displayName = ORG;
+          org.persistAndFlush();
+          orgId = org.id;
 
-              User user = new User();
-              user.iss = ISS;
-              user.sub = SUB;
-              user.email = "mint@example.com";
-              user.persistAndFlush();
-              userId = user.id;
+          User user = new User();
+          user.iss = ISS;
+          user.sub = SUB;
+          user.email = "mint@example.com";
+          user.persistAndFlush();
+          userId = user.id;
 
-              OrgMember m = new OrgMember();
-              m.orgId = org.id;
-              m.userId = user.id;
-              m.role = OrgMember.Role.member;
-              m.persistAndFlush();
-            });
+          OrgMember m = new OrgMember();
+          m.orgId = org.id;
+          m.userId = user.id;
+          m.role = OrgMember.Role.member;
+          m.persistAndFlush();
+        });
   }
 
   @AfterEach
   void cleanup() {
-    QuarkusTransaction.requiringNew()
-        .run(
-            () -> {
-              em.createNativeQuery("DELETE FROM organizations WHERE name = ?1")
-                  .setParameter(1, ORG)
-                  .executeUpdate();
-              em.createNativeQuery("DELETE FROM users WHERE iss = ?1 AND sub = ?2")
-                  .setParameter(1, ISS)
-                  .setParameter(2, SUB)
-                  .executeUpdate();
-            });
+    tx(
+        () -> {
+          em.createNativeQuery("DELETE FROM organizations WHERE name = ?1")
+              .setParameter(1, ORG)
+              .executeUpdate();
+          em.createNativeQuery("DELETE FROM users WHERE iss = ?1 AND sub = ?2")
+              .setParameter(1, ISS)
+              .setParameter(2, SUB)
+              .executeUpdate();
+        });
   }
 
   @Test
@@ -98,11 +97,9 @@ class CliTokenMinterTest {
         "raw token is 32 bytes of base64url entropy with no fixed prefix");
 
     ApiToken stored =
-        QuarkusTransaction.requiringNew()
-            .call(
-                () ->
-                    ApiToken.<ApiToken>find("tokenHash", hasher.hash(minted.rawToken()))
-                        .firstResult());
+        read(
+            () ->
+                ApiToken.<ApiToken>find("tokenHash", hasher.hash(minted.rawToken())).firstResult());
     assertEquals(ApiToken.Kind.oidc, stored.kind);
     assertEquals(userId, stored.userId);
     assertEquals("my laptop", stored.description);
@@ -111,8 +108,7 @@ class CliTokenMinterTest {
     // The principal carries no org/role; PrincipalRoleResolver resolves the role per request,
     // exactly like a console session.
     Optional<AuthenticatedPrincipal> principal =
-        QuarkusTransaction.requiringNew()
-            .call(() -> tokenFinder.findValidByHash(hasher.hash(minted.rawToken())));
+        read(() -> tokenFinder.findValidByHash(hasher.hash(minted.rawToken())));
     assertTrue(principal.isPresent(), "minted token authenticates like any api_token");
     assertEquals(CredentialKind.oidc_cli_token, principal.get().credential().kind());
     assertEquals(
@@ -127,12 +123,11 @@ class CliTokenMinterTest {
     CliTokenMinter.MintedCliToken minted = minter.mint(ISS, SUB, "  ");
 
     String label =
-        QuarkusTransaction.requiringNew()
-            .call(
-                () ->
-                    ApiToken.<ApiToken>find("tokenHash", hasher.hash(minted.rawToken()))
-                        .<ApiToken>firstResult()
-                        .description);
+        read(
+            () ->
+                ApiToken.<ApiToken>find("tokenHash", hasher.hash(minted.rawToken()))
+                    .<ApiToken>firstResult()
+                    .description);
     assertEquals("CLI token", label);
   }
 }

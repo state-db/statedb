@@ -1,5 +1,6 @@
 package app.statedb.app.update;
 
+import static app.statedb.testsupport.TestTransactions.tx;
 import static io.restassured.RestAssured.given;
 import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.equalTo;
@@ -11,7 +12,6 @@ import app.statedb.persistence.identity.OrgMember;
 import app.statedb.persistence.identity.Organization;
 import app.statedb.persistence.identity.User;
 import app.statedb.persistence.stack.StackCreator;
-import io.quarkus.narayana.jta.QuarkusTransaction;
 import io.quarkus.test.junit.QuarkusTest;
 import jakarta.inject.Inject;
 import jakarta.persistence.EntityManager;
@@ -44,60 +44,58 @@ class StartUpdateContractTest {
 
   @BeforeEach
   void seed() {
-    QuarkusTransaction.requiringNew()
-        .run(
-            () -> {
-              Organization org = new Organization();
-              org.name = ORG;
-              org.displayName = "Start Update Test";
-              org.persistAndFlush();
+    tx(
+        () -> {
+          Organization org = new Organization();
+          org.name = ORG;
+          org.displayName = "Start Update Test";
+          org.persistAndFlush();
 
-              Organization other = new Organization();
-              other.name = OTHER_ORG;
-              other.displayName = "Other Org";
-              other.persistAndFlush();
+          Organization other = new Organization();
+          other.name = OTHER_ORG;
+          other.displayName = "Other Org";
+          other.persistAndFlush();
 
-              User user = new User();
-              user.iss = "local:test";
-              user.sub = "start-update";
-              user.email = "start@example.com";
-              user.displayName = "Start Update Tester";
-              user.persistAndFlush();
+          User user = new User();
+          user.iss = "local:test";
+          user.sub = "start-update";
+          user.email = "start@example.com";
+          user.displayName = "Start Update Tester";
+          user.persistAndFlush();
 
-              OrgMember m = new OrgMember();
-              m.orgId = org.id;
-              m.userId = user.id;
-              m.role = OrgMember.Role.owner;
-              m.persistAndFlush();
+          OrgMember m = new OrgMember();
+          m.orgId = org.id;
+          m.userId = user.id;
+          m.role = OrgMember.Role.owner;
+          m.persistAndFlush();
 
-              ApiToken t = new ApiToken();
-              t.tokenHash = sha256Hex(RAW_TOKEN);
-              t.userId = user.id;
-              t.orgId = org.id;
-              t.kind = ApiToken.Kind.service_account;
-              t.expiresAt = java.time.Instant.now().plusSeconds(60 * 60);
-              t.description = "start-update";
-              t.persistAndFlush();
+          ApiToken t = new ApiToken();
+          t.tokenHash = sha256Hex(RAW_TOKEN);
+          t.userId = user.id;
+          t.orgId = org.id;
+          t.kind = ApiToken.Kind.service_account;
+          t.expiresAt = java.time.Instant.now().plusSeconds(60 * 60);
+          t.description = "start-update";
+          t.persistAndFlush();
 
-              stackCreator.create(org.id, ORG, PROJECT, STACK, Map.of());
-              stackCreator.create(other.id, OTHER_ORG, PROJECT, STACK, Map.of());
-            });
+          stackCreator.create(org.id, ORG, PROJECT, STACK, Map.of());
+          stackCreator.create(other.id, OTHER_ORG, PROJECT, STACK, Map.of());
+        });
   }
 
   @AfterEach
   void cleanup() {
-    QuarkusTransaction.requiringNew()
-        .run(
-            () -> {
-              em.createNativeQuery("DELETE FROM organizations WHERE name IN (?1, ?2)")
-                  .setParameter(1, ORG)
-                  .setParameter(2, OTHER_ORG)
-                  .executeUpdate();
-              em.createNativeQuery("DELETE FROM users WHERE iss = ?1 AND sub = ?2")
-                  .setParameter(1, "local:test")
-                  .setParameter(2, "start-update")
-                  .executeUpdate();
-            });
+    tx(
+        () -> {
+          em.createNativeQuery("DELETE FROM organizations WHERE name IN (?1, ?2)")
+              .setParameter(1, ORG)
+              .setParameter(2, OTHER_ORG)
+              .executeUpdate();
+          em.createNativeQuery("DELETE FROM users WHERE iss = ?1 AND sub = ?2")
+              .setParameter(1, "local:test")
+              .setParameter(2, "start-update")
+              .executeUpdate();
+        });
   }
 
   @Test
@@ -114,22 +112,21 @@ class StartUpdateContractTest {
         .body("updateID", notNullValue())
         .body("version", equalTo(0));
 
-    QuarkusTransaction.requiringNew()
-        .run(
-            () -> {
-              Object[] row =
-                  (Object[])
-                      em.createNativeQuery(
-                              "SELECT kind, status, pulumi_version, version, dry_run"
-                                  + " FROM stack_updates WHERE stack_id = ?1")
-                          .setParameter(1, stackId(ORG))
-                          .getSingleResult();
-              assertEquals("preview", row[0]);
-              assertEquals("in-progress", row[1]);
-              assertEquals("v3.234.0", row[2]);
-              assertEquals(0, ((Number) row[3]).intValue());
-              assertEquals(Boolean.TRUE, row[4]);
-            });
+    tx(
+        () -> {
+          Object[] row =
+              (Object[])
+                  em.createNativeQuery(
+                          "SELECT kind, status, pulumi_version, version, dry_run"
+                              + " FROM stack_updates WHERE stack_id = ?1")
+                      .setParameter(1, stackId(ORG))
+                      .getSingleResult();
+          assertEquals("preview", row[0]);
+          assertEquals("in-progress", row[1]);
+          assertEquals("v3.234.0", row[2]);
+          assertEquals(0, ((Number) row[3]).intValue());
+          assertEquals(Boolean.TRUE, row[4]);
+        });
   }
 
   @Test
@@ -154,17 +151,16 @@ class StartUpdateContractTest {
         .statusCode(200)
         .body("version", equalTo(2));
 
-    QuarkusTransaction.requiringNew()
-        .run(
-            () -> {
-              @SuppressWarnings("unchecked")
-              List<String> kinds =
-                  em.createNativeQuery(
-                          "SELECT kind FROM stack_updates WHERE stack_id = ?1 ORDER BY version")
-                      .setParameter(1, stackId(ORG))
-                      .getResultList();
-              assertEquals(List.of("update", "destroy"), kinds);
-            });
+    tx(
+        () -> {
+          @SuppressWarnings("unchecked")
+          List<String> kinds =
+              em.createNativeQuery(
+                      "SELECT kind FROM stack_updates WHERE stack_id = ?1 ORDER BY version")
+                  .setParameter(1, stackId(ORG))
+                  .getResultList();
+          assertEquals(List.of("update", "destroy"), kinds);
+        });
   }
 
   @Test
@@ -197,16 +193,15 @@ class StartUpdateContractTest {
 
     assertEquals(firstUpdateId, secondUpdateId);
 
-    QuarkusTransaction.requiringNew()
-        .run(
-            () -> {
-              Number n =
-                  (Number)
-                      em.createNativeQuery("SELECT count(*) FROM stack_updates WHERE stack_id = ?1")
-                          .setParameter(1, stackId(ORG))
-                          .getSingleResult();
-              assertEquals(1L, n.longValue());
-            });
+    tx(
+        () -> {
+          Number n =
+              (Number)
+                  em.createNativeQuery("SELECT count(*) FROM stack_updates WHERE stack_id = ?1")
+                      .setParameter(1, stackId(ORG))
+                      .getSingleResult();
+          assertEquals(1L, n.longValue());
+        });
   }
 
   @Test
@@ -266,16 +261,15 @@ class StartUpdateContractTest {
         .body("message", containsString("does not support journaling"))
         .body("message", containsString("3.100.0"));
 
-    QuarkusTransaction.requiringNew()
-        .run(
-            () -> {
-              Number n =
-                  (Number)
-                      em.createNativeQuery("SELECT count(*) FROM stack_updates WHERE stack_id = ?1")
-                          .setParameter(1, stackId(ORG))
-                          .getSingleResult();
-              assertEquals(0L, n.longValue());
-            });
+    tx(
+        () -> {
+          Number n =
+              (Number)
+                  em.createNativeQuery("SELECT count(*) FROM stack_updates WHERE stack_id = ?1")
+                      .setParameter(1, stackId(ORG))
+                      .getSingleResult();
+          assertEquals(0L, n.longValue());
+        });
   }
 
   private UUID stackId(String orgName) {

@@ -1,5 +1,7 @@
 package app.statedb.app.stack;
 
+import static app.statedb.testsupport.TestTransactions.read;
+import static app.statedb.testsupport.TestTransactions.tx;
 import static io.restassured.RestAssured.given;
 import static org.hamcrest.Matchers.equalTo;
 import static org.hamcrest.Matchers.not;
@@ -10,7 +12,6 @@ import app.statedb.persistence.identity.Organization;
 import app.statedb.persistence.identity.User;
 import app.statedb.persistence.stack.Stack;
 import app.statedb.persistence.update.StackUpdate;
-import io.quarkus.narayana.jta.QuarkusTransaction;
 import io.quarkus.test.junit.QuarkusTest;
 import jakarta.inject.Inject;
 import jakarta.persistence.EntityManager;
@@ -43,36 +44,35 @@ class StackTagsContractTest {
 
   @BeforeEach
   void seed() {
-    QuarkusTransaction.requiringNew()
-        .run(
-            () -> {
-              Organization org = new Organization();
-              org.name = ORG_NAME;
-              org.displayName = "Stack Tags Test";
-              org.persistAndFlush();
+    tx(
+        () -> {
+          Organization org = new Organization();
+          org.name = ORG_NAME;
+          org.displayName = "Stack Tags Test";
+          org.persistAndFlush();
 
-              User user = new User();
-              user.iss = "local:test";
-              user.sub = "stack-tags";
-              user.email = "tags@example.com";
-              user.displayName = "Stack Tags Tester";
-              user.persistAndFlush();
+          User user = new User();
+          user.iss = "local:test";
+          user.sub = "stack-tags";
+          user.email = "tags@example.com";
+          user.displayName = "Stack Tags Tester";
+          user.persistAndFlush();
 
-              OrgMember m = new OrgMember();
-              m.orgId = org.id;
-              m.userId = user.id;
-              m.role = OrgMember.Role.owner;
-              m.persistAndFlush();
+          OrgMember m = new OrgMember();
+          m.orgId = org.id;
+          m.userId = user.id;
+          m.role = OrgMember.Role.owner;
+          m.persistAndFlush();
 
-              ApiToken t = new ApiToken();
-              t.tokenHash = sha256Hex(RAW_TOKEN);
-              t.userId = user.id;
-              t.orgId = org.id;
-              t.kind = ApiToken.Kind.service_account;
-              t.expiresAt = java.time.Instant.now().plusSeconds(60 * 60);
-              t.description = "stack-tags";
-              t.persistAndFlush();
-            });
+          ApiToken t = new ApiToken();
+          t.tokenHash = sha256Hex(RAW_TOKEN);
+          t.userId = user.id;
+          t.orgId = org.id;
+          t.kind = ApiToken.Kind.service_account;
+          t.expiresAt = java.time.Instant.now().plusSeconds(60 * 60);
+          t.description = "stack-tags";
+          t.persistAndFlush();
+        });
 
     given()
         .header("Authorization", "token " + RAW_TOKEN)
@@ -91,17 +91,16 @@ class StackTagsContractTest {
 
   @AfterEach
   void cleanup() {
-    QuarkusTransaction.requiringNew()
-        .run(
-            () -> {
-              em.createNativeQuery("DELETE FROM organizations WHERE name = ?1")
-                  .setParameter(1, ORG_NAME)
-                  .executeUpdate();
-              em.createNativeQuery("DELETE FROM users WHERE iss = ?1 AND sub = ?2")
-                  .setParameter(1, "local:test")
-                  .setParameter(2, "stack-tags")
-                  .executeUpdate();
-            });
+    tx(
+        () -> {
+          em.createNativeQuery("DELETE FROM organizations WHERE name = ?1")
+              .setParameter(1, ORG_NAME)
+              .executeUpdate();
+          em.createNativeQuery("DELETE FROM users WHERE iss = ?1 AND sub = ?2")
+              .setParameter(1, "local:test")
+              .setParameter(2, "stack-tags")
+              .executeUpdate();
+        });
   }
 
   @Test
@@ -154,29 +153,28 @@ class StackTagsContractTest {
   void tagWriteDoesNotClobberActiveUpdate() {
     // Stand in for a concurrent `pulumi up`: an in-progress update with the stack pointing at it.
     UUID stackId =
-        QuarkusTransaction.requiringNew()
-            .call(
-                () -> {
-                  Stack s =
-                      Stack.<Stack>find(
-                              "select s from Stack s join s.project p join p.organization o"
-                                  + " where o.name = ?1 and p.name = ?2 and s.name = ?3",
-                              ORG_NAME,
-                              PROJECT,
-                              STACK)
-                          .firstResult();
+        read(
+            () -> {
+              Stack s =
+                  Stack.<Stack>find(
+                          "select s from Stack s join s.project p join p.organization o"
+                              + " where o.name = ?1 and p.name = ?2 and s.name = ?3",
+                          ORG_NAME,
+                          PROJECT,
+                          STACK)
+                      .firstResult();
 
-                  StackUpdate u = new StackUpdate();
-                  u.stackId = s.id;
-                  u.version = 1;
-                  u.kind = StackUpdate.Kind.UPDATE;
-                  u.status = StackUpdate.Status.IN_PROGRESS;
-                  u.startedAt = Instant.now();
-                  u.persistAndFlush();
+              StackUpdate u = new StackUpdate();
+              u.stackId = s.id;
+              u.version = 1;
+              u.kind = StackUpdate.Kind.UPDATE;
+              u.status = StackUpdate.Status.IN_PROGRESS;
+              u.startedAt = Instant.now();
+              u.persistAndFlush();
 
-                  Stack.update("activeUpdateId = ?1 where id = ?2", u.id, s.id);
-                  return s.id;
-                });
+              Stack.update("activeUpdateId = ?1 where id = ?2", u.id, s.id);
+              return s.id;
+            });
 
     given()
         .header("Authorization", "token " + RAW_TOKEN)
@@ -189,14 +187,13 @@ class StackTagsContractTest {
 
     // The active-update pointer set by the "concurrent" update must survive the tag write — a
     // full-row entity update would have rewritten active_update_id back to its stale (null) value.
-    QuarkusTransaction.requiringNew()
-        .run(
-            () -> {
-              Stack s = Stack.findById(stackId);
-              org.junit.jupiter.api.Assertions.assertNotNull(
-                  s.activeUpdateId, "tag write cleared active_update_id");
-              org.junit.jupiter.api.Assertions.assertEquals("staging", s.tags.get("env"));
-            });
+    tx(
+        () -> {
+          Stack s = Stack.findById(stackId);
+          org.junit.jupiter.api.Assertions.assertNotNull(
+              s.activeUpdateId, "tag write cleared active_update_id");
+          org.junit.jupiter.api.Assertions.assertEquals("staging", s.tags.get("env"));
+        });
   }
 
   @Test

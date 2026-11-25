@@ -1,5 +1,6 @@
 package app.statedb.app.secrets;
 
+import static app.statedb.testsupport.TestTransactions.tx;
 import static io.restassured.RestAssured.given;
 import static org.hamcrest.Matchers.aMapWithSize;
 import static org.hamcrest.Matchers.allOf;
@@ -16,7 +17,6 @@ import app.statedb.persistence.identity.User;
 import app.statedb.persistence.stack.StackCreator;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import io.quarkus.narayana.jta.QuarkusTransaction;
 import io.quarkus.test.junit.QuarkusTest;
 import io.restassured.path.json.JsonPath;
 import jakarta.inject.Inject;
@@ -55,80 +55,78 @@ class SecretsResourceTest {
 
   @BeforeEach
   void seed() {
-    QuarkusTransaction.requiringNew()
-        .run(
-            () -> {
-              Organization org = new Organization();
-              org.name = ORG_NAME;
-              org.displayName = "Secrets Org";
-              org.persistAndFlush();
+    tx(
+        () -> {
+          Organization org = new Organization();
+          org.name = ORG_NAME;
+          org.displayName = "Secrets Org";
+          org.persistAndFlush();
 
-              User user = new User();
-              user.iss = "local:test";
-              user.sub = "secrets";
-              user.email = "secrets@example.com";
-              user.displayName = "Secrets Tester";
-              user.persistAndFlush();
+          User user = new User();
+          user.iss = "local:test";
+          user.sub = "secrets";
+          user.email = "secrets@example.com";
+          user.displayName = "Secrets Tester";
+          user.persistAndFlush();
 
-              OrgMember m = new OrgMember();
-              m.orgId = org.id;
-              m.userId = user.id;
-              m.role = OrgMember.Role.owner;
-              m.persistAndFlush();
+          OrgMember m = new OrgMember();
+          m.orgId = org.id;
+          m.userId = user.id;
+          m.role = OrgMember.Role.owner;
+          m.persistAndFlush();
 
-              ApiToken t = new ApiToken();
-              t.tokenHash = sha256Hex(RAW_TOKEN);
-              t.userId = user.id;
-              t.orgId = org.id;
-              t.kind = ApiToken.Kind.service_account;
-              t.expiresAt = java.time.Instant.now().plusSeconds(60 * 60);
-              t.description = "secrets-test";
-              t.persistAndFlush();
+          ApiToken t = new ApiToken();
+          t.tokenHash = sha256Hex(RAW_TOKEN);
+          t.userId = user.id;
+          t.orgId = org.id;
+          t.kind = ApiToken.Kind.service_account;
+          t.expiresAt = java.time.Instant.now().plusSeconds(60 * 60);
+          t.description = "secrets-test";
+          t.persistAndFlush();
 
-              ApiToken sso = new ApiToken();
-              sso.tokenHash = sha256Hex(RAW_TOKEN_SSO);
-              sso.userId = user.id;
-              sso.orgId = null; // account-scoped: role resolved per request from org_members
-              sso.kind = ApiToken.Kind.oidc;
-              sso.expiresAt = java.time.Instant.now().plusSeconds(60 * 60);
-              sso.description = "secrets-sso-test";
-              sso.persistAndFlush();
+          ApiToken sso = new ApiToken();
+          sso.tokenHash = sha256Hex(RAW_TOKEN_SSO);
+          sso.userId = user.id;
+          sso.orgId = null; // account-scoped: role resolved per request from org_members
+          sso.kind = ApiToken.Kind.oidc;
+          sso.expiresAt = java.time.Instant.now().plusSeconds(60 * 60);
+          sso.description = "secrets-sso-test";
+          sso.persistAndFlush();
 
-              // A valid account-scoped token whose user has NO membership in the org.
-              User outsider = new User();
-              outsider.iss = "local:test";
-              outsider.sub = OUTSIDER_SUB;
-              outsider.email = "outsider@example.com";
-              outsider.persistAndFlush();
+          // A valid account-scoped token whose user has NO membership in the org.
+          User outsider = new User();
+          outsider.iss = "local:test";
+          outsider.sub = OUTSIDER_SUB;
+          outsider.email = "outsider@example.com";
+          outsider.persistAndFlush();
 
-              ApiToken outsiderToken = new ApiToken();
-              outsiderToken.tokenHash = sha256Hex(RAW_TOKEN_OUTSIDER);
-              outsiderToken.userId = outsider.id;
-              outsiderToken.orgId = null;
-              outsiderToken.kind = ApiToken.Kind.oidc;
-              outsiderToken.expiresAt = java.time.Instant.now().plusSeconds(60 * 60);
-              outsiderToken.description = "secrets-outsider-test";
-              outsiderToken.persistAndFlush();
+          ApiToken outsiderToken = new ApiToken();
+          outsiderToken.tokenHash = sha256Hex(RAW_TOKEN_OUTSIDER);
+          outsiderToken.userId = outsider.id;
+          outsiderToken.orgId = null;
+          outsiderToken.kind = ApiToken.Kind.oidc;
+          outsiderToken.expiresAt = java.time.Instant.now().plusSeconds(60 * 60);
+          outsiderToken.description = "secrets-outsider-test";
+          outsiderToken.persistAndFlush();
 
-              stackCreator.create(org.id, ORG_NAME, PROJECT, "alpha", Map.of());
-              stackCreator.create(org.id, ORG_NAME, PROJECT, "beta", Map.of());
-            });
+          stackCreator.create(org.id, ORG_NAME, PROJECT, "alpha", Map.of());
+          stackCreator.create(org.id, ORG_NAME, PROJECT, "beta", Map.of());
+        });
   }
 
   @AfterEach
   void cleanup() {
-    QuarkusTransaction.requiringNew()
-        .run(
-            () -> {
-              em.createNativeQuery("DELETE FROM organizations WHERE name = ?1")
-                  .setParameter(1, ORG_NAME)
-                  .executeUpdate();
-              em.createNativeQuery("DELETE FROM users WHERE iss = ?1 AND sub IN (?2, ?3)")
-                  .setParameter(1, "local:test")
-                  .setParameter(2, "secrets")
-                  .setParameter(3, OUTSIDER_SUB)
-                  .executeUpdate();
-            });
+    tx(
+        () -> {
+          em.createNativeQuery("DELETE FROM organizations WHERE name = ?1")
+              .setParameter(1, ORG_NAME)
+              .executeUpdate();
+          em.createNativeQuery("DELETE FROM users WHERE iss = ?1 AND sub IN (?2, ?3)")
+              .setParameter(1, "local:test")
+              .setParameter(2, "secrets")
+              .setParameter(3, OUTSIDER_SUB)
+              .executeUpdate();
+        });
   }
 
   @Test

@@ -1,5 +1,6 @@
 package app.statedb.app.stack;
 
+import static app.statedb.testsupport.TestTransactions.tx;
 import static io.restassured.RestAssured.given;
 import static org.hamcrest.Matchers.equalTo;
 import static org.hamcrest.Matchers.hasKey;
@@ -11,7 +12,6 @@ import app.statedb.persistence.identity.Organization;
 import app.statedb.persistence.identity.User;
 import app.statedb.persistence.stack.Stack;
 import app.statedb.persistence.update.StackUpdate;
-import io.quarkus.narayana.jta.QuarkusTransaction;
 import io.quarkus.test.junit.QuarkusTest;
 import jakarta.inject.Inject;
 import jakarta.persistence.EntityManager;
@@ -45,53 +45,51 @@ class StackHistoryContractTest {
 
   @BeforeEach
   void seed() {
-    QuarkusTransaction.requiringNew()
-        .run(
-            () -> {
-              Organization org = new Organization();
-              org.name = ORG_NAME;
-              org.displayName = "Stack History Test";
-              org.persistAndFlush();
+    tx(
+        () -> {
+          Organization org = new Organization();
+          org.name = ORG_NAME;
+          org.displayName = "Stack History Test";
+          org.persistAndFlush();
 
-              User user = new User();
-              user.iss = "local:test";
-              user.sub = "stack-history";
-              user.email = "history@example.com";
-              user.displayName = "Stack History Tester";
-              user.persistAndFlush();
+          User user = new User();
+          user.iss = "local:test";
+          user.sub = "stack-history";
+          user.email = "history@example.com";
+          user.displayName = "Stack History Tester";
+          user.persistAndFlush();
 
-              OrgMember m = new OrgMember();
-              m.orgId = org.id;
-              m.userId = user.id;
-              m.role = OrgMember.Role.owner;
-              m.persistAndFlush();
+          OrgMember m = new OrgMember();
+          m.orgId = org.id;
+          m.userId = user.id;
+          m.role = OrgMember.Role.owner;
+          m.persistAndFlush();
 
-              ApiToken t = new ApiToken();
-              t.tokenHash = sha256Hex(RAW_TOKEN);
-              t.userId = user.id;
-              t.orgId = org.id;
-              t.kind = ApiToken.Kind.service_account;
-              t.expiresAt = java.time.Instant.now().plusSeconds(60 * 60);
-              t.description = "stack-history";
-              t.persistAndFlush();
-            });
+          ApiToken t = new ApiToken();
+          t.tokenHash = sha256Hex(RAW_TOKEN);
+          t.userId = user.id;
+          t.orgId = org.id;
+          t.kind = ApiToken.Kind.service_account;
+          t.expiresAt = java.time.Instant.now().plusSeconds(60 * 60);
+          t.description = "stack-history";
+          t.persistAndFlush();
+        });
 
     createStack(STACK);
   }
 
   @AfterEach
   void cleanup() {
-    QuarkusTransaction.requiringNew()
-        .run(
-            () -> {
-              em.createNativeQuery("DELETE FROM organizations WHERE name = ?1")
-                  .setParameter(1, ORG_NAME)
-                  .executeUpdate();
-              em.createNativeQuery("DELETE FROM users WHERE iss = ?1 AND sub = ?2")
-                  .setParameter(1, "local:test")
-                  .setParameter(2, "stack-history")
-                  .executeUpdate();
-            });
+    tx(
+        () -> {
+          em.createNativeQuery("DELETE FROM organizations WHERE name = ?1")
+              .setParameter(1, ORG_NAME)
+              .executeUpdate();
+          em.createNativeQuery("DELETE FROM users WHERE iss = ?1 AND sub = ?2")
+              .setParameter(1, "local:test")
+              .setParameter(2, "stack-history")
+              .executeUpdate();
+        });
   }
 
   @Test
@@ -153,25 +151,24 @@ class StackHistoryContractTest {
     // environment
     // under metadata.environment; both must round-trip into stack history --json verbatim.
     Instant t = Instant.ofEpochSecond(1_700_000_000L);
-    QuarkusTransaction.requiringNew()
-        .run(
-            () -> {
-              StackUpdate u = new StackUpdate();
-              u.stackId = stackId();
-              u.version = 1;
-              u.kind = StackUpdate.Kind.UPDATE;
-              u.status = StackUpdate.Status.SUCCEEDED;
-              u.startedAt = t;
-              u.endedAt = t;
-              u.config = Map.of("aws:region", Map.of("string", "us-east-1", "secret", false));
-              u.metadata =
-                  Map.of(
-                      "message",
-                      "deploy",
-                      "environment",
-                      Map.of("pulumi.version", "3.100.0", "ci", "false"));
-              u.persistAndFlush();
-            });
+    tx(
+        () -> {
+          StackUpdate u = new StackUpdate();
+          u.stackId = stackId();
+          u.version = 1;
+          u.kind = StackUpdate.Kind.UPDATE;
+          u.status = StackUpdate.Status.SUCCEEDED;
+          u.startedAt = t;
+          u.endedAt = t;
+          u.config = Map.of("aws:region", Map.of("string", "us-east-1", "secret", false));
+          u.metadata =
+              Map.of(
+                  "message",
+                  "deploy",
+                  "environment",
+                  Map.of("pulumi.version", "3.100.0", "ci", "false"));
+          u.persistAndFlush();
+        });
 
     given()
         .header("Authorization", "token " + RAW_TOKEN)
@@ -273,36 +270,34 @@ class StackHistoryContractTest {
       Instant startedAt,
       Instant endedAt,
       String message) {
-    QuarkusTransaction.requiringNew()
-        .run(
-            () -> {
-              StackUpdate u = new StackUpdate();
-              u.stackId = stackId();
-              u.version = version;
-              u.kind = kind;
-              u.status = status;
-              u.startedAt = startedAt;
-              u.endedAt = endedAt;
-              u.message = message;
-              u.persistAndFlush();
-            });
+    tx(
+        () -> {
+          StackUpdate u = new StackUpdate();
+          u.stackId = stackId();
+          u.version = version;
+          u.kind = kind;
+          u.status = status;
+          u.startedAt = startedAt;
+          u.endedAt = endedAt;
+          u.message = message;
+          u.persistAndFlush();
+        });
   }
 
   private void addDryRunUpdate(Instant at) {
-    QuarkusTransaction.requiringNew()
-        .run(
-            () -> {
-              StackUpdate u = new StackUpdate();
-              u.stackId = stackId();
-              u.version = 0;
-              u.dryRun = true;
-              u.kind = StackUpdate.Kind.UPDATE;
-              u.status = StackUpdate.Status.SUCCEEDED;
-              u.startedAt = at;
-              u.endedAt = at;
-              u.message = "dry-run pass";
-              u.persistAndFlush();
-            });
+    tx(
+        () -> {
+          StackUpdate u = new StackUpdate();
+          u.stackId = stackId();
+          u.version = 0;
+          u.dryRun = true;
+          u.kind = StackUpdate.Kind.UPDATE;
+          u.status = StackUpdate.Status.SUCCEEDED;
+          u.startedAt = at;
+          u.endedAt = at;
+          u.message = "dry-run pass";
+          u.persistAndFlush();
+        });
   }
 
   // Must be called inside an active transaction (the entity hydration needs a session).

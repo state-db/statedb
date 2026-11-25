@@ -1,5 +1,7 @@
 package app.statedb.app.report;
 
+import static app.statedb.testsupport.TestTransactions.read;
+import static app.statedb.testsupport.TestTransactions.tx;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
@@ -23,7 +25,6 @@ import app.statedb.persistence.stack.Workspace;
 import app.statedb.persistence.update.StackUpdate;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import io.quarkus.narayana.jta.QuarkusTransaction;
 import io.quarkus.test.junit.QuarkusTest;
 import jakarta.inject.Inject;
 import java.io.InputStream;
@@ -78,7 +79,7 @@ class ReportGoldenTest {
     }
     String name = org;
     org = null;
-    QuarkusTransaction.requiringNew().run(() -> Organization.delete("name", name));
+    tx(() -> Organization.delete("name", name));
   }
 
   @Test
@@ -94,7 +95,7 @@ class ReportGoldenTest {
     assertEquals(golden(fromRows.body()), fromRows.body());
     assertFalse(fromRows.truncated());
 
-    QuarkusTransaction.requiringNew().run(() -> folder.fold(seeded.updateId(), Instant.now()));
+    tx(() -> folder.fold(seeded.updateId(), Instant.now()));
     assertNotNull(
         inTx(() -> UpdateEventArchive.<UpdateEventArchive>findById(seeded.updateId())),
         "precondition: the run was folded");
@@ -232,65 +233,64 @@ class ReportGoldenTest {
     this.org = "report-golden-" + System.nanoTime();
     String orgName = this.org;
     List<JsonNode> corpus = corpus();
-    return QuarkusTransaction.requiringNew()
-        .call(
-            () -> {
-              Organization organization = new Organization();
-              organization.name = orgName;
-              organization.displayName = orgName;
-              organization.persist();
-              Project project = new Project();
-              project.orgId = organization.id;
-              project.name = "shop";
-              project.persist();
-              Workspace workspace = new Workspace();
-              workspace.orgId = organization.id;
-              workspace.kind = Workspace.Kind.pulumi;
-              workspace.persist();
-              Stack stack = new Stack();
-              stack.orgId = organization.id;
-              stack.projectId = project.id;
-              stack.workspaceId = workspace.id;
-              stack.name = "dev";
-              stack.persistAndFlush();
+    return read(
+        () -> {
+          Organization organization = new Organization();
+          organization.name = orgName;
+          organization.displayName = orgName;
+          organization.persist();
+          Project project = new Project();
+          project.orgId = organization.id;
+          project.name = "shop";
+          project.persist();
+          Workspace workspace = new Workspace();
+          workspace.orgId = organization.id;
+          workspace.kind = Workspace.Kind.pulumi;
+          workspace.persist();
+          Stack stack = new Stack();
+          stack.orgId = organization.id;
+          stack.projectId = project.id;
+          stack.workspaceId = workspace.id;
+          stack.name = "dev";
+          stack.persistAndFlush();
 
-              StackUpdate update = new StackUpdate();
-              update.stackId = stack.id;
-              update.kind = StackUpdate.Kind.PREVIEW;
-              update.status = StackUpdate.Status.SUCCEEDED;
-              update.dryRun = true;
-              update.version = 0;
-              update.startedAt = STARTED;
-              // Well outside the fold grace period, so foldOnce() would take it — this test folds
-              // explicitly, but an eligible update is the realistic case.
-              update.endedAt = ENDED;
-              update.persistAndFlush();
+          StackUpdate update = new StackUpdate();
+          update.stackId = stack.id;
+          update.kind = StackUpdate.Kind.PREVIEW;
+          update.status = StackUpdate.Status.SUCCEEDED;
+          update.dryRun = true;
+          update.version = 0;
+          update.startedAt = STARTED;
+          // Well outside the fold grace period, so foldOnce() would take it — this test folds
+          // explicitly, but an eligible update is the realistic case.
+          update.endedAt = ENDED;
+          update.persistAndFlush();
 
-              for (JsonNode raw : corpus) {
-                UpdateEventView view = new UpdateEventView(raw);
-                UpdateEvent event = new UpdateEvent();
-                event.stackId = stack.id;
-                event.updateId = update.id;
-                event.sequence = view.sequence();
-                event.kind = view.kind();
-                event.severity = view.severity();
-                event.payload = raw;
-                event.persist();
-              }
+          for (JsonNode raw : corpus) {
+            UpdateEventView view = new UpdateEventView(raw);
+            UpdateEvent event = new UpdateEvent();
+            event.stackId = stack.id;
+            event.updateId = update.id;
+            event.sequence = view.sequence();
+            event.kind = view.kind();
+            event.severity = view.severity();
+            event.payload = raw;
+            event.persist();
+          }
 
-              StackRef ref =
-                  new StackRef(
-                      stack.id,
-                      stack.workspaceId,
-                      stack.orgId,
-                      "shop-org",
-                      "shop",
-                      "dev",
-                      0,
-                      null,
-                      stack.visibility);
-              return new Seeded(stack.id, update.id, ref);
-            });
+          StackRef ref =
+              new StackRef(
+                  stack.id,
+                  stack.workspaceId,
+                  stack.orgId,
+                  "shop-org",
+                  "shop",
+                  "dev",
+                  0,
+                  null,
+                  stack.visibility);
+          return new Seeded(stack.id, update.id, ref);
+        });
   }
 
   private static List<JsonNode> corpus() throws Exception {
@@ -304,7 +304,7 @@ class ReportGoldenTest {
   }
 
   private <T> T inTx(Supplier<T> work) {
-    return QuarkusTransaction.requiringNew().call(work::get);
+    return read(work::get);
   }
 
   /** The stack coordinates are fixed rather than taken from the seeded row so the golden is. */
