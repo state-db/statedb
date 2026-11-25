@@ -14,6 +14,7 @@ import app.statedb.persistence.lock.StackLockCanceller;
 import app.statedb.persistence.stack.CompactionJob;
 import app.statedb.persistence.stack.Stack;
 import app.statedb.persistence.stack.StackCreator;
+import app.statedb.persistence.stack.StackState;
 import app.statedb.persistence.update.AbandonedUpdateReaper;
 import app.statedb.persistence.update.StackUpdate;
 import app.statedb.persistence.update.StackUpdateStarter;
@@ -23,11 +24,13 @@ import io.quarkus.narayana.jta.QuarkusTransaction;
 import io.quarkus.test.junit.QuarkusTest;
 import jakarta.inject.Inject;
 import jakarta.persistence.EntityManager;
+import jakarta.persistence.LockModeType;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import java.util.concurrent.Callable;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -58,41 +61,34 @@ class AbandonedUpdateReaperTest {
   @BeforeEach
   void seed() {
     stackId =
-        QuarkusTransaction.requiringNew()
-            .call(
-                () -> {
-                  Organization org = new Organization();
-                  org.name = ORG_NAME;
-                  org.displayName = "Reaper Test";
-                  org.persistAndFlush();
-                  return stackCreator.create(org.id, ORG_NAME, "proj", "dev", Map.of()).stackId();
-                });
+        read(
+            () -> {
+              Organization org = new Organization();
+              org.name = ORG_NAME;
+              org.displayName = "Reaper Test";
+              org.persistAndFlush();
+              return stackCreator.create(org.id, ORG_NAME, "proj", "dev", Map.of()).stackId();
+            });
   }
 
   @AfterEach
   void cleanup() {
-    QuarkusTransaction.requiringNew()
-        .run(
-            () ->
-                em.createNativeQuery("DELETE FROM organizations WHERE name = ?1")
-                    .setParameter(1, ORG_NAME)
-                    .executeUpdate());
+    tx(() -> Organization.delete("name", ORG_NAME));
   }
 
   @Test
   void previewWhoseLeaseExpiredIsFailedAndReleasesTheStack() {
     UUID updateId = startPreview("k-expired");
-    acquirer.acquire(stackId, updateId, "user:ci", 1, null).orElseThrow();
+    lease(updateId);
     backdate(updateId);
     expireLease();
 
     reaper.reapOnce();
 
-    assertEquals(StackUpdate.Status.FAILED, status(updateId));
-    assertNotNull(endedAt(updateId));
-    long leases = QuarkusTransaction.requiringNew().call(() -> StackLock.count("stackId", stackId));
-    assertEquals(0L, leases);
-    assertNull(activeUpdateId());
+    assertEquals(StackUpdate.Status.FAILED, update(updateId).status);
+    assertNotNull(update(updateId).endedAt);
+    assertEquals(0L, leaseCount());
+    assertNull(stack().activeUpdateId);
   }
 
   @Test
@@ -102,7 +98,7 @@ class AbandonedUpdateReaperTest {
 
     reaper.reapOnce();
 
-    assertEquals(StackUpdate.Status.FAILED, status(updateId));
+    assertEquals(StackUpdate.Status.FAILED, update(updateId).status);
   }
 
   @Test
@@ -111,19 +107,19 @@ class AbandonedUpdateReaperTest {
 
     reaper.reapOnce();
 
-    assertEquals(StackUpdate.Status.IN_PROGRESS, status(updateId));
+    assertEquals(StackUpdate.Status.IN_PROGRESS, update(updateId).status);
   }
 
   @Test
   void longRunningUpdateWithLiveLeaseIsLeftAlone() {
     UUID updateId = startPreview("k-live");
-    acquirer.acquire(stackId, updateId, "user:ci", 1, null).orElseThrow();
+    lease(updateId);
     backdate(updateId);
 
     reaper.reapOnce();
 
-    assertEquals(StackUpdate.Status.IN_PROGRESS, status(updateId));
-    assertEquals(updateId, activeUpdateId());
+    assertEquals(StackUpdate.Status.IN_PROGRESS, update(updateId).status);
+    assertEquals(updateId, stack().activeUpdateId);
   }
 
   @Test
@@ -133,17 +129,17 @@ class AbandonedUpdateReaperTest {
     reaper.reapOnce();
 
     assertTrue(acquirer.acquire(stackId, reapedId, "user:ci", 1, null).isEmpty());
-    assertNull(activeUpdateId());
+    assertNull(stack().activeUpdateId);
 
     UUID nextId = startPreview("k-next");
     assertTrue(acquirer.acquire(stackId, nextId, "user:ci", 1, null).isPresent());
-    assertEquals(nextId, activeUpdateId());
+    assertEquals(nextId, stack().activeUpdateId);
   }
 
   @Test
   void killedApplyIsFinalizedLikeAFailedCompletion() throws Exception {
     UUID updateId = start(StackUpdate.Kind.UPDATE, "k-killed-up");
-    Lease lease = acquirer.acquire(stackId, updateId, "user:ci", 1, null).orElseThrow();
+    Lease lease = lease(updateId);
     journalAppender.append(
         stackId,
         updateId,
@@ -159,28 +155,18 @@ class AbandonedUpdateReaperTest {
 
     reaper.reapOnce();
 
-    long journalSeq =
-        ((Number)
-                em.createNativeQuery("SELECT journal_seq FROM stack_state WHERE stack_id = ?1")
-                    .setParameter(1, stackId)
-                    .getSingleResult())
-            .longValue();
-    assertEquals(StackUpdate.Status.FAILED, status(updateId));
+    StackUpdate reaped = update(updateId);
+    assertEquals(StackUpdate.Status.FAILED, reaped.status);
     // A null boundary would make `pulumi stack export --version 1` a 404.
-    assertEquals(
-        journalSeq,
-        QuarkusTransaction.requiringNew()
-            .call(() -> StackUpdate.<StackUpdate>findById(updateId).endJournalSeq));
-    assertEquals(
-        1, QuarkusTransaction.requiringNew().call(() -> Stack.<Stack>findById(stackId).version));
-    assertTrue(
-        QuarkusTransaction.requiringNew().call(() -> CompactionJob.count("stackId", stackId)) > 0);
+    assertEquals(journalSeq(), reaped.endJournalSeq);
+    assertEquals(1, stack().version);
+    assertTrue(compactionJobCount() > 0);
   }
 
   @Test
   void leaseRenewedWhileTheReaperWaitsSurvives() throws Exception {
     UUID updateId = startPreview("k-renew-race");
-    acquirer.acquire(stackId, updateId, "user:ci", 1, null).orElseThrow();
+    lease(updateId);
     backdate(updateId);
     expireLease();
 
@@ -192,16 +178,15 @@ class AbandonedUpdateReaperTest {
       Future<?> renewal =
           pool.submit(
               () ->
-                  QuarkusTransaction.requiringNew()
-                      .run(
-                          () -> {
-                            StackLock.update(
-                                "expiresAt = ?1 where updateId = ?2",
-                                Instant.now().plus(Duration.ofMinutes(5)),
-                                updateId);
-                            renewed.countDown();
-                            await(release);
-                          }));
+                  tx(
+                      () -> {
+                        StackLock.update(
+                            "expiresAt = ?1 where updateId = ?2",
+                            Instant.now().plus(Duration.ofMinutes(5)),
+                            updateId);
+                        renewed.countDown();
+                        await(release);
+                      }));
       renewed.await(10, TimeUnit.SECONDS);
       Future<Integer> reap = pool.submit(() -> reaper.reapOnce());
       awaitLockWaiter();
@@ -213,16 +198,15 @@ class AbandonedUpdateReaperTest {
       pool.shutdownNow();
     }
 
-    assertEquals(StackUpdate.Status.IN_PROGRESS, status(updateId));
-    assertEquals(
-        1L, QuarkusTransaction.requiringNew().call(() -> StackLock.count("updateId", updateId)));
-    assertEquals(updateId, activeUpdateId());
+    assertEquals(StackUpdate.Status.IN_PROGRESS, update(updateId).status);
+    assertEquals(1L, leaseCount());
+    assertEquals(updateId, stack().activeUpdateId);
   }
 
   @Test
   void forcedCancelWaitingOnAReapLeavesTheUpdateFailed() throws Exception {
     UUID updateId = startPreview("k-cancel-race");
-    acquirer.acquire(stackId, updateId, "user:ci", 1, null).orElseThrow();
+    lease(updateId);
 
     CountDownLatch reaping = new CountDownLatch(1);
     CountDownLatch release = new CountDownLatch(1);
@@ -232,22 +216,18 @@ class AbandonedUpdateReaperTest {
       Future<?> reap =
           pool.submit(
               () ->
-                  QuarkusTransaction.requiringNew()
-                      .run(
-                          () -> {
-                            em.createNativeQuery(
-                                    "SELECT 1 FROM stack_state WHERE stack_id = ?1 FOR UPDATE")
-                                .setParameter(1, stackId)
-                                .getResultList();
-                            StackLock.delete("updateId", updateId);
-                            StackUpdate.update(
-                                "status = ?1, endedAt = ?2 where id = ?3",
-                                StackUpdate.Status.FAILED,
-                                Instant.now(),
-                                updateId);
-                            reaping.countDown();
-                            await(release);
-                          }));
+                  tx(
+                      () -> {
+                        StackState.find("stackId", stackId)
+                            .withLock(LockModeType.PESSIMISTIC_WRITE)
+                            .firstResult();
+                        StackLock.delete("updateId", updateId);
+                        StackUpdate u = StackUpdate.findById(updateId);
+                        u.status = StackUpdate.Status.FAILED;
+                        u.endedAt = Instant.now();
+                        reaping.countDown();
+                        await(release);
+                      }));
       reaping.await(10, TimeUnit.SECONDS);
       Future<Boolean> cancel = pool.submit(() -> canceller.forceCancelUpdate(stackId, updateId));
       awaitLockWaiter();
@@ -259,8 +239,10 @@ class AbandonedUpdateReaperTest {
       pool.shutdownNow();
     }
 
-    assertEquals(StackUpdate.Status.FAILED, status(updateId));
+    assertEquals(StackUpdate.Status.FAILED, update(updateId).status);
   }
+
+  // --- setup
 
   private UUID startPreview(String key) {
     return start(StackUpdate.Kind.PREVIEW, key);
@@ -272,17 +254,56 @@ class AbandonedUpdateReaperTest {
     return starter.start(stackId, kind, null, null, key, req).updateId();
   }
 
+  private Lease lease(UUID updateId) {
+    return acquirer.acquire(stackId, updateId, "user:ci", 1, null).orElseThrow();
+  }
+
+  private void backdate(UUID updateId) {
+    tx(
+        () ->
+            StackUpdate.update(
+                "startedAt = ?1 where id = ?2", Instant.now().minus(LONG_AGO), updateId));
+  }
+
+  private void expireLease() {
+    tx(
+        () ->
+            StackLock.update(
+                "expiresAt = ?1 where stackId = ?2", Instant.now().minusSeconds(1), stackId));
+  }
+
+  // --- reads, each in its own transaction so they see what other threads committed
+
+  private StackUpdate update(UUID updateId) {
+    return read(() -> StackUpdate.findById(updateId));
+  }
+
+  private Stack stack() {
+    return read(() -> Stack.findById(stackId));
+  }
+
+  private long journalSeq() {
+    return read(() -> StackState.<StackState>find("stackId", stackId).firstResult().journalSeq);
+  }
+
+  private long leaseCount() {
+    return read(() -> StackLock.count("stackId", stackId));
+  }
+
+  private long compactionJobCount() {
+    return read(() -> CompactionJob.count("stackId", stackId));
+  }
+
   // Returns once some backend is blocked on a row lock, i.e. the second transaction is waiting.
   private void awaitLockWaiter() throws InterruptedException {
     long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(10);
     while (System.nanoTime() < deadline) {
       Number waiting =
-          QuarkusTransaction.requiringNew()
-              .call(
-                  () ->
-                      (Number)
-                          em.createNativeQuery("SELECT count(*) FROM pg_locks WHERE NOT granted")
-                              .getSingleResult());
+          read(
+              () ->
+                  (Number)
+                      em.createNativeQuery("SELECT count(*) FROM pg_locks WHERE NOT granted")
+                          .getSingleResult());
       if (waiting.longValue() > 0) {
         return;
       }
@@ -291,42 +312,21 @@ class AbandonedUpdateReaperTest {
     throw new AssertionError("second transaction never blocked on the first");
   }
 
+  // --- plumbing
+
+  private static <T> T read(Callable<T> work) {
+    return QuarkusTransaction.requiringNew().call(work);
+  }
+
+  private static void tx(Runnable work) {
+    QuarkusTransaction.requiringNew().run(work);
+  }
+
   private static void await(CountDownLatch latch) {
     try {
       latch.await(10, TimeUnit.SECONDS);
     } catch (InterruptedException e) {
       Thread.currentThread().interrupt();
     }
-  }
-
-  private void backdate(UUID updateId) {
-    QuarkusTransaction.requiringNew()
-        .run(
-            () ->
-                StackUpdate.update(
-                    "startedAt = ?1 where id = ?2", Instant.now().minus(LONG_AGO), updateId));
-  }
-
-  private void expireLease() {
-    QuarkusTransaction.requiringNew()
-        .run(
-            () ->
-                StackLock.update(
-                    "expiresAt = ?1 where stackId = ?2", Instant.now().minusSeconds(1), stackId));
-  }
-
-  private StackUpdate.Status status(UUID updateId) {
-    return QuarkusTransaction.requiringNew()
-        .call(() -> StackUpdate.<StackUpdate>findById(updateId).status);
-  }
-
-  private Instant endedAt(UUID updateId) {
-    return QuarkusTransaction.requiringNew()
-        .call(() -> StackUpdate.<StackUpdate>findById(updateId).endedAt);
-  }
-
-  private UUID activeUpdateId() {
-    return QuarkusTransaction.requiringNew()
-        .call(() -> Stack.<Stack>findById(stackId).activeUpdateId);
   }
 }
