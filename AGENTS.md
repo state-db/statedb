@@ -106,6 +106,12 @@ the owning target if it fails.
 
 ## Java test transactions
 
+- Use `@TestTransaction` when a direct persistence test fits in one rollback
+  transaction. Keep explicit boundaries when the test checks a commit or
+  rollback.
+- For HTTP tests, use feature fixtures that commit setup before the request.
+  Delete test-owned rows in `@AfterEach`. Keep the request and its assertions
+  in the test.
 - If a test needs a fresh transaction, statically import `read` or `tx` from
   `app.statedb.testsupport.TestTransactions`. Use `read(() -> ...)` if the
   callback returns a value. Use `tx(() -> ...)` for a void callback. Both
