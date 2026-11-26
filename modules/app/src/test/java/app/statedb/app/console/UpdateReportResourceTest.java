@@ -1,5 +1,6 @@
 package app.statedb.app.console;
 
+import static app.statedb.app.console.OidcConsoleSessionFixture.loginAs;
 import static app.statedb.testsupport.TestTransactions.read;
 import static app.statedb.testsupport.TestTransactions.tx;
 import static io.restassured.RestAssured.given;
@@ -14,7 +15,6 @@ import app.statedb.persistence.events.UpdateEventArchive;
 import app.statedb.persistence.events.UpdateEventView;
 import app.statedb.persistence.identity.OrgMember;
 import app.statedb.persistence.identity.Organization;
-import app.statedb.persistence.identity.User;
 import app.statedb.persistence.stack.Stack;
 import app.statedb.persistence.stack.StackCreator;
 import app.statedb.persistence.update.StackUpdate;
@@ -27,6 +27,7 @@ import io.quarkus.test.oidc.server.OidcWiremockTestResource;
 import io.restassured.http.Cookie;
 import io.restassured.response.Response;
 import jakarta.inject.Inject;
+import jakarta.transaction.Transactional;
 import java.io.InputStream;
 import java.time.Instant;
 import java.util.ArrayList;
@@ -63,23 +64,26 @@ class UpdateReportResourceTest {
   @Inject EventArchiveFolder folder;
 
   @BeforeEach
+  @Transactional
   void seed() {
     cleanup();
+    Organization org = new Organization();
+    org.name = ORG;
+    org.displayName = ORG;
+    org.persistAndFlush();
   }
 
   @AfterEach
+  @Transactional
   void cleanup() {
-    tx(
-        () -> {
-          Organization.delete("name", ORG);
-          Organization.delete("name", OTHER_ORG);
-        });
+    Organization.delete("name", ORG);
+    Organization.delete("name", OTHER_ORG);
     OidcConsoleSessionFixture.cleanup();
   }
 
   @Test
   void servesMarkdownByDefaultAndJsonOnRequest() {
-    Cookie session = ownerSession(ORG);
+    Cookie session = loginAs(ORG, OrgMember.Role.owner);
     UUID updateId = seedRun(createStack(ORG));
 
     Response markdown = report(session, updateId, null);
@@ -123,7 +127,7 @@ class UpdateReportResourceTest {
    */
   @Test
   void reportsIdenticallyOnceTheRunIsFolded() {
-    Cookie session = ownerSession(ORG);
+    Cookie session = loginAs(ORG, OrgMember.Role.owner);
     UUID updateId = seedRun(createStack(ORG));
 
     String before = report(session, updateId, null).asString();
@@ -141,7 +145,7 @@ class UpdateReportResourceTest {
   void refusesAnUpdateInAnotherTenantAsIfItDidNotExist() {
     UUID foreignUpdate = seedRun(createStack(OTHER_ORG, true));
     // A member of ORG with no role at all in OTHER_ORG.
-    Cookie session = ownerSession(ORG);
+    Cookie session = loginAs(ORG, OrgMember.Role.owner);
 
     // 404 rather than 403: a 403 would confirm that this update id exists somewhere.
     report(session, foreignUpdate, null).then().statusCode(404);
@@ -149,7 +153,7 @@ class UpdateReportResourceTest {
 
   @Test
   void refusesAPrivateStackInTheCallersOrgWithoutAReadGrant() {
-    Cookie session = session(ORG, OrgMember.Role.member);
+    Cookie session = loginAs(ORG, OrgMember.Role.member);
     UUID stackId = createStack(ORG);
     makeStackPrivate(stackId);
     UUID updateId = seedRun(stackId);
@@ -159,7 +163,7 @@ class UpdateReportResourceTest {
 
   @Test
   void refusesAnUnknownOrMalformedUpdateId() {
-    Cookie session = ownerSession(ORG);
+    Cookie session = loginAs(ORG, OrgMember.Role.owner);
     report(session, UUID.randomUUID(), null).then().statusCode(404);
     given()
         .cookie(session.getName(), session.getValue())
@@ -171,13 +175,13 @@ class UpdateReportResourceTest {
 
   @Test
   void refusesAnUnauthenticatedCaller() {
-    UUID updateId = seedRun(createStack(ORG, true));
+    UUID updateId = seedRun(createStack(ORG));
     given().when().get("/api/updates/" + updateId + "/report").then().statusCode(401);
   }
 
   @Test
   void rejectsAnUnknownFormat() {
-    Cookie session = ownerSession(ORG);
+    Cookie session = loginAs(ORG, OrgMember.Role.owner);
     UUID updateId = seedRun(createStack(ORG));
     report(session, updateId, "html").then().statusCode(400);
   }
@@ -246,42 +250,6 @@ class UpdateReportResourceTest {
     } catch (Exception e) {
       throw new IllegalStateException("failed to read " + CORPUS, e);
     }
-  }
-
-  private static Cookie ownerSession(String orgName) {
-    return session(orgName, OrgMember.Role.owner);
-  }
-
-  private static Cookie session(String orgName, OrgMember.Role role) {
-    tx(
-        () -> {
-          if (Organization.find("name", orgName).firstResult() == null) {
-            Organization org = new Organization();
-            org.name = orgName;
-            org.displayName = orgName;
-            org.persistAndFlush();
-          }
-        });
-    OidcConsoleSessionFixture.seedProvider();
-    Cookie session = OidcConsoleSessionFixture.login();
-    tx(
-        () -> {
-          User user =
-              User.<User>find(
-                      "iss = ?1 and sub = ?2",
-                      OidcConsoleSessionFixture.FIXTURE_ISS,
-                      OidcConsoleSessionFixture.FIXTURE_SUB)
-                  .firstResult();
-          Organization org = Organization.<Organization>find("name", orgName).firstResult();
-          if (OrgMember.find("orgId = ?1 and userId = ?2", org.id, user.id).firstResult() == null) {
-            OrgMember membership = new OrgMember();
-            membership.orgId = org.id;
-            membership.userId = user.id;
-            membership.role = role;
-            membership.persistAndFlush();
-          }
-        });
-    return session;
   }
 
   private void foldRun(UUID updateId) {

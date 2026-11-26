@@ -5,6 +5,8 @@ import static io.restassured.RestAssured.given;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 
 import app.statedb.persistence.identity.OidcProvider;
+import app.statedb.persistence.identity.OrgMember;
+import app.statedb.persistence.identity.Organization;
 import app.statedb.persistence.identity.User;
 import io.restassured.http.Cookie;
 import io.restassured.response.Response;
@@ -21,27 +23,43 @@ final class OidcConsoleSessionFixture {
   static final String FIXTURE_ISS = "https://server.example.com";
   static final String FIXTURE_SUB = "123456";
 
+  // seedProvider and cleanup join the caller's transaction.
   static void seedProvider() {
-    tx(
-        () -> {
-          OidcProvider.delete("name", PROVIDER);
-          OidcProvider provider = new OidcProvider();
-          provider.name = PROVIDER;
-          provider.issuerUrl = issuer();
-          provider.clientId = "quarkus-app";
-          provider.clientSecret = "secret";
-          provider.scopes = List.of("openid", "profile", "email");
-          provider.enabled = true;
-          provider.persistAndFlush();
-        });
+    OidcProvider.delete("name", PROVIDER);
+    OidcProvider provider = new OidcProvider();
+    provider.name = PROVIDER;
+    provider.issuerUrl = issuer();
+    provider.clientId = "quarkus-app";
+    provider.clientSecret = "secret";
+    provider.scopes = List.of("openid", "profile", "email");
+    provider.enabled = true;
+    provider.persistAndFlush();
   }
 
   static void cleanup() {
+    OidcProvider.delete("name", PROVIDER);
+    User.delete("iss = ?1 and sub = ?2", FIXTURE_ISS, FIXTURE_SUB);
+  }
+
+  static Cookie loginAs(String organizationName, OrgMember.Role role) {
+    tx(OidcConsoleSessionFixture::seedProvider);
+    Cookie session = login();
     tx(
         () -> {
-          OidcProvider.delete("name", PROVIDER);
-          User.delete("iss = ?1 and sub = ?2", FIXTURE_ISS, FIXTURE_SUB);
+          OrgMember membership = new OrgMember();
+          membership.orgId =
+              Organization.<Organization>find("name", organizationName).firstResult().id;
+          membership.userId = fixtureUser().id;
+          membership.role = role;
+          membership.persistAndFlush();
         });
+    return session;
+  }
+
+  static User fixtureUser() {
+    User user = User.<User>find("iss = ?1 and sub = ?2", FIXTURE_ISS, FIXTURE_SUB).firstResult();
+    assertNotNull(user, "OIDC callback provisions the fixture user");
+    return user;
   }
 
   static Cookie login() {

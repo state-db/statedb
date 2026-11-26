@@ -11,6 +11,7 @@ import io.quarkus.test.common.QuarkusTestResource;
 import io.quarkus.test.junit.QuarkusTest;
 import io.quarkus.test.oidc.server.OidcWiremockTestResource;
 import io.restassured.http.Cookie;
+import jakarta.transaction.Transactional;
 import java.time.Instant;
 import java.util.UUID;
 import org.junit.jupiter.api.AfterEach;
@@ -24,11 +25,13 @@ class TokensResourceTest {
   private UUID tokenId;
 
   @BeforeEach
+  @Transactional
   void seedProvider() {
     OidcConsoleSessionFixture.seedProvider();
   }
 
   @AfterEach
+  @Transactional
   void cleanup() {
     OidcConsoleSessionFixture.cleanup();
   }

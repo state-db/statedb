@@ -1,12 +1,12 @@
 package app.statedb.app.console;
 
-import static app.statedb.testsupport.TestTransactions.tx;
 import static io.restassured.RestAssured.given;
 
 import app.statedb.persistence.identity.OidcProvider;
 import io.quarkus.test.junit.QuarkusTest;
 import jakarta.inject.Inject;
 import jakarta.persistence.EntityManager;
+import jakarta.transaction.Transactional;
 import java.util.List;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -25,27 +25,24 @@ class ProviderLoginRejectionTest {
   private static final String DISABLED = "rejection-disabled";
 
   @BeforeEach
+  @Transactional
   void seedDisabledProvider() {
-    tx(
-        () -> {
-          OidcProvider p = new OidcProvider();
-          p.name = DISABLED;
-          p.issuerUrl = "https://disabled.example";
-          p.clientId = "cid";
-          p.clientSecret = "sec";
-          p.scopes = List.of("openid");
-          p.enabled = false;
-          p.persist();
-        });
+    OidcProvider p = new OidcProvider();
+    p.name = DISABLED;
+    p.issuerUrl = "https://disabled.example";
+    p.clientId = "cid";
+    p.clientSecret = "sec";
+    p.scopes = List.of("openid");
+    p.enabled = false;
+    p.persist();
   }
 
   @AfterEach
+  @Transactional
   void cleanup() {
-    tx(
-        () ->
-            em.createNativeQuery("DELETE FROM oidc_providers WHERE name = ?1")
-                .setParameter(1, DISABLED)
-                .executeUpdate());
+    em.createNativeQuery("DELETE FROM oidc_providers WHERE name = ?1")
+        .setParameter(1, DISABLED)
+        .executeUpdate();
   }
 
   @Test

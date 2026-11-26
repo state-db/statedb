@@ -13,6 +13,7 @@ import io.quarkus.test.junit.QuarkusTest;
 import io.quarkus.test.oidc.server.OidcWiremockTestResource;
 import io.restassured.http.Cookie;
 import io.restassured.response.Response;
+import jakarta.transaction.Transactional;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
@@ -33,24 +34,20 @@ class ServiceAccountsResourceTest {
   private static final String SA_PATH = "/api/orgs/" + ORG + "/service-accounts";
 
   @BeforeEach
+  @Transactional
   void seedProvider() {
     OidcConsoleSessionFixture.seedProvider();
-    tx(
-        () -> {
-          Organization org = new Organization();
-          org.name = ORG;
-          org.displayName = "Service Console Test";
-          org.persistAndFlush();
-        });
+    Organization org = new Organization();
+    org.name = ORG;
+    org.displayName = "Service Console Test";
+    org.persistAndFlush();
   }
 
   @AfterEach
+  @Transactional
   void cleanup() {
-    tx(
-        () -> {
-          Organization.delete("name", ORG);
-          User.delete("iss", "local:service");
-        });
+    Organization.delete("name", ORG);
+    User.delete("iss", "local:service");
     OidcConsoleSessionFixture.cleanup();
   }
 

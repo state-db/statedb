@@ -27,6 +27,7 @@ import app.statedb.persistence.update.StackUpdate;
 import io.quarkus.test.junit.QuarkusTest;
 import io.quarkus.test.junit.TestProfile;
 import jakarta.inject.Inject;
+import jakarta.transaction.Transactional;
 import java.time.Instant;
 import java.util.Map;
 import java.util.UUID;
@@ -46,14 +47,12 @@ class AdminOperationsResourceTest {
   private UUID serviceHolderId;
 
   @AfterEach
+  @Transactional
   void cleanup() {
-    tx(
-        () -> {
-          Organization.delete("name", ORG);
-          if (serviceHolderId != null) {
-            User.deleteById(serviceHolderId);
-          }
-        });
+    Organization.delete("name", ORG);
+    if (serviceHolderId != null) {
+      User.deleteById(serviceHolderId);
+    }
   }
 
   @Test

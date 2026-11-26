@@ -3,7 +3,6 @@ package app.statedb.app.console;
 import static app.statedb.app.console.LocalGlassTestSupport.COOKIE;
 import static app.statedb.app.console.LocalGlassTestSupport.PASSWORD;
 import static app.statedb.app.console.LocalGlassTestSupport.login;
-import static app.statedb.testsupport.TestTransactions.tx;
 import static io.restassured.RestAssured.given;
 import static org.hamcrest.Matchers.containsInAnyOrder;
 import static org.hamcrest.Matchers.is;
@@ -12,6 +11,7 @@ import app.statedb.persistence.identity.Organization;
 import app.statedb.persistence.identity.User;
 import io.quarkus.test.junit.QuarkusTest;
 import io.quarkus.test.junit.TestProfile;
+import jakarta.transaction.Transactional;
 import java.util.List;
 import java.util.Map;
 import org.junit.jupiter.api.AfterEach;
@@ -26,25 +26,22 @@ class ServiceAccountInventoryAdminTest {
   private static final List<String> ORGS = List.of("svc-admin-a", "svc-admin-b");
 
   @BeforeEach
+  @Transactional
   void seedOrganizations() {
-    tx(
-        () ->
-            ORGS.forEach(
-                name -> {
-                  Organization org = new Organization();
-                  org.name = name;
-                  org.displayName = name.toUpperCase();
-                  org.persist();
-                }));
+    ORGS.forEach(
+        name -> {
+          Organization org = new Organization();
+          org.name = name;
+          org.displayName = name.toUpperCase();
+          org.persist();
+        });
   }
 
   @AfterEach
+  @Transactional
   void cleanup() {
-    tx(
-        () -> {
-          Organization.delete("name in ?1", ORGS);
-          User.delete("iss", "local:service");
-        });
+    Organization.delete("name in ?1", ORGS);
+    User.delete("iss", "local:service");
   }
 
   @Test

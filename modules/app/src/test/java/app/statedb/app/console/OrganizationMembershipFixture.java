@@ -2,7 +2,6 @@ package app.statedb.app.console;
 
 import static app.statedb.testsupport.TestTransactions.read;
 import static app.statedb.testsupport.TestTransactions.tx;
-import static org.junit.jupiter.api.Assertions.assertNotNull;
 
 import app.statedb.persistence.identity.OrgMember;
 import app.statedb.persistence.identity.Organization;
@@ -22,20 +21,21 @@ final class OrganizationMembershipFixture {
   private OrganizationMembershipFixture() {}
 
   static void seedOrganizations() {
-    cleanup();
     tx(
         () -> {
+          deleteRows();
           persistOrganization(ORG);
           persistOrganization(OTHER_ORG);
         });
   }
 
   static void cleanup() {
-    tx(
-        () -> {
-          Organization.delete("name in ?1", List.of(ORG, OTHER_ORG));
-          User.delete("iss", "local:membership-resource");
-        });
+    tx(OrganizationMembershipFixture::deleteRows);
+  }
+
+  private static void deleteRows() {
+    Organization.delete("name in ?1", List.of(ORG, OTHER_ORG));
+    User.delete("iss", "local:membership-resource");
     OidcConsoleSessionFixture.cleanup();
   }
 
@@ -68,34 +68,11 @@ final class OrganizationMembershipFixture {
   }
 
   static Cookie ownerSession() {
-    OidcConsoleSessionFixture.seedProvider();
-    Cookie session = OidcConsoleSessionFixture.login();
-    tx(
-        () -> {
-          User user = fixtureUser();
-          Organization org = Organization.<Organization>find("name", ORG).firstResult();
-          OrgMember membership = new OrgMember();
-          membership.orgId = org.id;
-          membership.userId = user.id;
-          membership.role = OrgMember.Role.owner;
-          membership.persistAndFlush();
-        });
-    return session;
+    return OidcConsoleSessionFixture.loginAs(ORG, OrgMember.Role.owner);
   }
 
   static UUID fixtureUserId() {
-    return read(() -> fixtureUser().id);
-  }
-
-  private static User fixtureUser() {
-    User user =
-        User.<User>find(
-                "iss = ?1 and sub = ?2",
-                OidcConsoleSessionFixture.FIXTURE_ISS,
-                OidcConsoleSessionFixture.FIXTURE_SUB)
-            .firstResult();
-    assertNotNull(user, "OIDC callback provisions the fixture user");
-    return user;
+    return read(() -> OidcConsoleSessionFixture.fixtureUser().id);
   }
 
   static UUID candidate(String sub, String email) {

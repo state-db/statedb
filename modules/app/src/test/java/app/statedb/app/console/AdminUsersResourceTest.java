@@ -16,6 +16,7 @@ import app.statedb.persistence.identity.User;
 import io.quarkus.test.junit.QuarkusTest;
 import io.quarkus.test.junit.TestProfile;
 import jakarta.inject.Inject;
+import jakarta.transaction.Transactional;
 import java.time.Instant;
 import java.util.UUID;
 import org.junit.jupiter.api.AfterEach;
@@ -36,19 +37,17 @@ class AdminUsersResourceTest {
   private UUID serviceId;
 
   @AfterEach
+  @Transactional
   void cleanup() {
-    tx(
-        () -> {
-          if (orgId != null) {
-            ApiToken.delete("orgId", orgId);
-            OrgMember.delete("orgId", orgId);
-            Organization.deleteById(orgId);
-          }
-          User.delete("iss = ?1 and sub = ?2", HUMAN_ISS, HUMAN_SUB);
-          if (serviceId != null) {
-            User.deleteById(serviceId);
-          }
-        });
+    if (orgId != null) {
+      ApiToken.delete("orgId", orgId);
+      OrgMember.delete("orgId", orgId);
+      Organization.deleteById(orgId);
+    }
+    User.delete("iss = ?1 and sub = ?2", HUMAN_ISS, HUMAN_SUB);
+    if (serviceId != null) {
+      User.deleteById(serviceId);
+    }
   }
 
   @Test

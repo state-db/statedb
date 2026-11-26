@@ -20,6 +20,7 @@ import io.restassured.response.Response;
 import io.restassured.specification.RequestSpecification;
 import jakarta.inject.Inject;
 import jakarta.persistence.EntityManager;
+import jakarta.transaction.Transactional;
 import java.net.URI;
 import java.net.URLDecoder;
 import java.nio.charset.StandardCharsets;
@@ -56,41 +57,37 @@ class CliLoginFlowTest {
   }
 
   @BeforeEach
+  @Transactional
   void seedProvider() {
-    tx(
-        () -> {
-          em.createNativeQuery("DELETE FROM oidc_providers WHERE name = ?1")
-              .setParameter(1, PROVIDER)
-              .executeUpdate();
-          OidcProvider p = new OidcProvider();
-          p.name = PROVIDER;
-          p.issuerUrl = issuer();
-          p.clientId = "quarkus-app";
-          p.clientSecret = "secret";
-          p.scopes = List.of("openid", "profile", "email");
-          p.enabled = true;
-          p.persist();
-        });
+    em.createNativeQuery("DELETE FROM oidc_providers WHERE name = ?1")
+        .setParameter(1, PROVIDER)
+        .executeUpdate();
+    OidcProvider p = new OidcProvider();
+    p.name = PROVIDER;
+    p.issuerUrl = issuer();
+    p.clientId = "quarkus-app";
+    p.clientSecret = "secret";
+    p.scopes = List.of("openid", "profile", "email");
+    p.enabled = true;
+    p.persist();
   }
 
   @AfterEach
+  @Transactional
   void cleanup() {
-    tx(
-        () -> {
-          em.createNativeQuery("DELETE FROM oidc_providers WHERE name = ?1")
-              .setParameter(1, PROVIDER)
-              .executeUpdate();
-          em.createNativeQuery(
-                  "DELETE FROM api_tokens WHERE user_id IN"
-                      + " (SELECT id FROM users WHERE iss = ?1 AND sub = ?2)")
-              .setParameter(1, FIXTURE_ISS)
-              .setParameter(2, FIXTURE_SUB)
-              .executeUpdate();
-          em.createNativeQuery("DELETE FROM users WHERE iss = ?1 AND sub = ?2")
-              .setParameter(1, FIXTURE_ISS)
-              .setParameter(2, FIXTURE_SUB)
-              .executeUpdate();
-        });
+    em.createNativeQuery("DELETE FROM oidc_providers WHERE name = ?1")
+        .setParameter(1, PROVIDER)
+        .executeUpdate();
+    em.createNativeQuery(
+            "DELETE FROM api_tokens WHERE user_id IN"
+                + " (SELECT id FROM users WHERE iss = ?1 AND sub = ?2)")
+        .setParameter(1, FIXTURE_ISS)
+        .setParameter(2, FIXTURE_SUB)
+        .executeUpdate();
+    em.createNativeQuery("DELETE FROM users WHERE iss = ?1 AND sub = ?2")
+        .setParameter(1, FIXTURE_ISS)
+        .setParameter(2, FIXTURE_SUB)
+        .executeUpdate();
   }
 
   @Test

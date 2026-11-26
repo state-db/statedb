@@ -1,6 +1,5 @@
 package app.statedb.app.console;
 
-import static app.statedb.testsupport.TestTransactions.tx;
 import static io.restassured.RestAssured.given;
 import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.equalTo;
@@ -15,6 +14,7 @@ import io.quarkus.test.junit.QuarkusTestProfile;
 import io.quarkus.test.junit.TestProfile;
 import io.quarkus.test.oidc.server.OidcWiremockTestResource;
 import io.restassured.response.Response;
+import jakarta.transaction.Transactional;
 import java.net.URI;
 import java.util.List;
 import java.util.Map;
@@ -43,34 +43,30 @@ class CliLoginWithoutDefaultProviderTest {
   }
 
   @BeforeEach
+  @Transactional
   void seedProviders() {
-    tx(
-        () -> {
-          OidcProvider.delete("name in ?1", PROVIDERS);
-          for (String name : PROVIDERS) {
-            OidcProvider p = new OidcProvider();
-            p.name = name;
-            p.issuerUrl =
-                name.equals(PROVIDERS.get(1))
-                    ? ConfigProvider.getConfig().getValue("keycloak.url", String.class)
-                        + "/realms/quarkus"
-                    : "https://" + name + ".example";
-            p.clientId = "quarkus-app";
-            p.clientSecret = "secret";
-            p.scopes = List.of("openid");
-            p.enabled = true;
-            p.persist();
-          }
-        });
+    OidcProvider.delete("name in ?1", PROVIDERS);
+    for (String name : PROVIDERS) {
+      OidcProvider p = new OidcProvider();
+      p.name = name;
+      p.issuerUrl =
+          name.equals(PROVIDERS.get(1))
+              ? ConfigProvider.getConfig().getValue("keycloak.url", String.class)
+                  + "/realms/quarkus"
+              : "https://" + name + ".example";
+      p.clientId = "quarkus-app";
+      p.clientSecret = "secret";
+      p.scopes = List.of("openid");
+      p.enabled = true;
+      p.persist();
+    }
   }
 
   @AfterEach
+  @Transactional
   void cleanup() {
-    tx(
-        () -> {
-          OidcProvider.delete("name in ?1", PROVIDERS);
-          User.delete("iss = ?1 and sub = ?2", "https://server.example.com", "123456");
-        });
+    OidcProvider.delete("name in ?1", PROVIDERS);
+    User.delete("iss = ?1 and sub = ?2", "https://server.example.com", "123456");
   }
 
   @Test

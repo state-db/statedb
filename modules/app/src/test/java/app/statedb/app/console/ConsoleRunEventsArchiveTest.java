@@ -1,5 +1,6 @@
 package app.statedb.app.console;
 
+import static app.statedb.app.console.OidcConsoleSessionFixture.loginAs;
 import static app.statedb.testsupport.TestTransactions.read;
 import static app.statedb.testsupport.TestTransactions.tx;
 import static io.restassured.RestAssured.given;
@@ -14,7 +15,6 @@ import app.statedb.persistence.events.UpdateEvent;
 import app.statedb.persistence.events.UpdateEventArchive;
 import app.statedb.persistence.identity.OrgMember;
 import app.statedb.persistence.identity.Organization;
-import app.statedb.persistence.identity.User;
 import app.statedb.persistence.stack.Stack;
 import app.statedb.persistence.stack.StackCreator;
 import app.statedb.persistence.update.StackUpdate;
@@ -27,6 +27,7 @@ import io.quarkus.test.oidc.server.OidcWiremockTestResource;
 import io.restassured.http.Cookie;
 import io.restassured.response.Response;
 import jakarta.inject.Inject;
+import jakarta.transaction.Transactional;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
@@ -58,19 +59,25 @@ class ConsoleRunEventsArchiveTest {
   @Inject EventArchiveFolder folder;
 
   @BeforeEach
+  @Transactional
   void seed() {
     cleanup();
+    Organization org = new Organization();
+    org.name = ORG;
+    org.displayName = ORG;
+    org.persistAndFlush();
   }
 
   @AfterEach
+  @Transactional
   void cleanup() {
-    tx(() -> Organization.delete("name", ORG));
+    Organization.delete("name", ORG);
     OidcConsoleSessionFixture.cleanup();
   }
 
   @Test
   void archivedUpdateServesByteIdenticalPagesAndKeepsSummaryHot() {
-    Cookie session = ownerSession();
+    Cookie session = loginAs(ORG, OrgMember.Role.owner);
     UUID stackId = createStack();
     UUID updateId = seedUpdate(stackId);
 
@@ -100,7 +107,7 @@ class ConsoleRunEventsArchiveTest {
 
   @Test
   void inProgressRunDetailIncludesBackendDerivedChanges() {
-    Cookie session = ownerSession();
+    Cookie session = loginAs(ORG, OrgMember.Role.owner);
     UUID stackId = createStack();
     seedUpdate(stackId, StackUpdate.Status.IN_PROGRESS);
 
@@ -121,7 +128,7 @@ class ConsoleRunEventsArchiveTest {
 
   @Test
   void refreshBeforePreviewAndUpdateRemainsActivityAcrossFolding() throws Exception {
-    Cookie session = ownerSession();
+    Cookie session = loginAs(ORG, OrgMember.Role.owner);
     UUID stackId = createStack();
     UUID previewId = seedRefreshRun(stackId, StackUpdate.Kind.PREVIEW, true, 0, true);
     UUID updateId = seedRefreshRun(stackId, StackUpdate.Kind.UPDATE, false, 1, true);
@@ -143,7 +150,7 @@ class ConsoleRunEventsArchiveTest {
 
   @Test
   void standaloneRefreshPreviewUsesItsTerminalSameResult() throws Exception {
-    Cookie session = ownerSession();
+    Cookie session = loginAs(ORG, OrgMember.Role.owner);
     UUID stackId = createStack();
     UUID previewId = seedRefreshRun(stackId, StackUpdate.Kind.REFRESH, true, 0, false);
 
@@ -315,34 +322,6 @@ class ConsoleRunEventsArchiveTest {
     response.then().statusCode(200);
     assertEquals(List.of("refresh"), response.jsonPath().getList("changes.activity.op"));
     assertTrue(response.jsonPath().getList("changes.unchanged").isEmpty());
-  }
-
-  private static Cookie ownerSession() {
-    tx(
-        () -> {
-          Organization org = new Organization();
-          org.name = ORG;
-          org.displayName = ORG;
-          org.persistAndFlush();
-        });
-    OidcConsoleSessionFixture.seedProvider();
-    Cookie session = OidcConsoleSessionFixture.login();
-    tx(
-        () -> {
-          User user =
-              User.<User>find(
-                      "iss = ?1 and sub = ?2",
-                      OidcConsoleSessionFixture.FIXTURE_ISS,
-                      OidcConsoleSessionFixture.FIXTURE_SUB)
-                  .firstResult();
-          Organization org = Organization.<Organization>find("name", ORG).firstResult();
-          OrgMember membership = new OrgMember();
-          membership.orgId = org.id;
-          membership.userId = user.id;
-          membership.role = OrgMember.Role.owner;
-          membership.persistAndFlush();
-        });
-    return session;
   }
 
   private void foldRun(UUID updateId) {

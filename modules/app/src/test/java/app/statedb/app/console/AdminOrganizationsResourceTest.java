@@ -12,6 +12,7 @@ import app.statedb.persistence.stack.StackCreator;
 import io.quarkus.test.junit.QuarkusTest;
 import io.quarkus.test.junit.TestProfile;
 import jakarta.inject.Inject;
+import jakarta.transaction.Transactional;
 import java.util.List;
 import java.util.Map;
 import org.junit.jupiter.api.AfterEach;
@@ -26,8 +27,9 @@ class AdminOrganizationsResourceTest {
   @Inject StackCreator stackCreator;
 
   @AfterEach
+  @Transactional
   void cleanup() {
-    tx(() -> Organization.delete("name in ?1", TEST_ORGS));
+    Organization.delete("name in ?1", TEST_ORGS);
   }
 
   @Test

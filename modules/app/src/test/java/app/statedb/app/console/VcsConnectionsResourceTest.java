@@ -1,9 +1,9 @@
 package app.statedb.app.console;
 
+import static app.statedb.app.console.OidcConsoleSessionFixture.loginAs;
 import static app.statedb.testsupport.TestTransactions.tx;
 import static io.restassured.RestAssured.given;
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import app.statedb.persistence.identity.OrgMember;
@@ -15,6 +15,7 @@ import io.quarkus.test.junit.QuarkusTest;
 import io.quarkus.test.oidc.server.OidcWiremockTestResource;
 import io.restassured.http.Cookie;
 import jakarta.inject.Inject;
+import jakarta.transaction.Transactional;
 import java.util.Map;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -31,6 +32,7 @@ class VcsConnectionsResourceTest {
   @Inject app.statedb.persistence.vcs.VcsAppRegistry registrations;
 
   @BeforeEach
+  @Transactional
   void seed() {
     github.reset();
     github.completeManifest("test");
@@ -44,30 +46,24 @@ class VcsConnectionsResourceTest {
             "test-private-key",
             "test-client",
             "test-secret"));
-    OidcConsoleSessionFixture.seedProvider();
-    tx(
-        () -> {
-          Organization org = new Organization();
-          org.name = ORG;
-          org.displayName = "VCS Console Test";
-          org.persistAndFlush();
-        });
+    Organization org = new Organization();
+    org.name = ORG;
+    org.displayName = "VCS Console Test";
+    org.persistAndFlush();
   }
 
   @AfterEach
+  @Transactional
   void cleanup() {
-    tx(
-        () -> {
-          Organization.delete("name", ORG);
-          app.statedb.persistence.vcs.VcsAppRegistration.deleteAll();
-          User.delete("iss", "local:service");
-        });
+    Organization.delete("name", ORG);
+    app.statedb.persistence.vcs.VcsAppRegistration.deleteAll();
+    User.delete("iss", "local:service");
     OidcConsoleSessionFixture.cleanup();
   }
 
   @Test
   void ownerCompletesVerifiedRoundTripAndCanDisconnect() {
-    Cookie session = establishSession(OrgMember.Role.owner);
+    Cookie session = loginAs(ORG, OrgMember.Role.owner);
     String state = begin(session);
     String oauth = install(session, state, 9876);
     String routed =
@@ -119,7 +115,7 @@ class VcsConnectionsResourceTest {
 
   @Test
   void installationApprovalWithoutIdReturnsPendingNotice() {
-    Cookie session = establishSession(OrgMember.Role.owner);
+    Cookie session = loginAs(ORG, OrgMember.Role.owner);
     String routed =
         given()
             .cookie(session)
@@ -145,7 +141,7 @@ class VcsConnectionsResourceTest {
 
   @Test
   void arbitraryInstallationIdCannotConnectEvenWithValidState() {
-    Cookie session = establishSession(OrgMember.Role.owner);
+    Cookie session = loginAs(ORG, OrgMember.Role.owner);
     String oauth = install(session, begin(session), 5555);
     given()
         .cookie(session)
@@ -162,7 +158,7 @@ class VcsConnectionsResourceTest {
 
   @Test
   void membershipIsRecheckedAfterReturningFromGithub() {
-    Cookie session = establishSession(OrgMember.Role.owner);
+    Cookie session = loginAs(ORG, OrgMember.Role.owner);
     String oauth = install(session, begin(session), 9876);
     demoteOwnerToMember();
     given()
@@ -177,7 +173,7 @@ class VcsConnectionsResourceTest {
 
   @Test
   void forgedStateAndWrongCallbackPurposeAreRejected() {
-    Cookie session = establishSession(OrgMember.Role.owner);
+    Cookie session = loginAs(ORG, OrgMember.Role.owner);
     given()
         .cookie(session)
         .queryParam("state", "forged")
@@ -196,7 +192,7 @@ class VcsConnectionsResourceTest {
 
   @Test
   void disconnectInvalidatesPendingHandshakes() {
-    Cookie session = establishSession(OrgMember.Role.owner);
+    Cookie session = loginAs(ORG, OrgMember.Role.owner);
     String oauth = install(session, begin(session), 9876);
     given().cookie(session).delete(PATH + "/connections").then().statusCode(204);
     given()
@@ -210,7 +206,7 @@ class VcsConnectionsResourceTest {
 
   @Test
   void removedInstallationPickerAndDirectConnectCannotBypassVerification() {
-    Cookie session = establishSession(OrgMember.Role.owner);
+    Cookie session = loginAs(ORG, OrgMember.Role.owner);
     given().cookie(session).get(PATH + "/installations").then().statusCode(404);
     given()
         .cookie(session)
@@ -223,7 +219,7 @@ class VcsConnectionsResourceTest {
 
   @Test
   void memberCannotManageVcsConnection() {
-    Cookie session = establishSession(OrgMember.Role.member);
+    Cookie session = loginAs(ORG, OrgMember.Role.member);
     given().cookie(session).post(PATH + "/connect").then().statusCode(403);
     given().cookie(session).delete(PATH + "/connections").then().statusCode(403);
   }
@@ -276,27 +272,6 @@ class VcsConnectionsResourceTest {
 
   private static String state(String url) {
     return java.net.URI.create(url).getQuery().split("state=")[1].split("&")[0];
-  }
-
-  private Cookie establishSession(OrgMember.Role role) {
-    Cookie session = OidcConsoleSessionFixture.login();
-    tx(
-        () -> {
-          User user =
-              User.<User>find(
-                      "iss = ?1 and sub = ?2",
-                      OidcConsoleSessionFixture.FIXTURE_ISS,
-                      OidcConsoleSessionFixture.FIXTURE_SUB)
-                  .firstResult();
-          assertNotNull(user);
-          Organization org = Organization.<Organization>find("name", ORG).firstResult();
-          OrgMember member = new OrgMember();
-          member.orgId = org.id;
-          member.userId = user.id;
-          member.role = role;
-          member.persistAndFlush();
-        });
-    return session;
   }
 
   private void demoteOwnerToMember() {

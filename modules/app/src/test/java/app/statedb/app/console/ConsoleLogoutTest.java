@@ -10,6 +10,7 @@ import io.quarkus.test.junit.QuarkusTest;
 import io.quarkus.test.oidc.server.OidcWiremockTestResource;
 import io.restassured.http.Cookie;
 import io.restassured.response.Response;
+import jakarta.transaction.Transactional;
 import java.net.URI;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -27,11 +28,13 @@ import org.junit.jupiter.api.Test;
 class ConsoleLogoutTest {
 
   @BeforeEach
+  @Transactional
   void seedProvider() {
     OidcConsoleSessionFixture.seedProvider();
   }
 
   @AfterEach
+  @Transactional
   void cleanup() {
     OidcConsoleSessionFixture.cleanup();
   }

@@ -1,7 +1,6 @@
 package app.statedb.app.console;
 
 import static app.statedb.testsupport.TestTransactions.read;
-import static app.statedb.testsupport.TestTransactions.tx;
 import static io.restassured.RestAssured.given;
 import static org.hamcrest.Matchers.emptyOrNullString;
 import static org.hamcrest.Matchers.equalTo;
@@ -20,6 +19,7 @@ import io.restassured.http.Cookie;
 import io.restassured.response.Response;
 import jakarta.inject.Inject;
 import jakarta.persistence.EntityManager;
+import jakarta.transaction.Transactional;
 import java.net.URI;
 import java.net.URLDecoder;
 import java.nio.charset.StandardCharsets;
@@ -52,35 +52,31 @@ class OidcLoginFlowTest {
   }
 
   @BeforeEach
+  @Transactional
   void seedProvider() {
-    tx(
-        () -> {
-          em.createNativeQuery("DELETE FROM oidc_providers WHERE name = ?1")
-              .setParameter(1, PROVIDER)
-              .executeUpdate();
-          OidcProvider p = new OidcProvider();
-          p.name = PROVIDER;
-          p.issuerUrl = issuer();
-          p.clientId = "quarkus-app"; // the mock IdP's registered client + audience
-          p.clientSecret = "secret";
-          p.scopes = List.of("openid", "profile", "email");
-          p.enabled = true;
-          p.persist();
-        });
+    em.createNativeQuery("DELETE FROM oidc_providers WHERE name = ?1")
+        .setParameter(1, PROVIDER)
+        .executeUpdate();
+    OidcProvider p = new OidcProvider();
+    p.name = PROVIDER;
+    p.issuerUrl = issuer();
+    p.clientId = "quarkus-app"; // the mock IdP's registered client + audience
+    p.clientSecret = "secret";
+    p.scopes = List.of("openid", "profile", "email");
+    p.enabled = true;
+    p.persist();
   }
 
   @AfterEach
+  @Transactional
   void cleanup() {
-    tx(
-        () -> {
-          em.createNativeQuery("DELETE FROM oidc_providers WHERE name = ?1")
-              .setParameter(1, PROVIDER)
-              .executeUpdate();
-          // OidcWiremockTestResource signs its fixture ID token with this fixed issuer/subject.
-          em.createNativeQuery(
-                  "DELETE FROM users WHERE iss = 'https://server.example.com' AND sub = '123456'")
-              .executeUpdate();
-        });
+    em.createNativeQuery("DELETE FROM oidc_providers WHERE name = ?1")
+        .setParameter(1, PROVIDER)
+        .executeUpdate();
+    // OidcWiremockTestResource signs its fixture ID token with this fixed issuer/subject.
+    em.createNativeQuery(
+            "DELETE FROM users WHERE iss = 'https://server.example.com' AND sub = '123456'")
+        .executeUpdate();
   }
 
   @Test
