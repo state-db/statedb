@@ -18,6 +18,7 @@ import app.statedb.persistence.stack.StackRef;
 import app.statedb.persistence.update.StackUpdate;
 import app.statedb.persistence.update.StackUpdateStarter;
 import app.statedb.persistence.update.StartUpdateRequest;
+import io.quarkus.test.TestTransaction;
 import io.quarkus.test.junit.QuarkusTest;
 import jakarta.inject.Inject;
 import jakarta.persistence.EntityManager;
@@ -83,30 +84,28 @@ class LeaseRevalidatorTest {
                 .executeUpdate());
   }
 
+  @TestTransaction
   @Test
   void liveLeaseDoesNotThrow() {
     assertDoesNotThrow(() -> revalidator.requireLive(leaseId));
   }
 
+  @TestTransaction
   @Test
   void expiredLeaseThrows() {
-    tx(
-        () ->
-            em.createNativeQuery(
-                    "UPDATE stack_locks SET expires_at = now() - interval '1 second'"
-                        + " WHERE id = ?1")
-                .setParameter(1, leaseId)
-                .executeUpdate());
+    em.createNativeQuery(
+            "UPDATE stack_locks SET expires_at = now() - interval '1 second'" + " WHERE id = ?1")
+        .setParameter(1, leaseId)
+        .executeUpdate();
     assertThrows(LeaseExpiredException.class, () -> revalidator.requireLive(leaseId));
   }
 
+  @TestTransaction
   @Test
   void missingLeaseThrows() {
-    tx(
-        () ->
-            em.createNativeQuery("DELETE FROM stack_locks WHERE id = ?1")
-                .setParameter(1, leaseId)
-                .executeUpdate());
+    em.createNativeQuery("DELETE FROM stack_locks WHERE id = ?1")
+        .setParameter(1, leaseId)
+        .executeUpdate();
     assertThrows(LeaseExpiredException.class, () -> revalidator.requireLive(UUID.randomUUID()));
     assertThrows(LeaseExpiredException.class, () -> revalidator.requireLive(leaseId));
   }

@@ -1,7 +1,5 @@
 package app.statedb.app.console;
 
-import static app.statedb.testsupport.TestTransactions.read;
-import static app.statedb.testsupport.TestTransactions.tx;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -16,6 +14,7 @@ import app.statedb.persistence.auth.CliTokenMinter;
 import app.statedb.persistence.identity.OrgMember;
 import app.statedb.persistence.identity.Organization;
 import app.statedb.persistence.identity.User;
+import io.quarkus.test.TestTransaction;
 import io.quarkus.test.junit.QuarkusTest;
 import jakarta.inject.Inject;
 import jakarta.persistence.EntityManager;
@@ -23,8 +22,6 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.Optional;
 import java.util.UUID;
-import org.junit.jupiter.api.AfterEach;
-import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 @QuarkusTest
@@ -45,48 +42,31 @@ class CliTokenMinterTest {
   private UUID userId;
   private UUID orgId;
 
-  @BeforeEach
-  void seed() {
-    cleanup();
-    tx(
-        () -> {
-          Organization org = new Organization();
-          org.name = ORG;
-          org.displayName = ORG;
-          org.persistAndFlush();
-          orgId = org.id;
+  private void seed() {
+    Organization org = new Organization();
+    org.name = ORG;
+    org.displayName = ORG;
+    org.persistAndFlush();
+    orgId = org.id;
 
-          User user = new User();
-          user.iss = ISS;
-          user.sub = SUB;
-          user.email = "mint@example.com";
-          user.persistAndFlush();
-          userId = user.id;
+    User user = new User();
+    user.iss = ISS;
+    user.sub = SUB;
+    user.email = "mint@example.com";
+    user.persistAndFlush();
+    userId = user.id;
 
-          OrgMember m = new OrgMember();
-          m.orgId = org.id;
-          m.userId = user.id;
-          m.role = OrgMember.Role.member;
-          m.persistAndFlush();
-        });
+    OrgMember m = new OrgMember();
+    m.orgId = org.id;
+    m.userId = user.id;
+    m.role = OrgMember.Role.member;
+    m.persistAndFlush();
   }
 
-  @AfterEach
-  void cleanup() {
-    tx(
-        () -> {
-          em.createNativeQuery("DELETE FROM organizations WHERE name = ?1")
-              .setParameter(1, ORG)
-              .executeUpdate();
-          em.createNativeQuery("DELETE FROM users WHERE iss = ?1 AND sub = ?2")
-              .setParameter(1, ISS)
-              .setParameter(2, SUB)
-              .executeUpdate();
-        });
-  }
-
+  @TestTransaction
   @Test
   void mintCreatesAnAccountScoped24hOidcTokenResolvableByItsHash() {
+    seed();
     CliTokenMinter.MintedCliToken minted = minter.mint(ISS, SUB, "my laptop");
 
     assertTrue(
@@ -97,9 +77,7 @@ class CliTokenMinterTest {
         "raw token is 32 bytes of base64url entropy with no fixed prefix");
 
     ApiToken stored =
-        read(
-            () ->
-                ApiToken.<ApiToken>find("tokenHash", hasher.hash(minted.rawToken())).firstResult());
+        ApiToken.<ApiToken>find("tokenHash", hasher.hash(minted.rawToken())).firstResult();
     assertEquals(ApiToken.Kind.oidc, stored.kind);
     assertEquals(userId, stored.userId);
     assertEquals("my laptop", stored.description);
@@ -108,7 +86,7 @@ class CliTokenMinterTest {
     // The principal carries no org/role; PrincipalRoleResolver resolves the role per request,
     // exactly like a console session.
     Optional<AuthenticatedPrincipal> principal =
-        read(() -> tokenFinder.findValidByHash(hasher.hash(minted.rawToken())));
+        tokenFinder.findValidByHash(hasher.hash(minted.rawToken()));
     assertTrue(principal.isPresent(), "minted token authenticates like any api_token");
     assertEquals(CredentialKind.oidc_cli_token, principal.get().credential().kind());
     assertEquals(
@@ -118,16 +96,16 @@ class CliTokenMinterTest {
     assertNull(principal.get().credentialScope().role());
   }
 
+  @TestTransaction
   @Test
   void mintBlankDescriptionFallsBackToDefaultLabel() {
+    seed();
     CliTokenMinter.MintedCliToken minted = minter.mint(ISS, SUB, "  ");
 
     String label =
-        read(
-            () ->
-                ApiToken.<ApiToken>find("tokenHash", hasher.hash(minted.rawToken()))
-                    .<ApiToken>firstResult()
-                    .description);
+        ApiToken.<ApiToken>find("tokenHash", hasher.hash(minted.rawToken()))
+            .<ApiToken>firstResult()
+            .description;
     assertEquals("CLI token", label);
   }
 }

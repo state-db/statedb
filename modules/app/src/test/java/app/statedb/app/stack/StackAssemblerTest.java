@@ -18,6 +18,7 @@ import app.statedb.persistence.update.StackUpdate;
 import app.statedb.testsupport.pulumi.PulumiDeploymentAssert;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import io.quarkus.test.TestTransaction;
 import io.quarkus.test.junit.QuarkusTest;
 import jakarta.inject.Inject;
 import java.time.Instant;
@@ -90,6 +91,7 @@ class StackAssemblerTest {
 
   // Empty export
 
+  @TestTransaction
   @Test
   void emptyStackReturnsEmptyDeployment() {
     AssembledDeployment assembled = assemble();
@@ -105,6 +107,7 @@ class StackAssemblerTest {
 
   // Basic resource journal replay
 
+  @TestTransaction
   @Test
   void successAppendsState() throws Exception {
     UUID update = update();
@@ -117,6 +120,7 @@ class StackAssemblerTest {
     assertEquals(urn("a"), resources.get(0).required("urn").asText());
   }
 
+  @TestTransaction
   @Test
   void writeEntryUsesNewSnapshotAsBaseForFollowingReplay() throws Exception {
     UUID update = update();
@@ -144,6 +148,7 @@ class StackAssemblerTest {
     assertEquals("service", deployment.required("secrets_providers").required("type").asText());
   }
 
+  @TestTransaction
   @Test
   void successRemoveOldDropsBaseAtIndex() throws Exception {
     UUID update = update();
@@ -158,6 +163,7 @@ class StackAssemblerTest {
     assertEquals(urn("d"), resources.get(2).required("urn").asText());
   }
 
+  @TestTransaction
   @Test
   void successRemoveNewDropsNewByOpId() throws Exception {
     UUID update = update();
@@ -175,6 +181,7 @@ class StackAssemblerTest {
     assertEquals(urn("d"), resources.get(2).required("urn").asText());
   }
 
+  @TestTransaction
   @Test
   void successDeleteAndPendingReplacementMutateResources() throws Exception {
     UUID update = update();
@@ -195,6 +202,7 @@ class StackAssemblerTest {
     assertTrue(find(resources, "base-pending").required("pendingReplacement").asBoolean());
   }
 
+  @TestTransaction
   @Test
   void failureClearsOnlyMatchingPendingOp() throws Exception {
     UUID update = update();
@@ -208,6 +216,7 @@ class StackAssemblerTest {
     assertEquals(urn("b"), pending.get(0).required("resource").required("urn").asText());
   }
 
+  @TestTransaction
   @Test
   void failedCreateLeavesNoResourceAndNoPendingOp() throws Exception {
     UUID update = update();
@@ -220,6 +229,7 @@ class StackAssemblerTest {
     assertFalse(deployment.has("pending_operations"));
   }
 
+  @TestTransaction
   @ParameterizedTest
   @ValueSource(strings = {"creating", "updating", "deleting", "reading", "importing"})
   void allBeginOpTypesSurfaceAsPendingOperations(String opType) throws Exception {
@@ -235,6 +245,7 @@ class StackAssemblerTest {
 
   // Refresh and dependency repair
 
+  @TestTransaction
   @Test
   void refreshSuccessClearsPendingOperation() throws Exception {
     UUID update = update();
@@ -246,6 +257,7 @@ class StackAssemblerTest {
     assertFalse(deployment.has("pending_operations"));
   }
 
+  @TestTransaction
   @Test
   void refreshSuccessRemoveOldWithStateReplacesBaseAtIndex() throws Exception {
     UUID update = update();
@@ -267,6 +279,7 @@ class StackAssemblerTest {
         "project:///refreshed.ts#2,1", find(resources, "a").required("sourcePosition").asText());
   }
 
+  @TestTransaction
   @Test
   void refreshSuccessRemoveOldWithoutStateDeletesBaseAtIndex() throws Exception {
     UUID update = update();
@@ -280,6 +293,7 @@ class StackAssemblerTest {
     assertEquals(urn("survivor"), resources.get(0).required("urn").asText());
   }
 
+  @TestTransaction
   @Test
   void refreshSuccessRemoveNewReplacesNewResourceByOperationId() throws Exception {
     UUID update = update();
@@ -301,6 +315,7 @@ class StackAssemblerTest {
         "project:///refreshed.ts#2,1", find(resources, "a").required("sourcePosition").asText());
   }
 
+  @TestTransaction
   @Test
   void refreshSuccessRemoveNewWithoutStateRemovesNewResourceByOperationId() throws Exception {
     UUID update = update();
@@ -315,6 +330,7 @@ class StackAssemblerTest {
     assertEquals(urn("survivor"), resources.get(0).required("urn").asText());
   }
 
+  @TestTransaction
   @ParameterizedTest
   @ValueSource(strings = {"updating", "reading", "deleting", "importing"})
   void nonCreatingBasePendingOperationsAreDropped(String opType) throws Exception {
@@ -335,6 +351,7 @@ class StackAssemblerTest {
     assertFalse(deployment.has("pending_operations"));
   }
 
+  @TestTransaction
   @Test
   void refreshSuccessRebuildsAllDanglingReferencesTogether() throws Exception {
     UUID update = update();
@@ -376,6 +393,7 @@ class StackAssemblerTest {
 
   // Stack outputs and secrets
 
+  @TestTransaction
   @Test
   void outputsReplacesNewByOpId() throws Exception {
     UUID update = update();
@@ -396,6 +414,7 @@ class StackAssemblerTest {
     assertEquals("spot", stack.required("outputs").required("petName").asText());
   }
 
+  @TestTransaction
   @Test
   void secretsManagerSetsProviderAndElidesNoOp() throws Exception {
     UUID update = update();
@@ -421,6 +440,7 @@ class StackAssemblerTest {
     assertFalse(provider.has("extra"));
   }
 
+  @TestTransaction
   @Test
   void secretsManagerReplacesChangedProviderAndCanClearIt() throws Exception {
     UUID update = update();
@@ -456,6 +476,7 @@ class StackAssemblerTest {
     assertFalse(assemble().deployment().has("secrets_providers"));
   }
 
+  @TestTransaction
   @Test
   void encryptedSecretValuesArePreservedInJournalStateEntries() throws Exception {
     JsonNode expected = MAPPER.readTree(secretValue("ciphertext-1"));
@@ -489,6 +510,7 @@ class StackAssemblerTest {
 
   // Journal boundaries and update isolation
 
+  @TestTransaction
   @Test
   void rebuiltBaseStatePromotesNewToBase() throws Exception {
     UUID update = update();
@@ -503,6 +525,7 @@ class StackAssemblerTest {
     assertEquals(urn("a"), resources.get(1).required("urn").asText());
   }
 
+  @TestTransaction
   @Test
   void outOfOrderRebuiltBaseStateWithLaterRemoveNewDoesNotCrashExport() throws Exception {
     UUID update = update();
@@ -522,6 +545,7 @@ class StackAssemblerTest {
     assertEquals(urn("a"), resources.get(0).required("urn").asText());
   }
 
+  @TestTransaction
   @Test
   void crossUpdateOpIdReuseIsolated() throws Exception {
     UUID first = update();
@@ -536,6 +560,7 @@ class StackAssemblerTest {
     assertEquals(urn("first"), resources.get(1).required("urn").asText());
   }
 
+  @TestTransaction
   @Test
   void normalizeUrnReferencesFollowsAliasesAndSetsFeatures() throws Exception {
     UUID update = update();
@@ -559,6 +584,7 @@ class StackAssemblerTest {
 
   // A same-step success can carry updated checkpoint metadata; remove_old must make that state
   // replace the base row instead of appending a duplicate resource with the same URN.
+  @TestTransaction
   @Test
   void sameSuccessReplacesBaseResourceMetadataWithoutDuplicatingResource() throws Exception {
     UUID update = update();
@@ -579,6 +605,7 @@ class StackAssemblerTest {
 
   // Even if a run only has elidable same-step writes, replay must still produce a normal final
   // deployment with no leftover pending operations or duplicate base/new resources.
+  @TestTransaction
   @Test
   void onlyElidedSameEntriesStillProduceValidFinalExport() throws Exception {
     UUID update = update();
@@ -601,6 +628,7 @@ class StackAssemblerTest {
 
   // Dependency-only same changes are real checkpoint changes: each success replaces its old base
   // index, and the merged export must preserve Pulumi's final topological order.
+  @TestTransaction
   @Test
   void sameDependencyChangesReplaceBaseAndPreserveFinalOrder() throws Exception {
     UUID update = update();
@@ -626,6 +654,7 @@ class StackAssemblerTest {
   // Pulumi's vexing deployment merge keeps both versions of a replaced URN: the live replacement
   // appears in the current-plan DAG, while the old base resource is preserved as delete=true after
   // untouched base-only dependencies that it still references.
+  @TestTransaction
   @Test
   void vexingReplacementMergePreservesTopologicalOrderAndDeletionState() throws Exception {
     UUID update = update();
@@ -690,6 +719,7 @@ class StackAssemblerTest {
   // engine called the step "same". The engine processes providers and parents topologically before
   // their consumers, so the update replays same-steps for provider2 and parent ahead of "a" —
   // otherwise "a" would jump ahead of its references in the merged export.
+  @TestTransaction
   @Test
   void meaningfulSameChangesReplaceBaseResource() throws Exception {
     UUID update = update();
@@ -741,6 +771,7 @@ class StackAssemblerTest {
 
   // A same-step alias/URN change must flow through the normal Pulumi reference-normalization path
   // so dependents point at the canonical URN and transient aliases do not leak into export.
+  @TestTransaction
   @Test
   void sameAliasChangesRewriteUrnReferences() throws Exception {
     UUID update = update();
@@ -773,6 +804,7 @@ class StackAssemblerTest {
 
   // Source-position-only edits should not force an intermediate replacement; the metadata changes
   // only when Pulumi's close flush writes the final snapshot.
+  @TestTransaction
   @Test
   void sourcePositionOnlySameDoesNotReplaceBaseUntilCloseFlush() throws Exception {
     UUID update = update();
@@ -794,6 +826,7 @@ class StackAssemblerTest {
 
   // Historical (per-version) bounded replay
 
+  @TestTransaction
   @Test
   void assembleAtReturnsStateAsOfBoundary() throws Exception {
     UUID first = update();
@@ -812,6 +845,7 @@ class StackAssemblerTest {
 
   // assembleAt must find its base snapshot by boundary position, not via
   // stack_state.base_snapshot_id (which is never set here).
+  @TestTransaction
   @Test
   void assembleAtUsesNearestSnapshotAtOrBelowBoundary() throws Exception {
     long snapshotBoundary = boundaryAfterLastEntry();
@@ -827,6 +861,7 @@ class StackAssemblerTest {
     assertEquals(urn("from-snapshot"), resources.get(1).required("urn").asText());
   }
 
+  @TestTransaction
   @Test
   void assembleAtIgnoresSnapshotsBeyondBoundary() throws Exception {
     UUID first = update();
@@ -845,6 +880,7 @@ class StackAssemblerTest {
   // Import and rename install snapshots without advancing the journal, so a later version's
   // snapshot can sit exactly on an earlier version's boundary. The baseSnapshotVersion fence
   // must keep it from serving as that earlier version's base.
+  @TestTransaction
   @Test
   void assembleAtFencesSnapshotsInstalledByLaterVersions() throws Exception {
     UUID first = update();
@@ -861,6 +897,7 @@ class StackAssemblerTest {
     assertEquals(urn("imported"), v2.get(0).required("urn").asText());
   }
 
+  @TestTransaction
   @Test
   void assembleAtResolvesSameBoundaryImportsByVersionOrder() throws Exception {
     snapshotInstallingUpdate(0L, "[" + res("first-import") + "]");
@@ -875,6 +912,7 @@ class StackAssemblerTest {
 
   // Error handling
 
+  @TestTransaction
   @Test
   void unknownKindThrowsWithContext() throws Exception {
     UUID update = update();
@@ -902,16 +940,13 @@ class StackAssemblerTest {
   private void persistSnapshot(long boundary, String resources) throws Exception {
     JsonNode checkpoint = MAPPER.readTree("{\"resources\":" + resources + "}");
     int version = ++snapshotVersion;
-    tx(
-        () -> {
-          Snapshot snapshot = new Snapshot();
-          snapshot.stackId = stackId;
-          snapshot.version = version;
-          snapshot.checkpoint = checkpoint;
-          snapshot.compactedFromJournalSeq = boundary;
-          snapshot.resourceCount = checkpoint.path("resources").size();
-          snapshot.persistAndFlush();
-        });
+    Snapshot snapshot = new Snapshot();
+    snapshot.stackId = stackId;
+    snapshot.version = version;
+    snapshot.checkpoint = checkpoint;
+    snapshot.compactedFromJournalSeq = boundary;
+    snapshot.resourceCount = checkpoint.path("resources").size();
+    snapshot.persistAndFlush();
   }
 
   // Mirrors StackImporter/StackRenamer: an applied version that installs a snapshot at the
@@ -920,35 +955,29 @@ class StackAssemblerTest {
     persistSnapshot(boundary, resources);
     int version = ++updateVersion;
     int installedSnapshotVersion = snapshotVersion;
-    tx(
-        () -> {
-          StackUpdate update = new StackUpdate();
-          update.stackId = stackId;
-          update.version = version;
-          update.kind = StackUpdate.Kind.IMPORT;
-          update.status = StackUpdate.Status.SUCCEEDED;
-          update.startJournalSeq = boundary;
-          update.endJournalSeq = boundary;
-          update.baseSnapshotVersion = installedSnapshotVersion;
-          update.startedAt = Instant.now();
-          update.persistAndFlush();
-        });
+    StackUpdate update = new StackUpdate();
+    update.stackId = stackId;
+    update.version = version;
+    update.kind = StackUpdate.Kind.IMPORT;
+    update.status = StackUpdate.Status.SUCCEEDED;
+    update.startJournalSeq = boundary;
+    update.endJournalSeq = boundary;
+    update.baseSnapshotVersion = installedSnapshotVersion;
+    update.startedAt = Instant.now();
+    update.persistAndFlush();
   }
 
   private UUID update() {
     int version = ++updateVersion;
-    return read(
-        () -> {
-          StackUpdate update = new StackUpdate();
-          update.stackId = stackId;
-          update.version = version;
-          update.kind = StackUpdate.Kind.UPDATE;
-          update.status = StackUpdate.Status.SUCCEEDED;
-          update.startJournalSeq = sequence;
-          update.startedAt = Instant.now();
-          update.persistAndFlush();
-          return update.id;
-        });
+    StackUpdate update = new StackUpdate();
+    update.stackId = stackId;
+    update.version = version;
+    update.kind = StackUpdate.Kind.UPDATE;
+    update.status = StackUpdate.Status.SUCCEEDED;
+    update.startJournalSeq = sequence;
+    update.startedAt = Instant.now();
+    update.persistAndFlush();
+    return update.id;
   }
 
   private void begin(UUID updateId, long operationId, String operationType, String resource)
@@ -994,19 +1023,16 @@ class StackAssemblerTest {
       throws Exception {
     long seq = ++sequence;
     JsonNode parsed = MAPPER.readTree(payload);
-    tx(
-        () -> {
-          JournalEntry entry = new JournalEntry();
-          entry.stackId = stackId;
-          entry.updateId = updateId;
-          entry.sequenceId = seq;
-          entry.wireSequenceId = seq;
-          entry.kind = (short) kind.wireValue;
-          entry.operationId = operationId;
-          entry.payload = parsed;
-          setPromotedField(entry, promoted, value);
-          entry.persistAndFlush();
-        });
+    JournalEntry entry = new JournalEntry();
+    entry.stackId = stackId;
+    entry.updateId = updateId;
+    entry.sequenceId = seq;
+    entry.wireSequenceId = seq;
+    entry.kind = (short) kind.wireValue;
+    entry.operationId = operationId;
+    entry.payload = parsed;
+    setPromotedField(entry, promoted, value);
+    entry.persistAndFlush();
   }
 
   private static void setPromotedField(JournalEntry entry, String promoted, Long value) {

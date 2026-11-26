@@ -1,18 +1,17 @@
 package app.statedb.app.auth;
 
-import static app.statedb.testsupport.TestTransactions.tx;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
 import app.statedb.persistence.auth.ApiToken;
 import app.statedb.persistence.auth.ExpiredApiTokenPurger;
 import app.statedb.persistence.identity.Organization;
 import app.statedb.persistence.identity.User;
+import io.quarkus.test.TestTransaction;
 import io.quarkus.test.junit.QuarkusTest;
 import jakarta.inject.Inject;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.UUID;
-import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 
 @QuarkusTest
@@ -23,42 +22,28 @@ class ExpiredApiTokenPurgerTest {
   private UUID orgId;
   private UUID userId;
 
-  @AfterEach
-  void cleanup() {
-    tx(
-        () -> {
-          if (orgId != null) Organization.deleteById(orgId);
-          if (userId != null) User.deleteById(userId);
-        });
-  }
-
+  @TestTransaction
   @Test
   void retainsExpiredServiceCredentialsButPurgesPersonalTokens() {
-    tx(
-        () -> {
-          Organization org = new Organization();
-          org.name = "expired-token-purger";
-          org.displayName = "Expired Token Purger";
-          org.persist();
-          orgId = org.id;
+    Organization org = new Organization();
+    org.name = "expired-token-purger";
+    org.displayName = "Expired Token Purger";
+    org.persist();
+    orgId = org.id;
 
-          User user = new User();
-          user.iss = "local:purger-test";
-          user.sub = "actor";
-          user.persist();
-          userId = user.id;
+    User user = new User();
+    user.iss = "local:purger-test";
+    user.sub = "actor";
+    user.persist();
+    userId = user.id;
 
-          persistToken("oidc-old", ApiToken.Kind.oidc, null);
-          persistToken("service-old", ApiToken.Kind.service_account, orgId);
-        });
+    persistToken("oidc-old", ApiToken.Kind.oidc, null);
+    persistToken("service-old", ApiToken.Kind.service_account, orgId);
 
     purger.purge();
 
-    tx(
-        () -> {
-          assertEquals(0L, ApiToken.count("tokenHash", "oidc-old"));
-          assertEquals(1L, ApiToken.count("tokenHash", "service-old"));
-        });
+    assertEquals(0L, ApiToken.count("tokenHash", "oidc-old"));
+    assertEquals(1L, ApiToken.count("tokenHash", "service-old"));
   }
 
   private void persistToken(String hash, ApiToken.Kind kind, UUID tokenOrgId) {

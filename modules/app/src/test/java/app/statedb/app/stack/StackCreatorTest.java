@@ -11,6 +11,7 @@ import app.statedb.persistence.stack.Stack;
 import app.statedb.persistence.stack.StackAlreadyExistsException;
 import app.statedb.persistence.stack.StackCreator;
 import app.statedb.persistence.stack.StackRef;
+import io.quarkus.test.TestTransaction;
 import io.quarkus.test.junit.QuarkusTest;
 import jakarta.inject.Inject;
 import jakarta.persistence.EntityManager;
@@ -58,30 +59,28 @@ class StackCreatorTest {
                 .executeUpdate());
   }
 
+  @TestTransaction
   @Test
   void createsStackAndChildRows() {
     StackRef ref = stackCreator.create(orgId, ORG_NAME, "proj", "dev", Map.of("k", "v"));
     assertEquals(orgId, ref.orgId());
     assertEquals("dev", ref.stackName());
 
-    tx(
-        () -> {
-          Stack stack = Stack.findById(ref.stackId());
-          assertEquals("dev", stack.name);
-          assertEquals(0, stack.version);
-          UUID projectId =
-              (UUID)
-                  em.createNativeQuery("SELECT project_id FROM stacks WHERE id = ?1")
-                      .setParameter(1, ref.stackId())
-                      .getSingleResult();
-          assertEquals(7, projectId.version());
-          Number states =
-              (Number)
-                  em.createNativeQuery("SELECT count(*) FROM stack_state WHERE stack_id = ?1")
-                      .setParameter(1, ref.stackId())
-                      .getSingleResult();
-          assertEquals(1L, states.longValue());
-        });
+    Stack stack = Stack.findById(ref.stackId());
+    assertEquals("dev", stack.name);
+    assertEquals(0, stack.version);
+    UUID projectId =
+        (UUID)
+            em.createNativeQuery("SELECT project_id FROM stacks WHERE id = ?1")
+                .setParameter(1, ref.stackId())
+                .getSingleResult();
+    assertEquals(7, projectId.version());
+    Number states =
+        (Number)
+            em.createNativeQuery("SELECT count(*) FROM stack_state WHERE stack_id = ?1")
+                .setParameter(1, ref.stackId())
+                .getSingleResult();
+    assertEquals(1L, states.longValue());
   }
 
   @Test
@@ -94,21 +93,18 @@ class StackCreatorTest {
     assertTrue(ex.qualifiedName().contains("dup"));
   }
 
+  @TestTransaction
   @Test
   void projectUpsertIsIdempotentAcrossCalls() {
     stackCreator.create(orgId, ORG_NAME, "shared-proj", "alpha", Map.of());
     stackCreator.create(orgId, ORG_NAME, "shared-proj", "beta", Map.of());
 
-    tx(
-        () -> {
-          Number projects =
-              (Number)
-                  em.createNativeQuery(
-                          "SELECT count(*) FROM projects WHERE org_id = ?1 AND name = ?2")
-                      .setParameter(1, orgId)
-                      .setParameter(2, "shared-proj")
-                      .getSingleResult();
-          assertEquals(1L, projects.longValue());
-        });
+    Number projects =
+        (Number)
+            em.createNativeQuery("SELECT count(*) FROM projects WHERE org_id = ?1 AND name = ?2")
+                .setParameter(1, orgId)
+                .setParameter(2, "shared-proj")
+                .getSingleResult();
+    assertEquals(1L, projects.longValue());
   }
 }

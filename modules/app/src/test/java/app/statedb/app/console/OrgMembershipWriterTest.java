@@ -4,6 +4,7 @@ import static app.statedb.testsupport.TestTransactions.tx;
 import static org.junit.jupiter.api.Assertions.*;
 
 import app.statedb.persistence.identity.*;
+import io.quarkus.test.TestTransaction;
 import io.quarkus.test.junit.QuarkusTest;
 import jakarta.inject.Inject;
 import java.util.UUID;
@@ -53,6 +54,7 @@ class OrgMembershipWriterTest {
     assertThrows(LastOwnerException.class, () -> writer.remove(orgId, ownerId));
   }
 
+  @TestTransaction
   @Test
   void secondOwnerAllowsDemotion() {
     writer.add(orgId, otherId, OrgMember.Role.owner);
@@ -60,6 +62,7 @@ class OrgMembershipWriterTest {
     assertEquals(OrgMember.Role.guest, OrgMember.findRole(orgId, ownerId).orElseThrow());
   }
 
+  @TestTransaction
   @Test
   void serviceRoleIsRejected() {
     assertThrows(RuntimeException.class, () -> writer.add(orgId, otherId, OrgMember.Role.service));

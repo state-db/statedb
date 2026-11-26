@@ -17,6 +17,7 @@ import app.statedb.persistence.stack.Stack;
 import app.statedb.persistence.stack.Workspace;
 import app.statedb.persistence.update.StackUpdate;
 import com.fasterxml.jackson.databind.JsonNode;
+import io.quarkus.test.TestTransaction;
 import io.quarkus.test.junit.QuarkusTest;
 import jakarta.inject.Inject;
 import java.time.Instant;
@@ -74,31 +75,33 @@ class UpdateEventStreamTest {
     assertEquals(live.events(), archived.events(), "folding must not change what a reader sees");
   }
 
+  @TestTransaction
   @Test
   void theBoundTruncatesAndSaysSo() {
     List<JsonNode> corpus = EventArchiveFixture.recordedEvents();
     UUID stackId = seedStack("event-stream-bound");
     UUID updateId = seedUpdate(stackId, corpus, 50);
 
-    UpdateEventReader.EventStream bounded = inTx(() -> reader.stream(stackId, updateId, 10));
+    UpdateEventReader.EventStream bounded = reader.stream(stackId, updateId, 10);
     assertTrue(bounded.truncated(), "a bound that cut the stream must report it");
     assertEquals(10, bounded.events().size());
     // A prefix, in sequence order — a caller deriving from it gets the start of the run, not a
     // scattering of it.
     assertEquals(
-        inTx(() -> reader.page(stackId, updateId, -1, 10).events()),
+        reader.page(stackId, updateId, -1, 10).events(),
         bounded.events(),
         "the bounded read must be the first N events");
   }
 
   /** A stream that exactly fills the bound is complete; saying otherwise would be a false alarm. */
+  @TestTransaction
   @Test
   void aStreamThatExactlyFillsTheBoundIsNotTruncated() {
     List<JsonNode> corpus = EventArchiveFixture.recordedEvents();
     UUID stackId = seedStack("event-stream-exact");
     UUID updateId = seedUpdate(stackId, corpus, 25);
 
-    UpdateEventReader.EventStream exact = inTx(() -> reader.stream(stackId, updateId, 25));
+    UpdateEventReader.EventStream exact = reader.stream(stackId, updateId, 25);
     assertFalse(exact.truncated());
     assertEquals(25, exact.events().size());
   }
@@ -116,10 +119,11 @@ class UpdateEventStreamTest {
     assertEquals(10, bounded.events().size());
   }
 
+  @TestTransaction
   @Test
   void anUnknownUpdateIsAnEmptyStreamRatherThanAnError() {
     UUID stackId = seedStack("event-stream-missing");
-    UpdateEventReader.EventStream none = inTx(() -> reader.stream(stackId, UUID.randomUUID(), 10));
+    UpdateEventReader.EventStream none = reader.stream(stackId, UUID.randomUUID(), 10);
     assertEquals(List.of(), none.events());
     assertFalse(none.archived());
     assertFalse(none.truncated());

@@ -17,6 +17,7 @@ import app.statedb.persistence.update.StackUpdateStarter;
 import app.statedb.persistence.update.StartUpdateRequest;
 import app.statedb.persistence.update.StartedUpdate;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import io.quarkus.test.TestTransaction;
 import io.quarkus.test.junit.QuarkusTest;
 import jakarta.inject.Inject;
 import jakarta.persistence.EntityManager;
@@ -70,6 +71,7 @@ class StackUpdateStarterTest {
                 .executeUpdate());
   }
 
+  @TestTransaction
   @Test
   void distinctKeysProduceMonotonicVersions() {
     StartedUpdate a = starter.start(stackId, StackUpdate.Kind.UPDATE, null, null, "k-a", req());
@@ -79,6 +81,7 @@ class StackUpdateStarterTest {
     assertNotEquals(a.updateId(), b.updateId());
   }
 
+  @TestTransaction
   @Test
   void dryRunsDoNotConsumeAppliedVersions() {
     // pulumi preview, and the dry-run pass of up/refresh/destroy (same kind as the apply, but
@@ -127,6 +130,7 @@ class StackUpdateStarterTest {
     assertEquals(3, updateVersion(renameId));
   }
 
+  @TestTransaction
   @Test
   void sameKeyReplayReturnsExistingRow() {
     StartedUpdate first =
@@ -136,20 +140,18 @@ class StackUpdateStarterTest {
     assertEquals(first.updateId(), replay.updateId());
     assertEquals(first.version(), replay.version());
 
-    tx(
-        () -> {
-          Number n =
-              (Number)
-                  em.createNativeQuery(
-                          "SELECT count(*) FROM stack_updates WHERE stack_id = ?1"
-                              + " AND client_request_id = ?2")
-                      .setParameter(1, stackId)
-                      .setParameter(2, "dup-key")
-                      .getSingleResult();
-          assertEquals(1L, n.longValue());
-        });
+    Number n =
+        (Number)
+            em.createNativeQuery(
+                    "SELECT count(*) FROM stack_updates WHERE stack_id = ?1"
+                        + " AND client_request_id = ?2")
+                .setParameter(1, stackId)
+                .setParameter(2, "dup-key")
+                .getSingleResult();
+    assertEquals(1L, n.longValue());
   }
 
+  @TestTransaction
   @Test
   void nullKeyDoesNotDeduplicate() {
     StartedUpdate a = starter.start(stackId, StackUpdate.Kind.UPDATE, null, null, null, req());

@@ -20,6 +20,7 @@ import app.statedb.persistence.update.StartUpdateRequest;
 import app.statedb.persistence.update.StartedUpdate;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import io.quarkus.test.TestTransaction;
 import io.quarkus.test.junit.QuarkusTest;
 import jakarta.inject.Inject;
 import jakarta.persistence.EntityManager;
@@ -81,6 +82,7 @@ class EventBatchAppenderTest {
                 .executeUpdate());
   }
 
+  @TestTransaction
   @Test
   void singleBatchPersistsRowsWithPreservedSequence() {
     appender.append(
@@ -92,25 +94,23 @@ class EventBatchAppenderTest {
             event(1, "diagnosticEvent", "{\"severity\":\"info\",\"message\":\"hi\"}"),
             event(2, "summaryEvent", "{\"durationSeconds\":1}")));
 
-    tx(
-        () -> {
-          @SuppressWarnings("unchecked")
-          List<Object[]> rows =
-              em.createNativeQuery(
-                      "SELECT sequence, kind, severity FROM update_events "
-                          + "WHERE update_id = ?1 ORDER BY sequence")
-                  .setParameter(1, updateId)
-                  .getResultList();
-          assertEquals(3, rows.size());
-          assertEquals(0, ((Number) rows.get(0)[0]).intValue());
-          assertEquals("prelude", rows.get(0)[1]);
-          assertNull(rows.get(0)[2]);
-          assertEquals("diagnostic", rows.get(1)[1]);
-          assertEquals("info", rows.get(1)[2]);
-          assertEquals("summary", rows.get(2)[1]);
-        });
+    @SuppressWarnings("unchecked")
+    List<Object[]> rows =
+        em.createNativeQuery(
+                "SELECT sequence, kind, severity FROM update_events "
+                    + "WHERE update_id = ?1 ORDER BY sequence")
+            .setParameter(1, updateId)
+            .getResultList();
+    assertEquals(3, rows.size());
+    assertEquals(0, ((Number) rows.get(0)[0]).intValue());
+    assertEquals("prelude", rows.get(0)[1]);
+    assertNull(rows.get(0)[2]);
+    assertEquals("diagnostic", rows.get(1)[1]);
+    assertEquals("info", rows.get(1)[2]);
+    assertEquals("summary", rows.get(2)[1]);
   }
 
+  @TestTransaction
   @Test
   void payloadStoredVerbatim() {
     appender.append(
@@ -119,25 +119,21 @@ class EventBatchAppenderTest {
         leaseId,
         List.of(event(7, "stdoutEvent", "{\"message\":\"hello\",\"color\":\"auto\"}")));
 
-    tx(
-        () -> {
-          String payloadJson =
-              (String)
-                  em.createNativeQuery(
-                          "SELECT payload::text FROM update_events WHERE update_id = ?1")
-                      .setParameter(1, updateId)
-                      .getSingleResult();
-          JsonNode payload;
-          try {
-            payload = MAPPER.readTree(payloadJson);
-          } catch (Exception e) {
-            throw new RuntimeException(e);
-          }
-          // Full wire envelope is preserved, including sequence/timestamp keys.
-          assertEquals(7, payload.get("sequence").asInt());
-          assertTrue(payload.has("stdoutEvent"));
-          assertEquals("hello", payload.get("stdoutEvent").get("message").asText());
-        });
+    String payloadJson =
+        (String)
+            em.createNativeQuery("SELECT payload::text FROM update_events WHERE update_id = ?1")
+                .setParameter(1, updateId)
+                .getSingleResult();
+    JsonNode payload;
+    try {
+      payload = MAPPER.readTree(payloadJson);
+    } catch (Exception e) {
+      throw new RuntimeException(e);
+    }
+    // Full wire envelope is preserved, including sequence/timestamp keys.
+    assertEquals(7, payload.get("sequence").asInt());
+    assertTrue(payload.has("stdoutEvent"));
+    assertEquals("hello", payload.get("stdoutEvent").get("message").asText());
   }
 
   @Test

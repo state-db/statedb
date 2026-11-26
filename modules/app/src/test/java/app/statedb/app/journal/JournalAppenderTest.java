@@ -28,6 +28,7 @@ import app.statedb.persistence.update.StartedUpdate;
 import app.statedb.testsupport.pulumi.PulumiDeploymentAssert;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import io.quarkus.test.TestTransaction;
 import io.quarkus.test.junit.QuarkusTest;
 import jakarta.inject.Inject;
 import jakarta.persistence.EntityManager;
@@ -97,6 +98,7 @@ class JournalAppenderTest {
                 .executeUpdate());
   }
 
+  @TestTransaction
   @Test
   void singleBatchPersistsOffsetAndRows() {
     appender.append(
@@ -116,34 +118,29 @@ class JournalAppenderTest {
                 "{\"operation\":{\"resource\":{\"urn\":\"urn:b\",\"type\":\"t:b\"},\"type\":\"creating\"}}"),
             entry(3, 1, 1L, "{\"state\":{\"urn\":\"urn:a\"}}")));
 
-    tx(
-        () -> {
-          Long offset =
-              ((Number)
-                      em.createNativeQuery(
-                              "SELECT start_journal_seq FROM stack_updates WHERE id = ?1")
-                          .setParameter(1, updateId)
-                          .getSingleResult())
-                  .longValue();
-          assertEquals(0L, offset);
+    Long offset =
+        ((Number)
+                em.createNativeQuery("SELECT start_journal_seq FROM stack_updates WHERE id = ?1")
+                    .setParameter(1, updateId)
+                    .getSingleResult())
+            .longValue();
+    assertEquals(0L, offset);
 
-          List<?> rows =
-              em.createNativeQuery(
-                      "SELECT sequence_id, wire_sequence_id, kind, resource_urn "
-                          + "FROM journal_entries WHERE update_id = ?1 ORDER BY sequence_id")
-                  .setParameter(1, updateId)
-                  .getResultList();
-          assertEquals(3, rows.size());
+    List<?> rows =
+        em.createNativeQuery(
+                "SELECT sequence_id, wire_sequence_id, kind, resource_urn "
+                    + "FROM journal_entries WHERE update_id = ?1 ORDER BY sequence_id")
+            .setParameter(1, updateId)
+            .getResultList();
+    assertEquals(3, rows.size());
 
-          long stateSeq =
-              ((Number)
-                      em.createNativeQuery(
-                              "SELECT journal_seq FROM stack_state WHERE stack_id = ?1")
-                          .setParameter(1, stackId)
-                          .getSingleResult())
-                  .longValue();
-          assertEquals(4L, stateSeq);
-        });
+    long stateSeq =
+        ((Number)
+                em.createNativeQuery("SELECT journal_seq FROM stack_state WHERE stack_id = ?1")
+                    .setParameter(1, stackId)
+                    .getSingleResult())
+            .longValue();
+    assertEquals(4L, stateSeq);
   }
 
   @Test
@@ -204,6 +201,7 @@ class JournalAppenderTest {
     assertEquals("update does not exist", error.getMessage());
   }
 
+  @TestTransaction
   @Test
   void outOfOrderWireIdsWithinBatchReplayCorrectly() {
     // Entries arrive [6, 5, 7]; replay by sequence_id should be [5, 6, 7].
@@ -216,23 +214,21 @@ class JournalAppenderTest {
             entry(5, 1, 5L, "{\"state\":{\"urn\":\"urn:5\"}}"),
             entry(7, 1, 7L, "{\"state\":{\"urn\":\"urn:7\"}}")));
 
-    tx(
-        () -> {
-          @SuppressWarnings("unchecked")
-          List<Object[]> rows =
-              em.createNativeQuery(
-                      "SELECT wire_sequence_id, resource_urn FROM journal_entries "
-                          + "WHERE update_id = ?1 ORDER BY sequence_id")
-                  .setParameter(1, updateId)
-                  .getResultList();
-          assertEquals(3, rows.size());
-          assertEquals(5L, ((Number) rows.get(0)[0]).longValue());
-          assertEquals(6L, ((Number) rows.get(1)[0]).longValue());
-          assertEquals(7L, ((Number) rows.get(2)[0]).longValue());
-          assertEquals("urn:5", rows.get(0)[1]);
-        });
+    @SuppressWarnings("unchecked")
+    List<Object[]> rows =
+        em.createNativeQuery(
+                "SELECT wire_sequence_id, resource_urn FROM journal_entries "
+                    + "WHERE update_id = ?1 ORDER BY sequence_id")
+            .setParameter(1, updateId)
+            .getResultList();
+    assertEquals(3, rows.size());
+    assertEquals(5L, ((Number) rows.get(0)[0]).longValue());
+    assertEquals(6L, ((Number) rows.get(1)[0]).longValue());
+    assertEquals(7L, ((Number) rows.get(2)[0]).longValue());
+    assertEquals("urn:5", rows.get(0)[1]);
   }
 
+  @TestTransaction
   @Test
   void outOfOrderAcrossPatchesReplayCorrectly() {
     appender.append(
@@ -250,28 +246,25 @@ class JournalAppenderTest {
             entry(4, 1, 4L, "{\"state\":{\"urn\":\"urn:4\"}}"),
             entry(6, 1, 6L, "{\"state\":{\"urn\":\"urn:6\"}}")));
 
-    tx(
-        () -> {
-          @SuppressWarnings("unchecked")
-          List<Number> wireSeqs =
-              em.createNativeQuery(
-                      "SELECT wire_sequence_id FROM journal_entries WHERE update_id = ?1 "
-                          + "ORDER BY sequence_id")
-                  .setParameter(1, updateId)
-                  .getResultList();
-          assertEquals(List.of(3L, 4L, 5L, 6L), wireSeqs.stream().map(Number::longValue).toList());
+    @SuppressWarnings("unchecked")
+    List<Number> wireSeqs =
+        em.createNativeQuery(
+                "SELECT wire_sequence_id FROM journal_entries WHERE update_id = ?1 "
+                    + "ORDER BY sequence_id")
+            .setParameter(1, updateId)
+            .getResultList();
+    assertEquals(List.of(3L, 4L, 5L, 6L), wireSeqs.stream().map(Number::longValue).toList());
 
-          long stateSeq =
-              ((Number)
-                      em.createNativeQuery(
-                              "SELECT journal_seq FROM stack_state WHERE stack_id = ?1")
-                          .setParameter(1, stackId)
-                          .getSingleResult())
-                  .longValue();
-          assertEquals(7L, stateSeq);
-        });
+    long stateSeq =
+        ((Number)
+                em.createNativeQuery("SELECT journal_seq FROM stack_state WHERE stack_id = ?1")
+                    .setParameter(1, stackId)
+                    .getSingleResult())
+            .longValue();
+    assertEquals(7L, stateSeq);
   }
 
+  @TestTransaction
   @Test
   void duplicateIdenticalPatchIsNoOp() {
     appender.append(
@@ -279,38 +272,34 @@ class JournalAppenderTest {
     appender.append(
         stackId, updateId, leaseId, List.of(entry(1, 1, 1L, "{\"state\":{\"urn\":\"urn:1\"}}")));
 
-    tx(
-        () -> {
-          long count =
-              ((Number)
-                      em.createNativeQuery(
-                              "SELECT count(*) FROM journal_entries WHERE update_id = ?1")
-                          .setParameter(1, updateId)
-                          .getSingleResult())
-                  .longValue();
-          assertEquals(1L, count);
+    long count =
+        ((Number)
+                em.createNativeQuery("SELECT count(*) FROM journal_entries WHERE update_id = ?1")
+                    .setParameter(1, updateId)
+                    .getSingleResult())
+            .longValue();
+    assertEquals(1L, count);
 
-          long stateSeq =
-              ((Number)
-                      em.createNativeQuery(
-                              "SELECT journal_seq FROM stack_state WHERE stack_id = ?1")
-                          .setParameter(1, stackId)
-                          .getSingleResult())
-                  .longValue();
-          assertEquals(2L, stateSeq);
+    long stateSeq =
+        ((Number)
+                em.createNativeQuery("SELECT journal_seq FROM stack_state WHERE stack_id = ?1")
+                    .setParameter(1, stackId)
+                    .getSingleResult())
+            .longValue();
+    assertEquals(2L, stateSeq);
 
-          long sinceCompaction =
-              ((Number)
-                      em.createNativeQuery(
-                              "SELECT journal_entries_since_compaction FROM stack_state "
-                                  + "WHERE stack_id = ?1")
-                          .setParameter(1, stackId)
-                          .getSingleResult())
-                  .longValue();
-          assertEquals(1L, sinceCompaction);
-        });
+    long sinceCompaction =
+        ((Number)
+                em.createNativeQuery(
+                        "SELECT journal_entries_since_compaction FROM stack_state "
+                            + "WHERE stack_id = ?1")
+                    .setParameter(1, stackId)
+                    .getSingleResult())
+            .longValue();
+    assertEquals(1L, sinceCompaction);
   }
 
+  @TestTransaction
   @Test
   void partialOverlapRetryInsertsOnlyMissingEntries() {
     appender.append(
@@ -328,36 +317,31 @@ class JournalAppenderTest {
             entry(2, 1, 2L, "{\"state\":{\"urn\":\"urn:2\"}}"),
             entry(3, 1, 3L, "{\"state\":{\"urn\":\"urn:3\"}}")));
 
-    tx(
-        () -> {
-          long count =
-              ((Number)
-                      em.createNativeQuery(
-                              "SELECT count(*) FROM journal_entries WHERE update_id = ?1")
-                          .setParameter(1, updateId)
-                          .getSingleResult())
-                  .longValue();
-          assertEquals(3L, count);
+    long count =
+        ((Number)
+                em.createNativeQuery("SELECT count(*) FROM journal_entries WHERE update_id = ?1")
+                    .setParameter(1, updateId)
+                    .getSingleResult())
+            .longValue();
+    assertEquals(3L, count);
 
-          long stateSeq =
-              ((Number)
-                      em.createNativeQuery(
-                              "SELECT journal_seq FROM stack_state WHERE stack_id = ?1")
-                          .setParameter(1, stackId)
-                          .getSingleResult())
-                  .longValue();
-          assertEquals(4L, stateSeq);
+    long stateSeq =
+        ((Number)
+                em.createNativeQuery("SELECT journal_seq FROM stack_state WHERE stack_id = ?1")
+                    .setParameter(1, stackId)
+                    .getSingleResult())
+            .longValue();
+    assertEquals(4L, stateSeq);
 
-          long sinceCompaction =
-              ((Number)
-                      em.createNativeQuery(
-                              "SELECT journal_entries_since_compaction FROM stack_state "
-                                  + "WHERE stack_id = ?1")
-                          .setParameter(1, stackId)
-                          .getSingleResult())
-                  .longValue();
-          assertEquals(3L, sinceCompaction);
-        });
+    long sinceCompaction =
+        ((Number)
+                em.createNativeQuery(
+                        "SELECT journal_entries_since_compaction FROM stack_state "
+                            + "WHERE stack_id = ?1")
+                    .setParameter(1, stackId)
+                    .getSingleResult())
+            .longValue();
+    assertEquals(3L, sinceCompaction);
   }
 
   @Test
@@ -426,6 +410,7 @@ class JournalAppenderTest {
         () -> appender.append(stackId, updateId, leaseId, List.of(entry(0, 0, 1L, "{}"))));
   }
 
+  @TestTransaction
   @Test
   void successBeforeBeginArrivalStillReplaysInSequenceOrder() {
     // Batch 1 carries a terminal Success for op 42; batch 2 carries its Begin with an earlier wire
@@ -451,6 +436,7 @@ class JournalAppenderTest {
     assertFalse(assembled.deployment().has("pending_operations"));
   }
 
+  @TestTransaction
   @Test
   void unknownOperationTypeIsPersistedAndReplayed() {
     appender.append(
@@ -464,17 +450,13 @@ class JournalAppenderTest {
                 7L,
                 "{\"operation\":{\"resource\":{\"urn\":\"urn:r\",\"type\":\"t:x\"},\"type\":\"bogus\"}}")));
 
-    tx(
-        () -> {
-          long count =
-              ((Number)
-                      em.createNativeQuery(
-                              "SELECT count(*) FROM journal_entries WHERE update_id = ?1")
-                          .setParameter(1, updateId)
-                          .getSingleResult())
-                  .longValue();
-          assertEquals(1L, count);
-        });
+    long count =
+        ((Number)
+                em.createNativeQuery("SELECT count(*) FROM journal_entries WHERE update_id = ?1")
+                    .setParameter(1, updateId)
+                    .getSingleResult())
+            .longValue();
+    assertEquals(1L, count);
 
     JsonNode pending = assemble(stackId).deployment().required("pending_operations");
     assertEquals(1, pending.size());
@@ -482,6 +464,7 @@ class JournalAppenderTest {
     assertEquals("urn:r", pending.get(0).required("resource").required("urn").asText());
   }
 
+  @TestTransaction
   @Test
   void payloadStoredWithoutPromotedFields() {
     appender.append(
@@ -491,45 +474,40 @@ class JournalAppenderTest {
         List.of(
             entry(1, 3, 9L, "{\"state\":{\"urn\":\"urn:s\"},\"isRefresh\":true,\"removeOld\":5}")));
 
-    tx(
-        () -> {
-          String payloadJson =
-              (String)
-                  em.createNativeQuery(
-                          "SELECT payload::text FROM journal_entries WHERE update_id = ?1")
-                      .setParameter(1, updateId)
-                      .getSingleResult();
-          JsonNode payload;
-          try {
-            payload = MAPPER.readTree(payloadJson);
-          } catch (Exception e) {
-            throw new RuntimeException(e);
-          }
-          // state remains in payload; promoted columns are removed.
-          assertNotNull(payload.get("state"));
-          assertNull(payload.get("isRefresh"));
-          assertNull(payload.get("removeOld"));
-          assertNull(payload.get("sequenceID"));
-          assertNull(payload.get("kind"));
+    String payloadJson =
+        (String)
+            em.createNativeQuery("SELECT payload::text FROM journal_entries WHERE update_id = ?1")
+                .setParameter(1, updateId)
+                .getSingleResult();
+    JsonNode payload;
+    try {
+      payload = MAPPER.readTree(payloadJson);
+    } catch (Exception e) {
+      throw new RuntimeException(e);
+    }
+    // state remains in payload; promoted columns are removed.
+    assertNotNull(payload.get("state"));
+    assertNull(payload.get("isRefresh"));
+    assertNull(payload.get("removeOld"));
+    assertNull(payload.get("sequenceID"));
+    assertNull(payload.get("kind"));
 
-          Boolean isRefresh =
-              (Boolean)
-                  em.createNativeQuery(
-                          "SELECT is_refresh FROM journal_entries WHERE update_id = ?1")
-                      .setParameter(1, updateId)
-                      .getSingleResult();
-          assertTrue(isRefresh);
+    Boolean isRefresh =
+        (Boolean)
+            em.createNativeQuery("SELECT is_refresh FROM journal_entries WHERE update_id = ?1")
+                .setParameter(1, updateId)
+                .getSingleResult();
+    assertTrue(isRefresh);
 
-          Number removeOld =
-              (Number)
-                  em.createNativeQuery(
-                          "SELECT remove_old FROM journal_entries WHERE update_id = ?1")
-                      .setParameter(1, updateId)
-                      .getSingleResult();
-          assertEquals(5L, removeOld.longValue());
-        });
+    Number removeOld =
+        (Number)
+            em.createNativeQuery("SELECT remove_old FROM journal_entries WHERE update_id = ?1")
+                .setParameter(1, updateId)
+                .getSingleResult();
+    assertEquals(5L, removeOld.longValue());
   }
 
+  @TestTransaction
   @Test
   void payloadPrunesStackTraceButKeepsSourcePosition() {
     appender.append(
@@ -559,25 +537,21 @@ class JournalAppenderTest {
                 }
                 """)));
 
-    tx(
-        () -> {
-          String payloadJson =
-              (String)
-                  em.createNativeQuery(
-                          "SELECT payload::text FROM journal_entries WHERE update_id = ?1")
-                      .setParameter(1, updateId)
-                      .getSingleResult();
-          JsonNode payload;
-          try {
-            payload = MAPPER.readTree(payloadJson);
-          } catch (Exception e) {
-            throw new RuntimeException(e);
-          }
-          JsonNode state = payload.required("state");
-          assertEquals("file:///work/Pulumi.yaml:12:3", state.required("sourcePosition").asText());
-          assertNull(state.get("stackTrace"));
-          assertNull(state.required("outputs").required("nested").get("stackTrace"));
-        });
+    String payloadJson =
+        (String)
+            em.createNativeQuery("SELECT payload::text FROM journal_entries WHERE update_id = ?1")
+                .setParameter(1, updateId)
+                .getSingleResult();
+    JsonNode payload;
+    try {
+      payload = MAPPER.readTree(payloadJson);
+    } catch (Exception e) {
+      throw new RuntimeException(e);
+    }
+    JsonNode state = payload.required("state");
+    assertEquals("file:///work/Pulumi.yaml:12:3", state.required("sourcePosition").asText());
+    assertNull(state.get("stackTrace"));
+    assertNull(state.required("outputs").required("nested").get("stackTrace"));
   }
 
   @Test

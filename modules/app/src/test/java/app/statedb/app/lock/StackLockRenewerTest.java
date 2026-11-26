@@ -18,6 +18,7 @@ import app.statedb.persistence.stack.StackRef;
 import app.statedb.persistence.update.StackUpdate;
 import app.statedb.persistence.update.StackUpdateStarter;
 import app.statedb.persistence.update.StartUpdateRequest;
+import io.quarkus.test.TestTransaction;
 import io.quarkus.test.junit.QuarkusTest;
 import jakarta.inject.Inject;
 import jakarta.persistence.EntityManager;
@@ -82,6 +83,7 @@ class StackLockRenewerTest {
                 .executeUpdate());
   }
 
+  // Use separate transactions so renewal observes a new database timestamp.
   @Test
   void renewAdvancesExpiresAtAndHeartbeatAndRotatesToken() {
     // Back-date both timestamps so we can detect forward movement deterministically without
@@ -114,36 +116,34 @@ class StackLockRenewerTest {
     assertTrue(!java.util.Arrays.equals(hashBefore, hashAfter), "lock_token_hash should rotate");
   }
 
+  @TestTransaction
   @Test
   void renewPastMaxLifetimeIsRejected() {
     // Push the ceiling into the past while leaving expires_at in the future. Renew should
     // refuse — the bearer cannot be kept alive past max_expires_at even if currently valid.
-    tx(
-        () ->
-            em.createNativeQuery(
-                    "UPDATE stack_locks"
-                        + "    SET expires_at = now() + interval '5 minutes',"
-                        + "        max_expires_at = now() - interval '1 second'"
-                        + "  WHERE id = ?1")
-                .setParameter(1, leaseId)
-                .executeUpdate());
+    em.createNativeQuery(
+            "UPDATE stack_locks"
+                + "    SET expires_at = now() + interval '5 minutes',"
+                + "        max_expires_at = now() - interval '1 second'"
+                + "  WHERE id = ?1")
+        .setParameter(1, leaseId)
+        .executeUpdate();
 
     assertThrows(LeaseExpiredException.class, () -> renewer.renew(leaseId, null));
   }
 
+  @TestTransaction
   @Test
   void renewClampsExpiresAtToMaxLifetime() {
     // Ceiling is only one second away; the next renew would normally push expires_at out by
     // the TTL but must clamp to max_expires_at instead.
-    tx(
-        () ->
-            em.createNativeQuery(
-                    "UPDATE stack_locks"
-                        + "    SET expires_at = now() + interval '5 minutes',"
-                        + "        max_expires_at = now() + interval '1 second'"
-                        + "  WHERE id = ?1")
-                .setParameter(1, leaseId)
-                .executeUpdate());
+    em.createNativeQuery(
+            "UPDATE stack_locks"
+                + "    SET expires_at = now() + interval '5 minutes',"
+                + "        max_expires_at = now() + interval '1 second'"
+                + "  WHERE id = ?1")
+        .setParameter(1, leaseId)
+        .executeUpdate();
 
     Instant maxBefore = readMaxExpiresAt();
     Lease renewed = renewer.renew(leaseId, null);
@@ -153,35 +153,37 @@ class StackLockRenewerTest {
     assertTrue(renewed.expiresAt().equals(clamped), "response pins to clamped value");
   }
 
+  @TestTransaction
   @Test
   void renewOnExpiredLockIsRejected() {
-    tx(
-        () ->
-            em.createNativeQuery(
-                    "UPDATE stack_locks SET expires_at = now() - interval '1 second'"
-                        + " WHERE id = ?1")
-                .setParameter(1, leaseId)
-                .executeUpdate());
+    em.createNativeQuery(
+            "UPDATE stack_locks SET expires_at = now() - interval '1 second'" + " WHERE id = ?1")
+        .setParameter(1, leaseId)
+        .executeUpdate();
 
     assertThrows(LeaseExpiredException.class, () -> renewer.renew(leaseId, null));
   }
 
+  @TestTransaction
   @Test
   void requestedDurationIsHonoredWithinBounds() {
     assertEquals(Duration.ofSeconds(300), renewer.renew(leaseId, 300L).duration());
   }
 
+  @TestTransaction
   @Test
   void requestedDurationBelowFloorIsClampedUp() {
     assertEquals(Duration.ofSeconds(30), renewer.renew(leaseId, 1L).duration());
   }
 
+  @TestTransaction
   @Test
   void requestedDurationAboveLeaseTtlIsClampedDown() {
     Duration day = Duration.ofDays(1);
     assertEquals(lockConfig.leaseTtl(), renewer.renew(leaseId, day.toSeconds()).duration());
   }
 
+  @TestTransaction
   @Test
   void invalidRequestedDurationFallsBackToLeaseTtl() {
     assertEquals(lockConfig.leaseTtl(), renewer.renew(leaseId, 0L).duration());
@@ -189,13 +191,12 @@ class StackLockRenewerTest {
     assertEquals(lockConfig.leaseTtl(), renewer.renew(leaseId, null).duration());
   }
 
+  @TestTransaction
   @Test
   void renewOnMissingLockIsRejected() {
-    tx(
-        () ->
-            em.createNativeQuery("DELETE FROM stack_locks WHERE id = ?1")
-                .setParameter(1, leaseId)
-                .executeUpdate());
+    em.createNativeQuery("DELETE FROM stack_locks WHERE id = ?1")
+        .setParameter(1, leaseId)
+        .executeUpdate();
 
     assertThrows(LeaseExpiredException.class, () -> renewer.renew(leaseId, null));
   }
