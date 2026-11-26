@@ -112,13 +112,7 @@ class StackUpdateStarterTest {
 
     // These operations are terminal before import/rename in the real protocol. Marking them
     // terminal here keeps this test focused on version allocation rather than update completion.
-    tx(
-        () ->
-            StackUpdate.update(
-                "status = ?1 where id in (?2, ?3)",
-                StackUpdate.Status.SUCCEEDED,
-                dryRun.updateId(),
-                apply.updateId()));
+    markUpdatesSucceeded(dryRun, apply);
 
     UUID importId =
         stackImporter.importDeployment(stackId, null, null, MAPPER.readTree("{\"resources\":[]}"));
@@ -222,5 +216,15 @@ class StackUpdateStarterTest {
     Throwable c = t;
     while (c.getCause() != null) c = c.getCause();
     return c.getMessage() == null ? "" : c.getMessage();
+  }
+
+  private void markUpdatesSucceeded(StartedUpdate dryRun, StartedUpdate apply) {
+    tx(
+        () ->
+            StackUpdate.update(
+                "status = ?1 where id in (?2, ?3)",
+                StackUpdate.Status.SUCCEEDED,
+                dryRun.updateId(),
+                apply.updateId()));
   }
 }

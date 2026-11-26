@@ -151,22 +151,7 @@ class BootstrapProvisionerTest {
       pool.shutdownNow();
     }
 
-    tx(
-        () -> {
-          assertEquals(1, Organization.count("name", CONCURRENT_ORG));
-          Organization org = Organization.find("name", CONCURRENT_ORG).firstResult();
-          User user =
-              User.find(
-                      "iss = ?1 and sub = ?2",
-                      BootstrapProvisioner.BOOTSTRAP_ISS,
-                      BootstrapProvisioner.BOOTSTRAP_SUB)
-                  .firstResult();
-          assertNotNull(user, "bootstrap user must exist");
-          assertEquals(
-              1,
-              OrgMember.count("orgId = ?1 and userId = ?2", org.id, user.id),
-              "exactly one membership for org+user");
-        });
+    assertSingleBootstrapWasCommitted();
   }
 
   /**
@@ -185,6 +170,25 @@ class BootstrapProvisionerTest {
           em.createNativeQuery("DELETE FROM organizations WHERE name = ?1")
               .setParameter(1, CONCURRENT_ORG)
               .executeUpdate();
+        });
+  }
+
+  private void assertSingleBootstrapWasCommitted() {
+    tx(
+        () -> {
+          assertEquals(1, Organization.count("name", CONCURRENT_ORG));
+          Organization org = Organization.find("name", CONCURRENT_ORG).firstResult();
+          User user =
+              User.find(
+                      "iss = ?1 and sub = ?2",
+                      BootstrapProvisioner.BOOTSTRAP_ISS,
+                      BootstrapProvisioner.BOOTSTRAP_SUB)
+                  .firstResult();
+          assertNotNull(user, "bootstrap user must exist");
+          assertEquals(
+              1,
+              OrgMember.count("orgId = ?1 and userId = ?2", org.id, user.id),
+              "exactly one membership for org+user");
         });
   }
 }

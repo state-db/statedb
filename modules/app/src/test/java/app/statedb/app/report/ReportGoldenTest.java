@@ -95,7 +95,7 @@ class ReportGoldenTest {
     assertEquals(golden(fromRows.body()), fromRows.body());
     assertFalse(fromRows.truncated());
 
-    tx(() -> folder.fold(seeded.updateId(), Instant.now()));
+    foldRun(seeded.updateId());
     assertNotNull(
         inTx(() -> UpdateEventArchive.<UpdateEventArchive>findById(seeded.updateId())),
         "precondition: the run was folded");
@@ -309,4 +309,8 @@ class ReportGoldenTest {
 
   /** The stack coordinates are fixed rather than taken from the seeded row so the golden is. */
   private record Seeded(UUID stackId, UUID updateId, StackRef ref) {}
+
+  private void foldRun(UUID updateId) {
+    tx(() -> folder.fold(updateId, Instant.now()));
+  }
 }

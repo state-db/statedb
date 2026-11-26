@@ -164,11 +164,7 @@ class PolicyGrantAuthorizationTest {
     grant("StackWriteResourcePolicy", acmeId, dualUserId, prodStackId);
     assertTrue(decide(dual, "stack:Lock", acmeId, stack(ACME, "prod")));
 
-    tx(
-        () ->
-            em.createNativeQuery("DELETE FROM stacks WHERE id = ?1")
-                .setParameter(1, prodStackId)
-                .executeUpdate());
+    deleteGrantedStack();
     policySetCache.reload();
 
     assertFalse(decide(dual, "stack:Lock", acmeId, stack(ACME, "prod")));
@@ -275,5 +271,13 @@ class PolicyGrantAuthorizationTest {
     m.userId = userId;
     m.role = role;
     m.persistAndFlush();
+  }
+
+  private void deleteGrantedStack() {
+    tx(
+        () ->
+            em.createNativeQuery("DELETE FROM stacks WHERE id = ?1")
+                .setParameter(1, prodStackId)
+                .executeUpdate());
   }
 }

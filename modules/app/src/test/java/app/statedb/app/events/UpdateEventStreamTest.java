@@ -67,7 +67,7 @@ class UpdateEventStreamTest {
     // The page reader is the established answer for the same window; the stream must agree.
     assertEquals(inTx(() -> reader.page(stackId, updateId, -1, 10_000).events()), live.events());
 
-    tx(() -> folder.fold(updateId, Instant.now()));
+    foldRun(updateId);
     assertNotNull(inTx(() -> UpdateEventArchive.<UpdateEventArchive>findById(updateId)));
 
     UpdateEventReader.EventStream archived = inTx(() -> reader.stream(stackId, updateId, 10_000));
@@ -111,7 +111,7 @@ class UpdateEventStreamTest {
     List<JsonNode> corpus = EventArchiveFixture.recordedEvents();
     UUID stackId = seedStack("event-stream-bound-archived");
     UUID updateId = seedUpdate(stackId, corpus, 50);
-    tx(() -> folder.fold(updateId, Instant.now()));
+    foldRun(updateId);
 
     UpdateEventReader.EventStream bounded = inTx(() -> reader.stream(stackId, updateId, 10));
     assertTrue(bounded.archived());
@@ -187,5 +187,9 @@ class UpdateEventStreamTest {
 
   private <T> T inTx(Supplier<T> work) {
     return read(work::get);
+  }
+
+  private void foldRun(UUID updateId) {
+    tx(() -> folder.fold(updateId, Instant.now()));
   }
 }

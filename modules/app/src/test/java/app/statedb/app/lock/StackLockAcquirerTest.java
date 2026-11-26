@@ -146,11 +146,7 @@ class StackLockAcquirerTest {
     UUID firstUpdateId = startUpdate("k-orig");
     Lease first = acquirer.acquire(stackId, firstUpdateId, "user:a", null, null).orElseThrow();
 
-    tx(
-        () -> {
-          StackLock lock = StackLock.find("stackId", stackId).<StackLock>singleResult();
-          lock.expiresAt = Instant.now().minusSeconds(1);
-        });
+    expireLease();
 
     UUID secondUpdateId = startUpdate("k-stolen");
     Lease second = acquirer.acquire(stackId, secondUpdateId, "user:b", null, null).orElseThrow();
@@ -169,11 +165,7 @@ class StackLockAcquirerTest {
     UUID firstUpdateId = startUpdate("k-abandoned");
     acquirer.acquire(stackId, firstUpdateId, "user:a", null, null).orElseThrow();
 
-    tx(
-        () -> {
-          StackLock lock = StackLock.find("stackId", stackId).<StackLock>singleResult();
-          lock.expiresAt = Instant.now().minusSeconds(1);
-        });
+    expireLease();
 
     UUID secondUpdateId = startUpdate("k-taken-over");
     acquirer.acquire(stackId, secondUpdateId, "user:b", null, null).orElseThrow();
@@ -192,11 +184,7 @@ class StackLockAcquirerTest {
     UUID firstUpdateId = startUpdate("k-old-append");
     Lease first = acquirer.acquire(stackId, firstUpdateId, "user:a", null, null).orElseThrow();
 
-    tx(
-        () -> {
-          StackLock lock = StackLock.find("stackId", stackId).<StackLock>singleResult();
-          lock.expiresAt = Instant.now().minusSeconds(1);
-        });
+    expireLease();
 
     UUID secondUpdateId = startUpdate("k-new-owner");
     assertTrue(acquirer.acquire(stackId, secondUpdateId, "user:b", null, null).isPresent());
@@ -218,16 +206,7 @@ class StackLockAcquirerTest {
     UUID updateId = startUpdate("k-cascade");
     acquirer.acquire(stackId, updateId, "user:a", null, null).orElseThrow();
 
-    tx(
-        () -> {
-          // Break the deferred FK to stack_updates first by clearing active_update_id.
-          em.createNativeQuery("UPDATE stacks SET active_update_id = NULL WHERE id = ?1")
-              .setParameter(1, stackId)
-              .executeUpdate();
-          em.createNativeQuery("DELETE FROM stacks WHERE id = ?1")
-              .setParameter(1, stackId)
-              .executeUpdate();
-        });
+    deleteStack();
 
     Number n =
         (Number)
@@ -261,5 +240,26 @@ class StackLockAcquirerTest {
     if (operationId != null) node.put("operationID", operationId);
     if (payload.has("state")) node.set("state", payload.required("state"));
     return node;
+  }
+
+  private void expireLease() {
+    tx(
+        () -> {
+          StackLock lock = StackLock.find("stackId", stackId).<StackLock>singleResult();
+          lock.expiresAt = Instant.now().minusSeconds(1);
+        });
+  }
+
+  private void deleteStack() {
+    tx(
+        () -> {
+          // Break the deferred FK to stack_updates first by clearing active_update_id.
+          em.createNativeQuery("UPDATE stacks SET active_update_id = NULL WHERE id = ?1")
+              .setParameter(1, stackId)
+              .executeUpdate();
+          em.createNativeQuery("DELETE FROM stacks WHERE id = ?1")
+              .setParameter(1, stackId)
+              .executeUpdate();
+        });
   }
 }

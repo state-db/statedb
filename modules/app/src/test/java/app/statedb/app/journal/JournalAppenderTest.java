@@ -169,11 +169,7 @@ class JournalAppenderTest {
 
   @Test
   void dryRunUpdateCannotAppendAuthoritativeJournalEntries() {
-    tx(
-        () -> {
-          StackUpdate update = StackUpdate.findById(updateId);
-          update.dryRun = true;
-        });
+    markUpdateAsDryRun();
 
     RequestValidationException error =
         assertThrows(
@@ -357,17 +353,7 @@ class JournalAppenderTest {
         leaseId,
         List.of(entry(1, 1, 1L, "{\"state\":{\"urn\":\"urn:1\",\"value\":1}}")));
 
-    tx(
-        () -> {
-          long count =
-              ((Number)
-                      em.createNativeQuery(
-                              "SELECT count(*) FROM journal_entries WHERE update_id = ?1")
-                          .setParameter(1, updateId)
-                          .getSingleResult())
-                  .longValue();
-          assertEquals(1L, count);
-        });
+    assertEquals(1L, journalEntryCount(updateId));
   }
 
   @Test
@@ -390,17 +376,7 @@ class JournalAppenderTest {
         RequestValidationException.class,
         () -> appender.append(stackId, updateId, leaseId, List.of(entry(1, 8, null, "{}"))));
 
-    tx(
-        () -> {
-          long count =
-              ((Number)
-                      em.createNativeQuery(
-                              "SELECT count(*) FROM journal_entries WHERE update_id = ?1")
-                          .setParameter(1, updateId)
-                          .getSingleResult())
-                  .longValue();
-          assertEquals(0L, count);
-        });
+    assertEquals(0L, journalEntryCount(updateId));
   }
 
   @Test
@@ -626,26 +602,7 @@ class JournalAppenderTest {
                 leaseId,
                 List.of(entry(1, 1, 1L, "{\"state\":{\"urn\":\"u:after\"}}"))));
 
-    tx(
-        () -> {
-          long count =
-              ((Number)
-                      em.createNativeQuery(
-                              "SELECT count(*) FROM journal_entries WHERE update_id = ?1")
-                          .setParameter(1, updateId)
-                          .getSingleResult())
-                  .longValue();
-          assertEquals(0L, count);
-
-          long seq =
-              ((Number)
-                      em.createNativeQuery(
-                              "SELECT journal_seq FROM stack_state WHERE stack_id = ?1")
-                          .setParameter(1, stackId)
-                          .getSingleResult())
-                  .longValue();
-          assertEquals(0L, seq);
-        });
+    assertJournalWasNotAdvanced();
   }
 
   @Test
@@ -678,6 +635,73 @@ class JournalAppenderTest {
         lease2,
         List.of(entry(1, 1, 1L, "{\"state\":{\"urn\":\"u:2-1\"}}")));
 
+    assertSequenceContinuesAcrossUpdates(u2);
+  }
+
+  // Assembled exports must pass Pulumi's own integrity rules even mid-race.
+  private AssembledDeployment assemble(UUID targetStackId) {
+    AssembledDeployment assembled = assembler.assemble(targetStackId);
+    PulumiDeploymentAssert.assertIntegrityPasses(assembled.deployment());
+    return assembled;
+  }
+
+  private static JsonNode entry(long wireSeq, int kind, Long operationId, String payloadJson) {
+    try {
+      JsonNode payload = MAPPER.readTree(payloadJson);
+      com.fasterxml.jackson.databind.node.ObjectNode node =
+          (com.fasterxml.jackson.databind.node.ObjectNode) payload;
+      node.put("sequenceID", wireSeq);
+      node.put("kind", kind);
+      if (operationId != null) node.put("operationID", operationId);
+      return node;
+    } catch (Exception e) {
+      throw new RuntimeException(e);
+    }
+  }
+
+  private long journalEntryCount(UUID updateId) {
+    return read(
+        () ->
+            ((Number)
+                    em.createNativeQuery(
+                            "SELECT count(*) FROM journal_entries WHERE update_id = ?1")
+                        .setParameter(1, updateId)
+                        .getSingleResult())
+                .longValue());
+  }
+
+  private void markUpdateAsDryRun() {
+    tx(
+        () -> {
+          StackUpdate update = StackUpdate.findById(updateId);
+          update.dryRun = true;
+        });
+  }
+
+  private void assertJournalWasNotAdvanced() {
+    tx(
+        () -> {
+          long count =
+              ((Number)
+                      em.createNativeQuery(
+                              "SELECT count(*) FROM journal_entries WHERE update_id = ?1")
+                          .setParameter(1, updateId)
+                          .getSingleResult())
+                  .longValue();
+          assertEquals(0L, count);
+
+          long seq =
+              ((Number)
+                      em.createNativeQuery(
+                              "SELECT journal_seq FROM stack_state WHERE stack_id = ?1")
+                          .setParameter(1, stackId)
+                          .getSingleResult())
+                  .longValue();
+          assertEquals(0L, seq);
+        });
+  }
+
+  private void assertSequenceContinuesAcrossUpdates(StartedUpdate u2) {
     tx(
         () -> {
           Long offset2 =
@@ -700,26 +724,5 @@ class JournalAppenderTest {
                   .longValue();
           assertEquals(4L, seq);
         });
-  }
-
-  // Assembled exports must pass Pulumi's own integrity rules even mid-race.
-  private AssembledDeployment assemble(UUID targetStackId) {
-    AssembledDeployment assembled = assembler.assemble(targetStackId);
-    PulumiDeploymentAssert.assertIntegrityPasses(assembled.deployment());
-    return assembled;
-  }
-
-  private static JsonNode entry(long wireSeq, int kind, Long operationId, String payloadJson) {
-    try {
-      JsonNode payload = MAPPER.readTree(payloadJson);
-      com.fasterxml.jackson.databind.node.ObjectNode node =
-          (com.fasterxml.jackson.databind.node.ObjectNode) payload;
-      node.put("sequenceID", wireSeq);
-      node.put("kind", kind);
-      if (operationId != null) node.put("operationID", operationId);
-      return node;
-    } catch (Exception e) {
-      throw new RuntimeException(e);
-    }
   }
 }

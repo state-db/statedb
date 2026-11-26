@@ -69,7 +69,7 @@ class CompactionWorkerTest {
 
     JsonNode before = normalized(assemble(stackId).deployment());
 
-    tx(() -> enqueuer.enqueue(stackId));
+    enqueueCompaction();
     UUID jobId =
         read(() -> CompactionJob.<CompactionJob>find("stackId", stackId).singleResult().id);
     assertEquals(7, jobId.version());
@@ -92,7 +92,7 @@ class CompactionWorkerTest {
   void compactionWaitsForStackStateLockBeforeSnapshotting() throws Exception {
     UUID update = update(stackId);
     entry(stackId, update, 1, 1L, "{\"state\":" + res("locked") + "}");
-    tx(() -> enqueuer.enqueue(stackId));
+    enqueueCompaction();
 
     int compacted =
         holdThenContend(
@@ -119,7 +119,7 @@ class CompactionWorkerTest {
     entry(stackId, first, 1, 2L, "{\"state\":" + providedResource("alpha") + "}");
     entry(stackId, first, 1, 3L, "{\"state\":" + providedResource("beta") + "}");
 
-    tx(() -> enqueuer.enqueue(stackId));
+    enqueueCompaction();
     assertEquals(1, worker.drainOnce());
     assemble(stackId);
 
@@ -130,7 +130,7 @@ class CompactionWorkerTest {
     entryReplacingBase(stackId, second, 5L, "{\"state\":" + providedResource("alpha") + "}", 1L);
 
     // Compacting the prefix would put the suffix ahead of the provider on the next replay.
-    tx(() -> enqueuer.enqueue(stackId));
+    enqueueCompaction();
     worker.drainOnce();
 
     assertEquals(1L, Snapshot.count("stackId", stackId), "no snapshot may be taken mid-update");
@@ -163,18 +163,14 @@ class CompactionWorkerTest {
     JsonNode before = normalized(assemble(stackId).deployment());
     assertEquals(1, before.required("pending_operations").size());
 
-    tx(() -> enqueuer.enqueue(stackId));
+    enqueueCompaction();
     assertEquals(1, worker.drainOnce());
 
-    tx(
-        () -> {
-          Snapshot snapshot = Snapshot.find("stackId", stackId).<Snapshot>singleResult();
-          JsonNode basePending = snapshot.checkpoint.required("pending_operations");
-          assertEquals(1, basePending.size());
-          assertEquals("creating", basePending.get(0).required("type").asText());
-          assertEquals(
-              urn("orphan"), basePending.get(0).required("resource").required("urn").asText());
-        });
+    JsonNode checkpoint = compactedCheckpoint();
+    JsonNode basePending = checkpoint.required("pending_operations");
+    assertEquals(1, basePending.size());
+    assertEquals("creating", basePending.get(0).required("type").asText());
+    assertEquals(urn("orphan"), basePending.get(0).required("resource").required("urn").asText());
 
     JsonNode after = normalized(assemble(stackId).deployment());
     assertEquals(before, after);
@@ -201,18 +197,14 @@ class CompactionWorkerTest {
         """
             .formatted(urn("traced")));
 
-    tx(() -> enqueuer.enqueue(stackId));
+    enqueueCompaction();
 
     assertEquals(1, worker.drainOnce());
 
-    tx(
-        () -> {
-          Snapshot snapshot = Snapshot.find("stackId", stackId).<Snapshot>singleResult();
-          JsonNode resource = snapshot.checkpoint.required("resources").get(0);
-          assertEquals(
-              "file:///work/Pulumi.yaml:12:3", resource.required("sourcePosition").asText());
-          assertNull(resource.get("stackTrace"));
-        });
+    JsonNode checkpoint = compactedCheckpoint();
+    JsonNode resource = checkpoint.required("resources").get(0);
+    assertEquals("file:///work/Pulumi.yaml:12:3", resource.required("sourcePosition").asText());
+    assertNull(resource.get("stackTrace"));
   }
 
   @Test
@@ -241,22 +233,14 @@ class CompactionWorkerTest {
         expectedSecret,
         before.required("resources").get(0).required("outputs").required("password"));
 
-    tx(() -> enqueuer.enqueue(stackId));
+    enqueueCompaction();
     assertEquals(1, worker.drainOnce());
 
-    tx(
-        () -> {
-          Snapshot snapshot = Snapshot.find("stackId", stackId).<Snapshot>singleResult();
-          assertEquals(expectedProvider, snapshot.checkpoint.required("secrets_providers"));
-          assertEquals(
-              expectedSecret,
-              snapshot
-                  .checkpoint
-                  .required("resources")
-                  .get(0)
-                  .required("outputs")
-                  .required("password"));
-        });
+    JsonNode checkpoint = compactedCheckpoint();
+    assertEquals(expectedProvider, checkpoint.required("secrets_providers"));
+    assertEquals(
+        expectedSecret,
+        checkpoint.required("resources").get(0).required("outputs").required("password"));
 
     JsonNode after = assemble(stackId).deployment();
     assertEquals(expectedProvider, after.required("secrets_providers"));
@@ -271,19 +255,7 @@ class CompactionWorkerTest {
     entry(stackId, oldUpdate, 1, 1L, "{\"state\":" + res("old") + "}");
     JsonNode baseCheckpoint = MAPPER.readTree("{\"resources\":[" + res("base") + "]}");
 
-    tx(
-        () -> {
-          Snapshot snapshot = new Snapshot();
-          snapshot.stackId = stackId;
-          snapshot.version = 1;
-          snapshot.checkpoint = baseCheckpoint;
-          snapshot.compactedFromJournalSeq = 1L;
-          snapshot.persistAndFlush();
-
-          StackState state = stackState(stackId);
-          state.baseSnapshotId = snapshot.id;
-          state.baseSnapshotVersion = 1;
-        });
+    installBaseSnapshot(baseCheckpoint);
 
     UUID newUpdate = update(stackId);
     entry(stackId, newUpdate, 1, 2L, "{\"state\":" + res("new") + "}");
@@ -299,7 +271,7 @@ class CompactionWorkerTest {
   void retryableFailureReturnsToPendingUntilMaxAttempts() throws Exception {
     UUID update = update(stackId);
     entry(stackId, update, 99, 0L, "{}");
-    tx(() -> enqueuer.enqueue(stackId));
+    enqueueCompaction();
 
     assertEquals(1, worker.drainOnce());
 
@@ -494,5 +466,29 @@ class CompactionWorkerTest {
         + "\"ciphertext\":\""
         + ciphertext
         + "\"}";
+  }
+
+  private void enqueueCompaction() {
+    tx(() -> enqueuer.enqueue(stackId));
+  }
+
+  private JsonNode compactedCheckpoint() {
+    return read(() -> Snapshot.find("stackId", stackId).<Snapshot>singleResult().checkpoint);
+  }
+
+  private void installBaseSnapshot(JsonNode baseCheckpoint) {
+    tx(
+        () -> {
+          Snapshot snapshot = new Snapshot();
+          snapshot.stackId = stackId;
+          snapshot.version = 1;
+          snapshot.checkpoint = baseCheckpoint;
+          snapshot.compactedFromJournalSeq = 1L;
+          snapshot.persistAndFlush();
+
+          StackState state = stackState(stackId);
+          state.baseSnapshotId = snapshot.id;
+          state.baseSnapshotVersion = 1;
+        });
   }
 }

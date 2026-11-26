@@ -133,7 +133,7 @@ class EventArchiveFolderTest {
         inTx(() -> reader.page(stackId, updateId, 617, 250).events());
     assertEquals(618, midPageFromRows.getFirst().sequence());
 
-    tx(() -> folder.fold(updateId, Instant.now()));
+    foldRun(updateId);
 
     assertEquals(fromRows, walk(stackId, updateId, 250));
     assertEquals(midPageFromRows, inTx(() -> reader.page(stackId, updateId, 617, 250).events()));
@@ -154,13 +154,9 @@ class EventArchiveFolderTest {
     List<StoredEvent> full = events(stackId, updateId);
 
     // Fold, then put the rows back without removing the archive: both sources now hold the stream.
-    tx(() -> folder.fold(updateId, Instant.now()));
+    foldRun(updateId);
     UpdateEventArchive archive = archive(updateId);
-    tx(
-        () -> {
-          UpdateEvent.delete("updateId", updateId);
-          EventArchiveFixture.persistEvents(stackId, updateId, corpus, 40);
-        });
+    replaceLiveEvents(stackId, updateId, corpus);
     assertEquals(40L, rowCount(updateId), "rows and archive coexist");
     assertNotNull(archive(updateId));
 
@@ -221,7 +217,7 @@ class EventArchiveFolderTest {
     UUID stackId = seedStack("evt-archive-unfold-pending");
     UUID updateId = seedUpdate(stackId, 1, StackUpdate.Status.SUCCEEDED, LONG_AGO, corpus, 40);
 
-    tx(() -> folder.fold(updateId, Instant.now()));
+    foldRun(updateId);
     assertTrue(pending().isEmpty(), "folding settles it");
 
     folder.unfold(updateId);
@@ -349,5 +345,17 @@ class EventArchiveFolderTest {
 
   private <T> T inTx(Supplier<T> work) {
     return read(work::get);
+  }
+
+  private void foldRun(UUID updateId) {
+    tx(() -> folder.fold(updateId, Instant.now()));
+  }
+
+  private void replaceLiveEvents(UUID stackId, UUID updateId, List<JsonNode> corpus) {
+    tx(
+        () -> {
+          UpdateEvent.delete("updateId", updateId);
+          EventArchiveFixture.persistEvents(stackId, updateId, corpus, 40);
+        });
   }
 }

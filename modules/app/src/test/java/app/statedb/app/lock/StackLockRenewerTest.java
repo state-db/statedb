@@ -88,15 +88,7 @@ class StackLockRenewerTest {
   void renewAdvancesExpiresAtAndHeartbeatAndRotatesToken() {
     // Back-date both timestamps so we can detect forward movement deterministically without
     // depending on millisecond-level clock resolution.
-    tx(
-        () ->
-            em.createNativeQuery(
-                    "UPDATE stack_locks"
-                        + "    SET expires_at = now() + interval '5 minutes',"
-                        + "        heartbeat_at = now() - interval '5 minutes'"
-                        + "  WHERE id = ?1")
-                .setParameter(1, leaseId)
-                .executeUpdate());
+    setShortExpiryAndOldHeartbeat();
 
     byte[] hashBefore = readHash();
     Instant beforeExpires = readExpiresAt();
@@ -237,5 +229,17 @@ class StackLockRenewerTest {
     if (value instanceof java.time.OffsetDateTime o) return o.toInstant();
     if (value instanceof java.sql.Timestamp t) return t.toInstant();
     throw new IllegalStateException("unexpected timestamp type: " + value.getClass());
+  }
+
+  private void setShortExpiryAndOldHeartbeat() {
+    tx(
+        () ->
+            em.createNativeQuery(
+                    "UPDATE stack_locks"
+                        + "    SET expires_at = now() + interval '5 minutes',"
+                        + "        heartbeat_at = now() - interval '5 minutes'"
+                        + "  WHERE id = ?1")
+                .setParameter(1, leaseId)
+                .executeUpdate());
   }
 }

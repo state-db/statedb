@@ -133,7 +133,7 @@ class VcsCredentialStoreTest {
         jakarta.ws.rs.BadRequestException.class,
         () -> flows.consume(state, userId, orgId, Purpose.oauth));
     String expired = flows.beginInstall(userId, orgId, 7);
-    tx(() -> VcsAuthFlow.update("expiresAt = ?1", java.time.Instant.EPOCH));
+    expireAuthorizationFlows();
     assertThrows(
         jakarta.ws.rs.BadRequestException.class,
         () -> flows.consume(expired, userId, orgId, Purpose.install));
@@ -228,5 +228,9 @@ class VcsCredentialStoreTest {
           user.persistAndFlush();
           return user.id;
         });
+  }
+
+  private void expireAuthorizationFlows() {
+    tx(() -> VcsAuthFlow.update("expiresAt = ?1", java.time.Instant.EPOCH));
   }
 }

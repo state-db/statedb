@@ -78,7 +78,7 @@ class ConsoleRunEventsArchiveTest {
     assertTrue(beforeFold.size() > 1, "corpus should span more than one page");
     String runDetail = runDetail(session);
 
-    tx(() -> folder.fold(updateId, Instant.now()));
+    foldRun(updateId);
     assertNotNull(read(() -> UpdateEventArchive.findById(updateId)), "update was folded");
 
     assertEquals(beforeFold, pageThrough(session, updateId), "pages differ once archived");
@@ -132,11 +132,7 @@ class ConsoleRunEventsArchiveTest {
     assertRefreshActivity(
         session, "/api/pulumi/stacks/%s/%s/%s/updates/1".formatted(ORG, PROJECT, STACK));
 
-    tx(
-        () -> {
-          assertTrue(folder.fold(previewId, Instant.now()));
-          assertTrue(folder.fold(updateId, Instant.now()));
-        });
+    foldBothRuns(previewId, updateId);
 
     assertRefreshActivity(
         session,
@@ -347,5 +343,17 @@ class ConsoleRunEventsArchiveTest {
           membership.persistAndFlush();
         });
     return session;
+  }
+
+  private void foldRun(UUID updateId) {
+    tx(() -> folder.fold(updateId, Instant.now()));
+  }
+
+  private void foldBothRuns(UUID previewId, UUID updateId) {
+    tx(
+        () -> {
+          assertTrue(folder.fold(previewId, Instant.now()));
+          assertTrue(folder.fold(updateId, Instant.now()));
+        });
   }
 }

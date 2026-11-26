@@ -149,17 +149,7 @@ class EventBatchAppenderTest {
                 leaseId,
                 List.of(event(1, "stdoutEvent", "{\"message\":\"dup\"}"))));
 
-    tx(
-        () -> {
-          long count =
-              ((Number)
-                      em.createNativeQuery(
-                              "SELECT count(*) FROM update_events WHERE update_id = ?1")
-                          .setParameter(1, updateId)
-                          .getSingleResult())
-                  .longValue();
-          assertEquals(1L, count);
-        });
+    assertEquals(1L, eventCount(updateId));
   }
 
   @Test
@@ -250,20 +240,7 @@ class EventBatchAppenderTest {
     }
     assertEquals("23503", sqlState, "expected FK violation (23503), got " + thrown);
 
-    tx(
-        () -> {
-          long count =
-              ((Number)
-                      em.createNativeQuery(
-                              "SELECT count(*) FROM update_events WHERE update_id = ?1")
-                          .setParameter(1, updateId)
-                          .getSingleResult())
-                  .longValue();
-          assertEquals(0L, count);
-          em.createNativeQuery("DELETE FROM organizations WHERE name = ?1")
-              .setParameter(1, ORG_NAME + "-other")
-              .executeUpdate();
-        });
+    assertNoEventsAndRemoveForeignOrganization();
   }
 
   private static JsonNode event(int sequence, String kindKey, String innerJson) {
@@ -288,5 +265,32 @@ class EventBatchAppenderTest {
     } catch (Exception e) {
       throw new RuntimeException(e);
     }
+  }
+
+  private long eventCount(UUID updateId) {
+    return read(
+        () ->
+            ((Number)
+                    em.createNativeQuery("SELECT count(*) FROM update_events WHERE update_id = ?1")
+                        .setParameter(1, updateId)
+                        .getSingleResult())
+                .longValue());
+  }
+
+  private void assertNoEventsAndRemoveForeignOrganization() {
+    tx(
+        () -> {
+          long count =
+              ((Number)
+                      em.createNativeQuery(
+                              "SELECT count(*) FROM update_events WHERE update_id = ?1")
+                          .setParameter(1, updateId)
+                          .getSingleResult())
+                  .longValue();
+          assertEquals(0L, count);
+          em.createNativeQuery("DELETE FROM organizations WHERE name = ?1")
+              .setParameter(1, ORG_NAME + "-other")
+              .executeUpdate();
+        });
   }
 }

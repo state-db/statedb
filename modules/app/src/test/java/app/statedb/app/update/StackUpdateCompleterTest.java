@@ -375,17 +375,7 @@ class StackUpdateCompleterTest {
     // Simulate a concurrent cancel: status flipped, active_update_id cleared, lock still present
     // (in the real cancel path the lock is gone too — here we test the "lock + terminal status"
     // window, which is what makes this branch worth defending).
-    tx(
-        () -> {
-          em.createNativeQuery(
-                  "UPDATE stack_updates SET status = 'cancelled', ended_at = now()"
-                      + " WHERE id = ?1")
-              .setParameter(1, f.updateId())
-              .executeUpdate();
-          em.createNativeQuery("UPDATE stacks SET active_update_id = NULL WHERE id = ?1")
-              .setParameter(1, f.stackId())
-              .executeUpdate();
-        });
+    markUpdateCancelled(f);
 
     completer.complete(f.leaseId(), f.stackId(), f.updateId(), StackUpdate.Status.SUCCEEDED);
 
@@ -451,5 +441,19 @@ class StackUpdateCompleterTest {
 
   private static String urn(String name) {
     return "urn:pulumi:dev::proj::pkg:index:" + name + "::" + name;
+  }
+
+  private void markUpdateCancelled(Fixture f) {
+    tx(
+        () -> {
+          em.createNativeQuery(
+                  "UPDATE stack_updates SET status = 'cancelled', ended_at = now()"
+                      + " WHERE id = ?1")
+              .setParameter(1, f.updateId())
+              .executeUpdate();
+          em.createNativeQuery("UPDATE stacks SET active_update_id = NULL WHERE id = ?1")
+              .setParameter(1, f.stackId())
+              .executeUpdate();
+        });
   }
 }

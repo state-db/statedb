@@ -171,7 +171,7 @@ class ReportDeliveryLifecycleTest {
     vcs.addPullRequest(REPOSITORY_ID, 17, HEAD_1, true);
     Running run = running("disconnected", HEAD_1);
     complete(run);
-    tx(() -> VcsConnection.update("enabled = false where host = ?1", HOST));
+    disableHostConnection();
     assertEquals(0, worker.deliverOnce());
     ReportDelivery row = delivery(run.update().updateId());
     assertEquals("failed", row.state);
@@ -188,11 +188,7 @@ class ReportDeliveryLifecycleTest {
 
   @Test
   void orgWithoutConnectionCompletesWithoutQueueing() {
-    tx(
-        () ->
-            VcsConnection.update(
-                "enabled = false where orgId = ?1",
-                Organization.<Organization>find("name", ORG_NAME).singleResult().id));
+    disableOrganizationConnection();
     Running run = running("no-connection", HEAD_1);
     complete(run);
     assertEquals(StackUpdate.Status.SUCCEEDED, status(run.update().updateId()));
@@ -223,10 +219,7 @@ class ReportDeliveryLifecycleTest {
     Running run = running("retention", HEAD_1);
     complete(run);
     worker.deliverOnce();
-    tx(
-        () ->
-            ReportDelivery.update(
-                "settledAt = ?1 where updateId = ?2", Instant.EPOCH, run.update().updateId()));
+    ageSettledDelivery(run.update().updateId());
     worker.deliverOnce();
     assertEquals(0, ReportDelivery.count("updateId", run.update().updateId()));
     assertTrue(StackUpdate.findById(run.update().updateId()) != null);
@@ -240,13 +233,7 @@ class ReportDeliveryLifecycleTest {
     worker.deliverOnce();
     String commentId = vcs.comments().getFirst().id;
     // Simulate rollback of the final database transaction after GitHub accepted its writes.
-    tx(
-        () ->
-            ReportDelivery.update(
-                "state = 'pending', externalId = null, settledAt = null, nextAttemptAt = ?1"
-                    + " where updateId = ?2",
-                Instant.EPOCH,
-                run.update().updateId()));
+    resetPublishedDeliveryToPending(run.update().updateId());
     assertEquals(1, worker.deliverOnce());
     assertEquals(1, vcs.comments().size());
     assertEquals(commentId, delivery(run.update().updateId()).externalId);
@@ -280,7 +267,7 @@ class ReportDeliveryLifecycleTest {
             .orElseThrow();
     assertEquals(0, ReportDelivery.count("updateId", run.updateId()));
     complete(new Running(run, lease));
-    tx(() -> worker.enqueue(StackUpdate.findById(run.updateId())));
+    enqueueReport(run.updateId());
     assertEquals(1, ReportDelivery.count("updateId", run.updateId()));
     assertEquals(REPOSITORY, delivery(run.updateId()).repositoryName);
   }
@@ -342,4 +329,34 @@ class ReportDeliveryLifecycleTest {
   }
 
   private record Running(StartedUpdate update, Lease lease) {}
+
+  private void disableHostConnection() {
+    tx(() -> VcsConnection.update("enabled = false where host = ?1", HOST));
+  }
+
+  private void disableOrganizationConnection() {
+    tx(
+        () ->
+            VcsConnection.update(
+                "enabled = false where orgId = ?1",
+                Organization.<Organization>find("name", ORG_NAME).singleResult().id));
+  }
+
+  private void ageSettledDelivery(UUID updateId) {
+    tx(() -> ReportDelivery.update("settledAt = ?1 where updateId = ?2", Instant.EPOCH, updateId));
+  }
+
+  private void resetPublishedDeliveryToPending(UUID updateId) {
+    tx(
+        () ->
+            ReportDelivery.update(
+                "state = 'pending', externalId = null, settledAt = null, nextAttemptAt = ?1"
+                    + " where updateId = ?2",
+                Instant.EPOCH,
+                updateId));
+  }
+
+  private void enqueueReport(UUID updateId) {
+    tx(() -> worker.enqueue(StackUpdate.findById(updateId)));
+  }
 }

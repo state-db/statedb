@@ -239,7 +239,7 @@ class StackSharingVisibilityTest {
   void revokingGuestMembershipIsImmediatelyInert() {
     assertTrue(decide(session(guestId, "guest"), "stack:Read", INTERNAL_STACK));
 
-    tx(() -> OrgMember.delete("orgId = ?1 and userId = ?2", acmeId, guestId));
+    revokeGuestMembership();
 
     // No policy reload: the template guard and the listing membership check fail per request.
     assertFalse(decide(session(guestId, "guest"), "stack:Read", INTERNAL_STACK));
@@ -379,5 +379,9 @@ class StackSharingVisibilityTest {
     m.userId = userId;
     m.role = role;
     m.persistAndFlush();
+  }
+
+  private void revokeGuestMembership() {
+    tx(() -> OrgMember.delete("orgId = ?1 and userId = ?2", acmeId, guestId));
   }
 }
