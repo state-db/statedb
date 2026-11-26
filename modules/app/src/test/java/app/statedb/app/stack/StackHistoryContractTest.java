@@ -6,18 +6,10 @@ import static org.hamcrest.Matchers.equalTo;
 import static org.hamcrest.Matchers.hasKey;
 import static org.hamcrest.Matchers.hasSize;
 
-import app.statedb.persistence.auth.ApiToken;
-import app.statedb.persistence.identity.OrgMember;
-import app.statedb.persistence.identity.Organization;
-import app.statedb.persistence.identity.User;
+import app.statedb.app.contract.PulumiContractIdentity;
 import app.statedb.persistence.stack.Stack;
 import app.statedb.persistence.update.StackUpdate;
 import io.quarkus.test.junit.QuarkusTest;
-import jakarta.inject.Inject;
-import jakarta.persistence.EntityManager;
-import java.nio.charset.StandardCharsets;
-import java.security.MessageDigest;
-import java.security.NoSuchAlgorithmException;
 import java.time.Instant;
 import java.util.Map;
 import java.util.UUID;
@@ -41,55 +33,26 @@ class StackHistoryContractTest {
   private static final String BASE = "/pulumi/api/stacks/" + ORG_NAME + "/" + PROJECT;
   private static final String UPDATES = BASE + "/" + STACK + "/updates";
 
-  @Inject EntityManager em;
+  private static final PulumiContractIdentity IDENTITY =
+      new PulumiContractIdentity(
+          ORG_NAME,
+          "Stack History Test",
+          "stack-history",
+          "history@example.com",
+          "Stack History Tester",
+          RAW_TOKEN,
+          "stack-history");
 
   @BeforeEach
   void seed() {
-    tx(
-        () -> {
-          Organization org = new Organization();
-          org.name = ORG_NAME;
-          org.displayName = "Stack History Test";
-          org.persistAndFlush();
-
-          User user = new User();
-          user.iss = "local:test";
-          user.sub = "stack-history";
-          user.email = "history@example.com";
-          user.displayName = "Stack History Tester";
-          user.persistAndFlush();
-
-          OrgMember m = new OrgMember();
-          m.orgId = org.id;
-          m.userId = user.id;
-          m.role = OrgMember.Role.owner;
-          m.persistAndFlush();
-
-          ApiToken t = new ApiToken();
-          t.tokenHash = sha256Hex(RAW_TOKEN);
-          t.userId = user.id;
-          t.orgId = org.id;
-          t.kind = ApiToken.Kind.service_account;
-          t.expiresAt = java.time.Instant.now().plusSeconds(60 * 60);
-          t.description = "stack-history";
-          t.persistAndFlush();
-        });
+    IDENTITY.seed();
 
     createStack(STACK);
   }
 
   @AfterEach
   void cleanup() {
-    tx(
-        () -> {
-          em.createNativeQuery("DELETE FROM organizations WHERE name = ?1")
-              .setParameter(1, ORG_NAME)
-              .executeUpdate();
-          em.createNativeQuery("DELETE FROM users WHERE iss = ?1 AND sub = ?2")
-              .setParameter(1, "local:test")
-              .setParameter(2, "stack-history")
-              .executeUpdate();
-        });
+    IDENTITY.cleanup();
   }
 
   @Test
@@ -151,24 +114,7 @@ class StackHistoryContractTest {
     // environment
     // under metadata.environment; both must round-trip into stack history --json verbatim.
     Instant t = Instant.ofEpochSecond(1_700_000_000L);
-    tx(
-        () -> {
-          StackUpdate u = new StackUpdate();
-          u.stackId = stackId();
-          u.version = 1;
-          u.kind = StackUpdate.Kind.UPDATE;
-          u.status = StackUpdate.Status.SUCCEEDED;
-          u.startedAt = t;
-          u.endedAt = t;
-          u.config = Map.of("aws:region", Map.of("string", "us-east-1", "secret", false));
-          u.metadata =
-              Map.of(
-                  "message",
-                  "deploy",
-                  "environment",
-                  Map.of("pulumi.version", "3.100.0", "ci", "false"));
-          u.persistAndFlush();
-        });
+    seedUpdateWithConfigAndEnvironment(t);
 
     given()
         .header("Authorization", "token " + RAW_TOKEN)
@@ -323,18 +269,24 @@ class StackHistoryContractTest {
         .statusCode(200);
   }
 
-  private static String sha256Hex(String input) {
-    try {
-      byte[] digest =
-          MessageDigest.getInstance("SHA-256").digest(input.getBytes(StandardCharsets.UTF_8));
-      StringBuilder sb = new StringBuilder(digest.length * 2);
-      for (byte b : digest) {
-        sb.append(Character.forDigit((b >> 4) & 0xF, 16));
-        sb.append(Character.forDigit(b & 0xF, 16));
-      }
-      return sb.toString();
-    } catch (NoSuchAlgorithmException e) {
-      throw new IllegalStateException(e);
-    }
+  private void seedUpdateWithConfigAndEnvironment(Instant t) {
+    tx(
+        () -> {
+          StackUpdate u = new StackUpdate();
+          u.stackId = stackId();
+          u.version = 1;
+          u.kind = StackUpdate.Kind.UPDATE;
+          u.status = StackUpdate.Status.SUCCEEDED;
+          u.startedAt = t;
+          u.endedAt = t;
+          u.config = Map.of("aws:region", Map.of("string", "us-east-1", "secret", false));
+          u.metadata =
+              Map.of(
+                  "message",
+                  "deploy",
+                  "environment",
+                  Map.of("pulumi.version", "3.100.0", "ci", "false"));
+          u.persistAndFlush();
+        });
   }
 }

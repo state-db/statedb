@@ -288,28 +288,7 @@ class StackDeleteContractTest {
 
   @Test
   void crossOrgCollapsesTo404() {
-    tx(
-        () -> {
-          Organization other =
-              Organization.find("name", OTHER_ORG_NAME).<Organization>firstResult();
-          Project p = new Project();
-          p.orgId = other.id;
-          p.name = "secret-proj";
-          p.persistAndFlush();
-          Workspace w = new Workspace();
-          w.orgId = other.id;
-          w.kind = Workspace.Kind.pulumi;
-          w.persistAndFlush();
-          Stack s = new Stack();
-          s.orgId = other.id;
-          s.projectId = p.id;
-          s.name = "secret";
-          s.workspaceId = w.id;
-          s.persistAndFlush();
-          StackState st = new StackState();
-          st.stackId = s.id;
-          st.persistAndFlush();
-        });
+    seedOtherOrganizationStack();
 
     given()
         .header("Authorization", "token " + RAW_TOKEN)
@@ -393,5 +372,30 @@ class StackDeleteContractTest {
     } catch (NoSuchAlgorithmException e) {
       throw new IllegalStateException(e);
     }
+  }
+
+  private void seedOtherOrganizationStack() {
+    tx(
+        () -> {
+          Organization other =
+              Organization.find("name", OTHER_ORG_NAME).<Organization>firstResult();
+          Project p = new Project();
+          p.orgId = other.id;
+          p.name = "secret-proj";
+          p.persistAndFlush();
+          Workspace w = new Workspace();
+          w.orgId = other.id;
+          w.kind = Workspace.Kind.pulumi;
+          w.persistAndFlush();
+          Stack s = new Stack();
+          s.orgId = other.id;
+          s.projectId = p.id;
+          s.name = "secret";
+          s.workspaceId = w.id;
+          s.persistAndFlush();
+          StackState st = new StackState();
+          st.stackId = s.id;
+          st.persistAndFlush();
+        });
   }
 }

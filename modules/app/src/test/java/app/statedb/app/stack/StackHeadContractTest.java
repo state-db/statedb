@@ -154,33 +154,7 @@ class StackHeadContractTest {
 
   @Test
   void sameNamesAcrossOrgsResolveOwnStackAndHideOther() {
-    tx(
-        () -> {
-          Organization org = Organization.find("name", ORG_NAME).<Organization>firstResult();
-          stackCreator.create(
-              org.id, ORG_NAME, "shared-proj", "shared-stack", Map.of("tenant", "authorized"));
-
-          Organization other =
-              Organization.find("name", OTHER_ORG_NAME).<Organization>firstResult();
-          Project p = new Project();
-          p.orgId = other.id;
-          p.name = "shared-proj";
-          p.persistAndFlush();
-          Workspace w = new Workspace();
-          w.orgId = other.id;
-          w.kind = Workspace.Kind.pulumi;
-          w.persistAndFlush();
-          Stack s = new Stack();
-          s.orgId = other.id;
-          s.projectId = p.id;
-          s.name = "shared-stack";
-          s.workspaceId = w.id;
-          s.tags = Map.of("tenant", "hidden");
-          s.persistAndFlush();
-          StackState st = new StackState();
-          st.stackId = s.id;
-          st.persistAndFlush();
-        });
+    seedSameNamedStacksInBothOrganizations();
 
     given()
         .header("Authorization", "token " + RAW_TOKEN)
@@ -254,5 +228,35 @@ class StackHeadContractTest {
     } catch (NoSuchAlgorithmException e) {
       throw new IllegalStateException(e);
     }
+  }
+
+  private void seedSameNamedStacksInBothOrganizations() {
+    tx(
+        () -> {
+          Organization org = Organization.find("name", ORG_NAME).<Organization>firstResult();
+          stackCreator.create(
+              org.id, ORG_NAME, "shared-proj", "shared-stack", Map.of("tenant", "authorized"));
+
+          Organization other =
+              Organization.find("name", OTHER_ORG_NAME).<Organization>firstResult();
+          Project p = new Project();
+          p.orgId = other.id;
+          p.name = "shared-proj";
+          p.persistAndFlush();
+          Workspace w = new Workspace();
+          w.orgId = other.id;
+          w.kind = Workspace.Kind.pulumi;
+          w.persistAndFlush();
+          Stack s = new Stack();
+          s.orgId = other.id;
+          s.projectId = p.id;
+          s.name = "shared-stack";
+          s.workspaceId = w.id;
+          s.tags = Map.of("tenant", "hidden");
+          s.persistAndFlush();
+          StackState st = new StackState();
+          st.stackId = s.id;
+          st.persistAndFlush();
+        });
   }
 }

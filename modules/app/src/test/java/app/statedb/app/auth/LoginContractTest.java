@@ -8,13 +8,10 @@ import static org.hamcrest.Matchers.hasSize;
 import static org.hamcrest.Matchers.is;
 import static org.hamcrest.Matchers.not;
 
+import app.statedb.app.contract.PulumiContractIdentity;
 import app.statedb.persistence.auth.ApiToken;
-import app.statedb.persistence.identity.OrgMember;
-import app.statedb.persistence.identity.Organization;
 import app.statedb.persistence.identity.User;
 import io.quarkus.test.junit.QuarkusTest;
-import jakarta.inject.Inject;
-import jakarta.persistence.EntityManager;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
@@ -32,53 +29,24 @@ class LoginContractTest {
   private static final String ORG_NAME = "login-contract-org";
   private static final String RAW_TOKEN = "login-contract-token";
 
-  @Inject EntityManager em;
+  private static final PulumiContractIdentity IDENTITY =
+      new PulumiContractIdentity(
+          ORG_NAME,
+          "Login Contract Test",
+          "login-contract",
+          "contract@example.com",
+          "Contract Tester",
+          RAW_TOKEN,
+          "login-contract");
 
   @BeforeEach
   void seed() {
-    tx(
-        () -> {
-          Organization org = new Organization();
-          org.name = ORG_NAME;
-          org.displayName = "Login Contract Test";
-          org.persistAndFlush();
-
-          User user = new User();
-          user.iss = "local:test";
-          user.sub = "login-contract";
-          user.email = "contract@example.com";
-          user.displayName = "Contract Tester";
-          user.persistAndFlush();
-
-          OrgMember m = new OrgMember();
-          m.orgId = org.id;
-          m.userId = user.id;
-          m.role = OrgMember.Role.owner;
-          m.persistAndFlush();
-
-          ApiToken t = new ApiToken();
-          t.tokenHash = sha256Hex(RAW_TOKEN);
-          t.userId = user.id;
-          t.orgId = org.id;
-          t.kind = ApiToken.Kind.service_account;
-          t.expiresAt = java.time.Instant.now().plusSeconds(60 * 60);
-          t.description = "login-contract";
-          t.persistAndFlush();
-        });
+    IDENTITY.seed();
   }
 
   @AfterEach
   void cleanup() {
-    tx(
-        () -> {
-          em.createNativeQuery("DELETE FROM organizations WHERE name = ?1")
-              .setParameter(1, ORG_NAME)
-              .executeUpdate();
-          em.createNativeQuery("DELETE FROM users WHERE iss = ?1 AND sub = ?2")
-              .setParameter(1, "local:test")
-              .setParameter(2, "login-contract")
-              .executeUpdate();
-        });
+    IDENTITY.cleanup();
   }
 
   /**
@@ -110,18 +78,7 @@ class LoginContractTest {
     // `pulumi login` mints an oidc-kind token, whose sub is whatever the IdP issued — usually a
     // UUID. whoami must not print that.
     String rawOidcToken = "login-contract-oidc-token";
-    tx(
-        () -> {
-          User user =
-              User.find("iss = ?1 and sub = ?2", "local:test", "login-contract").firstResult();
-          ApiToken t = new ApiToken();
-          t.tokenHash = sha256Hex(rawOidcToken);
-          t.userId = user.id;
-          t.kind = ApiToken.Kind.oidc;
-          t.expiresAt = java.time.Instant.now().plusSeconds(60 * 60);
-          t.description = "login-contract-oidc";
-          t.persistAndFlush();
-        });
+    seedOidcToken(rawOidcToken);
 
     given()
         .header("Authorization", "token " + rawOidcToken)
@@ -179,5 +136,20 @@ class LoginContractTest {
     } catch (NoSuchAlgorithmException e) {
       throw new IllegalStateException(e);
     }
+  }
+
+  private void seedOidcToken(String rawOidcToken) {
+    tx(
+        () -> {
+          User user =
+              User.find("iss = ?1 and sub = ?2", "local:test", "login-contract").firstResult();
+          ApiToken t = new ApiToken();
+          t.tokenHash = sha256Hex(rawOidcToken);
+          t.userId = user.id;
+          t.kind = ApiToken.Kind.oidc;
+          t.expiresAt = java.time.Instant.now().plusSeconds(60 * 60);
+          t.description = "login-contract-oidc";
+          t.persistAndFlush();
+        });
   }
 }

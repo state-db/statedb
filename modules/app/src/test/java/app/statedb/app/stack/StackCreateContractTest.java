@@ -224,28 +224,7 @@ class StackCreateContractTest {
   @Test
   void crossOrgGetCollapsesTo404() {
     // Seed a stack owned by the *other* org directly via Hibernate (skipping the auth-gated POST).
-    tx(
-        () -> {
-          Organization other =
-              Organization.find("name", OTHER_ORG_NAME).<Organization>firstResult();
-          Project p = new Project();
-          p.orgId = other.id;
-          p.name = "other-proj";
-          p.persistAndFlush();
-          Workspace w = new Workspace();
-          w.orgId = other.id;
-          w.kind = Workspace.Kind.pulumi;
-          w.persistAndFlush();
-          Stack s = new Stack();
-          s.orgId = other.id;
-          s.projectId = p.id;
-          s.name = "secret";
-          s.workspaceId = w.id;
-          s.persistAndFlush();
-          StackState st = new StackState();
-          st.stackId = s.id;
-          st.persistAndFlush();
-        });
+    seedOtherOrganizationStack();
 
     // A token scoped to ORG_NAME must not see the stack in OTHER_ORG_NAME — collapse to 404,
     // not 403 (a 403 would confirm existence in another tenant).
@@ -284,5 +263,30 @@ class StackCreateContractTest {
     } catch (NoSuchAlgorithmException e) {
       throw new IllegalStateException(e);
     }
+  }
+
+  private void seedOtherOrganizationStack() {
+    tx(
+        () -> {
+          Organization other =
+              Organization.find("name", OTHER_ORG_NAME).<Organization>firstResult();
+          Project p = new Project();
+          p.orgId = other.id;
+          p.name = "other-proj";
+          p.persistAndFlush();
+          Workspace w = new Workspace();
+          w.orgId = other.id;
+          w.kind = Workspace.Kind.pulumi;
+          w.persistAndFlush();
+          Stack s = new Stack();
+          s.orgId = other.id;
+          s.projectId = p.id;
+          s.name = "secret";
+          s.workspaceId = w.id;
+          s.persistAndFlush();
+          StackState st = new StackState();
+          st.stackId = s.id;
+          st.persistAndFlush();
+        });
   }
 }

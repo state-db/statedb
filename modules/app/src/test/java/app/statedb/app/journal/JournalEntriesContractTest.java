@@ -7,19 +7,13 @@ import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.equalTo;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
-import app.statedb.persistence.auth.ApiToken;
-import app.statedb.persistence.identity.OrgMember;
-import app.statedb.persistence.identity.Organization;
-import app.statedb.persistence.identity.User;
+import app.statedb.app.contract.PulumiContractIdentity;
 import app.statedb.persistence.stack.StackCreator;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.quarkus.test.junit.QuarkusTest;
 import jakarta.inject.Inject;
 import jakarta.persistence.EntityManager;
 import java.io.ByteArrayOutputStream;
-import java.nio.charset.StandardCharsets;
-import java.security.MessageDigest;
-import java.security.NoSuchAlgorithmException;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -40,53 +34,18 @@ class JournalEntriesContractTest {
   @Inject EntityManager em;
   @Inject StackCreator stackCreator;
 
+  private static final PulumiContractIdentity IDENTITY =
+      new PulumiContractIdentity(
+          ORG, "Journal CT", "journal-ct", "ct@example.com", "CT Tester", RAW_TOKEN, "ct");
+
   @BeforeEach
   void seed() {
-    tx(
-        () -> {
-          Organization org = new Organization();
-          org.name = ORG;
-          org.displayName = "Journal CT";
-          org.persistAndFlush();
-
-          User user = new User();
-          user.iss = "local:test";
-          user.sub = "journal-ct";
-          user.email = "ct@example.com";
-          user.displayName = "CT Tester";
-          user.persistAndFlush();
-
-          OrgMember m = new OrgMember();
-          m.orgId = org.id;
-          m.userId = user.id;
-          m.role = OrgMember.Role.owner;
-          m.persistAndFlush();
-
-          ApiToken t = new ApiToken();
-          t.tokenHash = sha256Hex(RAW_TOKEN);
-          t.userId = user.id;
-          t.orgId = org.id;
-          t.kind = ApiToken.Kind.service_account;
-          t.expiresAt = java.time.Instant.now().plusSeconds(60 * 60);
-          t.description = "ct";
-          t.persistAndFlush();
-
-          stackCreator.create(org.id, ORG, PROJECT, STACK, Map.of());
-        });
+    IDENTITY.seedStack(stackCreator, PROJECT, STACK);
   }
 
   @AfterEach
   void cleanup() {
-    tx(
-        () -> {
-          em.createNativeQuery("DELETE FROM organizations WHERE name = ?1")
-              .setParameter(1, ORG)
-              .executeUpdate();
-          em.createNativeQuery("DELETE FROM users WHERE iss = ?1 AND sub = ?2")
-              .setParameter(1, "local:test")
-              .setParameter(2, "journal-ct")
-              .executeUpdate();
-        });
+    IDENTITY.cleanup();
   }
 
   @Test
@@ -378,21 +337,6 @@ class JournalEntriesContractTest {
       return baos.toByteArray();
     } catch (Exception e) {
       throw new RuntimeException(e);
-    }
-  }
-
-  private static String sha256Hex(String input) {
-    try {
-      byte[] digest =
-          MessageDigest.getInstance("SHA-256").digest(input.getBytes(StandardCharsets.UTF_8));
-      StringBuilder sb = new StringBuilder(digest.length * 2);
-      for (byte b : digest) {
-        sb.append(Character.forDigit((b >> 4) & 0xF, 16));
-        sb.append(Character.forDigit(b & 0xF, 16));
-      }
-      return sb.toString();
-    } catch (NoSuchAlgorithmException e) {
-      throw new IllegalStateException(e);
     }
   }
 }

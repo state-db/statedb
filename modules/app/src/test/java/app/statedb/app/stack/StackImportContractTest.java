@@ -6,17 +6,11 @@ import static org.hamcrest.Matchers.equalTo;
 import static org.hamcrest.Matchers.notNullValue;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
-import app.statedb.persistence.auth.ApiToken;
-import app.statedb.persistence.identity.OrgMember;
-import app.statedb.persistence.identity.Organization;
-import app.statedb.persistence.identity.User;
+import app.statedb.app.contract.PulumiContractIdentity;
 import app.statedb.persistence.stack.StackCreator;
 import io.quarkus.test.junit.QuarkusTest;
 import jakarta.inject.Inject;
 import jakarta.persistence.EntityManager;
-import java.nio.charset.StandardCharsets;
-import java.security.MessageDigest;
-import java.security.NoSuchAlgorithmException;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -36,53 +30,18 @@ class StackImportContractTest {
   @Inject StackCreator stackCreator;
   @Inject EntityManager em;
 
+  private static final PulumiContractIdentity IDENTITY =
+      new PulumiContractIdentity(
+          ORG, ORG, "import", "import@example.com", "Import Tester", RAW_TOKEN, "import");
+
   @BeforeEach
   void seed() {
-    tx(
-        () -> {
-          Organization org = new Organization();
-          org.name = ORG;
-          org.displayName = ORG;
-          org.persistAndFlush();
-
-          User user = new User();
-          user.iss = "local:test";
-          user.sub = "import";
-          user.email = "import@example.com";
-          user.displayName = "Import Tester";
-          user.persistAndFlush();
-
-          OrgMember member = new OrgMember();
-          member.orgId = org.id;
-          member.userId = user.id;
-          member.role = OrgMember.Role.owner;
-          member.persistAndFlush();
-
-          ApiToken token = new ApiToken();
-          token.tokenHash = sha256Hex(RAW_TOKEN);
-          token.userId = user.id;
-          token.orgId = org.id;
-          token.kind = ApiToken.Kind.service_account;
-          token.expiresAt = java.time.Instant.now().plusSeconds(60 * 60);
-          token.description = "import";
-          token.persistAndFlush();
-
-          stackCreator.create(org.id, ORG, PROJECT, STACK, Map.of());
-        });
+    IDENTITY.seedStack(stackCreator, PROJECT, STACK);
   }
 
   @AfterEach
   void cleanup() {
-    tx(
-        () -> {
-          em.createNativeQuery("DELETE FROM organizations WHERE name = ?1")
-              .setParameter(1, ORG)
-              .executeUpdate();
-          em.createNativeQuery("DELETE FROM users WHERE iss = ?1 AND sub = ?2")
-              .setParameter(1, "local:test")
-              .setParameter(2, "import")
-              .executeUpdate();
-        });
+    IDENTITY.cleanup();
   }
 
   @Test
@@ -221,20 +180,5 @@ class StackImportContractTest {
 
   private static String updatePath(String updateId) {
     return "/pulumi/api/stacks/" + ORG + "/" + PROJECT + "/" + STACK + "/update/" + updateId;
-  }
-
-  private static String sha256Hex(String input) {
-    try {
-      byte[] digest =
-          MessageDigest.getInstance("SHA-256").digest(input.getBytes(StandardCharsets.UTF_8));
-      StringBuilder sb = new StringBuilder(digest.length * 2);
-      for (byte b : digest) {
-        sb.append(Character.forDigit((b >> 4) & 0xF, 16));
-        sb.append(Character.forDigit(b & 0xF, 16));
-      }
-      return sb.toString();
-    } catch (NoSuchAlgorithmException e) {
-      throw new IllegalStateException(e);
-    }
   }
 }

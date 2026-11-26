@@ -171,7 +171,7 @@ class StackExportContractTest {
 
   @Test
   void versionedExportInProgressUpdateReturns404() {
-    tx(() -> appliedUpdate(1, StackUpdate.Status.IN_PROGRESS, 0L, null));
+    seedInProgressUpdate();
 
     given()
         .header("Authorization", "token " + RAW_TOKEN)
@@ -198,11 +198,7 @@ class StackExportContractTest {
   @Test
   void versionedExportDistinguishesImportSharingJournalBoundary() throws Exception {
     seedTwoAppliedVersions();
-    tx(
-        () -> {
-          StackState state = StackState.<StackState>find("stackId", stackId).firstResult();
-          state.journalSeq = 4L;
-        });
+    advanceJournalToImportBoundary();
     stackImporter.importDeployment(
         stackId,
         null,
@@ -317,5 +313,17 @@ class StackExportContractTest {
     } catch (NoSuchAlgorithmException e) {
       throw new IllegalStateException(e);
     }
+  }
+
+  private void seedInProgressUpdate() {
+    tx(() -> appliedUpdate(1, StackUpdate.Status.IN_PROGRESS, 0L, null));
+  }
+
+  private void advanceJournalToImportBoundary() {
+    tx(
+        () -> {
+          StackState state = StackState.<StackState>find("stackId", stackId).firstResult();
+          state.journalSeq = 4L;
+        });
   }
 }
