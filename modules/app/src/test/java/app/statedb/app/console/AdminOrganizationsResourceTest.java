@@ -35,12 +35,7 @@ class AdminOrganizationsResourceTest {
     String cookie = login(PASSWORD).statusCode(200).extract().cookie(COOKIE);
     String emptyId = createOrg(cookie, TEST_ORGS.get(0));
     String populatedId = createOrg(cookie, TEST_ORGS.get(1));
-    tx(
-        () -> {
-          Organization populated =
-              Organization.<Organization>find("name", TEST_ORGS.get(1)).firstResult();
-          stackCreator.create(populated.id, populated.name, "project", "stack", Map.of());
-        });
+    seedStackInPopulatedOrganization();
 
     given()
         .cookie(COOKIE, cookie)
@@ -84,5 +79,14 @@ class AdminOrganizationsResourceTest {
         .body("stacks", is(0))
         .extract()
         .path("id");
+  }
+
+  private void seedStackInPopulatedOrganization() {
+    tx(
+        () -> {
+          Organization populated =
+              Organization.<Organization>find("name", TEST_ORGS.get(1)).firstResult();
+          stackCreator.create(populated.id, populated.name, "project", "stack", Map.of());
+        });
   }
 }

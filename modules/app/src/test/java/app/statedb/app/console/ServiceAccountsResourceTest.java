@@ -238,13 +238,7 @@ class ServiceAccountsResourceTest {
   @Test
   void deactivatedHumanSessionCannotManageAccounts() {
     Cookie session = establishSession(OrgMember.Role.owner);
-    tx(
-        () ->
-            User.update(
-                "deactivatedAt = ?1 where iss = ?2 and sub = ?3",
-                Instant.now(),
-                OidcConsoleSessionFixture.FIXTURE_ISS,
-                OidcConsoleSessionFixture.FIXTURE_SUB));
+    deactivateFixtureUser();
 
     given()
         .cookie(session.getName(), session.getValue())
@@ -290,5 +284,15 @@ class ServiceAccountsResourceTest {
           assertEquals(1L, OrgMember.count("userId", user.id));
         });
     return session;
+  }
+
+  private void deactivateFixtureUser() {
+    tx(
+        () ->
+            User.update(
+                "deactivatedAt = ?1 where iss = ?2 and sub = ?3",
+                Instant.now(),
+                OidcConsoleSessionFixture.FIXTURE_ISS,
+                OidcConsoleSessionFixture.FIXTURE_SUB));
   }
 }

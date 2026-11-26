@@ -164,12 +164,7 @@ class VcsConnectionsResourceTest {
   void membershipIsRecheckedAfterReturningFromGithub() {
     Cookie session = establishSession(OrgMember.Role.owner);
     String oauth = install(session, begin(session), 9876);
-    tx(
-        () ->
-            OrgMember.update(
-                "role = ?1 where orgId = ?2",
-                OrgMember.Role.member,
-                Organization.<Organization>find("name", ORG).firstResult().id));
+    demoteOwnerToMember();
     given()
         .cookie(session)
         .queryParam("state", oauth)
@@ -302,5 +297,14 @@ class VcsConnectionsResourceTest {
           member.persistAndFlush();
         });
     return session;
+  }
+
+  private void demoteOwnerToMember() {
+    tx(
+        () ->
+            OrgMember.update(
+                "role = ?1 where orgId = ?2",
+                OrgMember.Role.member,
+                Organization.<Organization>find("name", ORG).firstResult().id));
   }
 }

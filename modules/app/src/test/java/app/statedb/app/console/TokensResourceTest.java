@@ -36,24 +36,7 @@ class TokensResourceTest {
   @Test
   void deactivatedSessionCannotListOrRevokeTokens() {
     Cookie session = OidcConsoleSessionFixture.login();
-    tx(
-        () -> {
-          User user =
-              User.<User>find(
-                      "iss = ?1 and sub = ?2",
-                      OidcConsoleSessionFixture.FIXTURE_ISS,
-                      OidcConsoleSessionFixture.FIXTURE_SUB)
-                  .firstResult();
-          ApiToken token = new ApiToken();
-          token.tokenHash = "deactivated-session-token-" + UUID.randomUUID();
-          token.description = "must survive rejected revocation";
-          token.userId = user.id;
-          token.kind = ApiToken.Kind.oidc;
-          token.expiresAt = Instant.now().plusSeconds(3600);
-          token.persistAndFlush();
-          tokenId = token.id;
-          user.deactivatedAt = Instant.now();
-        });
+    seedTokenAndDeactivateFixtureUser();
 
     given()
         .cookie(session.getName(), session.getValue())
@@ -72,5 +55,26 @@ class TokensResourceTest {
         1L,
         read(() -> ApiToken.count("id", tokenId)),
         "rejected revocation leaves the token intact");
+  }
+
+  private void seedTokenAndDeactivateFixtureUser() {
+    tx(
+        () -> {
+          User user =
+              User.<User>find(
+                      "iss = ?1 and sub = ?2",
+                      OidcConsoleSessionFixture.FIXTURE_ISS,
+                      OidcConsoleSessionFixture.FIXTURE_SUB)
+                  .firstResult();
+          ApiToken token = new ApiToken();
+          token.tokenHash = "deactivated-session-token-" + UUID.randomUUID();
+          token.description = "must survive rejected revocation";
+          token.userId = user.id;
+          token.kind = ApiToken.Kind.oidc;
+          token.expiresAt = Instant.now().plusSeconds(3600);
+          token.persistAndFlush();
+          tokenId = token.id;
+          user.deactivatedAt = Instant.now();
+        });
   }
 }

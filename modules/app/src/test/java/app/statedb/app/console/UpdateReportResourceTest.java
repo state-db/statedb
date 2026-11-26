@@ -128,7 +128,7 @@ class UpdateReportResourceTest {
 
     String before = report(session, updateId, null).asString();
 
-    tx(() -> folder.fold(updateId, Instant.now()));
+    foldRun(updateId);
     assertNotNull(
         read(() -> UpdateEventArchive.findById(updateId)), "precondition: the run was folded");
 
@@ -151,11 +151,7 @@ class UpdateReportResourceTest {
   void refusesAPrivateStackInTheCallersOrgWithoutAReadGrant() {
     Cookie session = session(ORG, OrgMember.Role.member);
     UUID stackId = createStack(ORG);
-    tx(
-        () -> {
-          Stack stack = Stack.findById(stackId);
-          stack.visibility = Stack.VISIBILITY_PRIVATE;
-        });
+    makeStackPrivate(stackId);
     UUID updateId = seedRun(stackId);
 
     report(session, updateId, null).then().statusCode(404);
@@ -286,5 +282,17 @@ class UpdateReportResourceTest {
           }
         });
     return session;
+  }
+
+  private void foldRun(UUID updateId) {
+    tx(() -> folder.fold(updateId, Instant.now()));
+  }
+
+  private void makeStackPrivate(UUID stackId) {
+    tx(
+        () -> {
+          Stack stack = Stack.findById(stackId);
+          stack.visibility = Stack.VISIBILITY_PRIVATE;
+        });
   }
 }
