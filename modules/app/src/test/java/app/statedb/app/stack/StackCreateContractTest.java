@@ -122,35 +122,7 @@ class StackCreateContractTest {
         .body("tags.\"pulumi:runtime\"", equalTo("yaml"));
 
     // The workspace, stack, and stack_state rows must all have been created.
-    tx(
-        () -> {
-          Number stacks =
-              (Number)
-                  em.createNativeQuery(
-                          "SELECT count(*) FROM stacks s "
-                              + "JOIN projects p ON p.id = s.project_id "
-                              + "JOIN organizations o ON o.id = s.org_id "
-                              + "WHERE o.name = ?1 AND p.name = ?2 AND s.name = ?3")
-                      .setParameter(1, ORG_NAME)
-                      .setParameter(2, PROJECT)
-                      .setParameter(3, "dev")
-                      .getSingleResult();
-          org.junit.jupiter.api.Assertions.assertEquals(1L, stacks.longValue());
-
-          Number states =
-              (Number)
-                  em.createNativeQuery(
-                          "SELECT count(*) FROM stack_state ss "
-                              + "JOIN stacks s ON s.id = ss.stack_id "
-                              + "JOIN projects p ON p.id = s.project_id "
-                              + "JOIN organizations o ON o.id = s.org_id "
-                              + "WHERE o.name = ?1 AND p.name = ?2 AND s.name = ?3")
-                      .setParameter(1, ORG_NAME)
-                      .setParameter(2, PROJECT)
-                      .setParameter(3, "dev")
-                      .getSingleResult();
-          org.junit.jupiter.api.Assertions.assertEquals(1L, states.longValue());
-        });
+    assertStackAndStateWereCreated();
   }
 
   @Test
@@ -287,6 +259,38 @@ class StackCreateContractTest {
           StackState st = new StackState();
           st.stackId = s.id;
           st.persistAndFlush();
+        });
+  }
+
+  private void assertStackAndStateWereCreated() {
+    tx(
+        () -> {
+          Number stacks =
+              (Number)
+                  em.createNativeQuery(
+                          "SELECT count(*) FROM stacks s "
+                              + "JOIN projects p ON p.id = s.project_id "
+                              + "JOIN organizations o ON o.id = s.org_id "
+                              + "WHERE o.name = ?1 AND p.name = ?2 AND s.name = ?3")
+                      .setParameter(1, ORG_NAME)
+                      .setParameter(2, PROJECT)
+                      .setParameter(3, "dev")
+                      .getSingleResult();
+          org.junit.jupiter.api.Assertions.assertEquals(1L, stacks.longValue());
+
+          Number states =
+              (Number)
+                  em.createNativeQuery(
+                          "SELECT count(*) FROM stack_state ss "
+                              + "JOIN stacks s ON s.id = ss.stack_id "
+                              + "JOIN projects p ON p.id = s.project_id "
+                              + "JOIN organizations o ON o.id = s.org_id "
+                              + "WHERE o.name = ?1 AND p.name = ?2 AND s.name = ?3")
+                      .setParameter(1, ORG_NAME)
+                      .setParameter(2, PROJECT)
+                      .setParameter(3, "dev")
+                      .getSingleResult();
+          org.junit.jupiter.api.Assertions.assertEquals(1L, states.longValue());
         });
   }
 }

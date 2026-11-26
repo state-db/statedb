@@ -210,14 +210,7 @@ class ServiceAccountAuthorizationTest {
     boolean revoked = read(() -> revoker.revoke(orgId, accountId, null));
     org.junit.jupiter.api.Assertions.assertTrue(revoked);
 
-    tx(
-        () -> {
-          User account = User.findById(accountId);
-          ApiToken token = ApiToken.find("userId", accountId).firstResult();
-          org.junit.jupiter.api.Assertions.assertNotNull(account);
-          org.junit.jupiter.api.Assertions.assertNotNull(account.deactivatedAt);
-          org.junit.jupiter.api.Assertions.assertNotNull(token.revokedAt);
-        });
+    assertAccountWasRevoked();
 
     asService().get(BASE).then().statusCode(401);
   }
@@ -228,5 +221,16 @@ class ServiceAccountAuthorizationTest {
 
   private io.restassured.specification.RequestSpecification asToken(String token) {
     return given().header("Authorization", "token " + token).when();
+  }
+
+  private void assertAccountWasRevoked() {
+    tx(
+        () -> {
+          User account = User.findById(accountId);
+          ApiToken token = ApiToken.find("userId", accountId).firstResult();
+          org.junit.jupiter.api.Assertions.assertNotNull(account);
+          org.junit.jupiter.api.Assertions.assertNotNull(account.deactivatedAt);
+          org.junit.jupiter.api.Assertions.assertNotNull(token.revokedAt);
+        });
   }
 }

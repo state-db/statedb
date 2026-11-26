@@ -136,14 +136,7 @@ class AdminOperationsResourceTest {
         .then()
         .statusCode(204);
 
-    tx(
-        () -> {
-          assertEquals(0L, StackLock.count("id", seed.lockId()));
-          StackUpdate update = StackUpdate.findById(seed.updateId());
-          assertEquals(StackUpdate.Status.CANCELLED, update.status);
-          assertNotNull(update.endedAt);
-          assertNull(Stack.<Stack>findById(seed.stackId()).activeUpdateId);
-        });
+    assertUpdateWasCancelledAndUnlocked(seed);
   }
 
   private Seed seed() {
@@ -238,4 +231,15 @@ class AdminOperationsResourceTest {
   }
 
   private record Seed(UUID stackId, UUID updateId, UUID lockId) {}
+
+  private void assertUpdateWasCancelledAndUnlocked(Seed seed) {
+    tx(
+        () -> {
+          assertEquals(0L, StackLock.count("id", seed.lockId()));
+          StackUpdate update = StackUpdate.findById(seed.updateId());
+          assertEquals(StackUpdate.Status.CANCELLED, update.status);
+          assertNotNull(update.endedAt);
+          assertNull(Stack.<Stack>findById(seed.stackId()).activeUpdateId);
+        });
+  }
 }

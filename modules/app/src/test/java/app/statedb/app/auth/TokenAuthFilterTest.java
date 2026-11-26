@@ -116,13 +116,7 @@ class TokenAuthFilterTest {
 
   @Test
   void revokedMembershipReturns401() {
-    tx(
-        () ->
-            em.createNativeQuery(
-                    "DELETE FROM org_members WHERE org_id ="
-                        + " (SELECT id FROM organizations WHERE name = ?1)")
-                .setParameter(1, ORG_NAME)
-                .executeUpdate());
+    revokeMembership();
 
     given()
         .header("Authorization", "token " + VALID_RAW_TOKEN)
@@ -155,13 +149,7 @@ class TokenAuthFilterTest {
         .then()
         .statusCode(200);
 
-    tx(
-        () -> {
-          ApiToken token =
-              ApiToken.<ApiToken>find("tokenHash", sha256Hex(VALID_RAW_TOKEN)).firstResult();
-          org.junit.jupiter.api.Assertions.assertNotNull(
-              token.lastUsedAt, "auth must record last_used_at");
-        });
+    assertTokenUseWasRecorded();
   }
 
   @Test
@@ -205,5 +193,25 @@ class TokenAuthFilterTest {
     } catch (NoSuchAlgorithmException e) {
       throw new IllegalStateException(e);
     }
+  }
+
+  private void revokeMembership() {
+    tx(
+        () ->
+            em.createNativeQuery(
+                    "DELETE FROM org_members WHERE org_id ="
+                        + " (SELECT id FROM organizations WHERE name = ?1)")
+                .setParameter(1, ORG_NAME)
+                .executeUpdate());
+  }
+
+  private void assertTokenUseWasRecorded() {
+    tx(
+        () -> {
+          ApiToken token =
+              ApiToken.<ApiToken>find("tokenHash", sha256Hex(VALID_RAW_TOKEN)).firstResult();
+          org.junit.jupiter.api.Assertions.assertNotNull(
+              token.lastUsedAt, "auth must record last_used_at");
+        });
   }
 }

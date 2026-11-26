@@ -234,17 +234,7 @@ class RecordedEventsBatchReplayTest {
         .statusCode(400);
 
     UUID upd = UUID.fromString(updateId);
-    tx(
-        () -> {
-          long actualRows =
-              ((Number)
-                      em.createNativeQuery(
-                              "SELECT count(*) FROM update_events WHERE update_id = ?1")
-                          .setParameter(1, upd)
-                          .getSingleResult())
-                  .longValue();
-          assertEquals(0L, actualRows, "no rows should land for a malformed gzip body");
-        });
+    assertMalformedBatchWroteNoEvents(upd);
   }
 
   @Test
@@ -411,5 +401,19 @@ class RecordedEventsBatchReplayTest {
     } catch (NoSuchAlgorithmException e) {
       throw new IllegalStateException(e);
     }
+  }
+
+  private void assertMalformedBatchWroteNoEvents(UUID upd) {
+    tx(
+        () -> {
+          long actualRows =
+              ((Number)
+                      em.createNativeQuery(
+                              "SELECT count(*) FROM update_events WHERE update_id = ?1")
+                          .setParameter(1, upd)
+                          .getSingleResult())
+                  .longValue();
+          assertEquals(0L, actualRows, "no rows should land for a malformed gzip body");
+        });
   }
 }

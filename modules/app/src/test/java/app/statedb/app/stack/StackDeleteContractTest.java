@@ -124,14 +124,7 @@ class StackDeleteContractTest {
         .statusCode(200)
         .body("$", anEmptyMap());
 
-    tx(
-        () -> {
-          assertEquals(
-              0L, count("SELECT count(*) FROM workspaces WHERE id = ?1", ref.workspaceId()));
-          assertEquals(0L, count("SELECT count(*) FROM stacks WHERE id = ?1", ref.stackId()));
-          assertEquals(
-              0L, count("SELECT count(*) FROM stack_state WHERE stack_id = ?1", ref.stackId()));
-        });
+    assertStackRows(0L, ref);
   }
 
   @Test
@@ -152,14 +145,7 @@ class StackDeleteContractTest {
         .then()
         .statusCode(409);
 
-    tx(
-        () -> {
-          assertEquals(
-              1L, count("SELECT count(*) FROM workspaces WHERE id = ?1", ref.workspaceId()));
-          assertEquals(1L, count("SELECT count(*) FROM stacks WHERE id = ?1", ref.stackId()));
-          assertEquals(
-              1L, count("SELECT count(*) FROM stack_state WHERE stack_id = ?1", ref.stackId()));
-        });
+    assertStackRows(1L, ref);
   }
 
   @Test
@@ -181,14 +167,7 @@ class StackDeleteContractTest {
         .statusCode(200)
         .body("$", anEmptyMap());
 
-    tx(
-        () -> {
-          assertEquals(
-              0L, count("SELECT count(*) FROM workspaces WHERE id = ?1", ref.workspaceId()));
-          assertEquals(0L, count("SELECT count(*) FROM stacks WHERE id = ?1", ref.stackId()));
-          assertEquals(
-              0L, count("SELECT count(*) FROM stack_state WHERE stack_id = ?1", ref.stackId()));
-        });
+    assertStackRows(0L, ref);
   }
 
   @Test
@@ -210,14 +189,7 @@ class StackDeleteContractTest {
         .statusCode(200)
         .body("$", anEmptyMap());
 
-    tx(
-        () -> {
-          assertEquals(
-              0L, count("SELECT count(*) FROM workspaces WHERE id = ?1", ref.workspaceId()));
-          assertEquals(0L, count("SELECT count(*) FROM stacks WHERE id = ?1", ref.stackId()));
-          assertEquals(
-              0L, count("SELECT count(*) FROM stack_state WHERE stack_id = ?1", ref.stackId()));
-        });
+    assertStackRows(0L, ref);
   }
 
   @Test
@@ -234,17 +206,7 @@ class StackDeleteContractTest {
         .then()
         .statusCode(409);
 
-    tx(
-        () -> {
-          assertEquals(
-              1L, count("SELECT count(*) FROM workspaces WHERE id = ?1", ref.workspaceId()));
-          assertEquals(1L, count("SELECT count(*) FROM stacks WHERE id = ?1", ref.stackId()));
-          assertEquals(
-              1L, count("SELECT count(*) FROM stack_state WHERE stack_id = ?1", ref.stackId()));
-          assertEquals(1L, count("SELECT count(*) FROM stack_updates WHERE id = ?1", updateId));
-          assertEquals(
-              1L, count("SELECT count(*) FROM stack_locks WHERE stack_id = ?1", ref.stackId()));
-        });
+    assertStackAndUpdateRows(1L, ref, updateId);
   }
 
   @Test
@@ -262,17 +224,7 @@ class StackDeleteContractTest {
         .statusCode(200)
         .body("$", anEmptyMap());
 
-    tx(
-        () -> {
-          assertEquals(
-              0L, count("SELECT count(*) FROM workspaces WHERE id = ?1", ref.workspaceId()));
-          assertEquals(0L, count("SELECT count(*) FROM stacks WHERE id = ?1", ref.stackId()));
-          assertEquals(
-              0L, count("SELECT count(*) FROM stack_state WHERE stack_id = ?1", ref.stackId()));
-          assertEquals(0L, count("SELECT count(*) FROM stack_updates WHERE id = ?1", updateId));
-          assertEquals(
-              0L, count("SELECT count(*) FROM stack_locks WHERE stack_id = ?1", ref.stackId()));
-        });
+    assertStackAndUpdateRows(0L, ref, updateId);
   }
 
   @Test
@@ -397,5 +349,29 @@ class StackDeleteContractTest {
           st.stackId = s.id;
           st.persistAndFlush();
         });
+  }
+
+  private void assertStackRows(long expected, StackRef ref) {
+    tx(() -> checkStackRows(expected, ref));
+  }
+
+  private void assertStackAndUpdateRows(long expected, StackRef ref, UUID updateId) {
+    tx(
+        () -> {
+          checkStackRows(expected, ref);
+          assertEquals(
+              expected, count("SELECT count(*) FROM stack_updates WHERE id = ?1", updateId));
+          assertEquals(
+              expected,
+              count("SELECT count(*) FROM stack_locks WHERE stack_id = ?1", ref.stackId()));
+        });
+  }
+
+  private void checkStackRows(long expected, StackRef ref) {
+    assertEquals(
+        expected, count("SELECT count(*) FROM workspaces WHERE id = ?1", ref.workspaceId()));
+    assertEquals(expected, count("SELECT count(*) FROM stacks WHERE id = ?1", ref.stackId()));
+    assertEquals(
+        expected, count("SELECT count(*) FROM stack_state WHERE stack_id = ?1", ref.stackId()));
   }
 }

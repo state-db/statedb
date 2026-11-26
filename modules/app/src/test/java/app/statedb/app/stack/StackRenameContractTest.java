@@ -161,14 +161,7 @@ class StackRenameContractTest {
             .path("updateId");
 
     // The returned id must point at a terminal `rename` update — the audit record of the move.
-    tx(
-        () -> {
-          StackUpdate update = StackUpdate.findById(UUID.fromString(updateId));
-          org.junit.jupiter.api.Assertions.assertNotNull(update, "rename recorded no update");
-          org.junit.jupiter.api.Assertions.assertEquals(StackUpdate.Kind.RENAME, update.kind);
-          org.junit.jupiter.api.Assertions.assertEquals(
-              StackUpdate.Status.SUCCEEDED, update.status);
-        });
+    assertRenameUpdateSucceeded(updateId);
   }
 
   @Test
@@ -290,5 +283,16 @@ class StackRenameContractTest {
         .body(body)
         .when()
         .post(BASE + "/" + stack + "/rename");
+  }
+
+  private void assertRenameUpdateSucceeded(String updateId) {
+    tx(
+        () -> {
+          StackUpdate update = StackUpdate.findById(UUID.fromString(updateId));
+          org.junit.jupiter.api.Assertions.assertNotNull(update, "rename recorded no update");
+          org.junit.jupiter.api.Assertions.assertEquals(StackUpdate.Kind.RENAME, update.kind);
+          org.junit.jupiter.api.Assertions.assertEquals(
+              StackUpdate.Status.SUCCEEDED, update.status);
+        });
   }
 }

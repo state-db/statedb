@@ -1,6 +1,6 @@
 package app.statedb.app.journal;
 
-import static app.statedb.testsupport.TestTransactions.tx;
+import static app.statedb.testsupport.TestTransactions.read;
 import static io.restassured.RestAssured.given;
 import static io.restassured.http.ContentType.JSON;
 import static org.hamcrest.Matchers.containsString;
@@ -87,17 +87,7 @@ class JournalEntriesContractTest {
         .statusCode(200);
 
     UUID upd = UUID.fromString(updateId);
-    tx(
-        () -> {
-          long count =
-              ((Number)
-                      em.createNativeQuery(
-                              "SELECT count(*) FROM journal_entries WHERE update_id = ?1")
-                          .setParameter(1, upd)
-                          .getSingleResult())
-                  .longValue();
-          assertEquals(2L, count);
-        });
+    assertEquals(2L, journalEntryCount(upd));
   }
 
   @Test
@@ -132,17 +122,7 @@ class JournalEntriesContractTest {
         .statusCode(200);
 
     UUID upd = UUID.fromString(updateId);
-    tx(
-        () -> {
-          long count =
-              ((Number)
-                      em.createNativeQuery(
-                              "SELECT count(*) FROM journal_entries WHERE update_id = ?1")
-                          .setParameter(1, upd)
-                          .getSingleResult())
-                  .longValue();
-          assertEquals(1L, count);
-        });
+    assertEquals(1L, journalEntryCount(upd));
   }
 
   @Test
@@ -338,5 +318,16 @@ class JournalEntriesContractTest {
     } catch (Exception e) {
       throw new RuntimeException(e);
     }
+  }
+
+  private long journalEntryCount(UUID upd) {
+    return read(
+        () ->
+            ((Number)
+                    em.createNativeQuery(
+                            "SELECT count(*) FROM journal_entries WHERE update_id = ?1")
+                        .setParameter(1, upd)
+                        .getSingleResult())
+                .longValue());
   }
 }

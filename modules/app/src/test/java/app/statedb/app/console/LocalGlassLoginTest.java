@@ -117,13 +117,9 @@ class LocalGlassLoginTest {
         .statusCode(204);
     given().cookie(COOKIE, cookie).when().post(base + "/compact").then().statusCode(202);
 
-    tx(
-        () -> {
-          assertEquals(0L, StackLock.count("stackId", stackId));
-          assertEquals(1L, CompactionJob.count("stackId", stackId));
-        });
+    assertUnlockedAndQueued(stackId);
 
-    tx(() -> Organization.delete("name", "ops-org"));
+    deleteOperationsOrganization();
   }
 
   @Test
@@ -186,7 +182,7 @@ class LocalGlassLoginTest {
           .statusCode(204);
       assertEquals(0L, read(() -> OidcProvider.count("name", name)));
     } finally {
-      tx(() -> OidcProvider.delete("name", name));
+      deleteProvider(name);
     }
   }
 
@@ -253,7 +249,7 @@ class LocalGlassLoginTest {
 
       assertEquals(0L, read(() -> OidcProvider.count("name", "env-provider")));
     } finally {
-      tx(() -> OidcProvider.delete("name", name));
+      deleteProvider(name);
     }
   }
 
@@ -349,5 +345,21 @@ class LocalGlassLoginTest {
           lock.persist();
           return stack.id;
         });
+  }
+
+  private void deleteOperationsOrganization() {
+    tx(() -> Organization.delete("name", "ops-org"));
+  }
+
+  private void assertUnlockedAndQueued(UUID stackId) {
+    tx(
+        () -> {
+          assertEquals(0L, StackLock.count("stackId", stackId));
+          assertEquals(1L, CompactionJob.count("stackId", stackId));
+        });
+  }
+
+  private void deleteProvider(String name) {
+    tx(() -> OidcProvider.delete("name", name));
   }
 }

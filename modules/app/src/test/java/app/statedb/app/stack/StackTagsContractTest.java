@@ -150,13 +150,7 @@ class StackTagsContractTest {
 
     // The active-update pointer set by the "concurrent" update must survive the tag write — a
     // full-row entity update would have rewritten active_update_id back to its stale (null) value.
-    tx(
-        () -> {
-          Stack s = Stack.findById(stackId);
-          org.junit.jupiter.api.Assertions.assertNotNull(
-              s.activeUpdateId, "tag write cleared active_update_id");
-          org.junit.jupiter.api.Assertions.assertEquals("staging", s.tags.get("env"));
-        });
+    assertTagChangedWithoutClearingUpdate(stackId);
   }
 
   @Test
@@ -214,5 +208,15 @@ class StackTagsContractTest {
         .patch(BASE + "/" + STACK + "/tags")
         .then()
         .statusCode(401);
+  }
+
+  private void assertTagChangedWithoutClearingUpdate(UUID stackId) {
+    tx(
+        () -> {
+          Stack s = Stack.findById(stackId);
+          org.junit.jupiter.api.Assertions.assertNotNull(
+              s.activeUpdateId, "tag write cleared active_update_id");
+          org.junit.jupiter.api.Assertions.assertEquals("staging", s.tags.get("env"));
+        });
   }
 }

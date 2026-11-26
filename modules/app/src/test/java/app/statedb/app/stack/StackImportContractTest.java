@@ -79,20 +79,7 @@ class StackImportContractTest {
         .body("deployment.resources[0].outputs.message", equalTo("imported"));
 
     UUID updateUuid = UUID.fromString(updateId);
-    tx(
-        () -> {
-          Object[] row =
-              (Object[])
-                  em.createNativeQuery(
-                          "SELECT kind, status, start_journal_seq, end_journal_seq "
-                              + "FROM stack_updates WHERE id = ?1")
-                      .setParameter(1, updateUuid)
-                      .getSingleResult();
-          assertEquals("import", row[0]);
-          assertEquals("succeeded", row[1]);
-          assertEquals(0L, ((Number) row[2]).longValue());
-          assertEquals(0L, ((Number) row[3]).longValue());
-        });
+    assertImportRecordedAtInitialBoundary(updateUuid);
   }
 
   @Test
@@ -180,5 +167,22 @@ class StackImportContractTest {
 
   private static String updatePath(String updateId) {
     return "/pulumi/api/stacks/" + ORG + "/" + PROJECT + "/" + STACK + "/update/" + updateId;
+  }
+
+  private void assertImportRecordedAtInitialBoundary(UUID updateUuid) {
+    tx(
+        () -> {
+          Object[] row =
+              (Object[])
+                  em.createNativeQuery(
+                          "SELECT kind, status, start_journal_seq, end_journal_seq "
+                              + "FROM stack_updates WHERE id = ?1")
+                      .setParameter(1, updateUuid)
+                      .getSingleResult();
+          assertEquals("import", row[0]);
+          assertEquals("succeeded", row[1]);
+          assertEquals(0L, ((Number) row[2]).longValue());
+          assertEquals(0L, ((Number) row[3]).longValue());
+        });
   }
 }

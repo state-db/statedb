@@ -1,5 +1,6 @@
 package app.statedb.app.update;
 
+import static app.statedb.testsupport.TestTransactions.read;
 import static app.statedb.testsupport.TestTransactions.tx;
 import static io.restassured.RestAssured.given;
 import static org.hamcrest.Matchers.containsString;
@@ -112,21 +113,7 @@ class StartUpdateContractTest {
         .body("updateID", notNullValue())
         .body("version", equalTo(0));
 
-    tx(
-        () -> {
-          Object[] row =
-              (Object[])
-                  em.createNativeQuery(
-                          "SELECT kind, status, pulumi_version, version, dry_run"
-                              + " FROM stack_updates WHERE stack_id = ?1")
-                      .setParameter(1, stackId(ORG))
-                      .getSingleResult();
-          assertEquals("preview", row[0]);
-          assertEquals("in-progress", row[1]);
-          assertEquals("v3.234.0", row[2]);
-          assertEquals(0, ((Number) row[3]).intValue());
-          assertEquals(Boolean.TRUE, row[4]);
-        });
+    assertPreviewWasPersisted();
   }
 
   @Test
@@ -151,16 +138,7 @@ class StartUpdateContractTest {
         .statusCode(200)
         .body("version", equalTo(2));
 
-    tx(
-        () -> {
-          @SuppressWarnings("unchecked")
-          List<String> kinds =
-              em.createNativeQuery(
-                      "SELECT kind FROM stack_updates WHERE stack_id = ?1 ORDER BY version")
-                  .setParameter(1, stackId(ORG))
-                  .getResultList();
-          assertEquals(List.of("update", "destroy"), kinds);
-        });
+    assertUpdateAndDestroyWerePersisted();
   }
 
   @Test
@@ -193,15 +171,7 @@ class StartUpdateContractTest {
 
     assertEquals(firstUpdateId, secondUpdateId);
 
-    tx(
-        () -> {
-          Number n =
-              (Number)
-                  em.createNativeQuery("SELECT count(*) FROM stack_updates WHERE stack_id = ?1")
-                      .setParameter(1, stackId(ORG))
-                      .getSingleResult();
-          assertEquals(1L, n.longValue());
-        });
+    assertEquals(1L, updateCount());
   }
 
   @Test
@@ -261,15 +231,7 @@ class StartUpdateContractTest {
         .body("message", containsString("does not support journaling"))
         .body("message", containsString("3.100.0"));
 
-    tx(
-        () -> {
-          Number n =
-              (Number)
-                  em.createNativeQuery("SELECT count(*) FROM stack_updates WHERE stack_id = ?1")
-                      .setParameter(1, stackId(ORG))
-                      .getSingleResult();
-          assertEquals(0L, n.longValue());
-        });
+    assertEquals(0L, updateCount());
   }
 
   private UUID stackId(String orgName) {
@@ -342,5 +304,46 @@ class StartUpdateContractTest {
     } catch (NoSuchAlgorithmException e) {
       throw new IllegalStateException(e);
     }
+  }
+
+  private long updateCount() {
+    return read(
+        () ->
+            ((Number)
+                    em.createNativeQuery("SELECT count(*) FROM stack_updates WHERE stack_id = ?1")
+                        .setParameter(1, stackId(ORG))
+                        .getSingleResult())
+                .longValue());
+  }
+
+  private void assertPreviewWasPersisted() {
+    tx(
+        () -> {
+          Object[] row =
+              (Object[])
+                  em.createNativeQuery(
+                          "SELECT kind, status, pulumi_version, version, dry_run"
+                              + " FROM stack_updates WHERE stack_id = ?1")
+                      .setParameter(1, stackId(ORG))
+                      .getSingleResult();
+          assertEquals("preview", row[0]);
+          assertEquals("in-progress", row[1]);
+          assertEquals("v3.234.0", row[2]);
+          assertEquals(0, ((Number) row[3]).intValue());
+          assertEquals(Boolean.TRUE, row[4]);
+        });
+  }
+
+  private void assertUpdateAndDestroyWerePersisted() {
+    tx(
+        () -> {
+          @SuppressWarnings("unchecked")
+          List<String> kinds =
+              em.createNativeQuery(
+                      "SELECT kind FROM stack_updates WHERE stack_id = ?1 ORDER BY version")
+                  .setParameter(1, stackId(ORG))
+                  .getResultList();
+          assertEquals(List.of("update", "destroy"), kinds);
+        });
   }
 }

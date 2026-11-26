@@ -144,13 +144,7 @@ class LeaseTokenFilterTest {
     String updateId = startPreview(STACK);
     String token = acquireLock(STACK, updateId);
 
-    tx(
-        () ->
-            em.createNativeQuery(
-                    "UPDATE stack_locks SET expires_at = now() - interval '1 second'"
-                        + " WHERE lock_token_hash = ?1")
-                .setParameter(1, LeaseTokenHasher.hash(UUID.fromString(token)))
-                .executeUpdate());
+    expireLease(token);
 
     given()
         .header("Authorization", "update-token " + token)
@@ -277,5 +271,15 @@ class LeaseTokenFilterTest {
     } catch (NoSuchAlgorithmException e) {
       throw new IllegalStateException(e);
     }
+  }
+
+  private void expireLease(String token) {
+    tx(
+        () ->
+            em.createNativeQuery(
+                    "UPDATE stack_locks SET expires_at = now() - interval '1 second'"
+                        + " WHERE lock_token_hash = ?1")
+                .setParameter(1, LeaseTokenHasher.hash(UUID.fromString(token)))
+                .executeUpdate());
   }
 }

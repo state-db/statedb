@@ -84,32 +84,7 @@ class AcquireLockContractTest {
 
     long tokenExpiration = ((Number) response.extract().path("tokenExpiration")).longValue();
 
-    tx(
-        () -> {
-          Object[] row =
-              (Object[])
-                  em.createNativeQuery(
-                          """
-                              SELECT su.journal_version, su.tags, sl.expires_at
-                                FROM stack_updates su
-                                JOIN stack_locks sl ON sl.stack_id = su.stack_id
-                               WHERE su.id = ?1
-                              """)
-                      .setParameter(1, UUID.fromString(updateId))
-                      .getSingleResult();
-          assertEquals(1, ((Number) row[0]).intValue());
-          assertNotNull(row[1]);
-          assertEquals(toInstant(row[2]).getEpochSecond(), tokenExpiration);
-
-          Number lockCount =
-              (Number)
-                  em.createNativeQuery(
-                          "SELECT count(*) FROM stack_locks WHERE stack_id"
-                              + " = (SELECT stack_id FROM stack_updates WHERE id = ?1)")
-                      .setParameter(1, UUID.fromString(updateId))
-                      .getSingleResult();
-          assertEquals(1L, lockCount.longValue());
-        });
+    assertLeaseAndAcquireFieldsWerePersisted(updateId, tokenExpiration);
   }
 
   @Test
@@ -197,5 +172,34 @@ class AcquireLockContractTest {
     if (value instanceof OffsetDateTime o) return o.toInstant();
     if (value instanceof java.sql.Timestamp t) return t.toInstant();
     throw new IllegalStateException("unexpected timestamp type: " + value.getClass());
+  }
+
+  private void assertLeaseAndAcquireFieldsWerePersisted(String updateId, long tokenExpiration) {
+    tx(
+        () -> {
+          Object[] row =
+              (Object[])
+                  em.createNativeQuery(
+                          """
+                              SELECT su.journal_version, su.tags, sl.expires_at
+                                FROM stack_updates su
+                                JOIN stack_locks sl ON sl.stack_id = su.stack_id
+                               WHERE su.id = ?1
+                              """)
+                      .setParameter(1, UUID.fromString(updateId))
+                      .getSingleResult();
+          assertEquals(1, ((Number) row[0]).intValue());
+          assertNotNull(row[1]);
+          assertEquals(toInstant(row[2]).getEpochSecond(), tokenExpiration);
+
+          Number lockCount =
+              (Number)
+                  em.createNativeQuery(
+                          "SELECT count(*) FROM stack_locks WHERE stack_id"
+                              + " = (SELECT stack_id FROM stack_updates WHERE id = ?1)")
+                      .setParameter(1, UUID.fromString(updateId))
+                      .getSingleResult();
+          assertEquals(1L, lockCount.longValue());
+        });
   }
 }
