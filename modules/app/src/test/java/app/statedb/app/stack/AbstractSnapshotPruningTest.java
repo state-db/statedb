@@ -3,6 +3,7 @@ package app.statedb.app.stack;
 import static app.statedb.testsupport.TestTransactions.read;
 import static app.statedb.testsupport.TestTransactions.tx;
 
+import app.statedb.app.CommittedStack;
 import app.statedb.persistence.identity.Organization;
 import app.statedb.persistence.journal.JournalEntry;
 import app.statedb.persistence.stack.CompactionJob;
@@ -14,16 +15,15 @@ import app.statedb.persistence.stack.SnapshotRetentionRow;
 import app.statedb.persistence.stack.StackAssembler;
 import app.statedb.persistence.stack.StackCreator;
 import app.statedb.persistence.stack.StackImporter;
-import app.statedb.persistence.stack.StackRef;
 import app.statedb.persistence.stack.StackState;
 import app.statedb.persistence.update.StackUpdate;
 import app.statedb.testsupport.pulumi.DeploymentNormalizer;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.inject.Inject;
+import jakarta.transaction.Transactional;
 import java.time.Instant;
 import java.util.List;
-import java.util.Map;
 import java.util.UUID;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -53,21 +53,13 @@ abstract class AbstractSnapshotPruningTest {
 
   @BeforeEach
   void seed() {
-    stackId =
-        read(
-            () -> {
-              Organization org = new Organization();
-              org.name = orgName();
-              org.displayName = "Snapshot pruning";
-              org.persistAndFlush();
-              StackRef ref = stackCreator.create(org.id, orgName(), "proj", "dev", Map.of());
-              return ref.stackId();
-            });
+    stackId = CommittedStack.create(stackCreator, orgName(), "Snapshot pruning");
   }
 
   @AfterEach
+  @Transactional
   void cleanup() {
-    tx(() -> Organization.delete("name", orgName()));
+    Organization.delete("name", orgName());
   }
 
   /**

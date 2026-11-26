@@ -22,6 +22,7 @@ import app.statedb.persistence.vcs.VcsConnection;
 import io.quarkus.test.junit.QuarkusTest;
 import jakarta.inject.Inject;
 import jakarta.persistence.EntityManager;
+import jakarta.transaction.Transactional;
 import java.nio.charset.StandardCharsets;
 import java.security.GeneralSecurityException;
 import java.util.UUID;
@@ -37,14 +38,12 @@ class VcsCredentialStoreTest {
   @Inject EntityManager em;
 
   @AfterEach
+  @Transactional
   void cleanup() {
-    tx(
-        () -> {
-          VcsAuthFlow.deleteAll();
-          Organization.delete("name", "vcs-auth-org");
-          VcsAppRegistration.deleteAll();
-          User.delete("iss", "https://vcs-credentials.test");
-        });
+    VcsAuthFlow.deleteAll();
+    Organization.delete("name", "vcs-auth-org");
+    VcsAppRegistration.deleteAll();
+    User.delete("iss", "https://vcs-credentials.test");
   }
 
   @Test

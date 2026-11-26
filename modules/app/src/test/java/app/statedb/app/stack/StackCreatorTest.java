@@ -1,7 +1,5 @@
 package app.statedb.app.stack;
 
-import static app.statedb.testsupport.TestTransactions.read;
-import static app.statedb.testsupport.TestTransactions.tx;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -15,6 +13,7 @@ import io.quarkus.test.TestTransaction;
 import io.quarkus.test.junit.QuarkusTest;
 import jakarta.inject.Inject;
 import jakarta.persistence.EntityManager;
+import jakarta.transaction.Transactional;
 import java.util.Map;
 import java.util.UUID;
 import org.junit.jupiter.api.AfterEach;
@@ -38,25 +37,21 @@ class StackCreatorTest {
   private UUID orgId;
 
   @BeforeEach
+  @Transactional
   void seed() {
-    orgId =
-        read(
-            () -> {
-              Organization org = new Organization();
-              org.name = ORG_NAME;
-              org.displayName = "Stack Creator Test";
-              org.persistAndFlush();
-              return org.id;
-            });
+    Organization org = new Organization();
+    org.name = ORG_NAME;
+    org.displayName = "Stack Creator Test";
+    org.persistAndFlush();
+    orgId = org.id;
   }
 
   @AfterEach
+  @Transactional
   void cleanup() {
-    tx(
-        () ->
-            em.createNativeQuery("DELETE FROM organizations WHERE name = ?1")
-                .setParameter(1, ORG_NAME)
-                .executeUpdate());
+    em.createNativeQuery("DELETE FROM organizations WHERE name = ?1")
+        .setParameter(1, ORG_NAME)
+        .executeUpdate();
   }
 
   @TestTransaction

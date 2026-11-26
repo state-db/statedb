@@ -20,10 +20,10 @@ import com.fasterxml.jackson.databind.JsonNode;
 import io.quarkus.test.TestTransaction;
 import io.quarkus.test.junit.QuarkusTest;
 import jakarta.inject.Inject;
+import jakarta.transaction.Transactional;
 import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
-import java.util.function.Supplier;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 
@@ -45,13 +45,13 @@ class UpdateEventStreamTest {
   private String org;
 
   @AfterEach
+  @Transactional
   void cleanup() {
     if (org == null) {
       return;
     }
-    String name = org;
+    Organization.delete("name", org);
     org = null;
-    tx(() -> Organization.delete("name", name));
   }
 
   @Test
@@ -60,17 +60,17 @@ class UpdateEventStreamTest {
     UUID stackId = seedStack("event-stream-parity");
     UUID updateId = seedUpdate(stackId, corpus, corpus.size());
 
-    UpdateEventReader.EventStream live = inTx(() -> reader.stream(stackId, updateId, 10_000));
+    UpdateEventReader.EventStream live = read(() -> reader.stream(stackId, updateId, 10_000));
     assertFalse(live.archived());
     assertFalse(live.truncated());
     assertEquals(corpus.size(), live.events().size());
     // The page reader is the established answer for the same window; the stream must agree.
-    assertEquals(inTx(() -> reader.page(stackId, updateId, -1, 10_000).events()), live.events());
+    assertEquals(read(() -> reader.page(stackId, updateId, -1, 10_000).events()), live.events());
 
     foldRun(updateId);
-    assertNotNull(inTx(() -> UpdateEventArchive.<UpdateEventArchive>findById(updateId)));
+    assertNotNull(read(() -> UpdateEventArchive.<UpdateEventArchive>findById(updateId)));
 
-    UpdateEventReader.EventStream archived = inTx(() -> reader.stream(stackId, updateId, 10_000));
+    UpdateEventReader.EventStream archived = read(() -> reader.stream(stackId, updateId, 10_000));
     assertTrue(archived.archived(), "the archive must be the source once folded");
     assertEquals(live.events(), archived.events(), "folding must not change what a reader sees");
   }
@@ -113,7 +113,7 @@ class UpdateEventStreamTest {
     UUID updateId = seedUpdate(stackId, corpus, 50);
     foldRun(updateId);
 
-    UpdateEventReader.EventStream bounded = inTx(() -> reader.stream(stackId, updateId, 10));
+    UpdateEventReader.EventStream bounded = read(() -> reader.stream(stackId, updateId, 10));
     assertTrue(bounded.archived());
     assertTrue(bounded.truncated());
     assertEquals(10, bounded.events().size());
@@ -137,9 +137,9 @@ class UpdateEventStreamTest {
     UUID stackId = seedStack("event-stream-bad-bound");
     UUID updateId = UUID.randomUUID();
     assertThrows(
-        IllegalArgumentException.class, () -> inTx(() -> reader.stream(stackId, updateId, 0)));
+        IllegalArgumentException.class, () -> read(() -> reader.stream(stackId, updateId, 0)));
     assertThrows(
-        IllegalArgumentException.class, () -> inTx(() -> reader.stream(stackId, updateId, -1)));
+        IllegalArgumentException.class, () -> read(() -> reader.stream(stackId, updateId, -1)));
   }
 
   private UUID seedStack(String orgName) {
@@ -183,10 +183,6 @@ class UpdateEventStreamTest {
           EventArchiveFixture.persistEvents(stackId, update.id, corpus, eventCount);
           return update.id;
         });
-  }
-
-  private <T> T inTx(Supplier<T> work) {
-    return read(work::get);
   }
 
   private void foldRun(UUID updateId) {

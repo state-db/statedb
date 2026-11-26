@@ -1,16 +1,15 @@
 package app.statedb.app.update;
 
 import static app.statedb.app.Races.holdThenContend;
-import static app.statedb.testsupport.TestTransactions.read;
 import static app.statedb.testsupport.TestTransactions.tx;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
+import app.statedb.app.CommittedStack;
 import app.statedb.persistence.events.EventBatchAppender;
 import app.statedb.persistence.events.UpdateEvent;
-import app.statedb.persistence.identity.Organization;
 import app.statedb.persistence.journal.JournalAppender;
 import app.statedb.persistence.journal.JournalEntry;
 import app.statedb.persistence.lock.Lease;
@@ -20,7 +19,6 @@ import app.statedb.persistence.stack.AssembledDeployment;
 import app.statedb.persistence.stack.CompactionJob;
 import app.statedb.persistence.stack.StackAssembler;
 import app.statedb.persistence.stack.StackCreator;
-import app.statedb.persistence.stack.StackRef;
 import app.statedb.persistence.stack.StackState;
 import app.statedb.persistence.update.StackUpdate;
 import app.statedb.persistence.update.StackUpdateCompleter;
@@ -70,16 +68,7 @@ class StackUpdateCompleterTest {
   private record Fixture(UUID stackId, UUID updateId, UUID leaseId) {}
 
   private Fixture seed(StackUpdate.Kind kind, String key) {
-    UUID stackId =
-        read(
-            () -> {
-              Organization org = new Organization();
-              org.name = ORG_NAME;
-              org.displayName = "Completer Test";
-              org.persistAndFlush();
-              StackRef ref = stackCreator.create(org.id, ORG_NAME, "proj", "dev", Map.of());
-              return ref.stackId();
-            });
+    UUID stackId = CommittedStack.create(stackCreator, ORG_NAME, "Completer Test");
     UUID updateId =
         starter
             .start(

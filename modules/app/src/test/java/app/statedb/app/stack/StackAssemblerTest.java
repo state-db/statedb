@@ -1,19 +1,17 @@
 package app.statedb.app.stack;
 
-import static app.statedb.testsupport.TestTransactions.read;
-import static app.statedb.testsupport.TestTransactions.tx;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import app.statedb.app.CommittedStack;
 import app.statedb.persistence.identity.Organization;
 import app.statedb.persistence.journal.JournalEntry;
 import app.statedb.persistence.stack.AssembledDeployment;
 import app.statedb.persistence.stack.Snapshot;
 import app.statedb.persistence.stack.StackAssembler;
 import app.statedb.persistence.stack.StackCreator;
-import app.statedb.persistence.stack.StackRef;
 import app.statedb.persistence.update.StackUpdate;
 import app.statedb.testsupport.pulumi.PulumiDeploymentAssert;
 import com.fasterxml.jackson.databind.JsonNode;
@@ -21,8 +19,8 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import io.quarkus.test.TestTransaction;
 import io.quarkus.test.junit.QuarkusTest;
 import jakarta.inject.Inject;
+import jakarta.transaction.Transactional;
 import java.time.Instant;
-import java.util.Map;
 import java.util.UUID;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -64,21 +62,13 @@ class StackAssemblerTest {
 
   @BeforeEach
   void seed() {
-    stackId =
-        read(
-            () -> {
-              Organization org = new Organization();
-              org.name = ORG_NAME;
-              org.displayName = "Assembler Test";
-              org.persistAndFlush();
-              StackRef ref = stackCreator.create(org.id, ORG_NAME, "proj", "dev", Map.of());
-              return ref.stackId();
-            });
+    stackId = CommittedStack.create(stackCreator, ORG_NAME, "Assembler Test");
   }
 
   @AfterEach
+  @Transactional
   void cleanup() {
-    tx(() -> Organization.delete("name = ?1", ORG_NAME));
+    Organization.delete("name = ?1", ORG_NAME);
   }
 
   // Every assembled export must be a deployment Pulumi itself would load; routing all assembly

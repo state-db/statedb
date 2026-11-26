@@ -112,6 +112,9 @@ the owning target if it fails.
 - For HTTP tests, use feature fixtures that commit setup before the request.
   Delete test-owned rows in `@AfterEach`. Keep the request and its assertions
   in the test.
+- Annotate committed `@BeforeEach` and `@AfterEach` methods with
+  `@Transactional` instead of wrapping their bodies. Fixture steps they combine
+  join that transaction; a fixture that is a whole committed step owns it.
 - If a test needs a fresh transaction, statically import `read` or `tx` from
   `app.statedb.testsupport.TestTransactions`. Use `read(() -> ...)` if the
   callback returns a value. Use `tx(() -> ...)` for a void callback. Both

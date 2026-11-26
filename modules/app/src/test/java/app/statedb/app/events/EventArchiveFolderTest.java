@@ -22,11 +22,11 @@ import com.fasterxml.jackson.databind.JsonNode;
 import io.quarkus.test.junit.QuarkusTest;
 import jakarta.inject.Inject;
 import jakarta.persistence.EntityManager;
+import jakarta.transaction.Transactional;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
-import java.util.function.Supplier;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 
@@ -50,15 +50,13 @@ class EventArchiveFolderTest {
   private UUID currentStackId;
 
   @AfterEach
+  @Transactional
   void cleanup() {
     if (org == null) return;
-    String name = org;
+    em.createNativeQuery("DELETE FROM organizations WHERE name = ?1")
+        .setParameter(1, org)
+        .executeUpdate();
     org = null;
-    tx(
-        () ->
-            em.createNativeQuery("DELETE FROM organizations WHERE name = ?1")
-                .setParameter(1, name)
-                .executeUpdate());
   }
 
   @Test
@@ -98,7 +96,7 @@ class EventArchiveFolderTest {
                 payloadBytes / (double) archive.events.length));
 
     // Reads are transparent: the same events, now flagged as archived.
-    UpdateEventReader.EventPage page = inTx(() -> reader.page(stackId, updateId, -1, 10_000));
+    UpdateEventReader.EventPage page = read(() -> reader.page(stackId, updateId, -1, 10_000));
     assertTrue(page.archived());
     assertEquals(before, page.events());
 
@@ -110,7 +108,7 @@ class EventArchiveFolderTest {
     // Unfolding restores every row exactly and removes the archive.
     assertEquals(corpus.size(), folder.unfold(updateId));
     assertNull(archive(updateId));
-    UpdateEventReader.EventPage restored = inTx(() -> reader.page(stackId, updateId, -1, 10_000));
+    UpdateEventReader.EventPage restored = read(() -> reader.page(stackId, updateId, -1, 10_000));
     assertFalse(restored.archived());
     assertEquals(before, restored.events());
   }
@@ -130,14 +128,14 @@ class EventArchiveFolderTest {
     assertEquals(5, fromRows.size(), "1200 events at 250 per page");
     // A cursor landing mid-page, and one past the end of the stream.
     List<StoredEvent> midPageFromRows =
-        inTx(() -> reader.page(stackId, updateId, 617, 250).events());
+        read(() -> reader.page(stackId, updateId, 617, 250).events());
     assertEquals(618, midPageFromRows.getFirst().sequence());
 
     foldRun(updateId);
 
     assertEquals(fromRows, walk(stackId, updateId, 250));
-    assertEquals(midPageFromRows, inTx(() -> reader.page(stackId, updateId, 617, 250).events()));
-    assertTrue(inTx(() -> reader.page(stackId, updateId, 1_199, 250).events()).isEmpty());
+    assertEquals(midPageFromRows, read(() -> reader.page(stackId, updateId, 617, 250).events()));
+    assertTrue(read(() -> reader.page(stackId, updateId, 1_199, 250).events()).isEmpty());
   }
 
   /**
@@ -160,7 +158,7 @@ class EventArchiveFolderTest {
     assertEquals(40L, rowCount(updateId), "rows and archive coexist");
     assertNotNull(archive(updateId));
 
-    UpdateEventReader.EventPage page = inTx(() -> reader.page(stackId, updateId, -1, 10_000));
+    UpdateEventReader.EventPage page = read(() -> reader.page(stackId, updateId, -1, 10_000));
     assertTrue(page.archived(), "archive is authoritative while both exist");
     assertEquals(full, page.events());
     assertEquals(archive.eventCount, page.events().size(), "no rows mixed into the blob's answer");
@@ -171,7 +169,7 @@ class EventArchiveFolderTest {
     int after = -1;
     while (true) {
       int cursor = after;
-      List<StoredEvent> page = inTx(() -> reader.page(stackId, updateId, cursor, limit).events());
+      List<StoredEvent> page = read(() -> reader.page(stackId, updateId, cursor, limit).events());
       pages.add(page);
       if (page.size() < limit) {
         return pages;
@@ -227,7 +225,7 @@ class EventArchiveFolderTest {
 
   /** The updates this stack's sweep would consider on the next tick. */
   private List<UUID> pending() {
-    return inTx(this::pendingIds);
+    return read(this::pendingIds);
   }
 
   @SuppressWarnings("unchecked")
@@ -262,26 +260,26 @@ class EventArchiveFolderTest {
   }
 
   private List<StoredEvent> events(UUID stackId, UUID updateId) {
-    return inTx(() -> reader.page(stackId, updateId, -1, 10_000).events());
+    return read(() -> reader.page(stackId, updateId, -1, 10_000).events());
   }
 
   private UpdateEventArchive archive(UUID updateId) {
-    return inTx(() -> UpdateEventArchive.<UpdateEventArchive>findById(updateId));
+    return read(() -> UpdateEventArchive.<UpdateEventArchive>findById(updateId));
   }
 
   private long rowCount(UUID updateId) {
-    return inTx(() -> UpdateEvent.count("updateId", updateId));
+    return read(() -> UpdateEvent.count("updateId", updateId));
   }
 
   private long summaryRowCount(UUID updateId) {
-    return inTx(
+    return read(
         () -> UpdateEvent.count("updateId = ?1 and kind = ?2", updateId, UpdateEvent.SUMMARY_KIND));
   }
 
   private long payloadBytes(UUID updateId) {
     // pg_column_size is the point of the measurement: it reports what Postgres actually stores,
     // TOAST compression included, which is the baseline the blob has to beat.
-    return inTx(
+    return read(
         () ->
             ((Number)
                     em.createNativeQuery(
@@ -341,10 +339,6 @@ class EventArchiveFolderTest {
           em.flush();
           return update.id;
         });
-  }
-
-  private <T> T inTx(Supplier<T> work) {
-    return read(work::get);
   }
 
   private void foldRun(UUID updateId) {

@@ -23,6 +23,7 @@ import app.statedb.testsupport.InMemoryVcs;
 import io.quarkus.test.junit.QuarkusTest;
 import jakarta.inject.Inject;
 import jakarta.persistence.EntityManager;
+import jakarta.transaction.Transactional;
 import java.time.Instant;
 import java.util.Map;
 import java.util.UUID;
@@ -57,32 +58,29 @@ class ReportDeliveryLifecycleTest {
   private StackRef stack;
 
   @BeforeEach
+  @Transactional
   void seed() {
     vcs.reset();
-    tx(
-        () -> {
-          Organization org = new Organization();
-          org.name = ORG_NAME;
-          org.displayName = "Report delivery";
-          org.persistAndFlush();
-          stack = stackCreator.create(org.id, ORG_NAME, "project", "dev", Map.of());
+    Organization org = new Organization();
+    org.name = ORG_NAME;
+    org.displayName = "Report delivery";
+    org.persistAndFlush();
+    stack = stackCreator.create(org.id, ORG_NAME, "project", "dev", Map.of());
 
-          VcsConnection connection = new VcsConnection();
-          connection.orgId = org.id;
-          connection.kind = "memory";
-          connection.host = HOST;
-          connection.persistAndFlush();
-        });
+    VcsConnection connection = new VcsConnection();
+    connection.orgId = org.id;
+    connection.kind = "memory";
+    connection.host = HOST;
+    connection.persistAndFlush();
   }
 
   @AfterEach
+  @Transactional
   void cleanup() {
     vcs.reset();
-    tx(
-        () ->
-            em.createNativeQuery("DELETE FROM organizations WHERE name = ?1")
-                .setParameter(1, ORG_NAME)
-                .executeUpdate());
+    em.createNativeQuery("DELETE FROM organizations WHERE name = ?1")
+        .setParameter(1, ORG_NAME)
+        .executeUpdate();
   }
 
   @Test

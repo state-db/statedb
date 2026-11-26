@@ -1,6 +1,5 @@
 package app.statedb.app.lock;
 
-import static app.statedb.testsupport.TestTransactions.read;
 import static app.statedb.testsupport.TestTransactions.tx;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
@@ -9,7 +8,7 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-import app.statedb.persistence.identity.Organization;
+import app.statedb.app.CommittedStack;
 import app.statedb.persistence.journal.JournalAppender;
 import app.statedb.persistence.journal.JournalEntry;
 import app.statedb.persistence.lock.Lease;
@@ -17,7 +16,6 @@ import app.statedb.persistence.lock.LeaseExpiredException;
 import app.statedb.persistence.lock.StackLock;
 import app.statedb.persistence.lock.StackLockAcquirer;
 import app.statedb.persistence.stack.StackCreator;
-import app.statedb.persistence.stack.StackRef;
 import app.statedb.persistence.update.StackUpdate;
 import app.statedb.persistence.update.StackUpdateStarter;
 import app.statedb.persistence.update.StartUpdateRequest;
@@ -27,6 +25,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import io.quarkus.test.junit.QuarkusTest;
 import jakarta.inject.Inject;
 import jakarta.persistence.EntityManager;
+import jakarta.transaction.Transactional;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
@@ -52,25 +51,15 @@ class StackLockAcquirerTest {
 
   @BeforeEach
   void seed() {
-    stackId =
-        read(
-            () -> {
-              Organization org = new Organization();
-              org.name = ORG_NAME;
-              org.displayName = "Acquirer Test";
-              org.persistAndFlush();
-              StackRef ref = stackCreator.create(org.id, ORG_NAME, "proj", "dev", Map.of());
-              return ref.stackId();
-            });
+    stackId = CommittedStack.create(stackCreator, ORG_NAME, "Acquirer Test");
   }
 
   @AfterEach
+  @Transactional
   void cleanup() {
-    tx(
-        () ->
-            em.createNativeQuery("DELETE FROM organizations WHERE name = ?1")
-                .setParameter(1, ORG_NAME)
-                .executeUpdate());
+    em.createNativeQuery("DELETE FROM organizations WHERE name = ?1")
+        .setParameter(1, ORG_NAME)
+        .executeUpdate();
   }
 
   @Test

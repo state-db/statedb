@@ -27,6 +27,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.quarkus.test.junit.QuarkusTest;
 import jakarta.inject.Inject;
+import jakarta.transaction.Transactional;
 import java.io.InputStream;
 import java.net.URI;
 import java.nio.charset.StandardCharsets;
@@ -36,7 +37,6 @@ import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
-import java.util.function.Supplier;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 
@@ -73,13 +73,14 @@ class ReportGoldenTest {
   private String org;
 
   @AfterEach
+  @Transactional
   void cleanup() {
     if (org == null) {
       return;
     }
     String name = org;
     org = null;
-    tx(() -> Organization.delete("name", name));
+    Organization.delete("name", name);
   }
 
   @Test
@@ -87,7 +88,7 @@ class ReportGoldenTest {
     Seeded seeded = seed();
 
     UpdateEventReader.EventStream live =
-        inTx(() -> reader.stream(seeded.stackId(), seeded.updateId(), 10_000));
+        read(() -> reader.stream(seeded.stackId(), seeded.updateId(), 10_000));
     assertFalse(live.archived(), "precondition: this run is not folded yet");
     assertFalse(live.truncated());
     RenderedReport fromRows = render(seeded, live.events());
@@ -97,11 +98,11 @@ class ReportGoldenTest {
 
     foldRun(seeded.updateId());
     assertNotNull(
-        inTx(() -> UpdateEventArchive.<UpdateEventArchive>findById(seeded.updateId())),
+        read(() -> UpdateEventArchive.<UpdateEventArchive>findById(seeded.updateId())),
         "precondition: the run was folded");
     // The rows the fold left behind: a query-based derivation would see only these.
     assertTrue(
-        inTx(
+        read(
                 () ->
                     UpdateEvent.count(
                         "updateId = ?1 and kind = ?2", seeded.updateId(), UpdateEvent.SUMMARY_KIND))
@@ -109,7 +110,7 @@ class ReportGoldenTest {
         "precondition: summary rows survive the fold");
 
     UpdateEventReader.EventStream archived =
-        inTx(() -> reader.stream(seeded.stackId(), seeded.updateId(), 10_000));
+        read(() -> reader.stream(seeded.stackId(), seeded.updateId(), 10_000));
     assertTrue(archived.archived(), "the fold must be the source now");
     assertEquals(live.events(), archived.events(), "the archive must round-trip every event");
 
@@ -125,8 +126,8 @@ class ReportGoldenTest {
     ChangeReport report =
         deriver.derive(
             seeded.ref(),
-            inTx(() -> StackUpdate.<StackUpdate>findById(seeded.updateId())),
-            inTx(() -> reader.stream(seeded.stackId(), seeded.updateId(), 10_000)).events(),
+            read(() -> StackUpdate.<StackUpdate>findById(seeded.updateId())),
+            read(() -> reader.stream(seeded.stackId(), seeded.updateId(), 10_000)).events(),
             ReportLimits.defaults());
 
     // `same` is not a change and must not occupy a row; a reader is looking for what moved.
@@ -177,8 +178,8 @@ class ReportGoldenTest {
     ChangeReport report =
         deriver.derive(
             seeded.ref(),
-            inTx(() -> StackUpdate.<StackUpdate>findById(seeded.updateId())),
-            inTx(() -> reader.stream(seeded.stackId(), seeded.updateId(), 10_000)).events(),
+            read(() -> StackUpdate.<StackUpdate>findById(seeded.updateId())),
+            read(() -> reader.stream(seeded.stackId(), seeded.updateId(), 10_000)).events(),
             ReportLimits.defaults());
     String serialized = mapper.writeValueAsString(report);
     String body = renderer.render(report, CONSOLE, ReportLimits.defaults()).body();
@@ -192,7 +193,7 @@ class ReportGoldenTest {
   }
 
   private RenderedReport render(Seeded seeded, List<app.statedb.persistence.events.StoredEvent> e) {
-    StackUpdate update = inTx(() -> StackUpdate.<StackUpdate>findById(seeded.updateId()));
+    StackUpdate update = read(() -> StackUpdate.<StackUpdate>findById(seeded.updateId()));
     ChangeReport report = deriver.derive(seeded.ref(), update, e, ReportLimits.defaults());
     return renderer.render(report, CONSOLE, ReportLimits.defaults());
   }
@@ -301,10 +302,6 @@ class ReportGoldenTest {
       mapper.readTree(in).forEach(events::add);
       return events;
     }
-  }
-
-  private <T> T inTx(Supplier<T> work) {
-    return read(work::get);
   }
 
   /** The stack coordinates are fixed rather than taken from the seeded row so the golden is. */

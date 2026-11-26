@@ -1,20 +1,18 @@
 package app.statedb.app.lock;
 
 import static app.statedb.app.Races.holdThenContend;
-import static app.statedb.testsupport.TestTransactions.read;
 import static app.statedb.testsupport.TestTransactions.tx;
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-import app.statedb.persistence.identity.Organization;
+import app.statedb.app.CommittedStack;
 import app.statedb.persistence.lock.Lease;
 import app.statedb.persistence.lock.LeaseExpiredException;
 import app.statedb.persistence.lock.LeaseRevalidator;
 import app.statedb.persistence.lock.StackLockAcquirer;
 import app.statedb.persistence.lock.StackLockCanceller;
 import app.statedb.persistence.stack.StackCreator;
-import app.statedb.persistence.stack.StackRef;
 import app.statedb.persistence.update.StackUpdate;
 import app.statedb.persistence.update.StackUpdateStarter;
 import app.statedb.persistence.update.StartUpdateRequest;
@@ -22,6 +20,7 @@ import io.quarkus.test.TestTransaction;
 import io.quarkus.test.junit.QuarkusTest;
 import jakarta.inject.Inject;
 import jakarta.persistence.EntityManager;
+import jakarta.transaction.Transactional;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.CountDownLatch;
@@ -51,16 +50,7 @@ class LeaseRevalidatorTest {
 
   @BeforeEach
   void seed() {
-    stackId =
-        read(
-            () -> {
-              Organization org = new Organization();
-              org.name = ORG_NAME;
-              org.displayName = "Revalidator Test";
-              org.persistAndFlush();
-              StackRef ref = stackCreator.create(org.id, ORG_NAME, "proj", "dev", Map.of());
-              return ref.stackId();
-            });
+    stackId = CommittedStack.create(stackCreator, ORG_NAME, "Revalidator Test");
     updateId =
         starter
             .start(
@@ -76,12 +66,11 @@ class LeaseRevalidatorTest {
   }
 
   @AfterEach
+  @Transactional
   void cleanup() {
-    tx(
-        () ->
-            em.createNativeQuery("DELETE FROM organizations WHERE name = ?1")
-                .setParameter(1, ORG_NAME)
-                .executeUpdate());
+    em.createNativeQuery("DELETE FROM organizations WHERE name = ?1")
+        .setParameter(1, ORG_NAME)
+        .executeUpdate();
   }
 
   @TestTransaction

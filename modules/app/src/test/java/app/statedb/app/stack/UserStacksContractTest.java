@@ -1,6 +1,5 @@
 package app.statedb.app.stack;
 
-import static app.statedb.testsupport.TestTransactions.tx;
 import static io.restassured.RestAssured.given;
 import static org.hamcrest.Matchers.empty;
 import static org.hamcrest.Matchers.equalTo;
@@ -18,6 +17,7 @@ import app.statedb.persistence.stack.Workspace;
 import io.quarkus.test.junit.QuarkusTest;
 import jakarta.inject.Inject;
 import jakarta.persistence.EntityManager;
+import jakarta.transaction.Transactional;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
@@ -43,49 +43,45 @@ class UserStacksContractTest {
   @Inject EntityManager em;
 
   @BeforeEach
+  @Transactional
   void seed() {
-    tx(
-        () -> {
-          Organization a = newOrg(ORG_A, "Org A");
-          Organization b = newOrg(ORG_B, "Org B");
-          Organization empty = newOrg(ORG_EMPTY, "Empty Org");
+    Organization a = newOrg(ORG_A, "Org A");
+    Organization b = newOrg(ORG_B, "Org B");
+    Organization empty = newOrg(ORG_EMPTY, "Empty Org");
 
-          User userA = newUser("user-stacks-a", "a@example.com");
-          User userEmpty = newUser("user-stacks-empty", "empty@example.com");
+    User userA = newUser("user-stacks-a", "a@example.com");
+    User userEmpty = newUser("user-stacks-empty", "empty@example.com");
 
-          newMember(a.id, userA.id);
-          newMember(empty.id, userEmpty.id);
+    newMember(a.id, userA.id);
+    newMember(empty.id, userEmpty.id);
 
-          newToken(TOKEN_A, userA.id, a.id);
-          newToken(TOKEN_EMPTY, userEmpty.id, empty.id);
+    newToken(TOKEN_A, userA.id, a.id);
+    newToken(TOKEN_EMPTY, userEmpty.id, empty.id);
 
-          // Org A: two projects across two stacks, plus one extra to exercise ordering.
-          //   project=alpha → stacks: prod, dev   (reverse-lex insertion)
-          //   project=beta  → stacks: dev
-          newStack(a.id, "alpha", "prod");
-          newStack(a.id, "alpha", "dev");
-          newStack(a.id, "beta", "dev");
+    // Org A: two projects across two stacks, plus one extra to exercise ordering.
+    //   project=alpha → stacks: prod, dev   (reverse-lex insertion)
+    //   project=beta  → stacks: dev
+    newStack(a.id, "alpha", "prod");
+    newStack(a.id, "alpha", "dev");
+    newStack(a.id, "beta", "dev");
 
-          // Org B: one stack the token-A caller must never see.
-          newStack(b.id, "secret", "dev");
-        });
+    // Org B: one stack the token-A caller must never see.
+    newStack(b.id, "secret", "dev");
   }
 
   @AfterEach
+  @Transactional
   void cleanup() {
-    tx(
-        () -> {
-          em.createNativeQuery("DELETE FROM organizations WHERE name IN (?1, ?2, ?3)")
-              .setParameter(1, ORG_A)
-              .setParameter(2, ORG_B)
-              .setParameter(3, ORG_EMPTY)
-              .executeUpdate();
-          em.createNativeQuery("DELETE FROM users WHERE iss = ?1 AND sub IN (?2, ?3)")
-              .setParameter(1, "local:test")
-              .setParameter(2, "user-stacks-a")
-              .setParameter(3, "user-stacks-empty")
-              .executeUpdate();
-        });
+    em.createNativeQuery("DELETE FROM organizations WHERE name IN (?1, ?2, ?3)")
+        .setParameter(1, ORG_A)
+        .setParameter(2, ORG_B)
+        .setParameter(3, ORG_EMPTY)
+        .executeUpdate();
+    em.createNativeQuery("DELETE FROM users WHERE iss = ?1 AND sub IN (?2, ?3)")
+        .setParameter(1, "local:test")
+        .setParameter(2, "user-stacks-a")
+        .setParameter(3, "user-stacks-empty")
+        .executeUpdate();
   }
 
   @Test

@@ -26,6 +26,7 @@ import com.cedarpolicy.value.PrimString;
 import io.quarkus.test.junit.QuarkusTest;
 import jakarta.inject.Inject;
 import jakarta.persistence.EntityManager;
+import jakarta.transaction.Transactional;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
@@ -60,26 +61,24 @@ class PolicyGrantAuthorizationTest {
   private UUID prodStackId;
 
   @BeforeEach
+  @Transactional
   void seed() {
-    tx(
-        () -> {
-          acmeId = persistOrg(ACME).id;
-          otherId = persistOrg(OTHER).id;
+    acmeId = persistOrg(ACME).id;
+    otherId = persistOrg(OTHER).id;
 
-          dualUserId = user("dual").id;
-          member(acmeId, dualUserId, OrgMember.Role.viewer);
-          member(otherId, dualUserId, OrgMember.Role.owner);
+    dualUserId = user("dual").id;
+    member(acmeId, dualUserId, OrgMember.Role.viewer);
+    member(otherId, dualUserId, OrgMember.Role.owner);
 
-          bothViewerId = user("both").id;
-          member(acmeId, bothViewerId, OrgMember.Role.viewer);
-          member(otherId, bothViewerId, OrgMember.Role.viewer);
+    bothViewerId = user("both").id;
+    member(acmeId, bothViewerId, OrgMember.Role.viewer);
+    member(otherId, bothViewerId, OrgMember.Role.viewer);
 
-          outsiderId = user("outsider").id;
-          member(otherId, outsiderId, OrgMember.Role.owner);
+    outsiderId = user("outsider").id;
+    member(otherId, outsiderId, OrgMember.Role.owner);
 
-          stackCreator.create(acmeId, ACME, PROJECT, "prod", Map.of());
-          stackCreator.create(acmeId, ACME, PROJECT, "staging", Map.of());
-        });
+    stackCreator.create(acmeId, ACME, PROJECT, "prod", Map.of());
+    stackCreator.create(acmeId, ACME, PROJECT, "staging", Map.of());
     prodStackId = stackRefResolver.resolve(ACME, PROJECT, "prod").orElseThrow().stackId();
   }
 

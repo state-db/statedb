@@ -497,20 +497,19 @@ public final class FixtureReplay {
   }
 
   public static void seedIdentity(EntityManager em) {
-    TestIdentity.seed(em, DEFAULT_TOKEN);
+    tx(() -> TestIdentity.seed(em, DEFAULT_TOKEN));
   }
 
   public static void seedIdentityWithStack(EntityManager em) {
-    TestIdentity.seed(em, DEFAULT_TOKEN);
     tx(
         () -> {
-          Organization org = Organization.find("name", TestIdentity.ORG).firstResult();
-          seedStack(org);
+          TestIdentity.seed(em, DEFAULT_TOKEN);
+          seedStack(Organization.find("name", TestIdentity.ORG).firstResult());
         });
   }
 
   public static void cleanup(EntityManager em) {
-    TestIdentity.cleanup(em);
+    tx(() -> TestIdentity.cleanup(em));
   }
 
   private static void seedStack(Organization org) {

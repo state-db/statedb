@@ -9,6 +9,7 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import app.statedb.app.CommittedStack;
 import app.statedb.persistence.RequestValidationException;
 import app.statedb.persistence.identity.Organization;
 import app.statedb.persistence.journal.JournalAppender;
@@ -20,7 +21,6 @@ import app.statedb.persistence.lock.StackLockCanceller;
 import app.statedb.persistence.stack.AssembledDeployment;
 import app.statedb.persistence.stack.StackAssembler;
 import app.statedb.persistence.stack.StackCreator;
-import app.statedb.persistence.stack.StackRef;
 import app.statedb.persistence.update.StackUpdate;
 import app.statedb.persistence.update.StackUpdateStarter;
 import app.statedb.persistence.update.StartUpdateRequest;
@@ -32,6 +32,7 @@ import io.quarkus.test.TestTransaction;
 import io.quarkus.test.junit.QuarkusTest;
 import jakarta.inject.Inject;
 import jakarta.persistence.EntityManager;
+import jakarta.transaction.Transactional;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -65,16 +66,7 @@ class JournalAppenderTest {
 
   @BeforeEach
   void seed() {
-    stackId =
-        read(
-            () -> {
-              Organization org = new Organization();
-              org.name = ORG_NAME;
-              org.displayName = "Journal Test";
-              org.persistAndFlush();
-              StackRef ref = stackCreator.create(org.id, ORG_NAME, "proj", "dev", Map.of());
-              return ref.stackId();
-            });
+    stackId = CommittedStack.create(stackCreator, ORG_NAME, "Journal Test");
     StartedUpdate u =
         starter.start(
             stackId,
@@ -90,12 +82,11 @@ class JournalAppenderTest {
   }
 
   @AfterEach
+  @Transactional
   void cleanup() {
-    tx(
-        () ->
-            em.createNativeQuery("DELETE FROM organizations WHERE name = ?1")
-                .setParameter(1, ORG_NAME)
-                .executeUpdate());
+    em.createNativeQuery("DELETE FROM organizations WHERE name = ?1")
+        .setParameter(1, ORG_NAME)
+        .executeUpdate();
   }
 
   @TestTransaction

@@ -14,6 +14,7 @@ import app.statedb.persistence.identity.User;
 import io.quarkus.test.junit.QuarkusTest;
 import jakarta.inject.Inject;
 import jakarta.persistence.EntityManager;
+import jakarta.transaction.Transactional;
 import java.util.Map;
 import java.util.UUID;
 import org.junit.jupiter.api.AfterEach;
@@ -47,39 +48,35 @@ class ServiceAccountAuthorizationTest {
   private String rawToken;
 
   @BeforeEach
+  @Transactional
   void seed() {
-    tx(
-        () -> {
-          Organization org = new Organization();
-          org.name = ORG;
-          org.displayName = "Service Account Test";
-          org.persistAndFlush();
-          orgId = org.id;
+    Organization org = new Organization();
+    org.name = ORG;
+    org.displayName = "Service Account Test";
+    org.persistAndFlush();
+    orgId = org.id;
 
-          Organization other = new Organization();
-          other.name = OTHER_ORG;
-          other.displayName = "Other Org";
-          other.persistAndFlush();
+    Organization other = new Organization();
+    other.name = OTHER_ORG;
+    other.displayName = "Other Org";
+    other.persistAndFlush();
 
-          stackCreator.create(org.id, ORG, PROJECT, STACK, Map.of());
-          stackCreator.create(other.id, OTHER_ORG, PROJECT, "secret", Map.of());
-        });
+    stackCreator.create(org.id, ORG, PROJECT, STACK, Map.of());
+    stackCreator.create(other.id, OTHER_ORG, PROJECT, "secret", Map.of());
 
-    var minted = read(() -> creator.create(orgId, "ci-deploy", 90, null));
+    var minted = creator.create(orgId, "ci-deploy", 90, null);
     accountId = minted.accountId();
     rawToken = minted.rawToken();
   }
 
   @AfterEach
+  @Transactional
   void cleanup() {
-    tx(
-        () -> {
-          em.createNativeQuery("DELETE FROM users WHERE iss = 'local:service'").executeUpdate();
-          em.createNativeQuery("DELETE FROM organizations WHERE name IN (?1, ?2)")
-              .setParameter(1, ORG)
-              .setParameter(2, OTHER_ORG)
-              .executeUpdate();
-        });
+    em.createNativeQuery("DELETE FROM users WHERE iss = 'local:service'").executeUpdate();
+    em.createNativeQuery("DELETE FROM organizations WHERE name IN (?1, ?2)")
+        .setParameter(1, ORG)
+        .setParameter(2, OTHER_ORG)
+        .executeUpdate();
   }
 
   @Test

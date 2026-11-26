@@ -11,6 +11,7 @@ import app.statedb.persistence.identity.User;
 import io.quarkus.test.junit.QuarkusTest;
 import jakarta.inject.Inject;
 import jakarta.persistence.EntityManager;
+import jakarta.transaction.Transactional;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
@@ -34,49 +35,42 @@ class TokenAuthFilterTest {
   @Inject EntityManager em;
 
   @BeforeEach
+  @Transactional
   void seed() {
-    tx(
-        () -> {
-          Organization org = new Organization();
-          org.name = ORG_NAME;
-          org.displayName = "Auth Filter Test";
-          org.persistAndFlush();
+    Organization org = new Organization();
+    org.name = ORG_NAME;
+    org.displayName = "Auth Filter Test";
+    org.persistAndFlush();
 
-          User user = new User();
-          user.iss = "local:test";
-          user.sub = "auth-filter";
-          user.email = "auth@example.com";
-          user.displayName = "Auth Tester";
-          user.persistAndFlush();
+    User user = new User();
+    user.iss = "local:test";
+    user.sub = "auth-filter";
+    user.email = "auth@example.com";
+    user.displayName = "Auth Tester";
+    user.persistAndFlush();
 
-          OrgMember m = new OrgMember();
-          m.orgId = org.id;
-          m.userId = user.id;
-          m.role = OrgMember.Role.owner;
-          m.persistAndFlush();
+    OrgMember m = new OrgMember();
+    m.orgId = org.id;
+    m.userId = user.id;
+    m.role = OrgMember.Role.owner;
+    m.persistAndFlush();
 
-          insertToken(
-              user.id, org.id, sha256Hex(VALID_RAW_TOKEN), Instant.now().plus(1, ChronoUnit.HOURS));
-          insertToken(
-              user.id,
-              org.id,
-              sha256Hex(EXPIRED_RAW_TOKEN),
-              Instant.now().minus(1, ChronoUnit.MINUTES));
-        });
+    insertToken(
+        user.id, org.id, sha256Hex(VALID_RAW_TOKEN), Instant.now().plus(1, ChronoUnit.HOURS));
+    insertToken(
+        user.id, org.id, sha256Hex(EXPIRED_RAW_TOKEN), Instant.now().minus(1, ChronoUnit.MINUTES));
   }
 
   @AfterEach
+  @Transactional
   void cleanup() {
-    tx(
-        () -> {
-          em.createNativeQuery("DELETE FROM organizations WHERE name = ?1")
-              .setParameter(1, ORG_NAME)
-              .executeUpdate();
-          em.createNativeQuery("DELETE FROM users WHERE iss = ?1 AND sub = ?2")
-              .setParameter(1, "local:test")
-              .setParameter(2, "auth-filter")
-              .executeUpdate();
-        });
+    em.createNativeQuery("DELETE FROM organizations WHERE name = ?1")
+        .setParameter(1, ORG_NAME)
+        .executeUpdate();
+    em.createNativeQuery("DELETE FROM users WHERE iss = ?1 AND sub = ?2")
+        .setParameter(1, "local:test")
+        .setParameter(2, "auth-filter")
+        .executeUpdate();
   }
 
   @Test

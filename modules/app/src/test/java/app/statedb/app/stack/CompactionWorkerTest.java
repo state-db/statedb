@@ -27,6 +27,7 @@ import io.quarkus.test.junit.QuarkusTest;
 import jakarta.inject.Inject;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.LockModeType;
+import jakarta.transaction.Transactional;
 import java.time.Instant;
 import java.util.Map;
 import java.util.UUID;
@@ -58,8 +59,9 @@ class CompactionWorkerTest {
   }
 
   @AfterEach
+  @Transactional
   void cleanup() {
-    tx(() -> Organization.delete("name", ORG_NAME));
+    Organization.delete("name", ORG_NAME);
   }
 
   @Test

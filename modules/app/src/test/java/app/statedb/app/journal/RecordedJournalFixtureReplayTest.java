@@ -23,6 +23,7 @@ import com.fasterxml.jackson.databind.node.ObjectNode;
 import io.quarkus.test.junit.QuarkusTest;
 import jakarta.inject.Inject;
 import jakarta.persistence.EntityManager;
+import jakarta.transaction.Transactional;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -75,19 +76,16 @@ class RecordedJournalFixtureReplayTest {
   private String org;
 
   @AfterEach
+  @Transactional
   void cleanup() {
     if (org == null) return;
-    String orgName = org;
-    tx(
-        () -> {
-          em.createNativeQuery("DELETE FROM organizations WHERE name = ?1")
-              .setParameter(1, orgName)
-              .executeUpdate();
-          em.createNativeQuery("DELETE FROM users WHERE iss = ?1 AND sub = ?2")
-              .setParameter(1, "local:test")
-              .setParameter(2, orgName)
-              .executeUpdate();
-        });
+    em.createNativeQuery("DELETE FROM organizations WHERE name = ?1")
+        .setParameter(1, org)
+        .executeUpdate();
+    em.createNativeQuery("DELETE FROM users WHERE iss = ?1 AND sub = ?2")
+        .setParameter(1, "local:test")
+        .setParameter(2, org)
+        .executeUpdate();
   }
 
   @ParameterizedTest(name = "replay {0}")

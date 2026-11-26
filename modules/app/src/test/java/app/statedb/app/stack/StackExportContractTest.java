@@ -20,6 +20,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import io.quarkus.test.junit.QuarkusTest;
 import jakarta.inject.Inject;
 import jakarta.persistence.EntityManager;
+import jakarta.transaction.Transactional;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
@@ -48,52 +49,48 @@ class StackExportContractTest {
   private UUID stackId;
 
   @BeforeEach
+  @Transactional
   void seed() {
-    tx(
-        () -> {
-          Organization org = org(ORG);
-          Organization other = org(OTHER_ORG);
+    Organization org = org(ORG);
+    Organization other = org(OTHER_ORG);
 
-          User user = new User();
-          user.iss = "local:test";
-          user.sub = "export";
-          user.email = "export@example.com";
-          user.displayName = "Export Tester";
-          user.persistAndFlush();
+    User user = new User();
+    user.iss = "local:test";
+    user.sub = "export";
+    user.email = "export@example.com";
+    user.displayName = "Export Tester";
+    user.persistAndFlush();
 
-          OrgMember member = new OrgMember();
-          member.orgId = org.id;
-          member.userId = user.id;
-          member.role = OrgMember.Role.owner;
-          member.persistAndFlush();
+    OrgMember member = new OrgMember();
+    member.orgId = org.id;
+    member.userId = user.id;
+    member.role = OrgMember.Role.owner;
+    member.persistAndFlush();
 
-          ApiToken token = new ApiToken();
-          token.tokenHash = sha256Hex(RAW_TOKEN);
-          token.userId = user.id;
-          token.orgId = org.id;
-          token.kind = ApiToken.Kind.service_account;
-          token.expiresAt = java.time.Instant.now().plusSeconds(60 * 60);
-          token.description = "export";
-          token.persistAndFlush();
+    ApiToken token = new ApiToken();
+    token.tokenHash = sha256Hex(RAW_TOKEN);
+    token.userId = user.id;
+    token.orgId = org.id;
+    token.kind = ApiToken.Kind.service_account;
+    token.expiresAt = java.time.Instant.now().plusSeconds(60 * 60);
+    token.description = "export";
+    token.persistAndFlush();
 
-          stackId = stackCreator.create(org.id, ORG, PROJECT, STACK, Map.of()).stackId();
-          stackCreator.create(other.id, OTHER_ORG, PROJECT, STACK, Map.of());
-        });
+    stackId = stackCreator.create(org.id, ORG, PROJECT, STACK, Map.of()).stackId();
+    stackCreator.create(other.id, OTHER_ORG, PROJECT, STACK, Map.of());
   }
 
   @AfterEach
+  @Transactional
   void cleanup() {
-    tx(
-        () -> {
-          em.createNativeQuery("DELETE FROM organizations WHERE name IN (?1, ?2)")
-              .setParameter(1, ORG)
-              .setParameter(2, OTHER_ORG)
-              .executeUpdate();
-          em.createNativeQuery("DELETE FROM users WHERE iss = ?1 AND sub = ?2")
-              .setParameter(1, "local:test")
-              .setParameter(2, "export")
-              .executeUpdate();
-        });
+    em.createNativeQuery("DELETE FROM organizations WHERE name IN (?1, ?2)")
+        .setParameter(1, ORG)
+        .setParameter(2, OTHER_ORG)
+        .executeUpdate();
+    em.createNativeQuery("DELETE FROM users WHERE iss = ?1 AND sub = ?2")
+        .setParameter(1, "local:test")
+        .setParameter(2, "export")
+        .executeUpdate();
   }
 
   @Test

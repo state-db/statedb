@@ -22,6 +22,7 @@ import io.quarkus.test.junit.QuarkusTest;
 import jakarta.inject.Inject;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.PersistenceException;
+import jakarta.transaction.Transactional;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.Callable;
@@ -49,26 +50,22 @@ class StackUpdateStarterTest {
   private UUID stackId;
 
   @BeforeEach
+  @Transactional
   void seed() {
-    stackId =
-        read(
-            () -> {
-              Organization org = new Organization();
-              org.name = ORG_NAME;
-              org.displayName = "Starter Test";
-              org.persistAndFlush();
-              stackRef = stackCreator.create(org.id, ORG_NAME, "proj", "dev", Map.of());
-              return stackRef.stackId();
-            });
+    Organization org = new Organization();
+    org.name = ORG_NAME;
+    org.displayName = "Starter Test";
+    org.persistAndFlush();
+    stackRef = stackCreator.create(org.id, ORG_NAME, "proj", "dev", Map.of());
+    stackId = stackRef.stackId();
   }
 
   @AfterEach
+  @Transactional
   void cleanup() {
-    tx(
-        () ->
-            em.createNativeQuery("DELETE FROM organizations WHERE name = ?1")
-                .setParameter(1, ORG_NAME)
-                .executeUpdate());
+    em.createNativeQuery("DELETE FROM organizations WHERE name = ?1")
+        .setParameter(1, ORG_NAME)
+        .executeUpdate();
   }
 
   @TestTransaction

@@ -17,6 +17,7 @@ import io.quarkus.test.TestTransaction;
 import io.quarkus.test.junit.QuarkusTest;
 import jakarta.inject.Inject;
 import jakarta.persistence.EntityManager;
+import jakarta.transaction.Transactional;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.CountDownLatch;
@@ -159,18 +160,16 @@ class BootstrapProvisionerTest {
    * {@code @TestTransaction} can't isolate it). Strip them so sibling tests' counts stay clean.
    */
   @AfterEach
+  @Transactional
   void cleanupConcurrentBootstrapRows() {
-    tx(
-        () -> {
-          em.createNativeQuery(
-                  "DELETE FROM org_members WHERE org_id IN"
-                      + " (SELECT id FROM organizations WHERE name = ?1)")
-              .setParameter(1, CONCURRENT_ORG)
-              .executeUpdate();
-          em.createNativeQuery("DELETE FROM organizations WHERE name = ?1")
-              .setParameter(1, CONCURRENT_ORG)
-              .executeUpdate();
-        });
+    em.createNativeQuery(
+            "DELETE FROM org_members WHERE org_id IN"
+                + " (SELECT id FROM organizations WHERE name = ?1)")
+        .setParameter(1, CONCURRENT_ORG)
+        .executeUpdate();
+    em.createNativeQuery("DELETE FROM organizations WHERE name = ?1")
+        .setParameter(1, CONCURRENT_ORG)
+        .executeUpdate();
   }
 
   private void assertSingleBootstrapWasCommitted() {

@@ -16,6 +16,7 @@ import app.statedb.persistence.stack.StackCreator;
 import io.quarkus.test.junit.QuarkusTest;
 import jakarta.inject.Inject;
 import jakarta.persistence.EntityManager;
+import jakarta.transaction.Transactional;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
@@ -44,59 +45,55 @@ class StartUpdateContractTest {
   @Inject StackCreator stackCreator;
 
   @BeforeEach
+  @Transactional
   void seed() {
-    tx(
-        () -> {
-          Organization org = new Organization();
-          org.name = ORG;
-          org.displayName = "Start Update Test";
-          org.persistAndFlush();
+    Organization org = new Organization();
+    org.name = ORG;
+    org.displayName = "Start Update Test";
+    org.persistAndFlush();
 
-          Organization other = new Organization();
-          other.name = OTHER_ORG;
-          other.displayName = "Other Org";
-          other.persistAndFlush();
+    Organization other = new Organization();
+    other.name = OTHER_ORG;
+    other.displayName = "Other Org";
+    other.persistAndFlush();
 
-          User user = new User();
-          user.iss = "local:test";
-          user.sub = "start-update";
-          user.email = "start@example.com";
-          user.displayName = "Start Update Tester";
-          user.persistAndFlush();
+    User user = new User();
+    user.iss = "local:test";
+    user.sub = "start-update";
+    user.email = "start@example.com";
+    user.displayName = "Start Update Tester";
+    user.persistAndFlush();
 
-          OrgMember m = new OrgMember();
-          m.orgId = org.id;
-          m.userId = user.id;
-          m.role = OrgMember.Role.owner;
-          m.persistAndFlush();
+    OrgMember m = new OrgMember();
+    m.orgId = org.id;
+    m.userId = user.id;
+    m.role = OrgMember.Role.owner;
+    m.persistAndFlush();
 
-          ApiToken t = new ApiToken();
-          t.tokenHash = sha256Hex(RAW_TOKEN);
-          t.userId = user.id;
-          t.orgId = org.id;
-          t.kind = ApiToken.Kind.service_account;
-          t.expiresAt = java.time.Instant.now().plusSeconds(60 * 60);
-          t.description = "start-update";
-          t.persistAndFlush();
+    ApiToken t = new ApiToken();
+    t.tokenHash = sha256Hex(RAW_TOKEN);
+    t.userId = user.id;
+    t.orgId = org.id;
+    t.kind = ApiToken.Kind.service_account;
+    t.expiresAt = java.time.Instant.now().plusSeconds(60 * 60);
+    t.description = "start-update";
+    t.persistAndFlush();
 
-          stackCreator.create(org.id, ORG, PROJECT, STACK, Map.of());
-          stackCreator.create(other.id, OTHER_ORG, PROJECT, STACK, Map.of());
-        });
+    stackCreator.create(org.id, ORG, PROJECT, STACK, Map.of());
+    stackCreator.create(other.id, OTHER_ORG, PROJECT, STACK, Map.of());
   }
 
   @AfterEach
+  @Transactional
   void cleanup() {
-    tx(
-        () -> {
-          em.createNativeQuery("DELETE FROM organizations WHERE name IN (?1, ?2)")
-              .setParameter(1, ORG)
-              .setParameter(2, OTHER_ORG)
-              .executeUpdate();
-          em.createNativeQuery("DELETE FROM users WHERE iss = ?1 AND sub = ?2")
-              .setParameter(1, "local:test")
-              .setParameter(2, "start-update")
-              .executeUpdate();
-        });
+    em.createNativeQuery("DELETE FROM organizations WHERE name IN (?1, ?2)")
+        .setParameter(1, ORG)
+        .setParameter(2, OTHER_ORG)
+        .executeUpdate();
+    em.createNativeQuery("DELETE FROM users WHERE iss = ?1 AND sub = ?2")
+        .setParameter(1, "local:test")
+        .setParameter(2, "start-update")
+        .executeUpdate();
   }
 
   @Test
