@@ -217,7 +217,7 @@ OIDC subject a site admin does not rewrite that organization membership
   `QUARKUS_HTTP_PROXY_PROXY_ADDRESS_FORWARDING=true` only when port 8080 is
   reachable exclusively through that proxy. Otherwise the generated
   `redirect_uri` can use the wrong scheme or authority. The example Helm chart
-  does not set this variable.
+  does not set this variable; set it through `extraEnv`.
 - Restrict who may authenticate if tenant-wide sign-in is too broad. In the
   Entra **Enterprise application**, set **Assignment required?** to **Yes** and
   assign the approved users or groups. Without required assignment, unassigned

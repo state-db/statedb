@@ -57,6 +57,19 @@ oidc:
   # Comma-separated issuer:subject pairs granted site administrator.
   adminSubjects: ""
 
+# Recovery admin login for the first sign-in; it turns off once OIDC is enabled.
+# Without existingSecret, the chart generates the password into a Secret.
+breakGlass:
+  enabled: true
+  # Holds a bcrypt hash, never the password itself.
+  existingSecret: ""
+  existingSecretPasswordHashKey: password-hash
+  # False limits sign-in to kubectl port-forward.
+  allowRemote: true
+
+extraEnv: []
+extraEnvFrom: []
+
 resources:
   requests:
     cpu: 250m
@@ -69,6 +82,10 @@ resources:
 startupProbe:
   failureThreshold: 60
   periodSeconds: 10
+
+# Rollouts drop requests unless the pod outlives routing updates and Quarkus's 30s shutdown.
+shutdownDelaySeconds: 10
+terminationGracePeriodSeconds: 45
 
 podAnnotations: {}
 nodeSelector: {}
