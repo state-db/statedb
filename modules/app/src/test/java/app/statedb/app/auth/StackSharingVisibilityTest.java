@@ -23,6 +23,9 @@ import app.statedb.persistence.stack.StackListFinder;
 import app.statedb.persistence.stack.StackRef;
 import app.statedb.persistence.stack.StackRefResolver;
 import app.statedb.persistence.stack.StackSummary;
+import app.statedb.persistence.stack.WorkspaceDirectoryFinder;
+import app.statedb.persistence.update.RecentUpdatesFinder;
+import app.statedb.persistence.update.StackUpdate;
 import com.cedarpolicy.model.entity.Entity;
 import com.cedarpolicy.value.EntityTypeName;
 import com.cedarpolicy.value.EntityUID;
@@ -68,6 +71,8 @@ class StackSharingVisibilityTest {
   @Inject StackCreator stackCreator;
   @Inject StackRefResolver stackRefResolver;
   @Inject StackListFinder stackListFinder;
+  @Inject WorkspaceDirectoryFinder workspaceDirectoryFinder;
+  @Inject RecentUpdatesFinder recentUpdatesFinder;
   @Inject EntityManager em;
 
   private UUID acmeId;
@@ -146,6 +151,38 @@ class StackSharingVisibilityTest {
     // bare guest sees nothing
     assertEquals(Set.of(), listedAcmeStacks(bareGuestId));
     assertEquals(Set.of(), listedAcmeStacks(outsiderId));
+  }
+
+  @Test
+  void directoryAndRecentUpdatesMatchStackListVisibilityAcrossAllRoles() {
+    QuarkusTransaction.requiringNew()
+        .run(
+            () -> {
+              for (UUID sid : List.of(internalStackId, privateStackId)) {
+                StackUpdate u = new StackUpdate();
+                u.stackId = sid;
+                u.kind = StackUpdate.Kind.UPDATE;
+                u.status = StackUpdate.Status.SUCCEEDED;
+                u.dryRun = false;
+                u.version = 1;
+                u.startedAt = java.time.Instant.parse("2026-08-01T12:00:00Z");
+                u.persist();
+              }
+            });
+
+    for (UUID uid :
+        List.of(ownerId, memberId, viewerId, guestId, bareGuestId, outsiderId, serviceUserId)) {
+      Set<String> expected = listedAcmeStacks(uid);
+      var dir = workspaceDirectoryFinder.find(uid, ACME);
+      assertEquals(expected.size(), dir.overview().stacks(), "directory stack count for " + uid);
+
+      var recent = recentUpdatesFinder.find(uid, ACME, false, null, 25);
+      Set<String> recentStacks =
+          recent.recent().stream()
+              .map(RecentUpdatesFinder.RecentUpdateItem::stack)
+              .collect(Collectors.toSet());
+      assertEquals(expected, recentStacks, "recent updates stacks for " + uid);
+    }
   }
 
   @Test

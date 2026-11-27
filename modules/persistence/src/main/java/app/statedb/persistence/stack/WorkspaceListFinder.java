@@ -27,6 +27,8 @@ public class WorkspaceListFinder {
 
   @Inject StackListFinder stackListFinder;
 
+  @Inject WorkspaceDirectoryFinder directoryFinder;
+
   @Inject UpdateActorAttributionFinder actorAttributionFinder;
 
   public List<WorkspaceSummary> findVisibleToUser(UUID userId) {
@@ -50,21 +52,7 @@ public class WorkspaceListFinder {
   }
 
   public WorkspaceOverview overview(UUID userId, String org) {
-    List<WorkspaceSummary> all = findVisibleToUser(userId, org, null);
-    long projects = all.stream().map(w -> w.orgName() + "/" + w.projectName()).distinct().count();
-    long resources =
-        all.stream().mapToLong(w -> w.resourceCount() == null ? 0L : w.resourceCount()).sum();
-    long failed =
-        all.stream()
-            .filter(w -> w.lastUpdate() != null && "failed".equals(w.lastUpdate().status()))
-            .count();
-    long running = all.stream().filter(WorkspaceListFinder::isActive).count();
-    return new WorkspaceOverview(all.size(), projects, resources, failed, running);
-  }
-
-  private static boolean isActive(WorkspaceSummary w) {
-    return w.lock() != null
-        || (w.lastUpdate() != null && "in-progress".equals(w.lastUpdate().status()));
+    return directoryFinder.find(userId, org).overview();
   }
 
   private List<WorkspaceSummary> assemble(List<StackSummary> stacks) {
@@ -76,6 +64,7 @@ public class WorkspaceListFinder {
     Map<UUID, WorkspaceSummary.LastUpdate> updates = latestUpdates(stackIds);
     Map<UUID, WorkspaceSummary.Lock> locks = liveLocks(stackIds);
     Map<UUID, Long> resourceCounts = resourceCounts(stackIds);
+    java.util.Set<UUID> failedStacks = failedAppliedStacks(stackIds);
 
     return stacks.stream()
         .map(
@@ -90,7 +79,8 @@ public class WorkspaceListFinder {
                     s.version(),
                     resourceCounts.getOrDefault(s.stackId(), 0L),
                     updates.get(s.stackId()),
-                    locks.get(s.stackId())))
+                    locks.get(s.stackId()),
+                    failedStacks.contains(s.stackId())))
         .toList();
   }
 
@@ -133,6 +123,23 @@ public class WorkspaceListFinder {
                         u.dryRun ? null : u.version,
                         actors.get(u.id))));
     return latest;
+  }
+
+  private java.util.Set<UUID> failedAppliedStacks(List<UUID> stackIds) {
+    List<StackUpdate> applied =
+        StackUpdate.<StackUpdate>find(
+                "from StackUpdate u where u.stackId in ?1 and u.dryRun = false and (u.stackId, u.version) in "
+                    + "(select u2.stackId, max(u2.version) from StackUpdate u2 "
+                    + "where u2.stackId in ?1 and u2.dryRun = false group by u2.stackId)",
+                stackIds)
+            .list();
+    java.util.Set<UUID> failed = new java.util.HashSet<>();
+    for (StackUpdate u : applied) {
+      if (u.status == StackUpdate.Status.FAILED) {
+        failed.add(u.stackId);
+      }
+    }
+    return failed;
   }
 
   private Map<UUID, WorkspaceSummary.Lock> liveLocks(List<UUID> stackIds) {

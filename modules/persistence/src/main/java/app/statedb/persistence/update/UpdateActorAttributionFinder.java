@@ -18,25 +18,37 @@ import java.util.stream.Collectors;
 @ApplicationScoped
 public class UpdateActorAttributionFinder {
 
+  public record ActorRef(UUID updateId, UUID startedByUserId, UUID startedByApiTokenId) {}
+
   public Map<UUID, UpdateActorAttribution> forUpdates(Collection<StackUpdate> updates) {
     if (updates.isEmpty()) {
       return Map.of();
     }
-    Map<UUID, User> users = usersById(updates);
-    Map<UUID, ApiToken> tokens = tokensById(updates);
+    return forUpdateRefs(
+        updates.stream()
+            .map(u -> new ActorRef(u.id, u.startedByUserId, u.startedByApiTokenId))
+            .toList());
+  }
+
+  public Map<UUID, UpdateActorAttribution> forUpdateRefs(Collection<ActorRef> refs) {
+    if (refs.isEmpty()) {
+      return Map.of();
+    }
+    Map<UUID, User> users = usersById(refs);
+    Map<UUID, ApiToken> tokens = tokensById(refs);
     Map<UUID, UpdateActorAttribution> actors = new HashMap<>();
-    for (StackUpdate update : updates) {
-      UpdateActorAttribution actor = actorFor(update, users, tokens);
+    for (ActorRef ref : refs) {
+      UpdateActorAttribution actor = actorFor(ref, users, tokens);
       if (actor != null) {
-        actors.put(update.id, actor);
+        actors.put(ref.updateId(), actor);
       }
     }
     return actors;
   }
 
-  private static Map<UUID, User> usersById(Collection<StackUpdate> updates) {
+  private static Map<UUID, User> usersById(Collection<ActorRef> refs) {
     List<UUID> userIds =
-        updates.stream().map(u -> u.startedByUserId).filter(Objects::nonNull).distinct().toList();
+        refs.stream().map(ActorRef::startedByUserId).filter(Objects::nonNull).distinct().toList();
     if (userIds.isEmpty()) {
       return Collections.emptyMap();
     }
@@ -44,10 +56,10 @@ public class UpdateActorAttributionFinder {
         .collect(Collectors.toMap(user -> user.id, Function.identity()));
   }
 
-  private static Map<UUID, ApiToken> tokensById(Collection<StackUpdate> updates) {
+  private static Map<UUID, ApiToken> tokensById(Collection<ActorRef> refs) {
     List<UUID> tokenIds =
-        updates.stream()
-            .map(u -> u.startedByApiTokenId)
+        refs.stream()
+            .map(ActorRef::startedByApiTokenId)
             .filter(Objects::nonNull)
             .distinct()
             .toList();
@@ -59,9 +71,9 @@ public class UpdateActorAttributionFinder {
   }
 
   private static UpdateActorAttribution actorFor(
-      StackUpdate update, Map<UUID, User> users, Map<UUID, ApiToken> tokens) {
-    User user = users.get(update.startedByUserId);
-    ApiToken token = tokens.get(update.startedByApiTokenId);
+      ActorRef ref, Map<UUID, User> users, Map<UUID, ApiToken> tokens) {
+    User user = users.get(ref.startedByUserId());
+    ApiToken token = tokens.get(ref.startedByApiTokenId());
     if (user == null && token == null) {
       return null;
     }
@@ -73,8 +85,8 @@ public class UpdateActorAttributionFinder {
             : null;
     return new UpdateActorAttribution(
         service ? "service" : "human",
-        user != null ? user.id : update.startedByUserId,
-        token != null ? token.id : update.startedByApiTokenId,
+        user != null ? user.id : ref.startedByUserId(),
+        token != null ? token.id : ref.startedByApiTokenId(),
         user != null ? user.displayName : null,
         user != null ? user.email : null,
         fallback,

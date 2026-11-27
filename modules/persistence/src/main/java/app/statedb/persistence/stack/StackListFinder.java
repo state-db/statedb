@@ -43,6 +43,42 @@ public class StackListFinder {
       List.of(OrgMember.Role.owner, OrgMember.Role.service);
   private static final List<OrgMember.Role> INTERNAL_READ_ROLES =
       List.of(OrgMember.Role.member, OrgMember.Role.viewer);
+
+  /**
+   * Native SQL mirror of {@link #readableByUser} for read-only console finders that alias {@code
+   * stacks} as {@code s} and bind {@code :userId}. Kept here so tenant-isolation predicates live in
+   * one place and stay pinned to Cedar by {@code StackSharingVisibilityTest}.
+   */
+  public static final String READABLE_BY_USER_SQL =
+      """
+      (
+        EXISTS (
+          SELECT 1 FROM org_members m
+          WHERE m.user_id = :userId AND m.org_id = s.org_id AND m.role IN ('owner', 'service')
+        )
+        OR (
+          s.visibility = 'internal'
+          AND EXISTS (
+            SELECT 1 FROM org_members m
+            WHERE m.user_id = :userId AND m.org_id = s.org_id AND m.role IN ('member', 'viewer')
+          )
+        )
+        OR (
+          EXISTS (
+            SELECT 1 FROM policy_grants g
+            WHERE g.principal_user_id = :userId
+              AND g.resource_stack_id = s.id
+              AND g.template_id IN ('StackReadResourcePolicy', 'StackWriteResourcePolicy')
+          )
+          AND EXISTS (
+            SELECT 1 FROM org_members m
+            WHERE m.user_id = :userId AND m.org_id = s.org_id
+              AND m.role IN ('owner', 'member', 'viewer', 'guest')
+          )
+        )
+      )
+      """;
+
   @Inject EntityManager em;
 
   public List<StackSummary> findVisibleToUser(UUID userId, String projectFilter) {
@@ -165,7 +201,8 @@ public class StackListFinder {
               hasLiveLock(cb, query, criteria.stack(), request.now()),
               latestUpdateHasStatus(cb, query, criteria.stack(), StackUpdate.Status.IN_PROGRESS)));
     } else if ("failed".equals(request.status())) {
-      predicates.add(latestUpdateHasStatus(cb, query, criteria.stack(), StackUpdate.Status.FAILED));
+      predicates.add(
+          latestAppliedUpdateHasStatus(cb, query, criteria.stack(), StackUpdate.Status.FAILED));
     }
     predicates.add(readableByUser(cb, query, criteria.stack(), request.userId()));
     return predicates.toArray(Predicate[]::new);
@@ -219,6 +256,29 @@ public class StackListFinder {
     subquery.where(
         cb.equal(lock.get("stackId"), stack.get("id")), cb.greaterThan(lock.get("expiresAt"), now));
     return cb.exists(subquery);
+  }
+
+  private static Predicate latestAppliedUpdateHasStatus(
+      CriteriaBuilder cb, CriteriaQuery<?> query, Root<Stack> stack, StackUpdate.Status status) {
+    Subquery<Integer> subquery = query.subquery(Integer.class);
+    Root<StackUpdate> update = subquery.from(StackUpdate.class);
+    subquery.select(cb.literal(1));
+    subquery.where(
+        cb.equal(update.get("stackId"), stack.get("id")),
+        cb.isFalse(update.get("dryRun")),
+        cb.equal(update.get("status"), status),
+        cb.equal(update.get("startedAt"), latestAppliedUpdateStartedAt(cb, query, stack)));
+    return cb.exists(subquery);
+  }
+
+  private static Subquery<Instant> latestAppliedUpdateStartedAt(
+      CriteriaBuilder cb, CriteriaQuery<?> query, Root<Stack> stack) {
+    Subquery<Instant> subquery = query.subquery(Instant.class);
+    Root<StackUpdate> update = subquery.from(StackUpdate.class);
+    subquery.select(cb.greatest(update.<Instant>get("startedAt")));
+    subquery.where(
+        cb.equal(update.get("stackId"), stack.get("id")), cb.isFalse(update.get("dryRun")));
+    return subquery;
   }
 
   private static Predicate latestUpdateHasStatus(

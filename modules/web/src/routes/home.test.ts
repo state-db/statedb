@@ -45,10 +45,13 @@ describe("home stack summary", () => {
     expect(matchesFilter(failed, "failed")).toBe(true);
   });
 
-  test("does not present a preview as applied version zero", () => {
+  test("does not present a preview as applied version zero or mark the stack failed", () => {
     const preview = workspace("preview", { status: "succeeded", version: null });
+    const failedPreview = workspace("failed-preview", { status: "failed", version: null });
 
     expect(lastUpdateVersionLabel(preview.lastUpdate!)).toBeNull();
+    expect(isFailedUpdate(failedPreview)).toBe(false);
+    expect(matchesFilter(failedPreview, "failed")).toBe(false);
   });
 
   test("uses the resolved service account name in the running tooltip", () => {

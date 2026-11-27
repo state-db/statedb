@@ -8,9 +8,11 @@ import app.statedb.persistence.stack.StackAssembler;
 import app.statedb.persistence.stack.StackListFinder;
 import app.statedb.persistence.stack.StackState;
 import app.statedb.persistence.stack.StackSummary;
+import app.statedb.persistence.stack.WorkspaceDirectoryFinder;
 import app.statedb.persistence.stack.WorkspaceListFinder;
 import app.statedb.persistence.stack.WorkspaceSummary;
 import app.statedb.persistence.update.ConsoleUpdateHistoryFinder;
+import app.statedb.persistence.update.RecentUpdatesFinder;
 import app.statedb.persistence.update.StackUpdate;
 import app.statedb.persistence.update.UpdateActorAttribution;
 import com.fasterxml.jackson.databind.JsonNode;
@@ -39,11 +41,15 @@ public class WorkspacesResource {
 
   @Inject WorkspaceListFinder workspaceListFinder;
 
+  @Inject WorkspaceDirectoryFinder workspaceDirectoryFinder;
+
   @Inject StackListFinder stackListFinder;
 
   @Inject StackAssembler stackAssembler;
 
   @Inject ConsoleUpdateHistoryFinder updateHistoryFinder;
+
+  @Inject RecentUpdatesFinder recentUpdatesFinder;
 
   @GET
   @Produces(MediaType.APPLICATION_JSON)
@@ -85,12 +91,85 @@ public class WorkspacesResource {
   public WorkspaceSummaryResponse summary(@QueryParam("org") String org) {
     WorkspaceListFinder.WorkspaceOverview overview =
         workspaceListFinder.overview(currentPrincipal.get().userId(), org);
+    return toSummaryResponse(overview);
+  }
+
+  @GET
+  @Path("/directory")
+  @Produces(MediaType.APPLICATION_JSON)
+  public WorkspaceDirectoryResponse directory(@QueryParam("org") String org) {
+    UUID userId = currentPrincipal.get().userId();
+    WorkspaceDirectoryFinder.DirectoryResult result = workspaceDirectoryFinder.find(userId, org);
+    if (org != null
+        && result.projects().isEmpty()
+        && !workspaceDirectoryFinder.isOrganizationVisible(userId, org)) {
+      throw new NotFoundException();
+    }
+    List<ProjectDirectoryResponse> projects =
+        result.projects().stream()
+            .map(
+                p ->
+                    new ProjectDirectoryResponse(
+                        p.org(),
+                        p.project(),
+                        p.projectCreatedAt(),
+                        p.vcsKind(),
+                        p.vcsOwner(),
+                        p.vcsRepo(),
+                        p.vcsRoot(),
+                        p.stackCount(),
+                        p.resourceCount(),
+                        p.runningCount(),
+                        p.failedCount(),
+                        p.lastActivityAt()))
+            .toList();
+    return new WorkspaceDirectoryResponse(toSummaryResponse(result.overview()), projects);
+  }
+
+  @GET
+  @Path("/updates/recent")
+  @Produces(MediaType.APPLICATION_JSON)
+  public RecentUpdatesResponse recentUpdates(
+      @QueryParam("org") String org,
+      @QueryParam("includePreviews") boolean includePreviews,
+      @QueryParam("status") String status,
+      @QueryParam("limit") Integer requestedLimit) {
+    String statusFilter = normalizeStatus(status);
+    int limit = requestedLimit == null ? 25 : Math.max(1, Math.min(requestedLimit, 50));
+    RecentUpdatesFinder.RecentUpdatesResult result =
+        recentUpdatesFinder.find(
+            currentPrincipal.get().userId(), org, includePreviews, statusFilter, limit);
+    return new RecentUpdatesResponse(
+        result.running().stream().map(WorkspacesResource::toRecentUpdateRow).toList(),
+        result.recent().stream().map(WorkspacesResource::toRecentUpdateRow).toList());
+  }
+
+  private static WorkspaceSummaryResponse toSummaryResponse(
+      WorkspaceListFinder.WorkspaceOverview overview) {
     return new WorkspaceSummaryResponse(
         overview.stacks(),
         overview.projects(),
         overview.resources(),
         overview.failed(),
         overview.running());
+  }
+
+  private static RecentUpdateRow toRecentUpdateRow(RecentUpdatesFinder.RecentUpdateItem item) {
+    return new RecentUpdateRow(
+        item.id(),
+        item.org(),
+        item.project(),
+        item.stack(),
+        item.version(),
+        item.dryRun(),
+        item.kind(),
+        item.status(),
+        item.message(),
+        item.summary(),
+        toActorResponse(item.actor()),
+        item.startedAt(),
+        item.endedAt(),
+        item.prNumber());
   }
 
   private static String normalizeStatus(String status) {
@@ -232,7 +311,8 @@ public class WorkspacesResource {
         summary.lock() == null
             ? null
             : new LockResponse(
-                summary.lock().id(), summary.lock().lockedBy(), summary.lock().lockedAt()));
+                summary.lock().id(), summary.lock().lockedBy(), summary.lock().lockedAt()),
+        summary.failed());
   }
 
   private static ActorResponse toActorResponse(UpdateActorAttribution actor) {
@@ -259,7 +339,8 @@ public class WorkspacesResource {
       int version,
       Long resourceCount,
       LastUpdateResponse lastUpdate,
-      LockResponse lock) {}
+      LockResponse lock,
+      boolean failed) {}
 
   public record LastUpdateResponse(
       UUID id,
@@ -308,6 +389,42 @@ public class WorkspacesResource {
 
   public record WorkspaceSummaryResponse(
       long stacks, long projects, long resources, long failed, long running) {}
+
+  public record ProjectDirectoryResponse(
+      String org,
+      String project,
+      Instant projectCreatedAt,
+      String vcsKind,
+      String vcsOwner,
+      String vcsRepo,
+      String vcsRoot,
+      long stackCount,
+      long resourceCount,
+      long runningCount,
+      long failedCount,
+      Instant lastActivityAt) {}
+
+  public record WorkspaceDirectoryResponse(
+      WorkspaceSummaryResponse overview, List<ProjectDirectoryResponse> projects) {}
+
+  public record RecentUpdateRow(
+      UUID id,
+      String org,
+      String project,
+      String stack,
+      Integer version,
+      boolean dryRun,
+      String kind,
+      String status,
+      String message,
+      JsonNode summary,
+      ActorResponse actor,
+      Instant startedAt,
+      Instant endedAt,
+      Long prNumber) {}
+
+  public record RecentUpdatesResponse(
+      List<RecentUpdateRow> running, List<RecentUpdateRow> recent) {}
 
   public record UpdateHistoryRow(
       UUID id,

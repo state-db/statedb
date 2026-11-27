@@ -305,6 +305,7 @@ export interface Workspace {
   resourceCount: number | null;
   lastUpdate: WorkspaceLastUpdate | null;
   lock: WorkspaceLock | null;
+  failed?: boolean;
 }
 
 export interface WorkspacePage {
@@ -320,6 +321,48 @@ export interface WorkspaceOverview {
   resources: number;
   failed: number;
   running: number;
+}
+
+export interface ProjectDirectoryEntry {
+  org: string;
+  project: string;
+  projectCreatedAt: string;
+  vcsKind: string | null;
+  vcsOwner: string | null;
+  vcsRepo: string | null;
+  vcsRoot: string | null;
+  stackCount: number;
+  resourceCount: number;
+  runningCount: number;
+  failedCount: number;
+  lastActivityAt: string | null;
+}
+
+export interface WorkspaceDirectoryResponse {
+  overview: WorkspaceOverview;
+  projects: ProjectDirectoryEntry[];
+}
+
+export interface RecentUpdateRow {
+  id: string;
+  org: string;
+  project: string;
+  stack: string;
+  version: number | null;
+  dryRun: boolean;
+  kind: string;
+  status: "succeeded" | "failed" | "in-progress" | "cancelled" | string;
+  message: string | null;
+  summary: { resourceChanges?: Record<string, number> } | null;
+  actor: ActivityActor | null;
+  startedAt: string;
+  endedAt: string | null;
+  prNumber: number | null;
+}
+
+export interface RecentUpdatesResponse {
+  running: RecentUpdateRow[];
+  recent: RecentUpdateRow[];
 }
 
 export type PulumiValue = null | boolean | number | string | PulumiValue[] | {
@@ -586,6 +629,25 @@ export const api = {
     summary: (org?: string) => {
       const query = org ? `?org=${encodeURIComponent(org)}` : "";
       return request<WorkspaceOverview>(`/workspaces/summary${query}`);
+    },
+    directory: (org?: string) => {
+      const query = org ? `?org=${encodeURIComponent(org)}` : "";
+      return request<WorkspaceDirectoryResponse>(`/workspaces/directory${query}`);
+    },
+    recentUpdates: (filters?: {
+      org?: string;
+      includePreviews?: boolean;
+      status?: "running" | "failed";
+      limit?: number;
+    }) => {
+      const params = new URLSearchParams();
+      if (filters?.org) params.set("org", filters.org);
+      if (filters?.includePreviews) params.set("includePreviews", "true");
+      if (filters?.status) params.set("status", filters.status);
+      if (filters?.limit) params.set("limit", String(filters.limit));
+      const encoded = params.toString();
+      const query = encoded ? `?${encoded}` : "";
+      return request<RecentUpdatesResponse>(`/workspaces/updates/recent${query}`);
     },
     get: (org: string, project: string, stack: string) =>
       request<StackDetail>(

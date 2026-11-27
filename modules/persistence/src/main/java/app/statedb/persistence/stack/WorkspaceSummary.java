@@ -15,7 +15,8 @@ public record WorkspaceSummary(
     int version,
     Long resourceCount,
     LastUpdate lastUpdate,
-    Lock lock) {
+    Lock lock,
+    boolean failed) {
 
   public record LastUpdate(
       UUID id,
