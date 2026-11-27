@@ -37,10 +37,39 @@ replicas and stable across upgrades. Rotating it logs everyone out.
 The chart generates a key on first install and reuses it on every upgrade. To manage the key yourself, put it in a
 Secret and set `sessionExistingSecret`.
 
+## First sign-in
+
+The chart generates a recovery password on first install and keeps it in the
+`statedb-statedb-break-glass` Secret. Read it, then open the console through the
+Ingress or a port-forward. Add `--namespace` if you installed the chart into
+another namespace:
+
+```sh
+kubectl get secret statedb-statedb-break-glass \
+  -o jsonpath='{.data.password}' | base64 -d
+kubectl port-forward svc/statedb-statedb 8080:8080
+```
+
+Sign in at `http://localhost:8080` with that password, then add an OpenID
+Connect provider under **Manage → Providers** and enable it. New providers
+start disabled. The recovery login turns itself off while an enabled provider
+exists.
+
+The recovery login is reachable through the Service and the Ingress, not only
+through port-forward. Set `breakGlass.allowRemote=false` to allow loopback
+connections only. To use your own password, put its bcrypt hash in a Secret and
+set `breakGlass.existingSecret`. The chart reads the key `password-hash` unless
+you set `breakGlass.existingSecretPasswordHashKey`. Set
+`breakGlass.enabled=false` to turn the login off.
+
+The Secret is kept across upgrades. Tools that render the chart without cluster
+access, such as `helm template` or Argo CD, generate a new password on every
+render. Use `breakGlass.existingSecret` with those tools.
+
 ## Identity provider
 
-You can configure OpenID Connect from the console after installing, or seed a
-provider at install time so the deployment is usable immediately:
+Instead of adding a provider from the console, you can seed one at install time.
+Add these values to `helm install`, or apply them to an existing release:
 
 ```sh
 helm upgrade statedb examples/helm/statedb \
@@ -54,7 +83,18 @@ helm upgrade statedb examples/helm/statedb \
 
 A seeded provider is re-applied at every pod start and shows as read-only in the
 console, so rotating the client secret means updating the Secret and restarting. `oidc.adminSubjects` takes comma-separated `issuer:subject`
-pairs and is what grants site administrator.
+pairs and is what grants site administrator. Without it, no OIDC user is a site
+administrator.
+
+A seeded provider turns off the recovery login. Because the provider is
+re-enabled at every pod start, the recovery login stays off during an identity
+provider outage.
+
+## Other settings
+
+Use `extraEnv` and `extraEnvFrom` for application settings that the chart does
+not template, such as `STATEDB_REPORTS_PUBLIC_BASE_URL`. They take the same
+form as a container's `env` and `envFrom`.
 
 ## Ingress
 
@@ -81,6 +121,11 @@ database lock keeps concurrent pods from racing. Because a cold database or a
 wait behind another pod's migration can take minutes, the chart has a long startup probe budget; raise `startupProbe.failureThreshold` if your database is
 slow to wake.
 
+A stopping pod keeps serving for `shutdownDelaySeconds` (10 by default) so the
+Service and Ingress stop routing to it first. It then has the rest of
+`terminationGracePeriodSeconds` (45 by default) to finish in-flight requests.
+Keep the grace period above the delay plus 30 seconds.
+
 While old and new versions overlap, only expand-only schema changes are safe;
 the migrations guarantee this, not your rollout strategy.
 
@@ -94,6 +139,11 @@ the migrations guarantee this, not your rollout strategy.
 | `sessionExistingSecret` | none | Secret holding the session key, if you manage it |
 | `bootstrap.orgName` | none | First organization, created at startup |
 | `oidc.name` | none | Seeds a provider when set |
+| `breakGlass.enabled` | `true` | Recovery login for the first sign-in |
+| `breakGlass.existingSecret` | none | Secret holding your own bcrypt hash |
+| `breakGlass.existingSecretPasswordHashKey` | `password-hash` | Key of the hash in that Secret |
+| `breakGlass.allowRemote` | `true` | Accept the recovery login through the Service and Ingress |
+| `extraEnv`, `extraEnvFrom` | `[]` | Additional container environment |
 | `ingress.enabled` | `false` | Expose the service through an Ingress |
 
 The full set is in

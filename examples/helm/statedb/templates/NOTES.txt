@@ -1,0 +1,26 @@
+{{- $fullname := include "statedb.fullname" . -}}
+{{- $glass := and (eq (include "statedb.breakGlassEnabled" .) "true") (not .Values.oidc.name) -}}
+{{- $loopbackOnly := not (dig "allowRemote" true (.Values.breakGlass | default dict)) -}}
+Reach the console:
+{{- if .Values.ingress.enabled }}
+  {{ if .Values.ingress.tls.enabled }}https{{ else }}http{{ end }}://{{ .Values.ingress.host }}
+{{- end }}
+{{- if or (not .Values.ingress.enabled) (and $glass $loopbackOnly) }}
+  kubectl --namespace {{ .Release.Namespace }} port-forward svc/{{ $fullname }} 8080:{{ .Values.service.port }}
+  http://localhost:8080
+{{- end }}
+{{- if $glass }}
+
+Sign in with the recovery password{{ if $loopbackOnly }} through the port-forward; breakGlass.allowRemote=false refuses it elsewhere{{ end }}.
+{{- if eq (include "statedb.breakGlassGenerated" .) "true" }}
+  kubectl --namespace {{ .Release.Namespace }} get secret {{ include "statedb.breakGlassSecretName" . }} -o jsonpath='{.data.password}' | base64 -d
+{{- else }}
+  Its hash is in the {{ include "statedb.breakGlassSecretName" . }} Secret.
+{{- end }}
+
+Then add and enable an OpenID Connect provider under Manage -> Providers. The
+recovery login turns itself off while an enabled provider exists.
+{{- else if not .Values.oidc.name }}
+
+No sign-in method is configured. Set breakGlass.enabled=true or the oidc.* values.
+{{- end }}

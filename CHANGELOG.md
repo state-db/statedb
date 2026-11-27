@@ -6,6 +6,20 @@ body.
 
 ## Unreleased
 
+### Fixed
+
+- The Helm chart now gives a working first sign-in. It generates a recovery password into a Secret
+  and accepts it through the Service and Ingress until you enable an OIDC provider. Set
+  `breakGlass.existingSecret` to use your own password hash, or `breakGlass.enabled=false` to turn
+  it off.
+
+- Helm chart rollouts drop far fewer requests. Pods wait `shutdownDelaySeconds` before shutting down
+  and get a 45-second `terminationGracePeriodSeconds`.
+
+### Added
+
+- Helm chart `extraEnv` and `extraEnvFrom` values for settings the chart does not template.
+
 ## 0.1.0 — 2026-11-20
 
 First public release. statedb is at version 0.x: a minor release can include breaking changes, and
