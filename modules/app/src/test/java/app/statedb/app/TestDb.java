@@ -23,6 +23,7 @@ import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 import jakarta.persistence.EntityManager;
 import java.time.Instant;
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
@@ -37,6 +38,9 @@ import java.util.UUID;
 public class TestDb {
 
   public static final String TEST_ISS = "local:test";
+
+  static final List<String> RESET_ROOT_TABLES =
+      List.of("organizations", "users", "oidc_providers", "vcs_app_registrations");
 
   @Inject EntityManager em;
   @Inject ApiTokenHasher tokenHasher;
@@ -79,10 +83,9 @@ public class TestDb {
                 () -> {
                   em.createNativeQuery("SET LOCAL lock_timeout = '5s'").executeUpdate();
                   boolean grants = PolicyGrant.count() > 0;
-                  em.createNativeQuery("DELETE FROM organizations").executeUpdate();
-                  em.createNativeQuery("DELETE FROM users").executeUpdate();
-                  em.createNativeQuery("DELETE FROM oidc_providers").executeUpdate();
-                  em.createNativeQuery("DELETE FROM vcs_app_registrations").executeUpdate();
+                  for (String table : RESET_ROOT_TABLES) {
+                    em.createNativeQuery("DELETE FROM " + table).executeUpdate();
+                  }
                   return grants;
                 });
     if (hadGrants) {
