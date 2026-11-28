@@ -35,7 +35,7 @@ public final class Races {
       throws Exception {
     var holderPid = new CompletableFuture<Integer>();
     var release = new CountDownLatch(1);
-    var pool = Executors.newFixedThreadPool(3);
+    var pool = Executors.newFixedThreadPool(2);
     try {
       Future<?> holder =
           pool.submit(
@@ -67,12 +67,7 @@ public final class Races {
               });
       int pid = holderPid.get(5, SECONDS);
       Future<T> contending = pool.submit(contender);
-      pool.submit(
-              () -> {
-                awaitBlocked(em, pid, waitingQuery, contending);
-                return null;
-              })
-          .get(6, SECONDS);
+      awaitBlocked(em, pid, waitingQuery, contending);
 
       release.countDown();
       holder.get(5, SECONDS);

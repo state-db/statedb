@@ -164,7 +164,9 @@ public class TestDb {
             new StartUpdateRequest(
                 Map.of(), Map.of(), Map.of(), "test", "yaml", "v3.242.0", "test"));
     Lease lease =
-        lockAcquirer.acquire(stackId, started.updateId(), "user:test", 1, null).orElseThrow();
+        lockAcquirer
+            .acquire(stackId, started.updateId(), "user:test", 1, null)
+            .orElseThrow(() -> new IllegalStateException("lease not acquired for " + stackId));
     return new ActiveUpdate(
         stackId, started.updateId(), lease.leaseId(), lease.plaintextToken(), started.version());
   }
