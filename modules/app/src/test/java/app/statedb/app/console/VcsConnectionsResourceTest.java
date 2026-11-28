@@ -1,41 +1,43 @@
 package app.statedb.app.console;
 
+import static app.statedb.app.console.OidcConsoleSessionFixture.loginAs;
+import static io.quarkus.narayana.jta.QuarkusTransaction.requiringNew;
 import static io.restassured.RestAssured.given;
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import app.statedb.app.DatabaseTest;
 import app.statedb.persistence.identity.OrgMember;
-import app.statedb.persistence.identity.Organization;
-import app.statedb.persistence.identity.User;
+import app.statedb.persistence.vcs.VcsAppRegistry;
+import app.statedb.persistence.vcs.VcsConnection;
 import app.statedb.testsupport.InMemoryGitHubAppManager;
-import io.quarkus.narayana.jta.QuarkusTransaction;
 import io.quarkus.test.common.QuarkusTestResource;
 import io.quarkus.test.junit.QuarkusTest;
 import io.quarkus.test.oidc.server.OidcWiremockTestResource;
 import io.restassured.http.Cookie;
 import jakarta.inject.Inject;
 import java.util.Map;
-import org.junit.jupiter.api.AfterEach;
+import java.util.UUID;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 @QuarkusTest
 @QuarkusTestResource(OidcWiremockTestResource.class)
-class VcsConnectionsResourceTest {
+class VcsConnectionsResourceTest extends DatabaseTest {
 
   private static final String ORG = "vcs-console-org";
   private static final String PATH = "/api/orgs/" + ORG + "/vcs";
 
   @Inject InMemoryGitHubAppManager github;
-  @Inject app.statedb.persistence.vcs.VcsAppRegistry registrations;
+  @Inject VcsAppRegistry registrations;
+
+  private UUID orgId;
 
   @BeforeEach
   void seed() {
-    github.reset();
     github.completeManifest("test");
     registrations.replace(
-        new app.statedb.persistence.vcs.VcsAppRegistry.AppRegistration(
+        new VcsAppRegistry.AppRegistration(
             "github.com",
             12345,
             "state-db-test",
@@ -44,32 +46,12 @@ class VcsConnectionsResourceTest {
             "test-private-key",
             "test-client",
             "test-secret"));
-    OidcConsoleSessionFixture.seedProvider();
-    QuarkusTransaction.requiringNew()
-        .run(
-            () -> {
-              Organization org = new Organization();
-              org.name = ORG;
-              org.displayName = "VCS Console Test";
-              org.persistAndFlush();
-            });
-  }
-
-  @AfterEach
-  void cleanup() {
-    QuarkusTransaction.requiringNew()
-        .run(
-            () -> {
-              Organization.delete("name", ORG);
-              app.statedb.persistence.vcs.VcsAppRegistration.deleteAll();
-              User.delete("iss", "local:service");
-            });
-    OidcConsoleSessionFixture.cleanup();
+    orgId = db.seedOrg(ORG, "VCS Console Test");
   }
 
   @Test
   void ownerCompletesVerifiedRoundTripAndCanDisconnect() {
-    Cookie session = establishSession(OrgMember.Role.owner);
+    Cookie session = loginAs(ORG, OrgMember.Role.owner);
     String state = begin(session);
     String oauth = install(session, state, 9876);
     String routed =
@@ -121,7 +103,7 @@ class VcsConnectionsResourceTest {
 
   @Test
   void installationApprovalWithoutIdReturnsPendingNotice() {
-    Cookie session = establishSession(OrgMember.Role.owner);
+    Cookie session = loginAs(ORG, OrgMember.Role.owner);
     String routed =
         given()
             .cookie(session)
@@ -147,7 +129,7 @@ class VcsConnectionsResourceTest {
 
   @Test
   void arbitraryInstallationIdCannotConnectEvenWithValidState() {
-    Cookie session = establishSession(OrgMember.Role.owner);
+    Cookie session = loginAs(ORG, OrgMember.Role.owner);
     String oauth = install(session, begin(session), 5555);
     given()
         .cookie(session)
@@ -164,15 +146,10 @@ class VcsConnectionsResourceTest {
 
   @Test
   void membershipIsRecheckedAfterReturningFromGithub() {
-    Cookie session = establishSession(OrgMember.Role.owner);
+    Cookie session = loginAs(ORG, OrgMember.Role.owner);
     String oauth = install(session, begin(session), 9876);
-    QuarkusTransaction.requiringNew()
-        .run(
-            () ->
-                OrgMember.update(
-                    "role = ?1 where orgId = ?2",
-                    OrgMember.Role.member,
-                    Organization.<Organization>find("name", ORG).firstResult().id));
+    requiringNew()
+        .run(() -> OrgMember.update("role = ?1 where orgId = ?2", OrgMember.Role.member, orgId));
     given()
         .cookie(session)
         .queryParam("state", oauth)
@@ -185,7 +162,7 @@ class VcsConnectionsResourceTest {
 
   @Test
   void forgedStateAndWrongCallbackPurposeAreRejected() {
-    Cookie session = establishSession(OrgMember.Role.owner);
+    Cookie session = loginAs(ORG, OrgMember.Role.owner);
     given()
         .cookie(session)
         .queryParam("state", "forged")
@@ -204,7 +181,7 @@ class VcsConnectionsResourceTest {
 
   @Test
   void disconnectInvalidatesPendingHandshakes() {
-    Cookie session = establishSession(OrgMember.Role.owner);
+    Cookie session = loginAs(ORG, OrgMember.Role.owner);
     String oauth = install(session, begin(session), 9876);
     given().cookie(session).delete(PATH + "/connections").then().statusCode(204);
     given()
@@ -218,7 +195,7 @@ class VcsConnectionsResourceTest {
 
   @Test
   void removedInstallationPickerAndDirectConnectCannotBypassVerification() {
-    Cookie session = establishSession(OrgMember.Role.owner);
+    Cookie session = loginAs(ORG, OrgMember.Role.owner);
     given().cookie(session).get(PATH + "/installations").then().statusCode(404);
     given()
         .cookie(session)
@@ -231,14 +208,13 @@ class VcsConnectionsResourceTest {
 
   @Test
   void memberCannotManageVcsConnection() {
-    Cookie session = establishSession(OrgMember.Role.member);
+    Cookie session = loginAs(ORG, OrgMember.Role.member);
     given().cookie(session).post(PATH + "/connect").then().statusCode(403);
     given().cookie(session).delete(PATH + "/connections").then().statusCode(403);
   }
 
   private long connectionCount() {
-    return app.statedb.persistence.vcs.VcsConnection.count(
-        "orgId", Organization.<Organization>find("name", ORG).firstResult().id);
+    return VcsConnection.count("orgId", orgId);
   }
 
   private String begin(Cookie session) {
@@ -284,27 +260,5 @@ class VcsConnectionsResourceTest {
 
   private static String state(String url) {
     return java.net.URI.create(url).getQuery().split("state=")[1].split("&")[0];
-  }
-
-  private Cookie establishSession(OrgMember.Role role) {
-    Cookie session = OidcConsoleSessionFixture.login();
-    QuarkusTransaction.requiringNew()
-        .run(
-            () -> {
-              User user =
-                  User.<User>find(
-                          "iss = ?1 and sub = ?2",
-                          OidcConsoleSessionFixture.FIXTURE_ISS,
-                          OidcConsoleSessionFixture.FIXTURE_SUB)
-                      .firstResult();
-              assertNotNull(user);
-              Organization org = Organization.<Organization>find("name", ORG).firstResult();
-              OrgMember member = new OrgMember();
-              member.orgId = org.id;
-              member.userId = user.id;
-              member.role = role;
-              member.persistAndFlush();
-            });
-    return session;
   }
 }

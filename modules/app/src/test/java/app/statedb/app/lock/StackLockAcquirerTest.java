@@ -1,5 +1,6 @@
 package app.statedb.app.lock;
 
+import static io.quarkus.narayana.jta.QuarkusTransaction.requiringNew;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
@@ -7,71 +8,44 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-import app.statedb.persistence.identity.Organization;
+import app.statedb.app.DatabaseTest;
 import app.statedb.persistence.journal.JournalAppender;
 import app.statedb.persistence.journal.JournalEntry;
 import app.statedb.persistence.lock.Lease;
 import app.statedb.persistence.lock.LeaseExpiredException;
 import app.statedb.persistence.lock.StackLock;
 import app.statedb.persistence.lock.StackLockAcquirer;
-import app.statedb.persistence.stack.StackCreator;
-import app.statedb.persistence.stack.StackRef;
 import app.statedb.persistence.update.StackUpdate;
 import app.statedb.persistence.update.StackUpdateStarter;
 import app.statedb.persistence.update.StartUpdateRequest;
 import app.statedb.persistence.update.StartedUpdate;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import io.quarkus.narayana.jta.QuarkusTransaction;
 import io.quarkus.test.junit.QuarkusTest;
 import jakarta.inject.Inject;
-import jakarta.persistence.EntityManager;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
-import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 @QuarkusTest
-class StackLockAcquirerTest {
+class StackLockAcquirerTest extends DatabaseTest {
 
   private static final ObjectMapper MAPPER = new ObjectMapper();
   private static final String ORG_NAME = "acquirer-org";
 
-  @Inject StackCreator stackCreator;
   @Inject StackUpdateStarter starter;
   @Inject StackLockAcquirer acquirer;
   @Inject JournalAppender journalAppender;
-  @Inject EntityManager em;
 
   private UUID stackId;
 
   @BeforeEach
   void seed() {
-    stackId =
-        QuarkusTransaction.requiringNew()
-            .call(
-                () -> {
-                  Organization org = new Organization();
-                  org.name = ORG_NAME;
-                  org.displayName = "Acquirer Test";
-                  org.persistAndFlush();
-                  StackRef ref = stackCreator.create(org.id, ORG_NAME, "proj", "dev", Map.of());
-                  return ref.stackId();
-                });
-  }
-
-  @AfterEach
-  void cleanup() {
-    QuarkusTransaction.requiringNew()
-        .run(
-            () ->
-                em.createNativeQuery("DELETE FROM organizations WHERE name = ?1")
-                    .setParameter(1, ORG_NAME)
-                    .executeUpdate());
+    stackId = db.seedStack(ORG_NAME).stackId();
   }
 
   @Test
@@ -147,7 +121,7 @@ class StackLockAcquirerTest {
     UUID firstUpdateId = startUpdate("k-orig");
     Lease first = acquirer.acquire(stackId, firstUpdateId, "user:a", null, null).orElseThrow();
 
-    QuarkusTransaction.requiringNew()
+    requiringNew()
         .run(
             () -> {
               StackLock lock = StackLock.find("stackId", stackId).<StackLock>singleResult();
@@ -171,7 +145,7 @@ class StackLockAcquirerTest {
     UUID firstUpdateId = startUpdate("k-abandoned");
     acquirer.acquire(stackId, firstUpdateId, "user:a", null, null).orElseThrow();
 
-    QuarkusTransaction.requiringNew()
+    requiringNew()
         .run(
             () -> {
               StackLock lock = StackLock.find("stackId", stackId).<StackLock>singleResult();
@@ -195,7 +169,7 @@ class StackLockAcquirerTest {
     UUID firstUpdateId = startUpdate("k-old-append");
     Lease first = acquirer.acquire(stackId, firstUpdateId, "user:a", null, null).orElseThrow();
 
-    QuarkusTransaction.requiringNew()
+    requiringNew()
         .run(
             () -> {
               StackLock lock = StackLock.find("stackId", stackId).<StackLock>singleResult();
@@ -222,7 +196,7 @@ class StackLockAcquirerTest {
     UUID updateId = startUpdate("k-cascade");
     acquirer.acquire(stackId, updateId, "user:a", null, null).orElseThrow();
 
-    QuarkusTransaction.requiringNew()
+    requiringNew()
         .run(
             () -> {
               // Break the deferred FK to stack_updates first by clearing active_update_id.

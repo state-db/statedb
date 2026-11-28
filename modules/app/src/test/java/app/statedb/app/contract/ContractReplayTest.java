@@ -2,14 +2,13 @@ package app.statedb.app.contract;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
+import app.statedb.app.DatabaseTest;
 import app.statedb.testsupport.TestIdentity;
 import com.fasterxml.jackson.databind.JsonNode;
 import io.quarkus.test.junit.QuarkusTest;
-import jakarta.inject.Inject;
 import jakarta.persistence.EntityManager;
 import java.util.List;
 import java.util.function.Consumer;
-import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.EnumSource;
@@ -26,7 +25,7 @@ import org.junit.jupiter.params.provider.EnumSource;
  * decryptable here); they are covered by {@code SecretsFixtureReplayTest} and CLI smoke.
  */
 @QuarkusTest
-class ContractReplayTest {
+class ContractReplayTest extends DatabaseTest {
 
   enum Scenario {
     LOGIN(FixtureReplay::seedIdentity, "01-login"),
@@ -87,13 +86,6 @@ class ContractReplayTest {
       this.commands = commands;
       this.seed = seed;
     }
-  }
-
-  @Inject EntityManager em;
-
-  @AfterEach
-  void cleanup() {
-    FixtureReplay.cleanup(em);
   }
 
   @ParameterizedTest(name = "{0}")

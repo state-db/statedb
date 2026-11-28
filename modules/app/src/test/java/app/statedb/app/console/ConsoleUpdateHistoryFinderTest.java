@@ -2,6 +2,7 @@ package app.statedb.app.console;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
+import app.statedb.app.DatabaseTest;
 import app.statedb.persistence.events.UpdateEvent;
 import app.statedb.persistence.events.UpdateEventReader;
 import app.statedb.persistence.identity.Organization;
@@ -18,7 +19,7 @@ import java.time.Instant;
 import org.junit.jupiter.api.Test;
 
 @QuarkusTest
-class ConsoleUpdateHistoryFinderTest {
+class ConsoleUpdateHistoryFinderTest extends DatabaseTest {
 
   @Inject ConsoleUpdateHistoryFinder finder;
   @Inject UpdateEventReader reader;

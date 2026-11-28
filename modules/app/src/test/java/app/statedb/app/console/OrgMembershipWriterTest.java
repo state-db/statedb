@@ -1,18 +1,23 @@
 package app.statedb.app.console;
 
-import static org.junit.jupiter.api.Assertions.*;
+import static io.quarkus.narayana.jta.QuarkusTransaction.requiringNew;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
-import app.statedb.persistence.identity.*;
-import io.quarkus.narayana.jta.QuarkusTransaction;
+import app.statedb.app.DatabaseTest;
+import app.statedb.persistence.identity.LastOwnerException;
+import app.statedb.persistence.identity.OrgMember;
+import app.statedb.persistence.identity.OrgMembershipWriter;
+import app.statedb.persistence.identity.Organization;
+import app.statedb.persistence.identity.User;
 import io.quarkus.test.junit.QuarkusTest;
 import jakarta.inject.Inject;
 import java.util.UUID;
-import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 @QuarkusTest
-class OrgMembershipWriterTest {
+class OrgMembershipWriterTest extends DatabaseTest {
   @Inject OrgMembershipWriter writer;
   private UUID orgId;
   private UUID ownerId;
@@ -20,7 +25,7 @@ class OrgMembershipWriterTest {
 
   @BeforeEach
   void seed() {
-    QuarkusTransaction.requiringNew()
+    requiringNew()
         .run(
             () -> {
               Organization org = new Organization();
@@ -35,16 +40,6 @@ class OrgMembershipWriterTest {
               owner.userId = ownerId;
               owner.role = OrgMember.Role.owner;
               owner.persistAndFlush();
-            });
-  }
-
-  @AfterEach
-  void cleanup() {
-    QuarkusTransaction.requiringNew()
-        .run(
-            () -> {
-              Organization.delete("id", orgId);
-              User.delete("sub in ?1", java.util.List.of("membership-owner", "membership-other"));
             });
   }
 

@@ -1,14 +1,14 @@
 package app.statedb.app.report;
 
+import static io.quarkus.narayana.jta.QuarkusTransaction.requiringNew;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-import app.statedb.persistence.identity.Organization;
+import app.statedb.app.DatabaseTest;
 import app.statedb.persistence.lock.Lease;
 import app.statedb.persistence.lock.StackLockAcquirer;
 import app.statedb.persistence.lock.StackLockCanceller;
-import app.statedb.persistence.stack.StackCreator;
 import app.statedb.persistence.stack.StackRef;
 import app.statedb.persistence.update.StackUpdate;
 import app.statedb.persistence.update.StackUpdateCompleter;
@@ -19,10 +19,8 @@ import app.statedb.persistence.vcs.ReportDelivery;
 import app.statedb.persistence.vcs.ReportDeliveryWorker;
 import app.statedb.persistence.vcs.VcsConnection;
 import app.statedb.testsupport.InMemoryVcs;
-import io.quarkus.narayana.jta.QuarkusTransaction;
 import io.quarkus.test.junit.QuarkusTest;
 import jakarta.inject.Inject;
-import jakarta.persistence.EntityManager;
 import java.time.Instant;
 import java.util.Map;
 import java.util.UUID;
@@ -35,7 +33,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 @QuarkusTest
-class ReportDeliveryLifecycleTest {
+class ReportDeliveryLifecycleTest extends DatabaseTest {
 
   private static final String ORG_NAME = "report-delivery-org";
   private static final String HOST = "github.test";
@@ -45,8 +43,6 @@ class ReportDeliveryLifecycleTest {
   private static final String HEAD_1 = "1111111111111111111111111111111111111111";
   private static final String HEAD_2 = "2222222222222222222222222222222222222222";
 
-  @Inject EntityManager em;
-  @Inject StackCreator stackCreator;
   @Inject StackUpdateStarter starter;
   @Inject StackLockAcquirer lockAcquirer;
   @Inject StackUpdateCompleter completer;
@@ -59,17 +55,12 @@ class ReportDeliveryLifecycleTest {
   @BeforeEach
   void seed() {
     vcs.reset();
-    QuarkusTransaction.requiringNew()
+    stack = db.seedStack(ORG_NAME, "project", "dev");
+    requiringNew()
         .run(
             () -> {
-              Organization org = new Organization();
-              org.name = ORG_NAME;
-              org.displayName = "Report delivery";
-              org.persistAndFlush();
-              stack = stackCreator.create(org.id, ORG_NAME, "project", "dev", Map.of());
-
               VcsConnection connection = new VcsConnection();
-              connection.orgId = org.id;
+              connection.orgId = stack.orgId();
               connection.kind = "memory";
               connection.host = HOST;
               connection.persistAndFlush();
@@ -77,14 +68,8 @@ class ReportDeliveryLifecycleTest {
   }
 
   @AfterEach
-  void cleanup() {
+  void resetVcs() {
     vcs.reset();
-    QuarkusTransaction.requiringNew()
-        .run(
-            () ->
-                em.createNativeQuery("DELETE FROM organizations WHERE name = ?1")
-                    .setParameter(1, ORG_NAME)
-                    .executeUpdate());
   }
 
   @Test
@@ -173,8 +158,7 @@ class ReportDeliveryLifecycleTest {
     vcs.addPullRequest(REPOSITORY_ID, 17, HEAD_1, true);
     Running run = running("disconnected", HEAD_1);
     complete(run);
-    QuarkusTransaction.requiringNew()
-        .run(() -> VcsConnection.update("enabled = false where host = ?1", HOST));
+    requiringNew().run(() -> VcsConnection.update("enabled = false where host = ?1", HOST));
     assertEquals(0, worker.deliverOnce());
     ReportDelivery row = delivery(run.update().updateId());
     assertEquals("failed", row.state);
@@ -191,12 +175,8 @@ class ReportDeliveryLifecycleTest {
 
   @Test
   void orgWithoutConnectionCompletesWithoutQueueing() {
-    QuarkusTransaction.requiringNew()
-        .run(
-            () ->
-                VcsConnection.update(
-                    "enabled = false where orgId = ?1",
-                    Organization.<Organization>find("name", ORG_NAME).singleResult().id));
+    requiringNew()
+        .run(() -> VcsConnection.update("enabled = false where orgId = ?1", stack.orgId()));
     Running run = running("no-connection", HEAD_1);
     complete(run);
     assertEquals(StackUpdate.Status.SUCCEEDED, status(run.update().updateId()));
@@ -227,14 +207,14 @@ class ReportDeliveryLifecycleTest {
     Running run = running("retention", HEAD_1);
     complete(run);
     worker.deliverOnce();
-    QuarkusTransaction.requiringNew()
+    requiringNew()
         .run(
             () ->
                 ReportDelivery.update(
                     "settledAt = ?1 where updateId = ?2", Instant.EPOCH, run.update().updateId()));
     worker.deliverOnce();
     assertEquals(0, ReportDelivery.count("updateId", run.update().updateId()));
-    assertTrue(StackUpdate.findById(run.update().updateId()) != null);
+    assertEquals(1L, StackUpdate.count("id", run.update().updateId()));
   }
 
   @Test
@@ -245,7 +225,7 @@ class ReportDeliveryLifecycleTest {
     worker.deliverOnce();
     String commentId = vcs.comments().getFirst().id;
     // Simulate rollback of the final database transaction after GitHub accepted its writes.
-    QuarkusTransaction.requiringNew()
+    requiringNew()
         .run(
             () ->
                 ReportDelivery.update(
@@ -286,8 +266,7 @@ class ReportDeliveryLifecycleTest {
             .orElseThrow();
     assertEquals(0, ReportDelivery.count("updateId", run.updateId()));
     complete(new Running(run, lease));
-    QuarkusTransaction.requiringNew()
-        .run(() -> worker.enqueue(StackUpdate.findById(run.updateId())));
+    requiringNew().run(() -> worker.enqueue(StackUpdate.findById(run.updateId())));
     assertEquals(1, ReportDelivery.count("updateId", run.updateId()));
     assertEquals(REPOSITORY, delivery(run.updateId()).repositoryName);
   }
@@ -301,7 +280,7 @@ class ReportDeliveryLifecycleTest {
   }
 
   private void due(UUID update) {
-    QuarkusTransaction.requiringNew()
+    requiringNew()
         .run(
             () ->
                 ReportDelivery.update(
@@ -309,13 +288,12 @@ class ReportDeliveryLifecycleTest {
   }
 
   private StackUpdate.Status status(UUID update) {
-    em.clear();
-    return StackUpdate.<StackUpdate>findById(update).status;
+    return requiringNew().call(() -> StackUpdate.<StackUpdate>findById(update).status);
   }
 
   private ReportDelivery delivery(UUID update) {
-    em.clear();
-    return ReportDelivery.<ReportDelivery>find("updateId", update).singleResult();
+    return requiringNew()
+        .call(() -> ReportDelivery.<ReportDelivery>find("updateId", update).singleResult());
   }
 
   private Running running(String key, String head) {
@@ -342,7 +320,7 @@ class ReportDeliveryLifecycleTest {
             key,
             new StartUpdateRequest(
                 Map.of(), Map.of("environment", environment), Map.of(), null, "yaml", null, key));
-    QuarkusTransaction.requiringNew()
+    requiringNew()
         .run(
             () -> {
               StackUpdate update = StackUpdate.findById(started.updateId());

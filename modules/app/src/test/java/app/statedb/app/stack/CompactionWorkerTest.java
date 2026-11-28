@@ -1,9 +1,11 @@
 package app.statedb.app.stack;
 
+import static app.statedb.app.Races.holdThenContend;
+import static io.quarkus.narayana.jta.QuarkusTransaction.requiringNew;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
 
-import app.statedb.persistence.identity.Organization;
+import app.statedb.app.DatabaseTest;
 import app.statedb.persistence.journal.JournalEntry;
 import app.statedb.persistence.stack.AssembledDeployment;
 import app.statedb.persistence.stack.CompactionJob;
@@ -12,33 +14,22 @@ import app.statedb.persistence.stack.CompactionWorker;
 import app.statedb.persistence.stack.Snapshot;
 import app.statedb.persistence.stack.Stack;
 import app.statedb.persistence.stack.StackAssembler;
-import app.statedb.persistence.stack.StackCreator;
-import app.statedb.persistence.stack.StackRef;
 import app.statedb.persistence.stack.StackState;
 import app.statedb.persistence.update.StackUpdate;
 import app.statedb.testsupport.pulumi.DeploymentNormalizer;
 import app.statedb.testsupport.pulumi.PulumiDeploymentAssert;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import io.quarkus.narayana.jta.QuarkusTransaction;
 import io.quarkus.test.junit.QuarkusTest;
 import jakarta.inject.Inject;
-import jakarta.persistence.EntityManager;
 import jakarta.persistence.LockModeType;
 import java.time.Instant;
-import java.util.Map;
 import java.util.UUID;
-import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
-import java.util.concurrent.Future;
-import java.util.concurrent.TimeUnit;
-import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 @QuarkusTest
-class CompactionWorkerTest {
+class CompactionWorkerTest extends DatabaseTest {
 
   private static final ObjectMapper MAPPER = new ObjectMapper();
   private static final String ORG_NAME = "compaction-org";
@@ -46,10 +37,8 @@ class CompactionWorkerTest {
   private static final String PROVIDER_ID = "8f1f0b1e-0000-4000-8000-000000000001";
 
   @Inject StackAssembler assembler;
-  @Inject StackCreator stackCreator;
   @Inject CompactionJobEnqueuer enqueuer;
   @Inject CompactionWorker worker;
-  @Inject EntityManager em;
 
   private UUID stackId;
   private int updateVersion;
@@ -57,12 +46,7 @@ class CompactionWorkerTest {
 
   @BeforeEach
   void seed() {
-    stackId = createStack("dev");
-  }
-
-  @AfterEach
-  void cleanup() {
-    QuarkusTransaction.requiringNew().run(() -> Organization.delete("name", ORG_NAME));
+    stackId = db.seedStack(ORG_NAME).stackId();
   }
 
   @Test
@@ -72,9 +56,9 @@ class CompactionWorkerTest {
 
     JsonNode before = normalized(assemble(stackId).deployment());
 
-    QuarkusTransaction.requiringNew().run(() -> enqueuer.enqueue(stackId));
+    requiringNew().run(() -> enqueuer.enqueue(stackId));
     UUID jobId =
-        QuarkusTransaction.requiringNew()
+        requiringNew()
             .call(() -> CompactionJob.<CompactionJob>find("stackId", stackId).singleResult().id);
     assertEquals(7, jobId.version());
 
@@ -83,9 +67,13 @@ class CompactionWorkerTest {
     JsonNode after = normalized(assemble(stackId).deployment());
     assertEquals(before, after);
     assertEquals(1L, Snapshot.count("stackId", stackId));
-    Snapshot snapshot = Snapshot.find("stackId", stackId).<Snapshot>singleResult();
-    assertEquals(1, snapshot.resourceCount);
-    assertEquals(0L, stackState(stackId).journalEntriesSinceCompaction);
+    requiringNew()
+        .run(
+            () -> {
+              Snapshot snapshot = Snapshot.find("stackId", stackId).<Snapshot>singleResult();
+              assertEquals(1, snapshot.resourceCount);
+              assertEquals(0L, stackState(stackId).journalEntriesSinceCompaction);
+            });
     assertEquals(
         1L,
         CompactionJob.count(
@@ -96,44 +84,27 @@ class CompactionWorkerTest {
   void compactionWaitsForStackStateLockBeforeSnapshotting() throws Exception {
     UUID update = update(stackId);
     entry(stackId, update, 1, 1L, "{\"state\":" + res("locked") + "}");
-    QuarkusTransaction.requiringNew().run(() -> enqueuer.enqueue(stackId));
+    requiringNew().run(() -> enqueuer.enqueue(stackId));
 
-    CountDownLatch locked = new CountDownLatch(1);
-    CountDownLatch release = new CountDownLatch(1);
-    ExecutorService pool = Executors.newFixedThreadPool(2);
-    try {
-      Future<?> holder =
-          pool.submit(
-              () ->
-                  QuarkusTransaction.requiringNew()
-                      .run(
-                          () -> {
-                            StackState.find("stackId", stackId)
-                                .withLock(LockModeType.PESSIMISTIC_WRITE)
-                                .<StackState>singleResult();
-                            locked.countDown();
-                            await(release);
-                          }));
+    int compacted =
+        holdThenContend(
+            em,
+            () ->
+                StackState.find("stackId", stackId)
+                    .withLock(LockModeType.PESSIMISTIC_WRITE)
+                    .<StackState>singleResult(),
+            "%select%from %stack_state%for%update%",
+            worker::drainOnce);
+    assertEquals(1, compacted);
 
-      org.junit.jupiter.api.Assertions.assertTrue(locked.await(5, TimeUnit.SECONDS));
-      Future<Integer> compacting = pool.submit(() -> worker.drainOnce());
-
-      Thread.sleep(200);
-      org.junit.jupiter.api.Assertions.assertFalse(
-          compacting.isDone(), "compaction must wait for the stack_state row lock");
-
-      release.countDown();
-      holder.get(5, TimeUnit.SECONDS);
-      assertEquals(1, compacting.get(5, TimeUnit.SECONDS));
-
-      StackState state = stackState(stackId);
-      assertEquals(0L, state.journalEntriesSinceCompaction);
-      Snapshot snapshot = Snapshot.find("stackId", stackId).<Snapshot>singleResult();
-      assertEquals(state.journalSeq, snapshot.compactedFromJournalSeq);
-    } finally {
-      release.countDown();
-      pool.shutdownNow();
-    }
+    requiringNew()
+        .run(
+            () -> {
+              StackState state = stackState(stackId);
+              assertEquals(0L, state.journalEntriesSinceCompaction);
+              Snapshot snapshot = Snapshot.find("stackId", stackId).<Snapshot>singleResult();
+              assertEquals(state.journalSeq, snapshot.compactedFromJournalSeq);
+            });
   }
 
   @Test
@@ -144,7 +115,7 @@ class CompactionWorkerTest {
     entry(stackId, first, 1, 2L, "{\"state\":" + providedResource("alpha") + "}");
     entry(stackId, first, 1, 3L, "{\"state\":" + providedResource("beta") + "}");
 
-    QuarkusTransaction.requiringNew().run(() -> enqueuer.enqueue(stackId));
+    requiringNew().run(() -> enqueuer.enqueue(stackId));
     assertEquals(1, worker.drainOnce());
     assemble(stackId);
 
@@ -155,7 +126,7 @@ class CompactionWorkerTest {
     entryReplacingBase(stackId, second, 5L, "{\"state\":" + providedResource("alpha") + "}", 1L);
 
     // Compacting the prefix would put the suffix ahead of the provider on the next replay.
-    QuarkusTransaction.requiringNew().run(() -> enqueuer.enqueue(stackId));
+    requiringNew().run(() -> enqueuer.enqueue(stackId));
     worker.drainOnce();
 
     assertEquals(1L, Snapshot.count("stackId", stackId), "no snapshot may be taken mid-update");
@@ -188,10 +159,10 @@ class CompactionWorkerTest {
     JsonNode before = normalized(assemble(stackId).deployment());
     assertEquals(1, before.required("pending_operations").size());
 
-    QuarkusTransaction.requiringNew().run(() -> enqueuer.enqueue(stackId));
+    requiringNew().run(() -> enqueuer.enqueue(stackId));
     assertEquals(1, worker.drainOnce());
 
-    QuarkusTransaction.requiringNew()
+    requiringNew()
         .run(
             () -> {
               Snapshot snapshot = Snapshot.find("stackId", stackId).<Snapshot>singleResult();
@@ -227,11 +198,11 @@ class CompactionWorkerTest {
         """
             .formatted(urn("traced")));
 
-    QuarkusTransaction.requiringNew().run(() -> enqueuer.enqueue(stackId));
+    requiringNew().run(() -> enqueuer.enqueue(stackId));
 
     assertEquals(1, worker.drainOnce());
 
-    QuarkusTransaction.requiringNew()
+    requiringNew()
         .run(
             () -> {
               Snapshot snapshot = Snapshot.find("stackId", stackId).<Snapshot>singleResult();
@@ -268,10 +239,10 @@ class CompactionWorkerTest {
         expectedSecret,
         before.required("resources").get(0).required("outputs").required("password"));
 
-    QuarkusTransaction.requiringNew().run(() -> enqueuer.enqueue(stackId));
+    requiringNew().run(() -> enqueuer.enqueue(stackId));
     assertEquals(1, worker.drainOnce());
 
-    QuarkusTransaction.requiringNew()
+    requiringNew()
         .run(
             () -> {
               Snapshot snapshot = Snapshot.find("stackId", stackId).<Snapshot>singleResult();
@@ -299,7 +270,7 @@ class CompactionWorkerTest {
     entry(stackId, oldUpdate, 1, 1L, "{\"state\":" + res("old") + "}");
     JsonNode baseCheckpoint = MAPPER.readTree("{\"resources\":[" + res("base") + "]}");
 
-    QuarkusTransaction.requiringNew()
+    requiringNew()
         .run(
             () -> {
               Snapshot snapshot = new Snapshot();
@@ -328,7 +299,7 @@ class CompactionWorkerTest {
   void retryableFailureReturnsToPendingUntilMaxAttempts() throws Exception {
     UUID update = update(stackId);
     entry(stackId, update, 99, 0L, "{}");
-    QuarkusTransaction.requiringNew().run(() -> enqueuer.enqueue(stackId));
+    requiringNew().run(() -> enqueuer.enqueue(stackId));
 
     assertEquals(1, worker.drainOnce());
 
@@ -347,13 +318,11 @@ class CompactionWorkerTest {
   @Test
   void reaperReclaimsTimedOutRunningJobsAndFailsExhaustedOnes() {
     UUID retryStack = stackId;
-    UUID failedStack = createStack("failed");
+    UUID failedStack = db.seedStack(ORG_NAME, "proj", "failed").stackId();
     UUID retryJob =
-        QuarkusTransaction.requiringNew()
-            .call(() -> runningJob(retryStack, 1, Instant.now().minusSeconds(600)));
-    QuarkusTransaction.requiringNew()
-        .call(() -> runningJob(failedStack, 3, Instant.now().minusSeconds(600)));
-    UUID failedJob = loadCompactionJobByStack(failedStack).id;
+        requiringNew().call(() -> runningJob(retryStack, 1, Instant.now().minusSeconds(600)));
+    UUID failedJob =
+        requiringNew().call(() -> runningJob(failedStack, 3, Instant.now().minusSeconds(600)));
 
     assertEquals(2, worker.reclaimStuckJobs());
 
@@ -361,28 +330,9 @@ class CompactionWorkerTest {
     assertEquals(CompactionJob.Status.FAILED, loadCompactionJob(failedJob).status);
   }
 
-  private UUID createStack(String stackName) {
-    return QuarkusTransaction.requiringNew()
-        .call(
-            () -> {
-              Organization org =
-                  (Organization)
-                      Organization.find("name", ORG_NAME)
-                          .firstResultOptional()
-                          .orElseGet(Organization::new);
-              if (org.id == null) {
-                org.name = ORG_NAME;
-                org.displayName = "Compaction Test";
-                org.persistAndFlush();
-              }
-              StackRef ref = stackCreator.create(org.id, ORG_NAME, "proj", stackName, Map.of());
-              return ref.stackId();
-            });
-  }
-
   private UUID update(UUID targetStackId) {
     int version = ++updateVersion;
-    return QuarkusTransaction.requiringNew()
+    return requiringNew()
         .call(
             () -> {
               StackUpdate update = new StackUpdate();
@@ -401,7 +351,7 @@ class CompactionWorkerTest {
       throws Exception {
     long seq = ++sequence;
     JsonNode parsed = MAPPER.readTree(payload);
-    QuarkusTransaction.requiringNew()
+    requiringNew()
         .run(
             () -> {
               JournalEntry entry = new JournalEntry();
@@ -436,7 +386,7 @@ class CompactionWorkerTest {
       throws Exception {
     long seq = ++sequence;
     JsonNode parsed = MAPPER.readTree(payload);
-    QuarkusTransaction.requiringNew()
+    requiringNew()
         .run(
             () -> {
               JournalEntry entry = new JournalEntry();
@@ -458,13 +408,12 @@ class CompactionWorkerTest {
 
   /** Clears the in-flight marker, as update completion does. */
   private void completeUpdate(UUID targetStackId) {
-    QuarkusTransaction.requiringNew()
-        .run(() -> Stack.update("activeUpdateId = null where id = ?1", targetStackId));
+    requiringNew().run(() -> Stack.update("activeUpdateId = null where id = ?1", targetStackId));
   }
 
   /** Marks the stack as having an update in flight, as lock acquisition does. */
   private void markUpdateInFlight(UUID targetStackId, UUID updateId) {
-    QuarkusTransaction.requiringNew()
+    requiringNew()
         .run(() -> Stack.update("activeUpdateId = ?1 where id = ?2", updateId, targetStackId));
   }
 
@@ -501,12 +450,12 @@ class CompactionWorkerTest {
   }
 
   private CompactionJob loadCompactionJobByStack(UUID targetStackId) {
-    return QuarkusTransaction.requiringNew()
+    return requiringNew()
         .call(() -> CompactionJob.find("stackId", targetStackId).<CompactionJob>firstResult());
   }
 
   private CompactionJob loadCompactionJob(UUID jobId) {
-    return QuarkusTransaction.requiringNew().call(() -> em.find(CompactionJob.class, jobId));
+    return requiringNew().call(() -> em.find(CompactionJob.class, jobId));
   }
 
   private JsonNode normalized(JsonNode node) {
@@ -533,16 +482,5 @@ class CompactionWorkerTest {
         + "\"ciphertext\":\""
         + ciphertext
         + "\"}";
-  }
-
-  private static void await(CountDownLatch latch) {
-    try {
-      if (!latch.await(5, TimeUnit.SECONDS)) {
-        throw new IllegalStateException("timed out waiting for latch");
-      }
-    } catch (InterruptedException e) {
-      Thread.currentThread().interrupt();
-      throw new RuntimeException(e);
-    }
   }
 }

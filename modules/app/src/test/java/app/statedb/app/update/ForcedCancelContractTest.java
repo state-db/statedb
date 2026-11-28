@@ -1,92 +1,35 @@
 package app.statedb.app.update;
 
+import static io.quarkus.narayana.jta.QuarkusTransaction.requiringNew;
 import static io.restassured.RestAssured.given;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
-import app.statedb.persistence.auth.ApiToken;
+import app.statedb.app.DatabaseTest;
 import app.statedb.persistence.events.UpdateEvent;
-import app.statedb.persistence.identity.OrgMember;
-import app.statedb.persistence.identity.Organization;
-import app.statedb.persistence.identity.User;
 import app.statedb.persistence.journal.JournalEntry;
 import app.statedb.persistence.lock.StackLock;
 import app.statedb.persistence.stack.Stack;
-import app.statedb.persistence.stack.StackCreator;
 import app.statedb.persistence.update.StackUpdate;
-import io.quarkus.narayana.jta.QuarkusTransaction;
 import io.quarkus.test.junit.QuarkusTest;
-import jakarta.inject.Inject;
-import jakarta.persistence.EntityManager;
-import java.nio.charset.StandardCharsets;
-import java.security.MessageDigest;
-import java.security.NoSuchAlgorithmException;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
-import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 @QuarkusTest
-class ForcedCancelContractTest {
+class ForcedCancelContractTest extends DatabaseTest {
 
   private static final String ORG = "forced-cancel-org";
   private static final String RAW_TOKEN = "forced-cancel-token";
   private static final String PROJECT = "recorder-test";
   private static final String STACK = "dev";
 
-  @Inject EntityManager em;
-  @Inject StackCreator stackCreator;
+  private UUID stackId;
 
   @BeforeEach
   void seed() {
-    QuarkusTransaction.requiringNew()
-        .run(
-            () -> {
-              Organization org = new Organization();
-              org.name = ORG;
-              org.displayName = "Forced Cancel Test";
-              org.persistAndFlush();
-
-              User user = new User();
-              user.iss = "local:test";
-              user.sub = "forced-cancel";
-              user.email = "forced-cancel@example.com";
-              user.displayName = "Forced Cancel Tester";
-              user.persistAndFlush();
-
-              OrgMember m = new OrgMember();
-              m.orgId = org.id;
-              m.userId = user.id;
-              m.role = OrgMember.Role.owner;
-              m.persistAndFlush();
-
-              ApiToken t = new ApiToken();
-              t.tokenHash = sha256Hex(RAW_TOKEN);
-              t.userId = user.id;
-              t.orgId = org.id;
-              t.kind = ApiToken.Kind.service_account;
-              t.expiresAt = java.time.Instant.now().plusSeconds(60 * 60);
-              t.description = "forced cancel";
-              t.persistAndFlush();
-
-              stackCreator.create(org.id, ORG, PROJECT, STACK, Map.of());
-            });
-  }
-
-  @AfterEach
-  void cleanup() {
-    QuarkusTransaction.requiringNew()
-        .run(
-            () -> {
-              em.createNativeQuery("DELETE FROM organizations WHERE name = ?1")
-                  .setParameter(1, ORG)
-                  .executeUpdate();
-              em.createNativeQuery("DELETE FROM users WHERE iss = ?1 AND sub = ?2")
-                  .setParameter(1, "local:test")
-                  .setParameter(2, "forced-cancel")
-                  .executeUpdate();
-            });
+    stackId = db.seedOwnerWithStack(ORG, RAW_TOKEN, PROJECT, STACK).stack().stackId();
   }
 
   @Test
@@ -253,65 +196,23 @@ class ForcedCancelContractTest {
   }
 
   private StackUpdate.Status updateStatus(String updateId) {
-    return QuarkusTransaction.requiringNew()
+    return requiringNew()
         .call(() -> StackUpdate.<StackUpdate>findById(UUID.fromString(updateId)).status);
   }
 
   private UUID activeUpdateId() {
-    return QuarkusTransaction.requiringNew()
-        .call(
-            () ->
-                Stack.<Stack>find(
-                        "project.organization.name = ?1 and project.name = ?2 and name = ?3",
-                        ORG,
-                        PROJECT,
-                        STACK)
-                    .singleResult()
-                    .activeUpdateId);
+    return requiringNew().call(() -> Stack.<Stack>findById(stackId).activeUpdateId);
   }
 
   private long lockCount() {
-    return QuarkusTransaction.requiringNew().call(() -> StackLock.count("stackId", stackId()));
+    return StackLock.count("stackId", stackId);
   }
 
   private long journalEntryCount(String updateId) {
-    return QuarkusTransaction.requiringNew()
-        .call(
-            () ->
-                JournalEntry.count(
-                    "stackId = ?1 and updateId = ?2", stackId(), UUID.fromString(updateId)));
+    return JournalEntry.count("stackId = ?1 and updateId = ?2", stackId, UUID.fromString(updateId));
   }
 
   private long updateEventCount(String updateId) {
-    return QuarkusTransaction.requiringNew()
-        .call(
-            () ->
-                UpdateEvent.count(
-                    "stackId = ?1 and updateId = ?2", stackId(), UUID.fromString(updateId)));
-  }
-
-  private UUID stackId() {
-    return Stack.<Stack>find(
-            "project.organization.name = ?1 and project.name = ?2 and name = ?3",
-            ORG,
-            PROJECT,
-            STACK)
-        .singleResult()
-        .id;
-  }
-
-  private static String sha256Hex(String input) {
-    try {
-      byte[] digest =
-          MessageDigest.getInstance("SHA-256").digest(input.getBytes(StandardCharsets.UTF_8));
-      StringBuilder sb = new StringBuilder(digest.length * 2);
-      for (byte b : digest) {
-        sb.append(Character.forDigit((b >> 4) & 0xF, 16));
-        sb.append(Character.forDigit(b & 0xF, 16));
-      }
-      return sb.toString();
-    } catch (NoSuchAlgorithmException e) {
-      throw new IllegalStateException(e);
-    }
+    return UpdateEvent.count("stackId = ?1 and updateId = ?2", stackId, UUID.fromString(updateId));
   }
 }

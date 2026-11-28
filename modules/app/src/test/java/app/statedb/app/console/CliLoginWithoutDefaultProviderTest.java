@@ -1,14 +1,14 @@
 package app.statedb.app.console;
 
+import static io.quarkus.narayana.jta.QuarkusTransaction.requiringNew;
 import static io.restassured.RestAssured.given;
 import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.equalTo;
 import static org.hamcrest.Matchers.hasItems;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
+import app.statedb.app.DatabaseTest;
 import app.statedb.persistence.identity.OidcProvider;
-import app.statedb.persistence.identity.User;
-import io.quarkus.narayana.jta.QuarkusTransaction;
 import io.quarkus.test.common.QuarkusTestResource;
 import io.quarkus.test.junit.QuarkusTest;
 import io.quarkus.test.junit.QuarkusTestProfile;
@@ -19,7 +19,6 @@ import java.net.URI;
 import java.util.List;
 import java.util.Map;
 import org.eclipse.microprofile.config.ConfigProvider;
-import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
@@ -31,7 +30,7 @@ import org.junit.jupiter.api.Test;
 @QuarkusTest
 @QuarkusTestResource(OidcWiremockTestResource.class)
 @TestProfile(CliLoginWithoutDefaultProviderTest.Profile.class)
-class CliLoginWithoutDefaultProviderTest {
+class CliLoginWithoutDefaultProviderTest extends DatabaseTest {
 
   private static final List<String> PROVIDERS = List.of("cli-idp-a", "cli-idp-b");
 
@@ -44,10 +43,9 @@ class CliLoginWithoutDefaultProviderTest {
 
   @BeforeEach
   void seedProviders() {
-    QuarkusTransaction.requiringNew()
+    requiringNew()
         .run(
             () -> {
-              OidcProvider.delete("name in ?1", PROVIDERS);
               for (String name : PROVIDERS) {
                 OidcProvider p = new OidcProvider();
                 p.name = name;
@@ -62,16 +60,6 @@ class CliLoginWithoutDefaultProviderTest {
                 p.enabled = true;
                 p.persist();
               }
-            });
-  }
-
-  @AfterEach
-  void cleanup() {
-    QuarkusTransaction.requiringNew()
-        .run(
-            () -> {
-              OidcProvider.delete("name in ?1", PROVIDERS);
-              User.delete("iss = ?1 and sub = ?2", "https://server.example.com", "123456");
             });
   }
 

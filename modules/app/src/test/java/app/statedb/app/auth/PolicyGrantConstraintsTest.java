@@ -2,6 +2,7 @@ package app.statedb.app.auth;
 
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
+import app.statedb.app.DatabaseTest;
 import app.statedb.persistence.identity.Organization;
 import app.statedb.persistence.identity.User;
 import app.statedb.persistence.policy.PolicyGrant;
@@ -20,7 +21,7 @@ import org.junit.jupiter.api.Test;
  * correctly tenanted) Cedar TemplateLink.
  */
 @QuarkusTest
-class PolicyGrantConstraintsTest {
+class PolicyGrantConstraintsTest extends DatabaseTest {
 
   @Test
   @TestTransaction

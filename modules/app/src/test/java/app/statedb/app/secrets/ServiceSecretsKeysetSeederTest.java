@@ -1,21 +1,19 @@
 package app.statedb.app.secrets;
 
+import static io.quarkus.narayana.jta.QuarkusTransaction.requiringNew;
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
+import app.statedb.app.DatabaseTest;
 import app.statedb.persistence.secrets.ServiceSecretsKeysetSeeder;
-import io.quarkus.narayana.jta.QuarkusTransaction;
 import io.quarkus.test.junit.QuarkusTest;
 import jakarta.inject.Inject;
-import jakarta.persistence.EntityManager;
 import org.junit.jupiter.api.Test;
 
 @QuarkusTest
-class ServiceSecretsKeysetSeederTest {
+class ServiceSecretsKeysetSeederTest extends DatabaseTest {
 
   @Inject ServiceSecretsKeysetSeeder seeder;
-
-  @Inject EntityManager em;
 
   @Test
   void exactlyOneRowAfterStartup() {
@@ -28,8 +26,8 @@ class ServiceSecretsKeysetSeederTest {
   @Test
   void rerunningSeedIsIdempotent() {
     byte[] before = currentMaterial();
-    QuarkusTransaction.requiringNew().run(seeder::seed);
-    QuarkusTransaction.requiringNew().run(seeder::seed);
+    requiringNew().run(seeder::seed);
+    requiringNew().run(seeder::seed);
     byte[] after = currentMaterial();
 
     assertArrayEquals(before, after, "key material must not change on re-seed");

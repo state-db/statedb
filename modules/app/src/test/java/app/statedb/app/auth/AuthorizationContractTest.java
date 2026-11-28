@@ -1,28 +1,26 @@
 package app.statedb.app.auth;
 
+import static io.quarkus.narayana.jta.QuarkusTransaction.requiringNew;
 import static io.restassured.RestAssured.given;
 import static org.hamcrest.Matchers.equalTo;
 
+import app.statedb.app.DatabaseTest;
 import app.statedb.persistence.auth.ApiToken;
+import app.statedb.persistence.auth.ApiTokenHasher;
 import app.statedb.persistence.bootstrap.BootstrapProvisioner;
 import app.statedb.persistence.identity.OrgMember;
 import app.statedb.persistence.identity.Organization;
 import app.statedb.persistence.identity.User;
 import app.statedb.persistence.stack.StackCreator;
-import app.statedb.testsupport.TestIdentity;
-import io.quarkus.narayana.jta.QuarkusTransaction;
 import io.quarkus.test.junit.QuarkusTest;
 import jakarta.inject.Inject;
-import jakarta.persistence.EntityManager;
 import java.util.List;
 import java.util.Map;
-import java.util.UUID;
-import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 @QuarkusTest
-class AuthorizationContractTest {
+class AuthorizationContractTest extends DatabaseTest {
 
   private static final String ORG = "authz-org";
   private static final String OTHER_ORG = "authz-other-org";
@@ -31,28 +29,24 @@ class AuthorizationContractTest {
   private static final String MEMBER_TOKEN = "authz-member-token";
   private static final String ADMIN_TOKEN = "authz-admin-token";
 
-  @Inject EntityManager em;
-
   @Inject StackCreator stackCreator;
-
-  private UUID orgId;
-  private UUID otherOrgId;
+  @Inject ApiTokenHasher tokenHasher;
 
   @BeforeEach
   void seed() {
-    QuarkusTransaction.requiringNew()
+    requiringNew()
         .run(
             () -> {
               Organization org = org(ORG);
-              orgId = org.id;
               Organization other = org(OTHER_ORG);
-              otherOrgId = other.id;
 
               userWithToken("viewer", OrgMember.Role.viewer, org, VIEWER_TOKEN);
               userWithToken("member", OrgMember.Role.member, org, MEMBER_TOKEN);
               stackCreator.create(org.id, ORG, PROJECT, "member-delete", Map.of());
               stackCreator.create(org.id, ORG, PROJECT, "secrets", Map.of());
               stackCreator.create(org.id, ORG, PROJECT, "prod", Map.of());
+              stackCreator.create(other.id, OTHER_ORG, PROJECT, "secret", Map.of());
+              stackCreator.create(other.id, OTHER_ORG, PROJECT, "delete-me", Map.of());
 
               User admin = new User();
               admin.iss = BootstrapProvisioner.BOOTSTRAP_ISS;
@@ -68,36 +62,13 @@ class AuthorizationContractTest {
               adminMember.persistAndFlush();
 
               ApiToken token = new ApiToken();
-              token.tokenHash = TestIdentity.sha256Hex(ADMIN_TOKEN);
+              token.tokenHash = tokenHasher.hash(ADMIN_TOKEN);
               token.userId = admin.id;
               token.orgId = org.id;
               token.kind = ApiToken.Kind.service_account;
               token.expiresAt = java.time.Instant.now().plusSeconds(60 * 60);
               token.description = "admin";
               token.persistAndFlush();
-            });
-
-    QuarkusTransaction.requiringNew()
-        .run(
-            () -> {
-              stackCreator.create(otherOrgId, OTHER_ORG, PROJECT, "secret", Map.of());
-              stackCreator.create(otherOrgId, OTHER_ORG, PROJECT, "delete-me", Map.of());
-            });
-  }
-
-  @AfterEach
-  void cleanup() {
-    QuarkusTransaction.requiringNew()
-        .run(
-            () -> {
-              em.createNativeQuery("DELETE FROM organizations WHERE name IN (?1, ?2)")
-                  .setParameter(1, ORG)
-                  .setParameter(2, OTHER_ORG)
-                  .executeUpdate();
-              em.createNativeQuery("DELETE FROM users WHERE iss IN (?1, ?2)")
-                  .setParameter(1, "local:test")
-                  .setParameter(2, BootstrapProvisioner.BOOTSTRAP_ISS)
-                  .executeUpdate();
             });
   }
 
@@ -262,8 +233,7 @@ class AuthorizationContractTest {
     return org;
   }
 
-  private static void userWithToken(
-      String sub, OrgMember.Role role, Organization org, String rawToken) {
+  private void userWithToken(String sub, OrgMember.Role role, Organization org, String rawToken) {
     User user = new User();
     user.iss = "local:test";
     user.sub = "authz-" + sub;
@@ -278,7 +248,7 @@ class AuthorizationContractTest {
     member.persistAndFlush();
 
     ApiToken token = new ApiToken();
-    token.tokenHash = TestIdentity.sha256Hex(rawToken);
+    token.tokenHash = tokenHasher.hash(rawToken);
     token.userId = user.id;
     token.orgId = org.id;
     token.kind = ApiToken.Kind.service_account;

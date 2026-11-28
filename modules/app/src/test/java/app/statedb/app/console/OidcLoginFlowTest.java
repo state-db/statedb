@@ -9,24 +9,19 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-import app.statedb.persistence.identity.OidcProvider;
+import app.statedb.app.DatabaseTest;
 import app.statedb.persistence.identity.User;
-import io.quarkus.narayana.jta.QuarkusTransaction;
 import io.quarkus.test.common.QuarkusTestResource;
 import io.quarkus.test.junit.QuarkusTest;
 import io.quarkus.test.oidc.server.OidcWiremockTestResource;
 import io.restassured.http.Cookie;
 import io.restassured.response.Response;
-import jakarta.inject.Inject;
-import jakarta.persistence.EntityManager;
 import java.net.URI;
 import java.net.URLDecoder;
 import java.nio.charset.StandardCharsets;
 import java.util.HashMap;
-import java.util.List;
 import java.util.Map;
 import org.eclipse.microprofile.config.ConfigProvider;
-import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
@@ -38,11 +33,9 @@ import org.junit.jupiter.api.Test;
  */
 @QuarkusTest
 @QuarkusTestResource(OidcWiremockTestResource.class)
-class OidcLoginFlowTest {
+class OidcLoginFlowTest extends DatabaseTest {
 
-  private static final String PROVIDER = "wiremock";
-
-  @Inject EntityManager em;
+  private static final String PROVIDER = OidcConsoleSessionFixture.PROVIDER;
 
   private String issuer() {
     // OidcWiremockTestResource exposes its base (already ending in /auth) as keycloak.url; the
@@ -52,36 +45,7 @@ class OidcLoginFlowTest {
 
   @BeforeEach
   void seedProvider() {
-    QuarkusTransaction.requiringNew()
-        .run(
-            () -> {
-              em.createNativeQuery("DELETE FROM oidc_providers WHERE name = ?1")
-                  .setParameter(1, PROVIDER)
-                  .executeUpdate();
-              OidcProvider p = new OidcProvider();
-              p.name = PROVIDER;
-              p.issuerUrl = issuer();
-              p.clientId = "quarkus-app"; // the mock IdP's registered client + audience
-              p.clientSecret = "secret";
-              p.scopes = List.of("openid", "profile", "email");
-              p.enabled = true;
-              p.persist();
-            });
-  }
-
-  @AfterEach
-  void cleanup() {
-    QuarkusTransaction.requiringNew()
-        .run(
-            () -> {
-              em.createNativeQuery("DELETE FROM oidc_providers WHERE name = ?1")
-                  .setParameter(1, PROVIDER)
-                  .executeUpdate();
-              // OidcWiremockTestResource signs its fixture ID token with this fixed issuer/subject.
-              em.createNativeQuery(
-                      "DELETE FROM users WHERE iss = 'https://server.example.com' AND sub = '123456'")
-                  .executeUpdate();
-            });
+    OidcConsoleSessionFixture.seedProvider();
   }
 
   @Test
@@ -168,11 +132,10 @@ class OidcLoginFlowTest {
 
     // Provisioning is part of authentication completion, not a later browser navigation. If the
     // browser never follows the restored /flow redirect, the issued session must still be usable.
-    long provisionedUsers =
-        QuarkusTransaction.requiringNew()
-            .call(
-                () -> User.count("iss = ?1 and sub = ?2", "https://server.example.com", "123456"));
-    assertEquals(1L, provisionedUsers, "callback completion provisions the user atomically");
+    assertEquals(
+        1L,
+        User.count("iss = ?1 and sub = ?2", "https://server.example.com", "123456"),
+        "callback completion provisions the user atomically");
 
     // 4. /api/user works immediately with the callback's session, without following /flow. The mock
     // id token carries no email/name claims, so those are null; id/siteAdmin/organizations remain.

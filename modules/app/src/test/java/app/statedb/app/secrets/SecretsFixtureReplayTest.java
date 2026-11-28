@@ -6,6 +6,7 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import app.statedb.app.DatabaseTest;
 import app.statedb.app.contract.FixtureReplay;
 import app.statedb.testsupport.RepoRoot;
 import com.fasterxml.jackson.databind.JsonNode;
@@ -16,8 +17,6 @@ import io.quarkus.test.junit.QuarkusTest;
 import io.restassured.path.json.JsonPath;
 import io.restassured.response.Response;
 import io.restassured.specification.RequestSpecification;
-import jakarta.inject.Inject;
-import jakarta.persistence.EntityManager;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.nio.file.Files;
@@ -27,7 +26,6 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.zip.GZIPOutputStream;
-import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
@@ -48,23 +46,16 @@ import org.junit.jupiter.api.Test;
  * end-to-end crypto wiring — without pretending {@code [secret]} is valid base64.
  */
 @QuarkusTest
-class SecretsFixtureReplayTest {
+class SecretsFixtureReplayTest extends DatabaseTest {
 
   private static final ObjectMapper JSON = new ObjectMapper();
   private static final String FIXTURE_ROOT = "tools/pulumi/recorder/fixtures/by-command";
   private static final String REDACTED = "[secret]";
   private static final String STACK_PATH = "/pulumi/api/stacks/testorg/recorder-test/dev";
 
-  @Inject EntityManager em;
-
   @BeforeEach
   void seed() {
     FixtureReplay.seedIdentityWithStack(em);
-  }
-
-  @AfterEach
-  void cleanup() {
-    FixtureReplay.cleanup(em);
   }
 
   @Test

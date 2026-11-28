@@ -1,11 +1,13 @@
 package app.statedb.app.console;
 
+import static io.quarkus.narayana.jta.QuarkusTransaction.requiringNew;
 import static io.restassured.RestAssured.given;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 
 import app.statedb.persistence.identity.OidcProvider;
+import app.statedb.persistence.identity.OrgMember;
+import app.statedb.persistence.identity.Organization;
 import app.statedb.persistence.identity.User;
-import io.quarkus.narayana.jta.QuarkusTransaction;
 import io.restassured.http.Cookie;
 import io.restassured.response.Response;
 import java.net.URI;
@@ -22,7 +24,7 @@ final class OidcConsoleSessionFixture {
   static final String FIXTURE_SUB = "123456";
 
   static void seedProvider() {
-    QuarkusTransaction.requiringNew()
+    requiringNew()
         .run(
             () -> {
               OidcProvider.delete("name", PROVIDER);
@@ -37,13 +39,26 @@ final class OidcConsoleSessionFixture {
             });
   }
 
-  static void cleanup() {
-    QuarkusTransaction.requiringNew()
+  static Cookie loginAs(String organizationName, OrgMember.Role role) {
+    seedProvider();
+    Cookie session = login();
+    requiringNew()
         .run(
             () -> {
-              OidcProvider.delete("name", PROVIDER);
-              User.delete("iss = ?1 and sub = ?2", FIXTURE_ISS, FIXTURE_SUB);
+              OrgMember membership = new OrgMember();
+              membership.orgId =
+                  Organization.<Organization>find("name", organizationName).firstResult().id;
+              membership.userId = fixtureUser().id;
+              membership.role = role;
+              membership.persistAndFlush();
             });
+    return session;
+  }
+
+  static User fixtureUser() {
+    User user = User.<User>find("iss = ?1 and sub = ?2", FIXTURE_ISS, FIXTURE_SUB).firstResult();
+    assertNotNull(user, "OIDC callback provisions the fixture user");
+    return user;
   }
 
   static Cookie login() {

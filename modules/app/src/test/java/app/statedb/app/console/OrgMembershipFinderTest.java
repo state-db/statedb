@@ -2,6 +2,7 @@ package app.statedb.app.console;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
+import app.statedb.app.DatabaseTest;
 import app.statedb.persistence.identity.OrgMember;
 import app.statedb.persistence.identity.OrgMembershipFinder;
 import app.statedb.persistence.identity.OrgMembershipView;
@@ -15,7 +16,7 @@ import org.junit.jupiter.api.Test;
 
 /** The finder joins org_members to organizations and returns the user's role per org. */
 @QuarkusTest
-class OrgMembershipFinderTest {
+class OrgMembershipFinderTest extends DatabaseTest {
 
   @Inject OrgMembershipFinder finder;
 

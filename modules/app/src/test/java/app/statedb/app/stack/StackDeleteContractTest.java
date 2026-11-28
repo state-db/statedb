@@ -1,34 +1,23 @@
 package app.statedb.app.stack;
 
+import static io.quarkus.narayana.jta.QuarkusTransaction.requiringNew;
 import static io.restassured.RestAssured.given;
 import static org.hamcrest.Matchers.anEmptyMap;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
-import app.statedb.persistence.auth.ApiToken;
-import app.statedb.persistence.identity.OrgMember;
-import app.statedb.persistence.identity.Organization;
-import app.statedb.persistence.identity.User;
-import app.statedb.persistence.lock.StackLockAcquirer;
-import app.statedb.persistence.stack.Project;
+import app.statedb.app.DatabaseTest;
+import app.statedb.persistence.lock.StackLock;
 import app.statedb.persistence.stack.Snapshot;
 import app.statedb.persistence.stack.Stack;
-import app.statedb.persistence.stack.StackCreator;
 import app.statedb.persistence.stack.StackRef;
 import app.statedb.persistence.stack.StackState;
 import app.statedb.persistence.stack.Workspace;
 import app.statedb.persistence.update.StackUpdate;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import io.quarkus.narayana.jta.QuarkusTransaction;
 import io.quarkus.test.junit.QuarkusTest;
-import jakarta.inject.Inject;
-import jakarta.persistence.EntityManager;
-import java.nio.charset.StandardCharsets;
-import java.security.MessageDigest;
-import java.security.NoSuchAlgorithmException;
 import java.util.Map;
 import java.util.UUID;
-import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
@@ -37,7 +26,7 @@ import org.junit.jupiter.api.Test;
  * tools/pulumi/recorder/fixtures/by-command/08-stack-rm/}.
  */
 @QuarkusTest
-class StackDeleteContractTest {
+class StackDeleteContractTest extends DatabaseTest {
 
   private static final ObjectMapper MAPPER = new ObjectMapper();
   private static final String ORG_NAME = "stack-delete-org";
@@ -45,75 +34,15 @@ class StackDeleteContractTest {
   private static final String RAW_TOKEN = "stack-delete-token";
   private static final String PROJECT = "recorder-test";
 
-  @Inject EntityManager em;
-
-  @Inject StackCreator stackCreator;
-
-  @Inject StackLockAcquirer stackLockAcquirer;
-
-  private UUID orgId;
-
   @BeforeEach
   void seed() {
-    orgId =
-        QuarkusTransaction.requiringNew()
-            .call(
-                () -> {
-                  Organization org = new Organization();
-                  org.name = ORG_NAME;
-                  org.displayName = "Stack Delete Test";
-                  org.persistAndFlush();
-
-                  Organization other = new Organization();
-                  other.name = OTHER_ORG_NAME;
-                  other.displayName = "Other Org";
-                  other.persistAndFlush();
-
-                  User user = new User();
-                  user.iss = "local:test";
-                  user.sub = "stack-delete";
-                  user.email = "delete@example.com";
-                  user.displayName = "Stack Delete Tester";
-                  user.persistAndFlush();
-
-                  OrgMember m = new OrgMember();
-                  m.orgId = org.id;
-                  m.userId = user.id;
-                  m.role = OrgMember.Role.owner;
-                  m.persistAndFlush();
-
-                  ApiToken t = new ApiToken();
-                  t.tokenHash = sha256Hex(RAW_TOKEN);
-                  t.userId = user.id;
-                  t.orgId = org.id;
-                  t.kind = ApiToken.Kind.service_account;
-                  t.expiresAt = java.time.Instant.now().plusSeconds(60 * 60);
-                  t.description = "stack-delete";
-                  t.persistAndFlush();
-
-                  return org.id;
-                });
-  }
-
-  @AfterEach
-  void cleanup() {
-    QuarkusTransaction.requiringNew()
-        .run(
-            () -> {
-              em.createNativeQuery("DELETE FROM organizations WHERE name IN (?1, ?2)")
-                  .setParameter(1, ORG_NAME)
-                  .setParameter(2, OTHER_ORG_NAME)
-                  .executeUpdate();
-              em.createNativeQuery("DELETE FROM users WHERE iss = ?1 AND sub = ?2")
-                  .setParameter(1, "local:test")
-                  .setParameter(2, "stack-delete")
-                  .executeUpdate();
-            });
+    db.seedOwner(ORG_NAME, RAW_TOKEN);
+    db.seedOrg(OTHER_ORG_NAME);
   }
 
   @Test
   void deletesEmptyStackAndReturnsPulumiShape() {
-    StackRef ref = stackCreator.create(orgId, ORG_NAME, PROJECT, "dev", fixtureTags());
+    StackRef ref = db.seedStack(ORG_NAME, PROJECT, "dev", fixtureTags());
 
     given()
         .header("Authorization", "token " + RAW_TOKEN)
@@ -125,20 +54,12 @@ class StackDeleteContractTest {
         .statusCode(200)
         .body("$", anEmptyMap());
 
-    QuarkusTransaction.requiringNew()
-        .run(
-            () -> {
-              assertEquals(
-                  0L, count("SELECT count(*) FROM workspaces WHERE id = ?1", ref.workspaceId()));
-              assertEquals(0L, count("SELECT count(*) FROM stacks WHERE id = ?1", ref.stackId()));
-              assertEquals(
-                  0L, count("SELECT count(*) FROM stack_state WHERE stack_id = ?1", ref.stackId()));
-            });
+    assertStackRows(0L, ref);
   }
 
   @Test
   void nonEmptyStackReturns409WithoutForce() {
-    StackRef ref = stackCreator.create(orgId, ORG_NAME, PROJECT, "busy", fixtureTags());
+    StackRef ref = db.seedStack(ORG_NAME, PROJECT, "busy", fixtureTags());
     setBaseSnapshot(
         ref.stackId(),
         1L,
@@ -154,20 +75,12 @@ class StackDeleteContractTest {
         .then()
         .statusCode(409);
 
-    QuarkusTransaction.requiringNew()
-        .run(
-            () -> {
-              assertEquals(
-                  1L, count("SELECT count(*) FROM workspaces WHERE id = ?1", ref.workspaceId()));
-              assertEquals(1L, count("SELECT count(*) FROM stacks WHERE id = ?1", ref.stackId()));
-              assertEquals(
-                  1L, count("SELECT count(*) FROM stack_state WHERE stack_id = ?1", ref.stackId()));
-            });
+    assertStackRows(1L, ref);
   }
 
   @Test
   void deletesStackWithOnlyRootStackResourceAndJournalHistory() {
-    StackRef ref = stackCreator.create(orgId, ORG_NAME, PROJECT, "destroyed", fixtureTags());
+    StackRef ref = db.seedStack(ORG_NAME, PROJECT, "destroyed", fixtureTags());
     setBaseSnapshot(
         ref.stackId(),
         42L,
@@ -184,20 +97,12 @@ class StackDeleteContractTest {
         .statusCode(200)
         .body("$", anEmptyMap());
 
-    QuarkusTransaction.requiringNew()
-        .run(
-            () -> {
-              assertEquals(
-                  0L, count("SELECT count(*) FROM workspaces WHERE id = ?1", ref.workspaceId()));
-              assertEquals(0L, count("SELECT count(*) FROM stacks WHERE id = ?1", ref.stackId()));
-              assertEquals(
-                  0L, count("SELECT count(*) FROM stack_state WHERE stack_id = ?1", ref.stackId()));
-            });
+    assertStackRows(0L, ref);
   }
 
   @Test
   void forceDeletesNonEmptyStack() {
-    StackRef ref = stackCreator.create(orgId, ORG_NAME, PROJECT, "force", fixtureTags());
+    StackRef ref = db.seedStack(ORG_NAME, PROJECT, "force", fixtureTags());
     setBaseSnapshot(
         ref.stackId(),
         1L,
@@ -214,21 +119,13 @@ class StackDeleteContractTest {
         .statusCode(200)
         .body("$", anEmptyMap());
 
-    QuarkusTransaction.requiringNew()
-        .run(
-            () -> {
-              assertEquals(
-                  0L, count("SELECT count(*) FROM workspaces WHERE id = ?1", ref.workspaceId()));
-              assertEquals(0L, count("SELECT count(*) FROM stacks WHERE id = ?1", ref.stackId()));
-              assertEquals(
-                  0L, count("SELECT count(*) FROM stack_state WHERE stack_id = ?1", ref.stackId()));
-            });
+    assertStackRows(0L, ref);
   }
 
   @Test
   void rejectsDeleteWhileUpdateIsActive() {
-    StackRef ref = stackCreator.create(orgId, ORG_NAME, PROJECT, "active", fixtureTags());
-    UUID updateId = seedActiveUpdate(ref.stackId());
+    StackRef ref = db.seedStack(ORG_NAME, PROJECT, "active", fixtureTags());
+    UUID updateId = db.seedActiveUpdate(ref.stackId(), StackUpdate.Kind.UPDATE).updateId();
 
     given()
         .header("Authorization", "token " + RAW_TOKEN)
@@ -239,24 +136,15 @@ class StackDeleteContractTest {
         .then()
         .statusCode(409);
 
-    QuarkusTransaction.requiringNew()
-        .run(
-            () -> {
-              assertEquals(
-                  1L, count("SELECT count(*) FROM workspaces WHERE id = ?1", ref.workspaceId()));
-              assertEquals(1L, count("SELECT count(*) FROM stacks WHERE id = ?1", ref.stackId()));
-              assertEquals(
-                  1L, count("SELECT count(*) FROM stack_state WHERE stack_id = ?1", ref.stackId()));
-              assertEquals(1L, count("SELECT count(*) FROM stack_updates WHERE id = ?1", updateId));
-              assertEquals(
-                  1L, count("SELECT count(*) FROM stack_locks WHERE stack_id = ?1", ref.stackId()));
-            });
+    assertStackRows(1L, ref);
+    assertEquals(1L, StackUpdate.count("id", updateId));
+    assertEquals(1L, StackLock.count("stackId", ref.stackId()));
   }
 
   @Test
   void forceDeletesStackWithActiveUpdate() {
-    StackRef ref = stackCreator.create(orgId, ORG_NAME, PROJECT, "active-force", fixtureTags());
-    UUID updateId = seedActiveUpdate(ref.stackId());
+    StackRef ref = db.seedStack(ORG_NAME, PROJECT, "active-force", fixtureTags());
+    UUID updateId = db.seedActiveUpdate(ref.stackId(), StackUpdate.Kind.UPDATE).updateId();
 
     given()
         .header("Authorization", "token " + RAW_TOKEN)
@@ -268,18 +156,9 @@ class StackDeleteContractTest {
         .statusCode(200)
         .body("$", anEmptyMap());
 
-    QuarkusTransaction.requiringNew()
-        .run(
-            () -> {
-              assertEquals(
-                  0L, count("SELECT count(*) FROM workspaces WHERE id = ?1", ref.workspaceId()));
-              assertEquals(0L, count("SELECT count(*) FROM stacks WHERE id = ?1", ref.stackId()));
-              assertEquals(
-                  0L, count("SELECT count(*) FROM stack_state WHERE stack_id = ?1", ref.stackId()));
-              assertEquals(0L, count("SELECT count(*) FROM stack_updates WHERE id = ?1", updateId));
-              assertEquals(
-                  0L, count("SELECT count(*) FROM stack_locks WHERE stack_id = ?1", ref.stackId()));
-            });
+    assertStackRows(0L, ref);
+    assertEquals(0L, StackUpdate.count("id", updateId));
+    assertEquals(0L, StackLock.count("stackId", ref.stackId()));
   }
 
   @Test
@@ -295,29 +174,7 @@ class StackDeleteContractTest {
 
   @Test
   void crossOrgCollapsesTo404() {
-    QuarkusTransaction.requiringNew()
-        .run(
-            () -> {
-              Organization other =
-                  Organization.find("name", OTHER_ORG_NAME).<Organization>firstResult();
-              Project p = new Project();
-              p.orgId = other.id;
-              p.name = "secret-proj";
-              p.persistAndFlush();
-              Workspace w = new Workspace();
-              w.orgId = other.id;
-              w.kind = Workspace.Kind.pulumi;
-              w.persistAndFlush();
-              Stack s = new Stack();
-              s.orgId = other.id;
-              s.projectId = p.id;
-              s.name = "secret";
-              s.workspaceId = w.id;
-              s.persistAndFlush();
-              StackState st = new StackState();
-              st.stackId = s.id;
-              st.persistAndFlush();
-            });
+    db.seedStack(OTHER_ORG_NAME, "secret-proj", "secret");
 
     given()
         .header("Authorization", "token " + RAW_TOKEN)
@@ -328,8 +185,14 @@ class StackDeleteContractTest {
         .statusCode(404);
   }
 
+  private void assertStackRows(long expected, StackRef ref) {
+    assertEquals(expected, Workspace.count("id", ref.workspaceId()));
+    assertEquals(expected, Stack.count("id", ref.stackId()));
+    assertEquals(expected, StackState.count("stackId", ref.stackId()));
+  }
+
   private void setBaseSnapshot(UUID stackId, long journalSeq, String resourcesJson) {
-    QuarkusTransaction.requiringNew()
+    requiringNew()
         .run(
             () -> {
               Snapshot snapshot = new Snapshot();
@@ -347,37 +210,12 @@ class StackDeleteContractTest {
             });
   }
 
-  private UUID seedActiveUpdate(UUID stackId) {
-    UUID updateId =
-        QuarkusTransaction.requiringNew()
-            .call(
-                () -> {
-                  StackUpdate update = new StackUpdate();
-                  update.stackId = stackId;
-                  update.version = 1;
-                  update.kind = StackUpdate.Kind.UPDATE;
-                  update.status = StackUpdate.Status.IN_PROGRESS;
-                  update.startedAt = java.time.Instant.now();
-                  update.persistAndFlush();
-                  return update.id;
-                });
-    stackLockAcquirer
-        .acquire(stackId, updateId, "stack-delete-test", null, null)
-        .orElseThrow(() -> new AssertionError("expected active update lease"));
-    return updateId;
-  }
-
   private static JsonNode deployment(String resourcesJson) {
     try {
       return MAPPER.readTree("{\"resources\":" + resourcesJson + "}");
     } catch (Exception e) {
       throw new IllegalArgumentException(e);
     }
-  }
-
-  private long count(String sql, UUID id) {
-    Number rows = (Number) em.createNativeQuery(sql).setParameter(1, id).getSingleResult();
-    return rows.longValue();
   }
 
   private static Map<String, String> fixtureTags() {
@@ -388,20 +226,5 @@ class StackDeleteContractTest {
         PROJECT,
         "pulumi:runtime",
         "yaml");
-  }
-
-  private static String sha256Hex(String input) {
-    try {
-      byte[] digest =
-          MessageDigest.getInstance("SHA-256").digest(input.getBytes(StandardCharsets.UTF_8));
-      StringBuilder sb = new StringBuilder(digest.length * 2);
-      for (byte b : digest) {
-        sb.append(Character.forDigit((b >> 4) & 0xF, 16));
-        sb.append(Character.forDigit(b & 0xF, 16));
-      }
-      return sb.toString();
-    } catch (NoSuchAlgorithmException e) {
-      throw new IllegalStateException(e);
-    }
   }
 }

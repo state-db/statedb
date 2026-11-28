@@ -3,6 +3,7 @@ package app.statedb.app.auth;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import app.statedb.app.DatabaseTest;
 import app.statedb.persistence.auth.ApiToken;
 import app.statedb.persistence.auth.ApiTokenFinder;
 import app.statedb.persistence.auth.AuthenticatedPrincipal;
@@ -21,7 +22,7 @@ import org.junit.jupiter.api.Test;
 
 /** SQL-contract tests; HTTP-level coverage lives in {@code TokenAuthFilterTest}. */
 @QuarkusTest
-class ApiTokenFinderTest {
+class ApiTokenFinderTest extends DatabaseTest {
 
   @Inject ApiTokenFinder finder;
 

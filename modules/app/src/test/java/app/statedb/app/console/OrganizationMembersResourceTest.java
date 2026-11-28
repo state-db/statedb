@@ -3,28 +3,25 @@ package app.statedb.app.console;
 import static app.statedb.app.console.LocalGlassTestSupport.COOKIE;
 import static app.statedb.app.console.LocalGlassTestSupport.PASSWORD;
 import static app.statedb.app.console.LocalGlassTestSupport.login;
+import static app.statedb.app.console.OidcConsoleSessionFixture.loginAs;
+import static io.quarkus.narayana.jta.QuarkusTransaction.requiringNew;
 import static io.restassured.RestAssured.given;
 import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.is;
-import static org.junit.jupiter.api.Assertions.assertNotNull;
 
+import app.statedb.app.DatabaseTest;
 import app.statedb.persistence.identity.OrgMember;
-import app.statedb.persistence.identity.Organization;
 import app.statedb.persistence.identity.User;
 import app.statedb.persistence.policy.PolicyGrant;
-import app.statedb.persistence.stack.StackCreator;
 import app.statedb.persistence.stack.StackRef;
-import io.quarkus.narayana.jta.QuarkusTransaction;
 import io.quarkus.test.common.QuarkusTestResource;
 import io.quarkus.test.junit.QuarkusTest;
 import io.quarkus.test.junit.TestProfile;
 import io.quarkus.test.oidc.server.OidcWiremockTestResource;
 import io.restassured.http.Cookie;
-import jakarta.inject.Inject;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
-import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
@@ -32,43 +29,22 @@ import org.junit.jupiter.api.Test;
 @QuarkusTest
 @TestProfile(LocalGlassTestSupport.Profile.class)
 @QuarkusTestResource(OidcWiremockTestResource.class)
-class OrganizationMembersResourceTest {
+class OrganizationMembersResourceTest extends DatabaseTest {
   private static final String ORG = "members-resource-org";
   private static final String OTHER_ORG = "members-resource-other-org";
 
-  @Inject StackCreator stackCreator;
+  private UUID orgId;
+  private UUID otherOrgId;
 
   @BeforeEach
   void seedOrganizations() {
-    QuarkusTransaction.requiringNew()
-        .run(
-            () -> {
-              Organization.delete("name in ?1", List.of(ORG, OTHER_ORG));
-              User.delete("iss", "local:membership-resource");
-            });
-    OidcConsoleSessionFixture.cleanup();
-    QuarkusTransaction.requiringNew()
-        .run(
-            () -> {
-              persistOrganization(ORG);
-              persistOrganization(OTHER_ORG);
-            });
-  }
-
-  @AfterEach
-  void cleanup() {
-    QuarkusTransaction.requiringNew()
-        .run(
-            () -> {
-              Organization.delete("name in ?1", List.of(ORG, OTHER_ORG));
-              User.delete("iss", "local:membership-resource");
-            });
-    OidcConsoleSessionFixture.cleanup();
+    orgId = db.seedOrg(ORG);
+    otherOrgId = db.seedOrg(OTHER_ORG);
   }
 
   @Test
   void ownerManagesHumansOnlyInTheirOrganization() {
-    Cookie session = ownerSession();
+    Cookie session = loginAs(ORG, OrgMember.Role.owner);
     UUID candidate = candidate("membership-candidate", "candidate@example.com");
     String path = "/api/orgs/" + ORG + "/members";
 
@@ -115,8 +91,8 @@ class OrganizationMembersResourceTest {
 
   @Test
   void finalOwnerCannotBeDemotedOrRemovedThroughTheApi() {
-    Cookie session = ownerSession();
-    UUID ownerId = fixtureUserId();
+    Cookie session = loginAs(ORG, OrgMember.Role.owner);
+    UUID ownerId = requiringNew().call(() -> OidcConsoleSessionFixture.fixtureUser().id);
     String path = "/api/orgs/" + ORG + "/members";
 
     given()
@@ -138,7 +114,7 @@ class OrganizationMembersResourceTest {
 
   @Test
   void invalidMemberInputsRetainValidationMessages() {
-    Cookie session = ownerSession();
+    Cookie session = loginAs(ORG, OrgMember.Role.owner);
     UUID candidate = candidate("invalid-input-candidate", "invalid-input@example.com");
     String path = "/api/orgs/" + ORG + "/members";
 
@@ -174,9 +150,6 @@ class OrganizationMembersResourceTest {
   @Test
   void siteAdminManagesMembershipWithoutBelongingToOrganization() {
     String cookie = login(PASSWORD).statusCode(200).extract().cookie(COOKIE);
-    UUID orgId =
-        QuarkusTransaction.requiringNew()
-            .call(() -> Organization.<Organization>find("name", ORG).firstResult().id);
     UUID userId = candidate("admin-added-user", "admin-added@example.com");
     UUID serviceUserId = candidate("admin-service-user", "service@example.com");
 
@@ -189,7 +162,7 @@ class OrganizationMembersResourceTest {
         .then()
         .statusCode(200)
         .body("role", is("owner"));
-    QuarkusTransaction.requiringNew()
+    requiringNew()
         .run(
             () -> {
               OrgMember service = new OrgMember();
@@ -216,7 +189,7 @@ class OrganizationMembersResourceTest {
 
   @Test
   void listsAllGuestGrantsFromThisOrganizationOnly() {
-    Cookie session = ownerSession();
+    Cookie session = loginAs(ORG, OrgMember.Role.owner);
     UUID guestId = candidate("granted-guest", "granted-guest@example.com");
     String path = "/api/orgs/" + ORG + "/members";
 
@@ -230,17 +203,14 @@ class OrganizationMembersResourceTest {
         .statusCode(200)
         .body("grants.size()", is(0));
 
-    QuarkusTransaction.requiringNew()
+    StackRef app = db.seedStack(ORG, "apps", "prod");
+    StackRef otherStack = db.seedStack(OTHER_ORG, "apps", "prod");
+    requiringNew()
         .run(
             () -> {
-              Organization org = Organization.<Organization>find("name", ORG).firstResult();
-              Organization other = Organization.<Organization>find("name", OTHER_ORG).firstResult();
-              StackRef app = stackCreator.create(org.id, org.name, "apps", "prod", Map.of());
-              StackRef otherStack =
-                  stackCreator.create(other.id, other.name, "apps", "prod", Map.of());
-              grant(org.id, guestId, app.stackId(), "StackReadResourcePolicy");
-              grant(org.id, guestId, app.stackId(), "StackWriteResourcePolicy");
-              grant(other.id, guestId, otherStack.stackId(), "StackReadResourcePolicy");
+              grant(orgId, guestId, app.stackId(), "StackReadResourcePolicy");
+              grant(orgId, guestId, app.stackId(), "StackWriteResourcePolicy");
+              grant(otherOrgId, guestId, otherStack.stackId(), "StackReadResourcePolicy");
             });
 
     given()
@@ -255,40 +225,8 @@ class OrganizationMembersResourceTest {
         .body("find { it.userId == '" + guestId + "' }.grants.stack.unique()", is(List.of("prod")));
   }
 
-  private static Cookie ownerSession() {
-    OidcConsoleSessionFixture.seedProvider();
-    Cookie session = OidcConsoleSessionFixture.login();
-    QuarkusTransaction.requiringNew()
-        .run(
-            () -> {
-              User user = fixtureUser();
-              Organization org = Organization.<Organization>find("name", ORG).firstResult();
-              OrgMember membership = new OrgMember();
-              membership.orgId = org.id;
-              membership.userId = user.id;
-              membership.role = OrgMember.Role.owner;
-              membership.persistAndFlush();
-            });
-    return session;
-  }
-
-  private static UUID fixtureUserId() {
-    return QuarkusTransaction.requiringNew().call(() -> fixtureUser().id);
-  }
-
-  private static User fixtureUser() {
-    User user =
-        User.<User>find(
-                "iss = ?1 and sub = ?2",
-                OidcConsoleSessionFixture.FIXTURE_ISS,
-                OidcConsoleSessionFixture.FIXTURE_SUB)
-            .firstResult();
-    assertNotNull(user, "OIDC callback provisions the fixture user");
-    return user;
-  }
-
   private static UUID candidate(String sub, String email) {
-    return QuarkusTransaction.requiringNew()
+    return requiringNew()
         .call(
             () -> {
               User user = new User();
@@ -298,13 +236,6 @@ class OrganizationMembersResourceTest {
               user.persistAndFlush();
               return user.id;
             });
-  }
-
-  private static void persistOrganization(String name) {
-    Organization org = new Organization();
-    org.name = name;
-    org.displayName = name;
-    org.persistAndFlush();
   }
 
   private static void grant(UUID orgId, UUID userId, UUID stackId, String templateId) {

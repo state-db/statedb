@@ -1,28 +1,23 @@
 package app.statedb.app.events;
 
+import static io.quarkus.narayana.jta.QuarkusTransaction.requiringNew;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import app.statedb.app.DatabaseTest;
 import app.statedb.persistence.events.EventArchiveFolder;
 import app.statedb.persistence.events.UpdateEventArchive;
 import app.statedb.persistence.events.UpdateEventReader;
-import app.statedb.persistence.identity.Organization;
-import app.statedb.persistence.stack.Project;
-import app.statedb.persistence.stack.Stack;
-import app.statedb.persistence.stack.Workspace;
 import app.statedb.persistence.update.StackUpdate;
 import com.fasterxml.jackson.databind.JsonNode;
-import io.quarkus.narayana.jta.QuarkusTransaction;
 import io.quarkus.test.junit.QuarkusTest;
 import jakarta.inject.Inject;
 import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
-import java.util.function.Supplier;
-import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 
 /**
@@ -33,42 +28,35 @@ import org.junit.jupiter.api.Test;
  * than silently shortening the stream.
  */
 @QuarkusTest
-class UpdateEventStreamTest {
+class UpdateEventStreamTest extends DatabaseTest {
 
   private static final Instant LONG_AGO = Instant.parse("2026-01-01T00:00:00Z");
 
   @Inject UpdateEventReader reader;
   @Inject EventArchiveFolder folder;
 
-  private String org;
-
-  @AfterEach
-  void cleanup() {
-    if (org == null) {
-      return;
-    }
-    String name = org;
-    org = null;
-    QuarkusTransaction.requiringNew().run(() -> Organization.delete("name", name));
-  }
-
   @Test
   void readsTheWholeStreamFromRowsAndFromAnArchiveAlike() {
     List<JsonNode> corpus = EventArchiveFixture.recordedEvents();
-    UUID stackId = seedStack("event-stream-parity");
+    UUID stackId = db.seedStack("event-stream-parity", "project", "dev").stackId();
     UUID updateId = seedUpdate(stackId, corpus, corpus.size());
 
-    UpdateEventReader.EventStream live = inTx(() -> reader.stream(stackId, updateId, 10_000));
+    UpdateEventReader.EventStream live =
+        requiringNew().call(() -> reader.stream(stackId, updateId, 10_000));
     assertFalse(live.archived());
     assertFalse(live.truncated());
     assertEquals(corpus.size(), live.events().size());
     // The page reader is the established answer for the same window; the stream must agree.
-    assertEquals(inTx(() -> reader.page(stackId, updateId, -1, 10_000).events()), live.events());
+    assertEquals(
+        requiringNew().call(() -> reader.page(stackId, updateId, -1, 10_000).events()),
+        live.events());
 
-    QuarkusTransaction.requiringNew().run(() -> folder.fold(updateId, Instant.now()));
-    assertNotNull(inTx(() -> UpdateEventArchive.<UpdateEventArchive>findById(updateId)));
+    requiringNew().run(() -> folder.fold(updateId, Instant.now()));
+    assertNotNull(
+        requiringNew().call(() -> UpdateEventArchive.<UpdateEventArchive>findById(updateId)));
 
-    UpdateEventReader.EventStream archived = inTx(() -> reader.stream(stackId, updateId, 10_000));
+    UpdateEventReader.EventStream archived =
+        requiringNew().call(() -> reader.stream(stackId, updateId, 10_000));
     assertTrue(archived.archived(), "the archive must be the source once folded");
     assertEquals(live.events(), archived.events(), "folding must not change what a reader sees");
   }
@@ -76,16 +64,17 @@ class UpdateEventStreamTest {
   @Test
   void theBoundTruncatesAndSaysSo() {
     List<JsonNode> corpus = EventArchiveFixture.recordedEvents();
-    UUID stackId = seedStack("event-stream-bound");
+    UUID stackId = db.seedStack("event-stream-bound", "project", "dev").stackId();
     UUID updateId = seedUpdate(stackId, corpus, 50);
 
-    UpdateEventReader.EventStream bounded = inTx(() -> reader.stream(stackId, updateId, 10));
+    UpdateEventReader.EventStream bounded =
+        requiringNew().call(() -> reader.stream(stackId, updateId, 10));
     assertTrue(bounded.truncated(), "a bound that cut the stream must report it");
     assertEquals(10, bounded.events().size());
     // A prefix, in sequence order — a caller deriving from it gets the start of the run, not a
     // scattering of it.
     assertEquals(
-        inTx(() -> reader.page(stackId, updateId, -1, 10).events()),
+        requiringNew().call(() -> reader.page(stackId, updateId, -1, 10).events()),
         bounded.events(),
         "the bounded read must be the first N events");
   }
@@ -94,10 +83,11 @@ class UpdateEventStreamTest {
   @Test
   void aStreamThatExactlyFillsTheBoundIsNotTruncated() {
     List<JsonNode> corpus = EventArchiveFixture.recordedEvents();
-    UUID stackId = seedStack("event-stream-exact");
+    UUID stackId = db.seedStack("event-stream-exact", "project", "dev").stackId();
     UUID updateId = seedUpdate(stackId, corpus, 25);
 
-    UpdateEventReader.EventStream exact = inTx(() -> reader.stream(stackId, updateId, 25));
+    UpdateEventReader.EventStream exact =
+        requiringNew().call(() -> reader.stream(stackId, updateId, 25));
     assertFalse(exact.truncated());
     assertEquals(25, exact.events().size());
   }
@@ -105,11 +95,12 @@ class UpdateEventStreamTest {
   @Test
   void theBoundIsAlsoHonouredOnAnArchivedRun() {
     List<JsonNode> corpus = EventArchiveFixture.recordedEvents();
-    UUID stackId = seedStack("event-stream-bound-archived");
+    UUID stackId = db.seedStack("event-stream-bound-archived", "project", "dev").stackId();
     UUID updateId = seedUpdate(stackId, corpus, 50);
-    QuarkusTransaction.requiringNew().run(() -> folder.fold(updateId, Instant.now()));
+    requiringNew().run(() -> folder.fold(updateId, Instant.now()));
 
-    UpdateEventReader.EventStream bounded = inTx(() -> reader.stream(stackId, updateId, 10));
+    UpdateEventReader.EventStream bounded =
+        requiringNew().call(() -> reader.stream(stackId, updateId, 10));
     assertTrue(bounded.archived());
     assertTrue(bounded.truncated());
     assertEquals(10, bounded.events().size());
@@ -117,8 +108,9 @@ class UpdateEventStreamTest {
 
   @Test
   void anUnknownUpdateIsAnEmptyStreamRatherThanAnError() {
-    UUID stackId = seedStack("event-stream-missing");
-    UpdateEventReader.EventStream none = inTx(() -> reader.stream(stackId, UUID.randomUUID(), 10));
+    UUID stackId = db.seedStack("event-stream-missing", "project", "dev").stackId();
+    UpdateEventReader.EventStream none =
+        requiringNew().call(() -> reader.stream(stackId, UUID.randomUUID(), 10));
     assertEquals(List.of(), none.events());
     assertFalse(none.archived());
     assertFalse(none.truncated());
@@ -129,44 +121,18 @@ class UpdateEventStreamTest {
    */
   @Test
   void rejectsANonPositiveBound() {
-    UUID stackId = seedStack("event-stream-bad-bound");
+    UUID stackId = db.seedStack("event-stream-bad-bound", "project", "dev").stackId();
     UUID updateId = UUID.randomUUID();
     assertThrows(
-        IllegalArgumentException.class, () -> inTx(() -> reader.stream(stackId, updateId, 0)));
+        IllegalArgumentException.class,
+        () -> requiringNew().call(() -> reader.stream(stackId, updateId, 0)));
     assertThrows(
-        IllegalArgumentException.class, () -> inTx(() -> reader.stream(stackId, updateId, -1)));
-  }
-
-  private UUID seedStack(String orgName) {
-    this.org = orgName + "-" + System.nanoTime();
-    String name = this.org;
-    return QuarkusTransaction.requiringNew()
-        .call(
-            () -> {
-              Organization organization = new Organization();
-              organization.name = name;
-              organization.displayName = name;
-              organization.persist();
-              Project project = new Project();
-              project.orgId = organization.id;
-              project.name = "project";
-              project.persist();
-              Workspace workspace = new Workspace();
-              workspace.orgId = organization.id;
-              workspace.kind = Workspace.Kind.pulumi;
-              workspace.persist();
-              Stack stack = new Stack();
-              stack.orgId = organization.id;
-              stack.projectId = project.id;
-              stack.workspaceId = workspace.id;
-              stack.name = "dev";
-              stack.persistAndFlush();
-              return stack.id;
-            });
+        IllegalArgumentException.class,
+        () -> requiringNew().call(() -> reader.stream(stackId, updateId, -1)));
   }
 
   private UUID seedUpdate(UUID stackId, List<JsonNode> corpus, int eventCount) {
-    return QuarkusTransaction.requiringNew()
+    return requiringNew()
         .call(
             () -> {
               StackUpdate update = new StackUpdate();
@@ -180,9 +146,5 @@ class UpdateEventStreamTest {
               EventArchiveFixture.persistEvents(stackId, update.id, corpus, eventCount);
               return update.id;
             });
-  }
-
-  private <T> T inTx(Supplier<T> work) {
-    return QuarkusTransaction.requiringNew().call(work::get);
   }
 }

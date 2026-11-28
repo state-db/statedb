@@ -1,12 +1,12 @@
 package app.statedb.app.update;
 
+import static io.quarkus.narayana.jta.QuarkusTransaction.requiringNew;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-import app.statedb.persistence.identity.Organization;
-import app.statedb.persistence.stack.StackCreator;
+import app.statedb.app.DatabaseTest;
 import app.statedb.persistence.stack.StackImporter;
 import app.statedb.persistence.stack.StackRef;
 import app.statedb.persistence.stack.StackRenamer;
@@ -15,10 +15,8 @@ import app.statedb.persistence.update.StackUpdateStarter;
 import app.statedb.persistence.update.StartUpdateRequest;
 import app.statedb.persistence.update.StartedUpdate;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import io.quarkus.narayana.jta.QuarkusTransaction;
 import io.quarkus.test.junit.QuarkusTest;
 import jakarta.inject.Inject;
-import jakarta.persistence.EntityManager;
 import jakarta.persistence.PersistenceException;
 import java.util.Map;
 import java.util.UUID;
@@ -27,48 +25,26 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
-import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 @QuarkusTest
-class StackUpdateStarterTest {
+class StackUpdateStarterTest extends DatabaseTest {
 
   private static final String ORG_NAME = "starter-org";
   private static final ObjectMapper MAPPER = new ObjectMapper();
 
-  @Inject StackCreator stackCreator;
   @Inject StackImporter stackImporter;
   @Inject StackRenamer stackRenamer;
   @Inject StackUpdateStarter starter;
-  @Inject EntityManager em;
 
   private StackRef stackRef;
   private UUID stackId;
 
   @BeforeEach
   void seed() {
-    stackId =
-        QuarkusTransaction.requiringNew()
-            .call(
-                () -> {
-                  Organization org = new Organization();
-                  org.name = ORG_NAME;
-                  org.displayName = "Starter Test";
-                  org.persistAndFlush();
-                  stackRef = stackCreator.create(org.id, ORG_NAME, "proj", "dev", Map.of());
-                  return stackRef.stackId();
-                });
-  }
-
-  @AfterEach
-  void cleanup() {
-    QuarkusTransaction.requiringNew()
-        .run(
-            () ->
-                em.createNativeQuery("DELETE FROM organizations WHERE name = ?1")
-                    .setParameter(1, ORG_NAME)
-                    .executeUpdate());
+    stackRef = db.seedStack(ORG_NAME);
+    stackId = stackRef.stackId();
   }
 
   @Test
@@ -110,7 +86,7 @@ class StackUpdateStarterTest {
 
     // These operations are terminal before import/rename in the real protocol. Marking them
     // terminal here keeps this test focused on version allocation rather than update completion.
-    QuarkusTransaction.requiringNew()
+    requiringNew()
         .run(
             () ->
                 StackUpdate.update(
@@ -138,19 +114,8 @@ class StackUpdateStarterTest {
     assertEquals(first.updateId(), replay.updateId());
     assertEquals(first.version(), replay.version());
 
-    QuarkusTransaction.requiringNew()
-        .run(
-            () -> {
-              Number n =
-                  (Number)
-                      em.createNativeQuery(
-                              "SELECT count(*) FROM stack_updates WHERE stack_id = ?1"
-                                  + " AND client_request_id = ?2")
-                          .setParameter(1, stackId)
-                          .setParameter(2, "dup-key")
-                          .getSingleResult();
-              assertEquals(1L, n.longValue());
-            });
+    assertEquals(
+        1L, StackUpdate.count("stackId = ?1 and clientRequestId = ?2", stackId, "dup-key"));
   }
 
   @Test
@@ -189,7 +154,7 @@ class StackUpdateStarterTest {
   void terminalStatusGuardRejectsRevert() {
     StartedUpdate s = starter.start(stackId, StackUpdate.Kind.UPDATE, null, null, "term", req());
 
-    QuarkusTransaction.requiringNew()
+    requiringNew()
         .run(
             () ->
                 em.createNativeQuery("UPDATE stack_updates SET status = 'succeeded' WHERE id = ?1")
@@ -200,7 +165,7 @@ class StackUpdateStarterTest {
         assertThrows(
             PersistenceException.class,
             () ->
-                QuarkusTransaction.requiringNew()
+                requiringNew()
                     .run(
                         () ->
                             em.createNativeQuery(
@@ -218,8 +183,7 @@ class StackUpdateStarterTest {
   }
 
   private static int updateVersion(UUID updateId) {
-    return QuarkusTransaction.requiringNew()
-        .call(() -> StackUpdate.<StackUpdate>findById(updateId).version);
+    return requiringNew().call(() -> StackUpdate.<StackUpdate>findById(updateId).version);
   }
 
   private static String rootMessage(Throwable t) {

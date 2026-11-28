@@ -1,29 +1,26 @@
 package app.statedb.app.report;
 
+import static io.quarkus.narayana.jta.QuarkusTransaction.requiringNew;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import app.statedb.app.DatabaseTest;
 import app.statedb.persistence.events.EventArchiveFolder;
 import app.statedb.persistence.events.UpdateEvent;
 import app.statedb.persistence.events.UpdateEventArchive;
 import app.statedb.persistence.events.UpdateEventReader;
 import app.statedb.persistence.events.UpdateEventView;
-import app.statedb.persistence.identity.Organization;
 import app.statedb.persistence.report.ChangeReport;
 import app.statedb.persistence.report.ChangeReportDeriver;
 import app.statedb.persistence.report.MarkdownReportRenderer;
 import app.statedb.persistence.report.RenderedReport;
 import app.statedb.persistence.report.ReportLimits;
-import app.statedb.persistence.stack.Project;
-import app.statedb.persistence.stack.Stack;
 import app.statedb.persistence.stack.StackRef;
-import app.statedb.persistence.stack.Workspace;
 import app.statedb.persistence.update.StackUpdate;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import io.quarkus.narayana.jta.QuarkusTransaction;
 import io.quarkus.test.junit.QuarkusTest;
 import jakarta.inject.Inject;
 import java.io.InputStream;
@@ -35,8 +32,6 @@ import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
-import java.util.function.Supplier;
-import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 
 /**
@@ -52,7 +47,7 @@ import org.junit.jupiter.api.Test;
  * <p>Regenerate the golden file with {@code -Dstatedb.report.golden.update=true} and read the diff.
  */
 @QuarkusTest
-class ReportGoldenTest {
+class ReportGoldenTest extends DatabaseTest {
 
   private static final String GOLDEN = "modules/app/src/test/resources/report/report-mixed-run.md";
   private static final String CORPUS = "/report/events-mixed-run.json";
@@ -69,24 +64,12 @@ class ReportGoldenTest {
   @Inject UpdateEventReader reader;
   @Inject EventArchiveFolder folder;
 
-  private String org;
-
-  @AfterEach
-  void cleanup() {
-    if (org == null) {
-      return;
-    }
-    String name = org;
-    org = null;
-    QuarkusTransaction.requiringNew().run(() -> Organization.delete("name", name));
-  }
-
   @Test
   void rendersTheSameReportFromLiveRowsAndFromAFoldedArchive() throws Exception {
     Seeded seeded = seed();
 
     UpdateEventReader.EventStream live =
-        inTx(() -> reader.stream(seeded.stackId(), seeded.updateId(), 10_000));
+        requiringNew().call(() -> reader.stream(seeded.stackId(), seeded.updateId(), 10_000));
     assertFalse(live.archived(), "precondition: this run is not folded yet");
     assertFalse(live.truncated());
     RenderedReport fromRows = render(seeded, live.events());
@@ -94,21 +77,20 @@ class ReportGoldenTest {
     assertEquals(golden(fromRows.body()), fromRows.body());
     assertFalse(fromRows.truncated());
 
-    QuarkusTransaction.requiringNew().run(() -> folder.fold(seeded.updateId(), Instant.now()));
+    requiringNew().run(() -> folder.fold(seeded.updateId(), Instant.now()));
     assertNotNull(
-        inTx(() -> UpdateEventArchive.<UpdateEventArchive>findById(seeded.updateId())),
+        requiringNew()
+            .call(() -> UpdateEventArchive.<UpdateEventArchive>findById(seeded.updateId())),
         "precondition: the run was folded");
     // The rows the fold left behind: a query-based derivation would see only these.
     assertTrue(
-        inTx(
-                () ->
-                    UpdateEvent.count(
-                        "updateId = ?1 and kind = ?2", seeded.updateId(), UpdateEvent.SUMMARY_KIND))
+        UpdateEvent.count(
+                "updateId = ?1 and kind = ?2", seeded.updateId(), UpdateEvent.SUMMARY_KIND)
             > 0,
         "precondition: summary rows survive the fold");
 
     UpdateEventReader.EventStream archived =
-        inTx(() -> reader.stream(seeded.stackId(), seeded.updateId(), 10_000));
+        requiringNew().call(() -> reader.stream(seeded.stackId(), seeded.updateId(), 10_000));
     assertTrue(archived.archived(), "the fold must be the source now");
     assertEquals(live.events(), archived.events(), "the archive must round-trip every event");
 
@@ -124,8 +106,10 @@ class ReportGoldenTest {
     ChangeReport report =
         deriver.derive(
             seeded.ref(),
-            inTx(() -> StackUpdate.<StackUpdate>findById(seeded.updateId())),
-            inTx(() -> reader.stream(seeded.stackId(), seeded.updateId(), 10_000)).events(),
+            requiringNew().call(() -> StackUpdate.<StackUpdate>findById(seeded.updateId())),
+            requiringNew()
+                .call(() -> reader.stream(seeded.stackId(), seeded.updateId(), 10_000))
+                .events(),
             ReportLimits.defaults());
 
     // `same` is not a change and must not occupy a row; a reader is looking for what moved.
@@ -176,8 +160,10 @@ class ReportGoldenTest {
     ChangeReport report =
         deriver.derive(
             seeded.ref(),
-            inTx(() -> StackUpdate.<StackUpdate>findById(seeded.updateId())),
-            inTx(() -> reader.stream(seeded.stackId(), seeded.updateId(), 10_000)).events(),
+            requiringNew().call(() -> StackUpdate.<StackUpdate>findById(seeded.updateId())),
+            requiringNew()
+                .call(() -> reader.stream(seeded.stackId(), seeded.updateId(), 10_000))
+                .events(),
             ReportLimits.defaults());
     String serialized = mapper.writeValueAsString(report);
     String body = renderer.render(report, CONSOLE, ReportLimits.defaults()).body();
@@ -191,7 +177,8 @@ class ReportGoldenTest {
   }
 
   private RenderedReport render(Seeded seeded, List<app.statedb.persistence.events.StoredEvent> e) {
-    StackUpdate update = inTx(() -> StackUpdate.<StackUpdate>findById(seeded.updateId()));
+    StackUpdate update =
+        requiringNew().call(() -> StackUpdate.<StackUpdate>findById(seeded.updateId()));
     ChangeReport report = deriver.derive(seeded.ref(), update, e, ReportLimits.defaults());
     return renderer.render(report, CONSOLE, ReportLimits.defaults());
   }
@@ -229,68 +216,38 @@ class ReportGoldenTest {
   }
 
   private Seeded seed() throws Exception {
-    this.org = "report-golden-" + System.nanoTime();
-    String orgName = this.org;
+    StackRef stack = db.seedStack("shop-org", "shop", "dev");
     List<JsonNode> corpus = corpus();
-    return QuarkusTransaction.requiringNew()
-        .call(
-            () -> {
-              Organization organization = new Organization();
-              organization.name = orgName;
-              organization.displayName = orgName;
-              organization.persist();
-              Project project = new Project();
-              project.orgId = organization.id;
-              project.name = "shop";
-              project.persist();
-              Workspace workspace = new Workspace();
-              workspace.orgId = organization.id;
-              workspace.kind = Workspace.Kind.pulumi;
-              workspace.persist();
-              Stack stack = new Stack();
-              stack.orgId = organization.id;
-              stack.projectId = project.id;
-              stack.workspaceId = workspace.id;
-              stack.name = "dev";
-              stack.persistAndFlush();
+    UUID updateId =
+        requiringNew()
+            .call(
+                () -> {
+                  StackUpdate update = new StackUpdate();
+                  update.stackId = stack.stackId();
+                  update.kind = StackUpdate.Kind.PREVIEW;
+                  update.status = StackUpdate.Status.SUCCEEDED;
+                  update.dryRun = true;
+                  update.version = 0;
+                  update.startedAt = STARTED;
+                  // Well outside the fold grace period, so foldOnce() would take it — this test
+                  // folds explicitly, but an eligible update is the realistic case.
+                  update.endedAt = ENDED;
+                  update.persistAndFlush();
 
-              StackUpdate update = new StackUpdate();
-              update.stackId = stack.id;
-              update.kind = StackUpdate.Kind.PREVIEW;
-              update.status = StackUpdate.Status.SUCCEEDED;
-              update.dryRun = true;
-              update.version = 0;
-              update.startedAt = STARTED;
-              // Well outside the fold grace period, so foldOnce() would take it — this test folds
-              // explicitly, but an eligible update is the realistic case.
-              update.endedAt = ENDED;
-              update.persistAndFlush();
-
-              for (JsonNode raw : corpus) {
-                UpdateEventView view = new UpdateEventView(raw);
-                UpdateEvent event = new UpdateEvent();
-                event.stackId = stack.id;
-                event.updateId = update.id;
-                event.sequence = view.sequence();
-                event.kind = view.kind();
-                event.severity = view.severity();
-                event.payload = raw;
-                event.persist();
-              }
-
-              StackRef ref =
-                  new StackRef(
-                      stack.id,
-                      stack.workspaceId,
-                      stack.orgId,
-                      "shop-org",
-                      "shop",
-                      "dev",
-                      0,
-                      null,
-                      stack.visibility);
-              return new Seeded(stack.id, update.id, ref);
-            });
+                  for (JsonNode raw : corpus) {
+                    UpdateEventView view = new UpdateEventView(raw);
+                    UpdateEvent event = new UpdateEvent();
+                    event.stackId = stack.stackId();
+                    event.updateId = update.id;
+                    event.sequence = view.sequence();
+                    event.kind = view.kind();
+                    event.severity = view.severity();
+                    event.payload = raw;
+                    event.persist();
+                  }
+                  return update.id;
+                });
+    return new Seeded(stack.stackId(), updateId, stack);
   }
 
   private static List<JsonNode> corpus() throws Exception {
@@ -301,10 +258,6 @@ class ReportGoldenTest {
       mapper.readTree(in).forEach(events::add);
       return events;
     }
-  }
-
-  private <T> T inTx(Supplier<T> work) {
-    return QuarkusTransaction.requiringNew().call(work::get);
   }
 
   /** The stack coordinates are fixed rather than taken from the seeded row so the golden is. */

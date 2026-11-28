@@ -3,6 +3,7 @@ package app.statedb.app.stack;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
+import app.statedb.app.DatabaseTest;
 import app.statedb.persistence.identity.Organization;
 import app.statedb.persistence.stack.Project;
 import app.statedb.persistence.stack.Stack;
@@ -16,7 +17,7 @@ import org.junit.jupiter.api.Test;
 
 /** Schema-contract tests for the stack-tree tables. */
 @QuarkusTest
-class StackTreeConstraintsTest {
+class StackTreeConstraintsTest extends DatabaseTest {
 
   @Test
   @TestTransaction

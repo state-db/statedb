@@ -8,6 +8,7 @@ import static org.hamcrest.Matchers.containsString;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 
+import app.statedb.app.DatabaseTest;
 import io.quarkus.test.junit.QuarkusTest;
 import io.quarkus.test.junit.TestProfile;
 import io.restassured.http.Cookie;
@@ -22,7 +23,7 @@ import org.junit.jupiter.api.Test;
  */
 @QuarkusTest
 @TestProfile(LocalGlassTestSupport.Profile.class)
-class CliLoginBreakGlassTest {
+class CliLoginBreakGlassTest extends DatabaseTest {
 
   @Test
   void breakGlassSignInCompletesCliLogin() {

@@ -1,32 +1,27 @@
 package app.statedb.app.console;
 
+import static io.quarkus.narayana.jta.QuarkusTransaction.requiringNew;
 import static io.restassured.RestAssured.given;
 
+import app.statedb.app.DatabaseTest;
 import app.statedb.persistence.identity.OidcProvider;
-import io.quarkus.narayana.jta.QuarkusTransaction;
 import io.quarkus.test.junit.QuarkusTest;
-import jakarta.inject.Inject;
-import jakarta.persistence.EntityManager;
 import java.util.List;
-import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 /**
  * The login route rejects unknown and disabled providers with a 404 (the {@code ProviderRouteGuard}
- * runs before quarkus-oidc would try to start a flow). Seed rows are committed because the guard's
- * lookup runs in its own transaction and only sees committed data; we clean them up afterward.
+ * runs before quarkus-oidc would try to start a flow).
  */
 @QuarkusTest
-class ProviderLoginRejectionTest {
-
-  @Inject EntityManager em;
+class ProviderLoginRejectionTest extends DatabaseTest {
 
   private static final String DISABLED = "rejection-disabled";
 
   @BeforeEach
   void seedDisabledProvider() {
-    QuarkusTransaction.requiringNew()
+    requiringNew()
         .run(
             () -> {
               OidcProvider p = new OidcProvider();
@@ -38,16 +33,6 @@ class ProviderLoginRejectionTest {
               p.enabled = false;
               p.persist();
             });
-  }
-
-  @AfterEach
-  void cleanup() {
-    QuarkusTransaction.requiringNew()
-        .run(
-            () ->
-                em.createNativeQuery("DELETE FROM oidc_providers WHERE name = ?1")
-                    .setParameter(1, DISABLED)
-                    .executeUpdate());
   }
 
   @Test

@@ -1,21 +1,21 @@
 package app.statedb.app.stack;
 
+import static io.quarkus.narayana.jta.QuarkusTransaction.requiringNew;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-import app.statedb.persistence.identity.Organization;
+import app.statedb.app.DatabaseTest;
+import app.statedb.persistence.stack.Project;
 import app.statedb.persistence.stack.Stack;
 import app.statedb.persistence.stack.StackAlreadyExistsException;
 import app.statedb.persistence.stack.StackCreator;
 import app.statedb.persistence.stack.StackRef;
-import io.quarkus.narayana.jta.QuarkusTransaction;
+import app.statedb.persistence.stack.StackState;
 import io.quarkus.test.junit.QuarkusTest;
 import jakarta.inject.Inject;
-import jakarta.persistence.EntityManager;
 import java.util.Map;
 import java.util.UUID;
-import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
@@ -25,38 +25,17 @@ import org.junit.jupiter.api.Test;
  * idempotency.
  */
 @QuarkusTest
-class StackCreatorTest {
+class StackCreatorTest extends DatabaseTest {
 
   private static final String ORG_NAME = "stack-creator-org";
 
   @Inject StackCreator stackCreator;
 
-  @Inject EntityManager em;
-
   private UUID orgId;
 
   @BeforeEach
   void seed() {
-    orgId =
-        QuarkusTransaction.requiringNew()
-            .call(
-                () -> {
-                  Organization org = new Organization();
-                  org.name = ORG_NAME;
-                  org.displayName = "Stack Creator Test";
-                  org.persistAndFlush();
-                  return org.id;
-                });
-  }
-
-  @AfterEach
-  void cleanup() {
-    QuarkusTransaction.requiringNew()
-        .run(
-            () ->
-                em.createNativeQuery("DELETE FROM organizations WHERE name = ?1")
-                    .setParameter(1, ORG_NAME)
-                    .executeUpdate());
+    orgId = db.seedOrg(ORG_NAME, "Stack Creator Test");
   }
 
   @Test
@@ -65,25 +44,15 @@ class StackCreatorTest {
     assertEquals(orgId, ref.orgId());
     assertEquals("dev", ref.stackName());
 
-    QuarkusTransaction.requiringNew()
+    requiringNew()
         .run(
             () -> {
               Stack stack = Stack.findById(ref.stackId());
               assertEquals("dev", stack.name);
               assertEquals(0, stack.version);
-              UUID projectId =
-                  (UUID)
-                      em.createNativeQuery("SELECT project_id FROM stacks WHERE id = ?1")
-                          .setParameter(1, ref.stackId())
-                          .getSingleResult();
-              assertEquals(7, projectId.version());
-              Number states =
-                  (Number)
-                      em.createNativeQuery("SELECT count(*) FROM stack_state WHERE stack_id = ?1")
-                          .setParameter(1, ref.stackId())
-                          .getSingleResult();
-              assertEquals(1L, states.longValue());
+              assertEquals(7, stack.projectId.version());
             });
+    assertEquals(1L, StackState.count("stackId", ref.stackId()));
   }
 
   @Test
@@ -101,17 +70,6 @@ class StackCreatorTest {
     stackCreator.create(orgId, ORG_NAME, "shared-proj", "alpha", Map.of());
     stackCreator.create(orgId, ORG_NAME, "shared-proj", "beta", Map.of());
 
-    QuarkusTransaction.requiringNew()
-        .run(
-            () -> {
-              Number projects =
-                  (Number)
-                      em.createNativeQuery(
-                              "SELECT count(*) FROM projects WHERE org_id = ?1 AND name = ?2")
-                          .setParameter(1, orgId)
-                          .setParameter(2, "shared-proj")
-                          .getSingleResult();
-              assertEquals(1L, projects.longValue());
-            });
+    assertEquals(1L, Project.count("orgId = ?1 and name = ?2", orgId, "shared-proj"));
   }
 }

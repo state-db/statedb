@@ -4,6 +4,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import app.statedb.app.DatabaseTest;
 import app.statedb.persistence.identity.Organization;
 import app.statedb.persistence.stack.Project;
 import app.statedb.persistence.stack.Stack;
@@ -18,7 +19,7 @@ import java.util.UUID;
 import org.junit.jupiter.api.Test;
 
 @QuarkusTest
-class StackRefResolverTest {
+class StackRefResolverTest extends DatabaseTest {
 
   @Inject StackRefResolver resolver;
 

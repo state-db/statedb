@@ -5,6 +5,7 @@ import static app.statedb.app.console.LocalGlassTestSupport.login;
 import static io.restassured.RestAssured.given;
 import static org.hamcrest.Matchers.is;
 
+import app.statedb.app.DatabaseTest;
 import io.quarkus.test.junit.QuarkusTest;
 import io.quarkus.test.junit.QuarkusTestProfile;
 import io.quarkus.test.junit.TestProfile;
@@ -21,7 +22,7 @@ import org.junit.jupiter.api.Test;
  */
 @QuarkusTest
 @TestProfile(LocalGlassPbkdf2LoginTest.Profile.class)
-class LocalGlassPbkdf2LoginTest {
+class LocalGlassPbkdf2LoginTest extends DatabaseTest {
 
   /** As produced by the bootstrap Lambda in {@code deploy/aws/cloudformation.yaml}. */
   private static final String PBKDF2_HASH =

@@ -5,42 +5,30 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import app.statedb.app.DatabaseTest;
+import app.statedb.app.TestDb;
 import app.statedb.persistence.RequestValidationException;
 import app.statedb.persistence.events.EventBatchAppender;
 import app.statedb.persistence.events.EventSequenceConflictException;
-import app.statedb.persistence.identity.Organization;
-import app.statedb.persistence.lock.StackLockAcquirer;
-import app.statedb.persistence.stack.StackCreator;
-import app.statedb.persistence.stack.StackRef;
+import app.statedb.persistence.events.UpdateEvent;
 import app.statedb.persistence.update.StackUpdate;
-import app.statedb.persistence.update.StackUpdateStarter;
-import app.statedb.persistence.update.StartUpdateRequest;
-import app.statedb.persistence.update.StartedUpdate;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import io.quarkus.narayana.jta.QuarkusTransaction;
 import io.quarkus.test.junit.QuarkusTest;
 import jakarta.inject.Inject;
-import jakarta.persistence.EntityManager;
 import java.util.List;
-import java.util.Map;
 import java.util.UUID;
 import org.hibernate.exception.ConstraintViolationException;
-import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 @QuarkusTest
-class EventBatchAppenderTest {
+class EventBatchAppenderTest extends DatabaseTest {
 
   private static final String ORG_NAME = "events-org";
   private static final ObjectMapper MAPPER = new ObjectMapper();
 
-  @Inject StackCreator stackCreator;
-  @Inject StackUpdateStarter starter;
-  @Inject StackLockAcquirer lockAcquirer;
   @Inject EventBatchAppender appender;
-  @Inject EntityManager em;
 
   private UUID stackId;
   private UUID updateId;
@@ -48,38 +36,11 @@ class EventBatchAppenderTest {
 
   @BeforeEach
   void seed() {
-    stackId =
-        QuarkusTransaction.requiringNew()
-            .call(
-                () -> {
-                  Organization org = new Organization();
-                  org.name = ORG_NAME;
-                  org.displayName = "Events Test";
-                  org.persistAndFlush();
-                  StackRef ref = stackCreator.create(org.id, ORG_NAME, "proj", "dev", Map.of());
-                  return ref.stackId();
-                });
-    StartedUpdate u =
-        starter.start(
-            stackId,
-            StackUpdate.Kind.UPDATE,
-            null,
-            null,
-            UUID.randomUUID().toString(),
-            new StartUpdateRequest(
-                Map.of(), Map.of(), Map.of(), "desc", "yaml", "v3.242.0", "msg"));
-    updateId = u.updateId();
-    leaseId = lockAcquirer.acquire(stackId, updateId, "test", 1, Map.of()).orElseThrow().leaseId();
-  }
-
-  @AfterEach
-  void cleanup() {
-    QuarkusTransaction.requiringNew()
-        .run(
-            () ->
-                em.createNativeQuery("DELETE FROM organizations WHERE name = ?1")
-                    .setParameter(1, ORG_NAME)
-                    .executeUpdate());
+    TestDb.ActiveUpdate active =
+        db.seedActiveUpdate(db.seedStack(ORG_NAME).stackId(), StackUpdate.Kind.UPDATE);
+    stackId = active.stackId();
+    updateId = active.updateId();
+    leaseId = active.leaseId();
   }
 
   @Test
@@ -93,54 +54,40 @@ class EventBatchAppenderTest {
             event(1, "diagnosticEvent", "{\"severity\":\"info\",\"message\":\"hi\"}"),
             event(2, "summaryEvent", "{\"durationSeconds\":1}")));
 
-    QuarkusTransaction.requiringNew()
-        .run(
-            () -> {
-              @SuppressWarnings("unchecked")
-              List<Object[]> rows =
-                  em.createNativeQuery(
-                          "SELECT sequence, kind, severity FROM update_events "
-                              + "WHERE update_id = ?1 ORDER BY sequence")
-                      .setParameter(1, updateId)
-                      .getResultList();
-              assertEquals(3, rows.size());
-              assertEquals(0, ((Number) rows.get(0)[0]).intValue());
-              assertEquals("prelude", rows.get(0)[1]);
-              assertNull(rows.get(0)[2]);
-              assertEquals("diagnostic", rows.get(1)[1]);
-              assertEquals("info", rows.get(1)[2]);
-              assertEquals("summary", rows.get(2)[1]);
-            });
+    @SuppressWarnings("unchecked")
+    List<Object[]> rows =
+        em.createNativeQuery(
+                "SELECT sequence, kind, severity FROM update_events "
+                    + "WHERE update_id = ?1 ORDER BY sequence")
+            .setParameter(1, updateId)
+            .getResultList();
+    assertEquals(3, rows.size());
+    assertEquals(0, ((Number) rows.get(0)[0]).intValue());
+    assertEquals("prelude", rows.get(0)[1]);
+    assertNull(rows.get(0)[2]);
+    assertEquals("diagnostic", rows.get(1)[1]);
+    assertEquals("info", rows.get(1)[2]);
+    assertEquals("summary", rows.get(2)[1]);
   }
 
   @Test
-  void payloadStoredVerbatim() {
+  void payloadStoredVerbatim() throws Exception {
     appender.append(
         stackId,
         updateId,
         leaseId,
         List.of(event(7, "stdoutEvent", "{\"message\":\"hello\",\"color\":\"auto\"}")));
 
-    QuarkusTransaction.requiringNew()
-        .run(
-            () -> {
-              String payloadJson =
-                  (String)
-                      em.createNativeQuery(
-                              "SELECT payload::text FROM update_events WHERE update_id = ?1")
-                          .setParameter(1, updateId)
-                          .getSingleResult();
-              JsonNode payload;
-              try {
-                payload = MAPPER.readTree(payloadJson);
-              } catch (Exception e) {
-                throw new RuntimeException(e);
-              }
-              // Full wire envelope is preserved, including sequence/timestamp keys.
-              assertEquals(7, payload.get("sequence").asInt());
-              assertTrue(payload.has("stdoutEvent"));
-              assertEquals("hello", payload.get("stdoutEvent").get("message").asText());
-            });
+    String payloadJson =
+        (String)
+            em.createNativeQuery("SELECT payload::text FROM update_events WHERE update_id = ?1")
+                .setParameter(1, updateId)
+                .getSingleResult();
+    JsonNode payload = MAPPER.readTree(payloadJson);
+    // Full wire envelope is preserved, including sequence/timestamp keys.
+    assertEquals(7, payload.get("sequence").asInt());
+    assertTrue(payload.has("stdoutEvent"));
+    assertEquals("hello", payload.get("stdoutEvent").get("message").asText());
   }
 
   @Test
@@ -156,18 +103,7 @@ class EventBatchAppenderTest {
                 leaseId,
                 List.of(event(1, "stdoutEvent", "{\"message\":\"dup\"}"))));
 
-    QuarkusTransaction.requiringNew()
-        .run(
-            () -> {
-              long count =
-                  ((Number)
-                          em.createNativeQuery(
-                                  "SELECT count(*) FROM update_events WHERE update_id = ?1")
-                              .setParameter(1, updateId)
-                              .getSingleResult())
-                      .longValue();
-              assertEquals(1L, count);
-            });
+    assertEquals(1L, UpdateEvent.count("updateId", updateId));
   }
 
   @Test
@@ -228,18 +164,7 @@ class EventBatchAppenderTest {
   void crossStackUpdateIdRejectedByCompositeFk() {
     // Smuggle this update's id under a *different* stack — Postgres composite FK
     // (update_id, stack_id) → stack_updates(id, stack_id) must reject.
-    UUID otherStackId =
-        QuarkusTransaction.requiringNew()
-            .call(
-                () -> {
-                  Organization org2 = new Organization();
-                  org2.name = ORG_NAME + "-other";
-                  org2.displayName = "other";
-                  org2.persistAndFlush();
-                  StackRef ref =
-                      stackCreator.create(org2.id, ORG_NAME + "-other", "p2", "dev", Map.of());
-                  return ref.stackId();
-                });
+    UUID otherStackId = db.seedStack(ORG_NAME + "-other", "p2", "dev").stackId();
 
     RuntimeException thrown =
         assertThrows(
@@ -259,21 +184,7 @@ class EventBatchAppenderTest {
     }
     assertEquals("23503", sqlState, "expected FK violation (23503), got " + thrown);
 
-    QuarkusTransaction.requiringNew()
-        .run(
-            () -> {
-              long count =
-                  ((Number)
-                          em.createNativeQuery(
-                                  "SELECT count(*) FROM update_events WHERE update_id = ?1")
-                              .setParameter(1, updateId)
-                              .getSingleResult())
-                      .longValue();
-              assertEquals(0L, count);
-              em.createNativeQuery("DELETE FROM organizations WHERE name = ?1")
-                  .setParameter(1, ORG_NAME + "-other")
-                  .executeUpdate();
-            });
+    assertEquals(0L, UpdateEvent.count("updateId", updateId));
   }
 
   private static JsonNode event(int sequence, String kindKey, String innerJson) {

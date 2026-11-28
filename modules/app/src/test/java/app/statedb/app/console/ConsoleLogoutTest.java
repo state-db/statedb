@@ -5,13 +5,13 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import app.statedb.app.DatabaseTest;
 import io.quarkus.test.common.QuarkusTestResource;
 import io.quarkus.test.junit.QuarkusTest;
 import io.quarkus.test.oidc.server.OidcWiremockTestResource;
 import io.restassured.http.Cookie;
 import io.restassured.response.Response;
 import java.net.URI;
-import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
@@ -24,16 +24,11 @@ import org.junit.jupiter.api.Test;
  */
 @QuarkusTest
 @QuarkusTestResource(OidcWiremockTestResource.class)
-class ConsoleLogoutTest {
+class ConsoleLogoutTest extends DatabaseTest {
 
   @BeforeEach
   void seedProvider() {
     OidcConsoleSessionFixture.seedProvider();
-  }
-
-  @AfterEach
-  void cleanup() {
-    OidcConsoleSessionFixture.cleanup();
   }
 
   @Test
