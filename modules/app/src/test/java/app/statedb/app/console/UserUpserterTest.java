@@ -3,6 +3,7 @@ package app.statedb.app.console;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 
+import app.statedb.app.DatabaseTest;
 import app.statedb.persistence.identity.User;
 import app.statedb.persistence.identity.UserUpserter;
 import io.quarkus.test.TestTransaction;
@@ -14,7 +15,7 @@ import org.junit.jupiter.api.Test;
  * First login creates the user; later logins refresh the same row in place (atomic, no duplicate).
  */
 @QuarkusTest
-class UserUpserterTest {
+class UserUpserterTest extends DatabaseTest {
 
   @Inject UserUpserter upserter;
 

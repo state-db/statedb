@@ -1,35 +1,31 @@
 package app.statedb.app.stack;
 
+import static io.quarkus.narayana.jta.QuarkusTransaction.requiringNew;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-import app.statedb.persistence.identity.Organization;
+import app.statedb.app.DatabaseTest;
 import app.statedb.persistence.journal.JournalEntry;
 import app.statedb.persistence.stack.AssembledDeployment;
 import app.statedb.persistence.stack.Snapshot;
 import app.statedb.persistence.stack.StackAssembler;
-import app.statedb.persistence.stack.StackCreator;
-import app.statedb.persistence.stack.StackRef;
 import app.statedb.persistence.update.StackUpdate;
 import app.statedb.testsupport.pulumi.PulumiDeploymentAssert;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import io.quarkus.narayana.jta.QuarkusTransaction;
 import io.quarkus.test.junit.QuarkusTest;
 import jakarta.inject.Inject;
 import java.time.Instant;
-import java.util.Map;
 import java.util.UUID;
-import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
 
 @QuarkusTest
-class StackAssemblerTest {
+class StackAssemblerTest extends DatabaseTest {
 
   private static final ObjectMapper MAPPER = new ObjectMapper();
   private static final String ORG_NAME = "assembler-org";
@@ -53,7 +49,6 @@ class StackAssemblerTest {
   }
 
   @Inject StackAssembler assembler;
-  @Inject StackCreator stackCreator;
 
   private UUID stackId;
   private int updateVersion;
@@ -62,22 +57,7 @@ class StackAssemblerTest {
 
   @BeforeEach
   void seed() {
-    stackId =
-        QuarkusTransaction.requiringNew()
-            .call(
-                () -> {
-                  Organization org = new Organization();
-                  org.name = ORG_NAME;
-                  org.displayName = "Assembler Test";
-                  org.persistAndFlush();
-                  StackRef ref = stackCreator.create(org.id, ORG_NAME, "proj", "dev", Map.of());
-                  return ref.stackId();
-                });
-  }
-
-  @AfterEach
-  void cleanup() {
-    QuarkusTransaction.requiringNew().run(() -> Organization.delete("name = ?1", ORG_NAME));
+    stackId = db.seedStack(ORG_NAME).stackId();
   }
 
   // Every assembled export must be a deployment Pulumi itself would load; routing all assembly
@@ -902,7 +882,7 @@ class StackAssemblerTest {
   private void persistSnapshot(long boundary, String resources) throws Exception {
     JsonNode checkpoint = MAPPER.readTree("{\"resources\":" + resources + "}");
     int version = ++snapshotVersion;
-    QuarkusTransaction.requiringNew()
+    requiringNew()
         .run(
             () -> {
               Snapshot snapshot = new Snapshot();
@@ -921,7 +901,7 @@ class StackAssemblerTest {
     persistSnapshot(boundary, resources);
     int version = ++updateVersion;
     int installedSnapshotVersion = snapshotVersion;
-    QuarkusTransaction.requiringNew()
+    requiringNew()
         .run(
             () -> {
               StackUpdate update = new StackUpdate();
@@ -939,7 +919,7 @@ class StackAssemblerTest {
 
   private UUID update() {
     int version = ++updateVersion;
-    return QuarkusTransaction.requiringNew()
+    return requiringNew()
         .call(
             () -> {
               StackUpdate update = new StackUpdate();
@@ -997,7 +977,7 @@ class StackAssemblerTest {
       throws Exception {
     long seq = ++sequence;
     JsonNode parsed = MAPPER.readTree(payload);
-    QuarkusTransaction.requiringNew()
+    requiringNew()
         .run(
             () -> {
               JournalEntry entry = new JournalEntry();

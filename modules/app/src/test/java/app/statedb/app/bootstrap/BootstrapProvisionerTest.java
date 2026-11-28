@@ -1,10 +1,12 @@
 package app.statedb.app.bootstrap;
 
+import static io.quarkus.narayana.jta.QuarkusTransaction.requiringNew;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import app.statedb.app.DatabaseTest;
 import app.statedb.persistence.AdvisoryLock;
 import app.statedb.persistence.bootstrap.BootstrapConfig;
 import app.statedb.persistence.bootstrap.BootstrapProvisioner;
@@ -12,11 +14,9 @@ import app.statedb.persistence.identity.OrgMember;
 import app.statedb.persistence.identity.Organization;
 import app.statedb.persistence.identity.User;
 import io.quarkus.arc.Arc;
-import io.quarkus.narayana.jta.QuarkusTransaction;
 import io.quarkus.test.TestTransaction;
 import io.quarkus.test.junit.QuarkusTest;
 import jakarta.inject.Inject;
-import jakarta.persistence.EntityManager;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.CountDownLatch;
@@ -24,25 +24,22 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
-import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 
 /**
- * DB-touching tests for {@link BootstrapProvisioner}. Each test runs inside a
- * {@code @TestTransaction} that rolls back at the end, so tests do not interfere with each other or
- * with the Quarkus startup observer (which sees no bootstrap env in test profile and skips).
+ * DB-touching tests for {@link BootstrapProvisioner}. Single-caller tests run inside a
+ * {@code @TestTransaction} that rolls back; the concurrent test commits real rows and relies on
+ * {@link DatabaseTest} cleanup.
  *
  * <p>The bootstrap user lives at the fixed {@code (iss='local:bootstrap', sub='admin')}; multiple
  * provision calls inside one transaction target the same user row by design.
  */
 @QuarkusTest
-class BootstrapProvisionerTest {
+class BootstrapProvisionerTest extends DatabaseTest {
 
   @Inject BootstrapProvisioner provisioner;
 
   @Inject AdvisoryLock advisoryLock;
-
-  @Inject EntityManager em;
 
   private static final String CONCURRENT_ORG = "acme-concurrent";
 
@@ -151,7 +148,7 @@ class BootstrapProvisionerTest {
       pool.shutdownNow();
     }
 
-    QuarkusTransaction.requiringNew()
+    requiringNew()
         .run(
             () -> {
               assertEquals(1, Organization.count("name", CONCURRENT_ORG));
@@ -167,26 +164,6 @@ class BootstrapProvisionerTest {
                   1,
                   OrgMember.count("orgId = ?1 and userId = ?2", org.id, user.id),
                   "exactly one membership for org+user");
-            });
-  }
-
-  /**
-   * The concurrent test commits real rows (advisory-lock semantics require commits, so
-   * {@code @TestTransaction} can't isolate it). Strip them so sibling tests' counts stay clean.
-   */
-  @AfterEach
-  void cleanupConcurrentBootstrapRows() {
-    QuarkusTransaction.requiringNew()
-        .run(
-            () -> {
-              em.createNativeQuery(
-                      "DELETE FROM org_members WHERE org_id IN"
-                          + " (SELECT id FROM organizations WHERE name = ?1)")
-                  .setParameter(1, CONCURRENT_ORG)
-                  .executeUpdate();
-              em.createNativeQuery("DELETE FROM organizations WHERE name = ?1")
-                  .setParameter(1, CONCURRENT_ORG)
-                  .executeUpdate();
             });
   }
 }

@@ -1,32 +1,26 @@
 package app.statedb.app.events;
 
+import static io.quarkus.narayana.jta.QuarkusTransaction.requiringNew;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import app.statedb.app.DatabaseTest;
 import app.statedb.persistence.events.EventArchiveFolder;
 import app.statedb.persistence.events.StoredEvent;
 import app.statedb.persistence.events.UpdateEvent;
 import app.statedb.persistence.events.UpdateEventArchive;
 import app.statedb.persistence.events.UpdateEventReader;
-import app.statedb.persistence.identity.Organization;
-import app.statedb.persistence.stack.Project;
-import app.statedb.persistence.stack.Stack;
-import app.statedb.persistence.stack.Workspace;
 import app.statedb.persistence.update.StackUpdate;
 import com.fasterxml.jackson.databind.JsonNode;
-import io.quarkus.narayana.jta.QuarkusTransaction;
 import io.quarkus.test.junit.QuarkusTest;
 import jakarta.inject.Inject;
-import jakarta.persistence.EntityManager;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
-import java.util.function.Supplier;
-import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 
 /**
@@ -37,29 +31,14 @@ import org.junit.jupiter.api.Test;
  * sweep is global, and other tests sharing this database may leave foldable updates behind.
  */
 @QuarkusTest
-class EventArchiveFolderTest {
+class EventArchiveFolderTest extends DatabaseTest {
 
   private static final Instant LONG_AGO = Instant.parse("2026-01-01T00:00:00Z");
 
   @Inject EventArchiveFolder folder;
   @Inject UpdateEventReader reader;
-  @Inject EntityManager em;
 
-  private String org;
   private UUID currentStackId;
-
-  @AfterEach
-  void cleanup() {
-    if (org == null) return;
-    String name = org;
-    org = null;
-    QuarkusTransaction.requiringNew()
-        .run(
-            () ->
-                em.createNativeQuery("DELETE FROM organizations WHERE name = ?1")
-                    .setParameter(1, name)
-                    .executeUpdate());
-  }
 
   @Test
   void foldsTerminalUpdateKeepingSummaryHotAndUnfoldsBackExactly() {
@@ -98,7 +77,8 @@ class EventArchiveFolderTest {
                 payloadBytes / (double) archive.events.length));
 
     // Reads are transparent: the same events, now flagged as archived.
-    UpdateEventReader.EventPage page = inTx(() -> reader.page(stackId, updateId, -1, 10_000));
+    UpdateEventReader.EventPage page =
+        requiringNew().call(() -> reader.page(stackId, updateId, -1, 10_000));
     assertTrue(page.archived());
     assertEquals(before, page.events());
 
@@ -110,7 +90,8 @@ class EventArchiveFolderTest {
     // Unfolding restores every row exactly and removes the archive.
     assertEquals(corpus.size(), folder.unfold(updateId));
     assertNull(archive(updateId));
-    UpdateEventReader.EventPage restored = inTx(() -> reader.page(stackId, updateId, -1, 10_000));
+    UpdateEventReader.EventPage restored =
+        requiringNew().call(() -> reader.page(stackId, updateId, -1, 10_000));
     assertFalse(restored.archived());
     assertEquals(before, restored.events());
   }
@@ -130,14 +111,17 @@ class EventArchiveFolderTest {
     assertEquals(5, fromRows.size(), "1200 events at 250 per page");
     // A cursor landing mid-page, and one past the end of the stream.
     List<StoredEvent> midPageFromRows =
-        inTx(() -> reader.page(stackId, updateId, 617, 250).events());
+        requiringNew().call(() -> reader.page(stackId, updateId, 617, 250).events());
     assertEquals(618, midPageFromRows.getFirst().sequence());
 
-    QuarkusTransaction.requiringNew().run(() -> folder.fold(updateId, Instant.now()));
+    requiringNew().run(() -> folder.fold(updateId, Instant.now()));
 
     assertEquals(fromRows, walk(stackId, updateId, 250));
-    assertEquals(midPageFromRows, inTx(() -> reader.page(stackId, updateId, 617, 250).events()));
-    assertTrue(inTx(() -> reader.page(stackId, updateId, 1_199, 250).events()).isEmpty());
+    assertEquals(
+        midPageFromRows,
+        requiringNew().call(() -> reader.page(stackId, updateId, 617, 250).events()));
+    assertTrue(
+        requiringNew().call(() -> reader.page(stackId, updateId, 1_199, 250).events()).isEmpty());
   }
 
   /**
@@ -154,9 +138,9 @@ class EventArchiveFolderTest {
     List<StoredEvent> full = events(stackId, updateId);
 
     // Fold, then put the rows back without removing the archive: both sources now hold the stream.
-    QuarkusTransaction.requiringNew().run(() -> folder.fold(updateId, Instant.now()));
+    requiringNew().run(() -> folder.fold(updateId, Instant.now()));
     UpdateEventArchive archive = archive(updateId);
-    QuarkusTransaction.requiringNew()
+    requiringNew()
         .run(
             () -> {
               UpdateEvent.delete("updateId", updateId);
@@ -165,7 +149,8 @@ class EventArchiveFolderTest {
     assertEquals(40L, rowCount(updateId), "rows and archive coexist");
     assertNotNull(archive(updateId));
 
-    UpdateEventReader.EventPage page = inTx(() -> reader.page(stackId, updateId, -1, 10_000));
+    UpdateEventReader.EventPage page =
+        requiringNew().call(() -> reader.page(stackId, updateId, -1, 10_000));
     assertTrue(page.archived(), "archive is authoritative while both exist");
     assertEquals(full, page.events());
     assertEquals(archive.eventCount, page.events().size(), "no rows mixed into the blob's answer");
@@ -176,7 +161,8 @@ class EventArchiveFolderTest {
     int after = -1;
     while (true) {
       int cursor = after;
-      List<StoredEvent> page = inTx(() -> reader.page(stackId, updateId, cursor, limit).events());
+      List<StoredEvent> page =
+          requiringNew().call(() -> reader.page(stackId, updateId, cursor, limit).events());
       pages.add(page);
       if (page.size() < limit) {
         return pages;
@@ -222,7 +208,7 @@ class EventArchiveFolderTest {
     UUID stackId = seedStack("evt-archive-unfold-pending");
     UUID updateId = seedUpdate(stackId, 1, StackUpdate.Status.SUCCEEDED, LONG_AGO, corpus, 40);
 
-    QuarkusTransaction.requiringNew().run(() -> folder.fold(updateId, Instant.now()));
+    requiringNew().run(() -> folder.fold(updateId, Instant.now()));
     assertTrue(pending().isEmpty(), "folding settles it");
 
     folder.unfold(updateId);
@@ -231,12 +217,8 @@ class EventArchiveFolderTest {
   }
 
   /** The updates this stack's sweep would consider on the next tick. */
-  private List<UUID> pending() {
-    return inTx(this::pendingIds);
-  }
-
   @SuppressWarnings("unchecked")
-  private List<UUID> pendingIds() {
+  private List<UUID> pending() {
     return em.createNativeQuery(
             "SELECT id FROM stack_updates WHERE events_folded_at IS NULL"
                 + " AND status <> 'in-progress' AND stack_id = ?1")
@@ -267,63 +249,36 @@ class EventArchiveFolderTest {
   }
 
   private List<StoredEvent> events(UUID stackId, UUID updateId) {
-    return inTx(() -> reader.page(stackId, updateId, -1, 10_000).events());
+    return requiringNew().call(() -> reader.page(stackId, updateId, -1, 10_000).events());
   }
 
   private UpdateEventArchive archive(UUID updateId) {
-    return inTx(() -> UpdateEventArchive.<UpdateEventArchive>findById(updateId));
+    return requiringNew().call(() -> UpdateEventArchive.<UpdateEventArchive>findById(updateId));
   }
 
   private long rowCount(UUID updateId) {
-    return inTx(() -> UpdateEvent.count("updateId", updateId));
+    return UpdateEvent.count("updateId", updateId);
   }
 
   private long summaryRowCount(UUID updateId) {
-    return inTx(
-        () -> UpdateEvent.count("updateId = ?1 and kind = ?2", updateId, UpdateEvent.SUMMARY_KIND));
+    return UpdateEvent.count("updateId = ?1 and kind = ?2", updateId, UpdateEvent.SUMMARY_KIND);
   }
 
   private long payloadBytes(UUID updateId) {
     // pg_column_size is the point of the measurement: it reports what Postgres actually stores,
     // TOAST compression included, which is the baseline the blob has to beat.
-    return inTx(
-        () ->
-            ((Number)
-                    em.createNativeQuery(
-                            "SELECT sum(pg_column_size(payload)) FROM update_events"
-                                + " WHERE update_id = ?1")
-                        .setParameter(1, updateId)
-                        .getSingleResult())
-                .longValue());
+    return ((Number)
+            em.createNativeQuery(
+                    "SELECT sum(pg_column_size(payload)) FROM update_events"
+                        + " WHERE update_id = ?1")
+                .setParameter(1, updateId)
+                .getSingleResult())
+        .longValue();
   }
 
   private UUID seedStack(String orgName) {
-    this.org = orgName + "-" + System.nanoTime();
-    String name = this.org;
-    return QuarkusTransaction.requiringNew()
-        .call(
-            () -> {
-              Organization organization = new Organization();
-              organization.name = name;
-              organization.displayName = name;
-              organization.persist();
-              Project project = new Project();
-              project.orgId = organization.id;
-              project.name = "project";
-              project.persist();
-              Workspace workspace = new Workspace();
-              workspace.orgId = organization.id;
-              workspace.kind = Workspace.Kind.pulumi;
-              workspace.persist();
-              Stack stack = new Stack();
-              stack.orgId = organization.id;
-              stack.projectId = project.id;
-              stack.workspaceId = workspace.id;
-              stack.name = "dev";
-              stack.persistAndFlush();
-              currentStackId = stack.id;
-              return stack.id;
-            });
+    currentStackId = db.seedStack(orgName, "project", "dev").stackId();
+    return currentStackId;
   }
 
   private UUID seedUpdate(
@@ -333,7 +288,7 @@ class EventArchiveFolderTest {
       Instant endedAt,
       List<JsonNode> corpus,
       int eventCount) {
-    return QuarkusTransaction.requiringNew()
+    return requiringNew()
         .call(
             () -> {
               StackUpdate update = new StackUpdate();
@@ -348,9 +303,5 @@ class EventArchiveFolderTest {
               em.flush();
               return update.id;
             });
-  }
-
-  private <T> T inTx(Supplier<T> work) {
-    return QuarkusTransaction.requiringNew().call(work::get);
   }
 }

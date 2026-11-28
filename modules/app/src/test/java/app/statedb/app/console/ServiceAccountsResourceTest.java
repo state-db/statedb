@@ -1,13 +1,13 @@
 package app.statedb.app.console;
 
+import static app.statedb.app.console.OidcConsoleSessionFixture.loginAs;
+import static io.quarkus.narayana.jta.QuarkusTransaction.requiringNew;
 import static io.restassured.RestAssured.given;
-import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 
+import app.statedb.app.DatabaseTest;
 import app.statedb.persistence.identity.OrgMember;
-import app.statedb.persistence.identity.Organization;
 import app.statedb.persistence.identity.User;
-import io.quarkus.narayana.jta.QuarkusTransaction;
 import io.quarkus.test.common.QuarkusTestResource;
 import io.quarkus.test.junit.QuarkusTest;
 import io.quarkus.test.oidc.server.OidcWiremockTestResource;
@@ -16,7 +16,6 @@ import io.restassured.response.Response;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
-import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
@@ -27,33 +26,14 @@ import org.junit.jupiter.api.Test;
  */
 @QuarkusTest
 @QuarkusTestResource(OidcWiremockTestResource.class)
-class ServiceAccountsResourceTest {
+class ServiceAccountsResourceTest extends DatabaseTest {
 
   private static final String ORG = "svc-console-org";
   private static final String SA_PATH = "/api/orgs/" + ORG + "/service-accounts";
 
   @BeforeEach
-  void seedProvider() {
-    OidcConsoleSessionFixture.seedProvider();
-    QuarkusTransaction.requiringNew()
-        .run(
-            () -> {
-              Organization org = new Organization();
-              org.name = ORG;
-              org.displayName = "Service Console Test";
-              org.persistAndFlush();
-            });
-  }
-
-  @AfterEach
-  void cleanup() {
-    QuarkusTransaction.requiringNew()
-        .run(
-            () -> {
-              Organization.delete("name", ORG);
-              User.delete("iss", "local:service");
-            });
-    OidcConsoleSessionFixture.cleanup();
+  void seed() {
+    db.seedOrg(ORG, "Service Console Test");
   }
 
   @Test
@@ -240,7 +220,7 @@ class ServiceAccountsResourceTest {
   @Test
   void deactivatedHumanSessionCannotManageAccounts() {
     Cookie session = establishSession(OrgMember.Role.owner);
-    QuarkusTransaction.requiringNew()
+    requiringNew()
         .run(
             () ->
                 User.update(
@@ -269,30 +249,16 @@ class ServiceAccountsResourceTest {
         .statusCode(401);
   }
 
-  // Drives the console code flow to a usable session cookie, then grants the fixture user the
-  // requested role in the test org. Mirrors CliLoginFlowTest.
   private Cookie establishSession(OrgMember.Role role) {
-    Cookie session = OidcConsoleSessionFixture.login();
-
-    QuarkusTransaction.requiringNew()
+    Cookie session = loginAs(ORG, role);
+    requiringNew()
         .run(
-            () -> {
-              User user =
-                  User.<User>find(
-                          "iss = ?1 and sub = ?2",
-                          OidcConsoleSessionFixture.FIXTURE_ISS,
-                          OidcConsoleSessionFixture.FIXTURE_SUB)
-                      .firstResult();
-              assertNotNull(user, "callback provisions the user");
-              user.displayName = "Alice Example";
-              Organization org = Organization.<Organization>find("name", ORG).firstResult();
-              OrgMember m = new OrgMember();
-              m.orgId = org.id;
-              m.userId = user.id;
-              m.role = role;
-              m.persistAndFlush();
-              assertEquals(1L, OrgMember.count("userId", user.id));
-            });
+            () ->
+                User.update(
+                    "displayName = ?1 where iss = ?2 and sub = ?3",
+                    "Alice Example",
+                    OidcConsoleSessionFixture.FIXTURE_ISS,
+                    OidcConsoleSessionFixture.FIXTURE_SUB));
     return session;
   }
 }

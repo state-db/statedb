@@ -7,25 +7,21 @@ import static io.restassured.RestAssured.given;
 import static org.hamcrest.Matchers.equalTo;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
+import app.statedb.app.DatabaseTest;
 import app.statedb.persistence.vcs.VcsAuthFlow;
-import app.statedb.testsupport.InMemoryGitHubAppManager;
 import io.quarkus.test.junit.QuarkusTest;
 import io.quarkus.test.junit.QuarkusTestProfile;
 import io.quarkus.test.junit.TestProfile;
-import jakarta.inject.Inject;
 import java.util.Map;
 import org.junit.jupiter.api.Test;
 
 /** Without a public URL, GitHub setup is disabled and leaves no auth-flow rows behind. */
 @QuarkusTest
 @TestProfile(GitHubIntegrationResourceTest.Profile.class)
-class GitHubIntegrationResourceTest {
-
-  @Inject InMemoryGitHubAppManager github;
+class GitHubIntegrationResourceTest extends DatabaseTest {
 
   @Test
   void setupIsDisabledWhenPublicUrlIsUnset() {
-    github.reset();
     String cookie = login(PASSWORD).statusCode(200).extract().cookie(COOKIE);
 
     given()

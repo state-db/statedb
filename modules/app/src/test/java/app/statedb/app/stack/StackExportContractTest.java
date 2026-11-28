@@ -1,37 +1,27 @@
 package app.statedb.app.stack;
 
+import static io.quarkus.narayana.jta.QuarkusTransaction.requiringNew;
 import static io.restassured.RestAssured.given;
 import static org.hamcrest.Matchers.containsInAnyOrder;
 import static org.hamcrest.Matchers.equalTo;
 import static org.hamcrest.Matchers.hasSize;
 import static org.hamcrest.Matchers.nullValue;
 
-import app.statedb.persistence.auth.ApiToken;
-import app.statedb.persistence.identity.OrgMember;
-import app.statedb.persistence.identity.Organization;
-import app.statedb.persistence.identity.User;
+import app.statedb.app.DatabaseTest;
 import app.statedb.persistence.journal.JournalEntry;
-import app.statedb.persistence.stack.StackCreator;
 import app.statedb.persistence.stack.StackImporter;
 import app.statedb.persistence.stack.StackState;
 import app.statedb.persistence.update.StackUpdate;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import io.quarkus.narayana.jta.QuarkusTransaction;
 import io.quarkus.test.junit.QuarkusTest;
 import jakarta.inject.Inject;
-import jakarta.persistence.EntityManager;
-import java.nio.charset.StandardCharsets;
-import java.security.MessageDigest;
-import java.security.NoSuchAlgorithmException;
 import java.time.Instant;
-import java.util.Map;
 import java.util.UUID;
-import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 @QuarkusTest
-class StackExportContractTest {
+class StackExportContractTest extends DatabaseTest {
 
   private static final String ORG = "export-org";
   private static final String OTHER_ORG = "export-other-org";
@@ -41,61 +31,14 @@ class StackExportContractTest {
 
   private static final ObjectMapper MAPPER = new ObjectMapper();
 
-  @Inject StackCreator stackCreator;
   @Inject StackImporter stackImporter;
-  @Inject EntityManager em;
 
   private UUID stackId;
 
   @BeforeEach
   void seed() {
-    QuarkusTransaction.requiringNew()
-        .run(
-            () -> {
-              Organization org = org(ORG);
-              Organization other = org(OTHER_ORG);
-
-              User user = new User();
-              user.iss = "local:test";
-              user.sub = "export";
-              user.email = "export@example.com";
-              user.displayName = "Export Tester";
-              user.persistAndFlush();
-
-              OrgMember member = new OrgMember();
-              member.orgId = org.id;
-              member.userId = user.id;
-              member.role = OrgMember.Role.owner;
-              member.persistAndFlush();
-
-              ApiToken token = new ApiToken();
-              token.tokenHash = sha256Hex(RAW_TOKEN);
-              token.userId = user.id;
-              token.orgId = org.id;
-              token.kind = ApiToken.Kind.service_account;
-              token.expiresAt = java.time.Instant.now().plusSeconds(60 * 60);
-              token.description = "export";
-              token.persistAndFlush();
-
-              stackId = stackCreator.create(org.id, ORG, PROJECT, STACK, Map.of()).stackId();
-              stackCreator.create(other.id, OTHER_ORG, PROJECT, STACK, Map.of());
-            });
-  }
-
-  @AfterEach
-  void cleanup() {
-    QuarkusTransaction.requiringNew()
-        .run(
-            () -> {
-              em.createNativeQuery("DELETE FROM organizations WHERE name IN (?1, ?2)")
-                  .setParameter(1, ORG)
-                  .setParameter(2, OTHER_ORG)
-                  .executeUpdate();
-              em.createNativeQuery("DELETE FROM users WHERE iss = ?1 AND sub = ?2")
-                  .setParameter(1, "local:test")
-                  .setParameter(2, "export")
-                  .executeUpdate();
-            });
+    stackId = db.seedOwnerWithStack(ORG, RAW_TOKEN, PROJECT, STACK).stack().stackId();
+    db.seedStack(OTHER_ORG, PROJECT, STACK);
   }
 
   @Test
@@ -173,8 +116,7 @@ class StackExportContractTest {
 
   @Test
   void versionedExportInProgressUpdateReturns404() {
-    QuarkusTransaction.requiringNew()
-        .run(() -> appliedUpdate(1, StackUpdate.Status.IN_PROGRESS, 0L, null));
+    requiringNew().run(() -> appliedUpdate(1, StackUpdate.Status.IN_PROGRESS, 0L, null));
 
     given()
         .header("Authorization", "token " + RAW_TOKEN)
@@ -201,7 +143,7 @@ class StackExportContractTest {
   @Test
   void versionedExportDistinguishesImportSharingJournalBoundary() throws Exception {
     seedTwoAppliedVersions();
-    QuarkusTransaction.requiringNew()
+    requiringNew()
         .run(
             () -> {
               StackState state = StackState.<StackState>find("stackId", stackId).firstResult();
@@ -248,7 +190,7 @@ class StackExportContractTest {
   // Two applied versions with production boundary semantics: end_journal_seq is one past the
   // update's last journal entry (the gap JournalAppender's counter advance leaves).
   private void seedTwoAppliedVersions() {
-    QuarkusTransaction.requiringNew()
+    requiringNew()
         .run(
             () -> {
               UUID first = appliedUpdate(1, StackUpdate.Status.SUCCEEDED, 0L, 2L);
@@ -297,30 +239,7 @@ class StackExportContractTest {
     return "urn:pulumi:dev::proj::pkg:index:" + name + "::" + name;
   }
 
-  private Organization org(String name) {
-    Organization org = new Organization();
-    org.name = name;
-    org.displayName = name;
-    org.persistAndFlush();
-    return org;
-  }
-
   private static String path(String org, String project, String stack) {
     return "/pulumi/api/stacks/" + org + "/" + project + "/" + stack + "/export";
-  }
-
-  private static String sha256Hex(String input) {
-    try {
-      byte[] digest =
-          MessageDigest.getInstance("SHA-256").digest(input.getBytes(StandardCharsets.UTF_8));
-      StringBuilder sb = new StringBuilder(digest.length * 2);
-      for (byte b : digest) {
-        sb.append(Character.forDigit((b >> 4) & 0xF, 16));
-        sb.append(Character.forDigit(b & 0xF, 16));
-      }
-      return sb.toString();
-    } catch (NoSuchAlgorithmException e) {
-      throw new IllegalStateException(e);
-    }
   }
 }

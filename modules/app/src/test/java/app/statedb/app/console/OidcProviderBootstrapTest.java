@@ -3,6 +3,7 @@ package app.statedb.app.console;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import app.statedb.app.DatabaseTest;
 import app.statedb.persistence.bootstrap.OidcBootstrapConfig;
 import app.statedb.persistence.bootstrap.OidcProviderBootstrap;
 import app.statedb.persistence.identity.OidcProvider;
@@ -13,7 +14,7 @@ import org.junit.jupiter.api.Test;
 
 /** Boot-time provider upsert is idempotent and env wins on conflict (secret/issuer rotation). */
 @QuarkusTest
-class OidcProviderBootstrapTest {
+class OidcProviderBootstrapTest extends DatabaseTest {
 
   @Inject OidcProviderBootstrap bootstrap;
 

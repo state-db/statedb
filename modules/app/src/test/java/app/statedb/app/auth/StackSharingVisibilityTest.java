@@ -1,9 +1,11 @@
 package app.statedb.app.auth;
 
+import static io.quarkus.narayana.jta.QuarkusTransaction.requiringNew;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import app.statedb.app.DatabaseTest;
 import app.statedb.persistence.auth.ApiToken;
 import app.statedb.persistence.auth.AuthenticatedPrincipal;
 import app.statedb.persistence.authz.Authorizer;
@@ -27,17 +29,14 @@ import com.cedarpolicy.model.entity.Entity;
 import com.cedarpolicy.value.EntityTypeName;
 import com.cedarpolicy.value.EntityUID;
 import com.cedarpolicy.value.PrimString;
-import io.quarkus.narayana.jta.QuarkusTransaction;
 import io.quarkus.test.junit.QuarkusTest;
 import jakarta.inject.Inject;
-import jakarta.persistence.EntityManager;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
-import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
@@ -53,7 +52,7 @@ import org.junit.jupiter.api.Test;
  * "secrets" (write shares carry read); member → no grant (private stays hidden).
  */
 @QuarkusTest
-class StackSharingVisibilityTest {
+class StackSharingVisibilityTest extends DatabaseTest {
 
   private static final String ACME = "vis-acme";
   private static final String OTHER = "vis-other";
@@ -68,7 +67,6 @@ class StackSharingVisibilityTest {
   @Inject StackCreator stackCreator;
   @Inject StackRefResolver stackRefResolver;
   @Inject StackListFinder stackListFinder;
-  @Inject EntityManager em;
 
   private UUID acmeId;
   private UUID ownerId;
@@ -83,7 +81,7 @@ class StackSharingVisibilityTest {
 
   @BeforeEach
   void seed() {
-    QuarkusTransaction.requiringNew()
+    requiringNew()
         .run(
             () -> {
               acmeId = persistOrg(ACME).id;
@@ -115,23 +113,6 @@ class StackSharingVisibilityTest {
 
     grant("StackReadResourcePolicy", guestId, internalStackId);
     grant("StackWriteResourcePolicy", viewerId, privateStackId);
-  }
-
-  @AfterEach
-  void cleanup() {
-    QuarkusTransaction.requiringNew()
-        .run(
-            () -> {
-              // org / user deletes cascade org_members, stacks, and policy_grants.
-              em.createNativeQuery("DELETE FROM organizations WHERE name IN (?1, ?2)")
-                  .setParameter(1, ACME)
-                  .setParameter(2, OTHER)
-                  .executeUpdate();
-              em.createNativeQuery("DELETE FROM users WHERE iss = ?1")
-                  .setParameter(1, ISS)
-                  .executeUpdate();
-            });
-    policySetCache.reload();
   }
 
   @Test
@@ -226,7 +207,7 @@ class StackSharingVisibilityTest {
     AuthenticatedPrincipal ci = serviceToken(serviceUserId, "ci");
     assertTrue(decide(ci, "stack:Read", PRIVATE_STACK));
     Set<String> listed =
-        QuarkusTransaction.requiringNew()
+        requiringNew()
             .call(
                 () ->
                     stackListFinder.findVisibleToUserInOrg(serviceUserId, acmeId, null).stream()
@@ -239,8 +220,7 @@ class StackSharingVisibilityTest {
   void revokingGuestMembershipIsImmediatelyInert() {
     assertTrue(decide(session(guestId, "guest"), "stack:Read", INTERNAL_STACK));
 
-    QuarkusTransaction.requiringNew()
-        .run(() -> OrgMember.delete("orgId = ?1 and userId = ?2", acmeId, guestId));
+    requiringNew().run(() -> OrgMember.delete("orgId = ?1 and userId = ?2", acmeId, guestId));
 
     // No policy reload: the template guard and the listing membership check fail per request.
     assertFalse(decide(session(guestId, "guest"), "stack:Read", INTERNAL_STACK));
@@ -277,7 +257,7 @@ class StackSharingVisibilityTest {
   }
 
   private Set<String> listedAcmeStacks(UUID userId) {
-    return QuarkusTransaction.requiringNew()
+    return requiringNew()
         .call(
             () ->
                 stackListFinder.findVisibleToUser(userId, null).stream()
@@ -287,7 +267,7 @@ class StackSharingVisibilityTest {
   }
 
   private boolean decide(AuthenticatedPrincipal p, String action, String stackName) {
-    return QuarkusTransaction.requiringNew()
+    return requiringNew()
         .call(
             () -> {
               CedarResource resource = StackEntityLoader.stackResource(ref(stackName));
@@ -297,12 +277,12 @@ class StackSharingVisibilityTest {
   }
 
   private boolean targetedVisible(UUID userId, String org, String project, String stack) {
-    return QuarkusTransaction.requiringNew()
+    return requiringNew()
         .call(() -> stackListFinder.findVisibleToUser(userId, org, project, stack).isPresent());
   }
 
   private boolean decideOnOrg(AuthenticatedPrincipal p, String action) {
-    return QuarkusTransaction.requiringNew()
+    return requiringNew()
         .call(
             () -> {
               EntityUID uid = EntityTypeName.parse("Org").orElseThrow().of(ResourceName.org(ACME));
@@ -320,7 +300,7 @@ class StackSharingVisibilityTest {
   }
 
   private boolean loaderCanRead(UUID userId, String sub, String stackName) {
-    return QuarkusTransaction.requiringNew()
+    return requiringNew()
         .call(
             () -> {
               StackRef r = ref(stackName);
@@ -334,7 +314,7 @@ class StackSharingVisibilityTest {
   }
 
   private void grant(String templateId, UUID userId, UUID stackId) {
-    QuarkusTransaction.requiringNew()
+    requiringNew()
         .run(
             () -> {
               PolicyGrant g = new PolicyGrant();

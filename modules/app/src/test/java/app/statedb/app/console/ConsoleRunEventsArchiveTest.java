@@ -1,24 +1,22 @@
 package app.statedb.app.console;
 
+import static app.statedb.app.console.OidcConsoleSessionFixture.loginAs;
+import static io.quarkus.narayana.jta.QuarkusTransaction.requiringNew;
 import static io.restassured.RestAssured.given;
 import static org.hamcrest.Matchers.notNullValue;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import app.statedb.app.DatabaseTest;
 import app.statedb.app.events.EventArchiveFixture;
 import app.statedb.persistence.events.EventArchiveFolder;
 import app.statedb.persistence.events.UpdateEvent;
 import app.statedb.persistence.events.UpdateEventArchive;
 import app.statedb.persistence.identity.OrgMember;
-import app.statedb.persistence.identity.Organization;
-import app.statedb.persistence.identity.User;
-import app.statedb.persistence.stack.Stack;
-import app.statedb.persistence.stack.StackCreator;
 import app.statedb.persistence.update.StackUpdate;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import io.quarkus.narayana.jta.QuarkusTransaction;
 import io.quarkus.test.common.QuarkusTestResource;
 import io.quarkus.test.junit.QuarkusTest;
 import io.quarkus.test.junit.TestProfile;
@@ -29,10 +27,7 @@ import jakarta.inject.Inject;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Map;
 import java.util.UUID;
-import org.junit.jupiter.api.AfterEach;
-import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 /**
@@ -43,7 +38,7 @@ import org.junit.jupiter.api.Test;
 @QuarkusTest
 @TestProfile(LocalGlassTestSupport.Profile.class)
 @QuarkusTestResource(OidcWiremockTestResource.class)
-class ConsoleRunEventsArchiveTest {
+class ConsoleRunEventsArchiveTest extends DatabaseTest {
 
   private static final String ORG = "run-events-archive-org";
   private static final String PROJECT = "project";
@@ -53,45 +48,27 @@ class ConsoleRunEventsArchiveTest {
   private static final int EVENT_COUNT = 600;
   private static final ObjectMapper MAPPER = new ObjectMapper();
 
-  @Inject StackCreator stackCreator;
   @Inject EventArchiveFolder folder;
-
-  @BeforeEach
-  void seed() {
-    cleanup();
-  }
-
-  @AfterEach
-  void cleanup() {
-    QuarkusTransaction.requiringNew().run(() -> Organization.delete("name", ORG));
-    OidcConsoleSessionFixture.cleanup();
-  }
 
   @Test
   void archivedUpdateServesByteIdenticalPagesAndKeepsSummaryHot() {
-    Cookie session = ownerSession();
-    UUID stackId = createStack();
+    UUID stackId = db.seedStack(ORG, PROJECT, STACK).stackId();
+    Cookie session = loginAs(ORG, OrgMember.Role.owner);
     UUID updateId = seedUpdate(stackId);
 
     List<String> beforeFold = pageThrough(session, updateId);
     assertTrue(beforeFold.size() > 1, "corpus should span more than one page");
     String runDetail = runDetail(session);
 
-    QuarkusTransaction.requiringNew().run(() -> folder.fold(updateId, Instant.now()));
+    requiringNew().run(() -> folder.fold(updateId, Instant.now()));
     assertNotNull(
-        QuarkusTransaction.requiringNew().call(() -> UpdateEventArchive.findById(updateId)),
-        "update was folded");
+        requiringNew().call(() -> UpdateEventArchive.findById(updateId)), "update was folded");
 
     assertEquals(beforeFold, pageThrough(session, updateId), "pages differ once archived");
 
     // The summary is answered from the row the folder left behind, not by inflating the blob.
     assertTrue(
-        QuarkusTransaction.requiringNew()
-                .call(
-                    () ->
-                        UpdateEvent.count(
-                            "updateId = ?1 and kind = ?2", updateId, UpdateEvent.SUMMARY_KIND))
-            > 0,
+        UpdateEvent.count("updateId = ?1 and kind = ?2", updateId, UpdateEvent.SUMMARY_KIND) > 0,
         "summary rows stay hot");
     assertEquals(runDetail, runDetail(session), "run detail differs once archived");
 
@@ -102,8 +79,8 @@ class ConsoleRunEventsArchiveTest {
 
   @Test
   void inProgressRunDetailIncludesBackendDerivedChanges() {
-    Cookie session = ownerSession();
-    UUID stackId = createStack();
+    UUID stackId = db.seedStack(ORG, PROJECT, STACK).stackId();
+    Cookie session = loginAs(ORG, OrgMember.Role.owner);
     seedUpdate(stackId, StackUpdate.Status.IN_PROGRESS);
 
     Response response =
@@ -123,8 +100,8 @@ class ConsoleRunEventsArchiveTest {
 
   @Test
   void refreshBeforePreviewAndUpdateRemainsActivityAcrossFolding() throws Exception {
-    Cookie session = ownerSession();
-    UUID stackId = createStack();
+    UUID stackId = db.seedStack(ORG, PROJECT, STACK).stackId();
+    Cookie session = loginAs(ORG, OrgMember.Role.owner);
     UUID previewId = seedRefreshRun(stackId, StackUpdate.Kind.PREVIEW, true, 0, true);
     UUID updateId = seedRefreshRun(stackId, StackUpdate.Kind.UPDATE, false, 1, true);
 
@@ -134,7 +111,7 @@ class ConsoleRunEventsArchiveTest {
     assertRefreshActivity(
         session, "/api/pulumi/stacks/%s/%s/%s/updates/1".formatted(ORG, PROJECT, STACK));
 
-    QuarkusTransaction.requiringNew()
+    requiringNew()
         .run(
             () -> {
               assertTrue(folder.fold(previewId, Instant.now()));
@@ -150,8 +127,8 @@ class ConsoleRunEventsArchiveTest {
 
   @Test
   void standaloneRefreshPreviewUsesItsTerminalSameResult() throws Exception {
-    Cookie session = ownerSession();
-    UUID stackId = createStack();
+    UUID stackId = db.seedStack(ORG, PROJECT, STACK).stackId();
+    Cookie session = loginAs(ORG, OrgMember.Role.owner);
     UUID previewId = seedRefreshRun(stackId, StackUpdate.Kind.REFRESH, true, 0, false);
 
     Response response =
@@ -201,23 +178,13 @@ class ConsoleRunEventsArchiveTest {
         .asString();
   }
 
-  private UUID createStack() {
-    return QuarkusTransaction.requiringNew()
-        .call(
-            () -> {
-              Organization org = Organization.<Organization>find("name", ORG).firstResult();
-              stackCreator.create(org.id, ORG, PROJECT, STACK, Map.of());
-              return Stack.<Stack>find("orgId = ?1 and name = ?2", org.id, STACK).firstResult().id;
-            });
-  }
-
   private UUID seedUpdate(UUID stackId) {
     return seedUpdate(stackId, StackUpdate.Status.SUCCEEDED);
   }
 
   private UUID seedUpdate(UUID stackId, StackUpdate.Status status) {
     List<JsonNode> corpus = EventArchiveFixture.recordedEvents();
-    return QuarkusTransaction.requiringNew()
+    return requiringNew()
         .call(
             () -> {
               StackUpdate update = new StackUpdate();
@@ -244,7 +211,7 @@ class ConsoleRunEventsArchiveTest {
     // pre/output events followed by the program's same pre/output events. A standalone refresh
     // instead completes its refresh pre-event with a terminal same output event.
     String urn = "urn:pulumi:dev::project::test:index:Resource::unchanged";
-    return QuarkusTransaction.requiringNew()
+    return requiringNew()
         .call(
             () -> {
               StackUpdate update = new StackUpdate();
@@ -325,35 +292,5 @@ class ConsoleRunEventsArchiveTest {
     response.then().statusCode(200);
     assertEquals(List.of("refresh"), response.jsonPath().getList("changes.activity.op"));
     assertTrue(response.jsonPath().getList("changes.unchanged").isEmpty());
-  }
-
-  private static Cookie ownerSession() {
-    QuarkusTransaction.requiringNew()
-        .run(
-            () -> {
-              Organization org = new Organization();
-              org.name = ORG;
-              org.displayName = ORG;
-              org.persistAndFlush();
-            });
-    OidcConsoleSessionFixture.seedProvider();
-    Cookie session = OidcConsoleSessionFixture.login();
-    QuarkusTransaction.requiringNew()
-        .run(
-            () -> {
-              User user =
-                  User.<User>find(
-                          "iss = ?1 and sub = ?2",
-                          OidcConsoleSessionFixture.FIXTURE_ISS,
-                          OidcConsoleSessionFixture.FIXTURE_SUB)
-                      .firstResult();
-              Organization org = Organization.<Organization>find("name", ORG).firstResult();
-              OrgMember membership = new OrgMember();
-              membership.orgId = org.id;
-              membership.userId = user.id;
-              membership.role = OrgMember.Role.owner;
-              membership.persistAndFlush();
-            });
-    return session;
   }
 }

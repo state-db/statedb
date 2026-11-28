@@ -4,6 +4,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
+import app.statedb.app.DatabaseTest;
 import app.statedb.persistence.auth.ApiToken;
 import app.statedb.persistence.identity.OrgMember;
 import app.statedb.persistence.identity.Organization;
@@ -25,7 +26,7 @@ import org.junit.jupiter.api.Test;
  * transaction rollback-only; further DB work in the same method would fail for unrelated reasons.
  */
 @QuarkusTest
-class IdentityConstraintsTest {
+class IdentityConstraintsTest extends DatabaseTest {
 
   // -----------------------------------------------------------------------------------------
   // Foreign keys

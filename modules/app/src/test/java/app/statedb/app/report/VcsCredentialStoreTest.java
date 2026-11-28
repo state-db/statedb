@@ -1,51 +1,35 @@
 package app.statedb.app.report;
 
+import static io.quarkus.narayana.jta.QuarkusTransaction.requiringNew;
 import static java.nio.charset.StandardCharsets.UTF_8;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import app.statedb.app.DatabaseTest;
 import app.statedb.persistence.RequestValidationException;
-import app.statedb.persistence.identity.Organization;
 import app.statedb.persistence.identity.User;
 import app.statedb.persistence.secrets.ServiceSecretsAead;
-import app.statedb.persistence.vcs.VcsAppRegistration;
 import app.statedb.persistence.vcs.VcsAppRegistry;
 import app.statedb.persistence.vcs.VcsAppRegistry.AppRegistration;
 import app.statedb.persistence.vcs.VcsAuthFlow;
 import app.statedb.persistence.vcs.VcsAuthFlow.Purpose;
 import app.statedb.persistence.vcs.VcsAuthFlows;
 import app.statedb.persistence.vcs.VcsConnection;
-import io.quarkus.narayana.jta.QuarkusTransaction;
 import io.quarkus.test.junit.QuarkusTest;
 import jakarta.inject.Inject;
-import jakarta.persistence.EntityManager;
 import java.nio.charset.StandardCharsets;
 import java.security.GeneralSecurityException;
 import java.util.UUID;
-import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 
 @QuarkusTest
-class VcsCredentialStoreTest {
+class VcsCredentialStoreTest extends DatabaseTest {
 
   @Inject VcsAppRegistry registrations;
   @Inject VcsAuthFlows flows;
   @Inject ServiceSecretsAead secretsAead;
-  @Inject EntityManager em;
-
-  @AfterEach
-  void cleanup() {
-    QuarkusTransaction.requiringNew()
-        .run(
-            () -> {
-              VcsAuthFlow.deleteAll();
-              Organization.delete("name", "vcs-auth-org");
-              VcsAppRegistration.deleteAll();
-              User.delete("iss", "https://vcs-credentials.test");
-            });
-  }
 
   @Test
   void appPrivateKeyIsEncryptedAndVersionBound() {
@@ -62,14 +46,11 @@ class VcsCredentialStoreTest {
             "client-secret-one"));
 
     byte[] ciphertext =
-        QuarkusTransaction.requiringNew()
-            .call(
-                () ->
-                    (byte[])
-                        em.createNativeQuery(
-                                "SELECT private_key_ciphertext FROM vcs_app_registrations WHERE"
-                                    + " host = 'github.com'")
-                            .getSingleResult());
+        (byte[])
+            em.createNativeQuery(
+                    "SELECT private_key_ciphertext FROM vcs_app_registrations WHERE"
+                        + " host = 'github.com'")
+                .getSingleResult();
     assertFalse(java.util.Arrays.equals(privateKey.getBytes(StandardCharsets.UTF_8), ciphertext));
     assertEquals(privateKey, registrations.credentials("github.com").orElseThrow().privateKeyPem());
 
@@ -90,14 +71,11 @@ class VcsCredentialStoreTest {
     assertEquals("client-two", credentials.clientId());
     assertEquals("client-secret-two", credentials.clientSecret());
     byte[] oauthCiphertext =
-        QuarkusTransaction.requiringNew()
-            .call(
-                () ->
-                    (byte[])
-                        em.createNativeQuery(
-                                "SELECT client_secret_ciphertext FROM vcs_app_registrations WHERE"
-                                    + " host = 'github.com'")
-                            .getSingleResult());
+        (byte[])
+            em.createNativeQuery(
+                    "SELECT client_secret_ciphertext FROM vcs_app_registrations WHERE"
+                        + " host = 'github.com'")
+                .getSingleResult();
     assertFalse(
         java.util.Arrays.equals(
             "client-secret-two".getBytes(StandardCharsets.UTF_8), oauthCiphertext));
@@ -116,7 +94,7 @@ class VcsCredentialStoreTest {
   @Test
   void connectionStateBindsUserOrgPurposeAndExpires() {
     UUID userId = user();
-    UUID orgId = organization();
+    UUID orgId = db.seedOrg("vcs-auth-org", "VCS auth");
     String state = flows.beginOAuth(userId, orgId, 7, 9876L, "verifier");
     assertThrows(
         jakarta.ws.rs.BadRequestException.class,
@@ -135,8 +113,7 @@ class VcsCredentialStoreTest {
         jakarta.ws.rs.BadRequestException.class,
         () -> flows.consume(state, userId, orgId, Purpose.oauth));
     String expired = flows.beginInstall(userId, orgId, 7);
-    QuarkusTransaction.requiringNew()
-        .run(() -> VcsAuthFlow.update("expiresAt = ?1", java.time.Instant.EPOCH));
+    requiringNew().run(() -> VcsAuthFlow.update("expiresAt = ?1", java.time.Instant.EPOCH));
     assertThrows(
         jakarta.ws.rs.BadRequestException.class,
         () -> flows.consume(expired, userId, orgId, Purpose.install));
@@ -146,14 +123,11 @@ class VcsCredentialStoreTest {
   void appCredentialsUseTheSharedKeysetUnderTheirOwnAssociatedData() throws Exception {
     register(123, "private-key-one", "client-secret-one");
     Object[] ciphertexts =
-        QuarkusTransaction.requiringNew()
-            .call(
-                () ->
-                    (Object[])
-                        em.createNativeQuery(
-                                "SELECT private_key_ciphertext, client_secret_ciphertext FROM"
-                                    + " vcs_app_registrations WHERE host = 'github.com'")
-                            .getSingleResult());
+        (Object[])
+            em.createNativeQuery(
+                    "SELECT private_key_ciphertext, client_secret_ciphertext FROM"
+                        + " vcs_app_registrations WHERE host = 'github.com'")
+                .getSingleResult();
     byte[] privateKey = (byte[]) ciphertexts[0];
     byte[] clientSecret = (byte[]) ciphertexts[1];
     var aead = secretsAead.aead();
@@ -174,7 +148,7 @@ class VcsCredentialStoreTest {
 
   @Test
   void replacingTheAppDisablesConnectionsAndRejectsOldVersionHandshakes() {
-    UUID orgId = organization();
+    UUID orgId = db.seedOrg("vcs-auth-org", "VCS auth");
     register(123, "private-key-one", "client-secret-one");
     assertTrue(registrations.connectGitHub(orgId, 111, 1).enabled);
 
@@ -204,28 +178,16 @@ class VcsCredentialStoreTest {
   }
 
   private VcsConnection connection(UUID orgId) {
-    em.clear();
-    return VcsConnection.<VcsConnection>find("orgId", orgId).singleResult();
+    return requiringNew()
+        .call(() -> VcsConnection.<VcsConnection>find("orgId", orgId).singleResult());
   }
 
   private static byte[] aad(String suffix) {
     return ("vcs-app:" + suffix).getBytes(UTF_8);
   }
 
-  private UUID organization() {
-    return QuarkusTransaction.requiringNew()
-        .call(
-            () -> {
-              Organization org = new Organization();
-              org.name = "vcs-auth-org";
-              org.displayName = "VCS auth";
-              org.persistAndFlush();
-              return org.id;
-            });
-  }
-
   private UUID user() {
-    return QuarkusTransaction.requiringNew()
+    return requiringNew()
         .call(
             () -> {
               User user = new User();

@@ -7,46 +7,24 @@ import static io.restassured.RestAssured.given;
 import static org.hamcrest.Matchers.containsInAnyOrder;
 import static org.hamcrest.Matchers.is;
 
-import app.statedb.persistence.identity.Organization;
-import app.statedb.persistence.identity.User;
-import io.quarkus.narayana.jta.QuarkusTransaction;
+import app.statedb.app.DatabaseTest;
 import io.quarkus.test.junit.QuarkusTest;
 import io.quarkus.test.junit.TestProfile;
 import java.util.List;
 import java.util.Map;
-import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 /** Site admins can inventory and mint credentials across orgs without holding memberships. */
 @QuarkusTest
 @TestProfile(LocalGlassTestSupport.Profile.class)
-class ServiceAccountInventoryAdminTest {
+class ServiceAccountInventoryAdminTest extends DatabaseTest {
 
   private static final List<String> ORGS = List.of("svc-admin-a", "svc-admin-b");
 
   @BeforeEach
   void seedOrganizations() {
-    QuarkusTransaction.requiringNew()
-        .run(
-            () ->
-                ORGS.forEach(
-                    name -> {
-                      Organization org = new Organization();
-                      org.name = name;
-                      org.displayName = name.toUpperCase();
-                      org.persist();
-                    }));
-  }
-
-  @AfterEach
-  void cleanup() {
-    QuarkusTransaction.requiringNew()
-        .run(
-            () -> {
-              Organization.delete("name in ?1", ORGS);
-              User.delete("iss", "local:service");
-            });
+    ORGS.forEach(name -> db.seedOrg(name, name.toUpperCase()));
   }
 
   @Test

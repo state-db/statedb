@@ -5,6 +5,7 @@ import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import app.statedb.app.DatabaseTest;
 import app.statedb.persistence.identity.Organization;
 import io.quarkus.test.TestTransaction;
 import io.quarkus.test.junit.QuarkusTest;
@@ -17,7 +18,7 @@ import org.junit.jupiter.api.Test;
  * IdentityConstraintsTest}.
  */
 @QuarkusTest
-class PersistenceSmokeTest {
+class PersistenceSmokeTest extends DatabaseTest {
 
   @Test
   @TestTransaction

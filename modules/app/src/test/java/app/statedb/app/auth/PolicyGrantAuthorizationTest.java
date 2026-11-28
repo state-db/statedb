@@ -1,8 +1,10 @@
 package app.statedb.app.auth;
 
+import static io.quarkus.narayana.jta.QuarkusTransaction.requiringNew;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import app.statedb.app.DatabaseTest;
 import app.statedb.persistence.auth.ApiToken;
 import app.statedb.persistence.auth.AuthenticatedPrincipal;
 import app.statedb.persistence.authz.Authorizer;
@@ -21,14 +23,11 @@ import com.cedarpolicy.model.entity.Entity;
 import com.cedarpolicy.value.EntityTypeName;
 import com.cedarpolicy.value.EntityUID;
 import com.cedarpolicy.value.PrimString;
-import io.quarkus.narayana.jta.QuarkusTransaction;
 import io.quarkus.test.junit.QuarkusTest;
 import jakarta.inject.Inject;
-import jakarta.persistence.EntityManager;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
-import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
@@ -38,7 +37,7 @@ import org.junit.jupiter.api.Test;
  * resolver (session vs token), and the managed (per-org) and per-stack (share) grant templates.
  */
 @QuarkusTest
-class PolicyGrantAuthorizationTest {
+class PolicyGrantAuthorizationTest extends DatabaseTest {
 
   private static final String ACME = "grant-acme";
   private static final String OTHER = "grant-other";
@@ -49,7 +48,6 @@ class PolicyGrantAuthorizationTest {
   @Inject PolicySetCache policySetCache;
   @Inject StackCreator stackCreator;
   @Inject StackRefResolver stackRefResolver;
-  @Inject EntityManager em;
 
   private UUID acmeId;
   private UUID otherId;
@@ -60,7 +58,7 @@ class PolicyGrantAuthorizationTest {
 
   @BeforeEach
   void seed() {
-    QuarkusTransaction.requiringNew()
+    requiringNew()
         .run(
             () -> {
               acmeId = persistOrg(ACME).id;
@@ -81,23 +79,6 @@ class PolicyGrantAuthorizationTest {
               stackCreator.create(acmeId, ACME, PROJECT, "staging", Map.of());
             });
     prodStackId = stackRefResolver.resolve(ACME, PROJECT, "prod").orElseThrow().stackId();
-  }
-
-  @AfterEach
-  void cleanup() {
-    QuarkusTransaction.requiringNew()
-        .run(
-            () -> {
-              // org / user deletes cascade org_members, stacks, and policy_grants.
-              em.createNativeQuery("DELETE FROM organizations WHERE name IN (?1, ?2)")
-                  .setParameter(1, ACME)
-                  .setParameter(2, OTHER)
-                  .executeUpdate();
-              em.createNativeQuery("DELETE FROM users WHERE iss = ?1")
-                  .setParameter(1, "local:test")
-                  .executeUpdate();
-            });
-    policySetCache.reload();
   }
 
   @Test
@@ -165,7 +146,7 @@ class PolicyGrantAuthorizationTest {
     grant("StackWriteResourcePolicy", acmeId, dualUserId, prodStackId);
     assertTrue(decide(dual, "stack:Lock", acmeId, stack(ACME, "prod")));
 
-    QuarkusTransaction.requiringNew()
+    requiringNew()
         .run(
             () ->
                 em.createNativeQuery("DELETE FROM stacks WHERE id = ?1")
@@ -180,7 +161,7 @@ class PolicyGrantAuthorizationTest {
 
   private boolean decide(
       AuthenticatedPrincipal p, String action, UUID resourceOrgId, CedarResource resource) {
-    return QuarkusTransaction.requiringNew()
+    return requiringNew()
         .call(
             () -> {
               OrgMember.Role role = roleResolver.resolve(p, resourceOrgId).orElse(null);
@@ -189,7 +170,7 @@ class PolicyGrantAuthorizationTest {
   }
 
   private void grant(String templateId, UUID orgId, UUID userId, UUID stackId) {
-    QuarkusTransaction.requiringNew()
+    requiringNew()
         .run(
             () -> {
               PolicyGrant g = new PolicyGrant();

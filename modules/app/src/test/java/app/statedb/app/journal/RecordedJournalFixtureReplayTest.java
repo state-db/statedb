@@ -5,28 +5,19 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-import app.statedb.persistence.auth.ApiToken;
-import app.statedb.persistence.identity.OrgMember;
-import app.statedb.persistence.identity.Organization;
-import app.statedb.persistence.identity.User;
+import app.statedb.app.DatabaseTest;
+import app.statedb.persistence.journal.JournalEntry;
 import app.statedb.persistence.stack.AssembledDeployment;
-import app.statedb.persistence.stack.Project;
 import app.statedb.persistence.stack.StackAssembler;
-import app.statedb.persistence.stack.StackCreator;
 import app.statedb.testsupport.RepoRoot;
 import app.statedb.testsupport.pulumi.PulumiDeploymentAssert;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
-import io.quarkus.narayana.jta.QuarkusTransaction;
 import io.quarkus.test.junit.QuarkusTest;
 import jakarta.inject.Inject;
-import jakarta.persistence.EntityManager;
-import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.security.MessageDigest;
-import java.security.NoSuchAlgorithmException;
 import java.util.Base64;
 import java.util.HashSet;
 import java.util.List;
@@ -35,7 +26,6 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.stream.IntStream;
 import java.util.stream.Stream;
-import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
@@ -54,14 +44,12 @@ import org.junit.jupiter.params.provider.MethodSource;
  * JournalAppenderTest}.
  */
 @QuarkusTest
-class RecordedJournalFixtureReplayTest {
+class RecordedJournalFixtureReplayTest extends DatabaseTest {
 
   private static final ObjectMapper MAPPER = new ObjectMapper();
   private static final String FIXTURES_ROOT = "tools/pulumi/recorder/fixtures/by-command";
   private static final String RAW_TOKEN = "fixture-replay-tok";
 
-  @Inject EntityManager em;
-  @Inject StackCreator stackCreator;
   @Inject StackAssembler assembler;
 
   static Stream<Arguments> commands() {
@@ -71,31 +59,11 @@ class RecordedJournalFixtureReplayTest {
         Arguments.of("08-destroy", "replay-dst-org", "p-dst", "s-dst"));
   }
 
-  private String org;
-
-  @AfterEach
-  void cleanup() {
-    if (org == null) return;
-    String orgName = org;
-    QuarkusTransaction.requiringNew()
-        .run(
-            () -> {
-              em.createNativeQuery("DELETE FROM organizations WHERE name = ?1")
-                  .setParameter(1, orgName)
-                  .executeUpdate();
-              em.createNativeQuery("DELETE FROM users WHERE iss = ?1 AND sub = ?2")
-                  .setParameter(1, "local:test")
-                  .setParameter(2, orgName)
-                  .executeUpdate();
-            });
-  }
-
   @ParameterizedTest(name = "replay {0}")
   @MethodSource("commands")
   void replayRecordedJournalPatches(String command, String orgName, String project, String stack)
       throws Exception {
-    this.org = orgName;
-    seedIdentityAndStack(orgName, project, stack);
+    db.seedOwnerWithStack(orgName, RAW_TOKEN, project, stack);
     String updateId = startUpdate(orgName, project, stack);
     String token = acquireLock(orgName, project, stack, updateId);
 
@@ -137,91 +105,72 @@ class RecordedJournalFixtureReplayTest {
       }
     }
 
-    long expectedRows = expectedRowCount;
-    long expectedMaxWire = maxWireSeq;
     UUID upd = UUID.fromString(updateId);
-    QuarkusTransaction.requiringNew()
-        .run(
-            () -> {
-              long actualRows =
-                  ((Number)
-                          em.createNativeQuery(
-                                  "SELECT count(*) FROM journal_entries WHERE update_id = ?1")
-                              .setParameter(1, upd)
-                              .getSingleResult())
-                      .longValue();
-              assertEquals(expectedRows, actualRows, command + ": journal row count mismatch");
+    assertEquals(
+        expectedRowCount,
+        JournalEntry.count("updateId", upd),
+        command + ": journal row count mismatch");
 
-              long maxServerSeq =
-                  ((Number)
-                          em.createNativeQuery(
-                                  "SELECT MAX(sequence_id) FROM journal_entries WHERE update_id = ?1")
-                              .setParameter(1, upd)
-                              .getSingleResult())
-                      .longValue();
-              long offset =
-                  ((Number)
-                          em.createNativeQuery(
-                                  "SELECT start_journal_seq FROM stack_updates WHERE id = ?1")
-                              .setParameter(1, upd)
-                              .getSingleResult())
-                      .longValue();
-              // server.sequence_id = offset + wire.sequenceID per the appender's contract.
-              assertEquals(
-                  offset + expectedMaxWire,
-                  maxServerSeq,
-                  command + ": max sequence_id should equal offset + max wire seq");
+    long maxServerSeq =
+        ((Number)
+                em.createNativeQuery(
+                        "SELECT MAX(sequence_id) FROM journal_entries WHERE update_id = ?1")
+                    .setParameter(1, upd)
+                    .getSingleResult())
+            .longValue();
+    long offset =
+        ((Number)
+                em.createNativeQuery("SELECT start_journal_seq FROM stack_updates WHERE id = ?1")
+                    .setParameter(1, upd)
+                    .getSingleResult())
+            .longValue();
+    // server.sequence_id = offset + wire.sequenceID per the appender's contract.
+    assertEquals(
+        offset + maxWireSeq,
+        maxServerSeq,
+        command + ": max sequence_id should equal offset + max wire seq");
 
-              // Every wire sequenceID 1..N from the recorded run must appear exactly once.
-              long distinctWire =
-                  ((Number)
-                          em.createNativeQuery(
-                                  "SELECT count(DISTINCT wire_sequence_id) FROM journal_entries "
-                                      + "WHERE update_id = ?1")
-                              .setParameter(1, upd)
-                              .getSingleResult())
-                      .longValue();
-              assertEquals(expectedRows, distinctWire);
+    // Every wire sequenceID 1..N from the recorded run must appear exactly once.
+    long distinctWire =
+        ((Number)
+                em.createNativeQuery(
+                        "SELECT count(DISTINCT wire_sequence_id) FROM journal_entries "
+                            + "WHERE update_id = ?1")
+                    .setParameter(1, upd)
+                    .getSingleResult())
+            .longValue();
+    assertEquals(expectedRowCount, distinctWire);
 
-              // journal_entries_since_compaction must equal the number of rows we just appended —
-              // pins step 8 of the appender (the counter that compaction reads to decide when to
-              // run). Done as a stack-level read to also catch the case where the counter wasn't
-              // bumped on the right row.
-              long sinceCompaction =
-                  ((Number)
-                          em.createNativeQuery(
-                                  "SELECT journal_entries_since_compaction FROM stack_state "
-                                      + "WHERE stack_id = (SELECT stack_id FROM stack_updates "
-                                      + " WHERE id = ?1)")
-                              .setParameter(1, upd)
-                              .getSingleResult())
-                      .longValue();
-              assertEquals(
-                  expectedRows,
-                  sinceCompaction,
-                  command + ": journal_entries_since_compaction should equal rows appended");
+    // journal_entries_since_compaction must equal the number of rows we just appended —
+    // pins step 8 of the appender (the counter that compaction reads to decide when to
+    // run). Done as a stack-level read to also catch the case where the counter wasn't
+    // bumped on the right row.
+    long sinceCompaction =
+        ((Number)
+                em.createNativeQuery(
+                        "SELECT journal_entries_since_compaction FROM stack_state "
+                            + "WHERE stack_id = (SELECT stack_id FROM stack_updates "
+                            + " WHERE id = ?1)")
+                    .setParameter(1, upd)
+                    .getSingleResult())
+            .longValue();
+    assertEquals(
+        expectedRowCount,
+        sinceCompaction,
+        command + ": journal_entries_since_compaction should equal rows appended");
 
-              // At least one Begin (kind=0) means the recorded session had real resource ops, not
-              // just SecretsManager setup — guards against silently replaying an empty stream.
-              long beginCount =
-                  ((Number)
-                          em.createNativeQuery(
-                                  "SELECT count(*) FROM journal_entries "
-                                      + "WHERE update_id = ?1 AND kind = 0")
-                              .setParameter(1, upd)
-                              .getSingleResult())
-                      .longValue();
-              assertNotEquals(
-                  0L, beginCount, command + ": expected at least one Begin entry in replay");
-            });
+    // At least one Begin (kind=0) means the recorded session had real resource ops, not
+    // just SecretsManager setup — guards against silently replaying an empty stream.
+    long beginCount = JournalEntry.count("updateId = ?1 and kind = ?2", upd, (short) 0);
+    assertNotEquals(0L, beginCount, command + ": expected at least one Begin entry in replay");
   }
 
   @Test
   void recordedRefreshReplayHasTerminalRebuildAndCleanExportReferences() throws Exception {
-    this.org = "replay-refresh-integrity-org";
+    String org = "replay-refresh-integrity-org";
     String project = "p-refresh-integrity";
     String stack = "s-refresh-integrity";
-    seedIdentityAndStack(org, project, stack);
+    UUID stackId = db.seedOwnerWithStack(org, RAW_TOKEN, project, stack).stack().stackId();
 
     replayCommand(org, project, stack, "03-up");
     replayCommand(org, project, stack, "05-refresh");
@@ -239,7 +188,7 @@ class RecordedJournalFixtureReplayTest {
                         && entry.hasNonNull("state")),
         "recorded refresh should include RefreshSuccess(removeOld, state) replacement rows");
 
-    JsonNode resources = assemble(stackId(org, project, stack)).deployment().required("resources");
+    JsonNode resources = assemble(stackId).deployment().required("resources");
 
     assertNoDanglingExportReferences(resources);
   }
@@ -248,9 +197,9 @@ class RecordedJournalFixtureReplayTest {
   @MethodSource("commands")
   void splitAndUnsplitRecordedJournalStreamProduceSameExport(
       String command, String orgName, String project, String stack) throws Exception {
-    this.org = orgName;
-    seedIdentityAndStack(orgName, project, stack + "-one");
-    seedStack(orgName, project, stack + "-split");
+    UUID unsplitStackId =
+        db.seedOwnerWithStack(orgName, RAW_TOKEN, project, stack + "-one").stack().stackId();
+    UUID splitStackId = db.seedStack(orgName, project, stack + "-split").stackId();
 
     String unsplitUpdate = startUpdate(orgName, project, stack + "-one");
     String unsplitToken = acquireLock(orgName, project, stack + "-one", unsplitUpdate);
@@ -271,8 +220,6 @@ class RecordedJournalFixtureReplayTest {
           entries.subList(from, Math.min(from + 3, entries.size())));
     }
 
-    UUID unsplitStackId = stackId(orgName, project, stack + "-one");
-    UUID splitStackId = stackId(orgName, project, stack + "-split");
     AssembledDeployment unsplit = assemble(unsplitStackId);
     AssembledDeployment split = assemble(splitStackId);
     assertEquals(
@@ -391,50 +338,6 @@ class RecordedJournalFixtureReplayTest {
             });
   }
 
-  private void seedIdentityAndStack(String orgName, String project, String stack) {
-    QuarkusTransaction.requiringNew()
-        .run(
-            () -> {
-              Organization o = new Organization();
-              o.name = orgName;
-              o.displayName = orgName;
-              o.persistAndFlush();
-
-              User user = new User();
-              user.iss = "local:test";
-              user.sub = orgName;
-              user.email = orgName + "@example.com";
-              user.displayName = orgName;
-              user.persistAndFlush();
-
-              OrgMember m = new OrgMember();
-              m.orgId = o.id;
-              m.userId = user.id;
-              m.role = OrgMember.Role.owner;
-              m.persistAndFlush();
-
-              ApiToken t = new ApiToken();
-              t.tokenHash = sha256Hex(RAW_TOKEN);
-              t.userId = user.id;
-              t.orgId = o.id;
-              t.kind = ApiToken.Kind.service_account;
-              t.expiresAt = java.time.Instant.now().plusSeconds(60 * 60);
-              t.description = "replay";
-              t.persistAndFlush();
-
-              stackCreator.create(o.id, orgName, project, stack, Map.of());
-            });
-  }
-
-  private void seedStack(String orgName, String project, String stack) {
-    QuarkusTransaction.requiringNew()
-        .run(
-            () -> {
-              Organization org = Organization.<Organization>find("name", orgName).firstResult();
-              stackCreator.create(org.id, orgName, project, stack, Map.of());
-            });
-  }
-
   private String startUpdate(String orgName, String project, String stack) {
     return given()
         .header("Authorization", "token " + RAW_TOKEN)
@@ -524,20 +427,6 @@ class RecordedJournalFixtureReplayTest {
     return assembled;
   }
 
-  private UUID stackId(String orgName, String project, String stack) {
-    return QuarkusTransaction.requiringNew()
-        .call(
-            () -> {
-              Organization org = Organization.<Organization>find("name", orgName).firstResult();
-              Project p = Project.find("orgId = ?1 and name = ?2", org.id, project).firstResult();
-              app.statedb.persistence.stack.Stack s =
-                  app.statedb.persistence.stack.Stack.<app.statedb.persistence.stack.Stack>find(
-                          "projectId = ?1 and name = ?2", p.id, stack)
-                      .firstResult();
-              return s.id;
-            });
-  }
-
   private static JsonNode comparableDeployment(JsonNode deployment) {
     ObjectNode copy = deployment.deepCopy();
     JsonNode manifest = copy.get("manifest");
@@ -555,21 +444,6 @@ class RecordedJournalFixtureReplayTest {
       return baos.toByteArray();
     } catch (Exception e) {
       throw new RuntimeException(e);
-    }
-  }
-
-  private static String sha256Hex(String input) {
-    try {
-      byte[] digest =
-          MessageDigest.getInstance("SHA-256").digest(input.getBytes(StandardCharsets.UTF_8));
-      StringBuilder sb = new StringBuilder(digest.length * 2);
-      for (byte b : digest) {
-        sb.append(Character.forDigit((b >> 4) & 0xF, 16));
-        sb.append(Character.forDigit(b & 0xF, 16));
-      }
-      return sb.toString();
-    } catch (NoSuchAlgorithmException e) {
-      throw new IllegalStateException(e);
     }
   }
 }

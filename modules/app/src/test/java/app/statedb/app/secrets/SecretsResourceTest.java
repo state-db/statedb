@@ -1,5 +1,6 @@
 package app.statedb.app.secrets;
 
+import static io.quarkus.narayana.jta.QuarkusTransaction.requiringNew;
 import static io.restassured.RestAssured.given;
 import static org.hamcrest.Matchers.aMapWithSize;
 import static org.hamcrest.Matchers.allOf;
@@ -9,26 +10,21 @@ import static org.hamcrest.Matchers.hasKey;
 import static org.hamcrest.Matchers.not;
 import static org.hamcrest.Matchers.nullValue;
 
+import app.statedb.app.DatabaseTest;
+import app.statedb.app.TestDb;
 import app.statedb.persistence.auth.ApiToken;
-import app.statedb.persistence.identity.OrgMember;
-import app.statedb.persistence.identity.Organization;
+import app.statedb.persistence.auth.ApiTokenHasher;
 import app.statedb.persistence.identity.User;
-import app.statedb.persistence.stack.StackCreator;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import io.quarkus.narayana.jta.QuarkusTransaction;
 import io.quarkus.test.junit.QuarkusTest;
 import io.restassured.path.json.JsonPath;
 import jakarta.inject.Inject;
-import jakarta.persistence.EntityManager;
 import java.io.ByteArrayOutputStream;
-import java.nio.charset.StandardCharsets;
-import java.security.MessageDigest;
-import java.security.NoSuchAlgorithmException;
+import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 import java.util.zip.GZIPOutputStream;
-import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
@@ -37,7 +33,7 @@ import org.junit.jupiter.api.Test;
  * under the same token to assert cross-stack isolation via {@code stack.id} AAD.
  */
 @QuarkusTest
-class SecretsResourceTest {
+class SecretsResourceTest extends DatabaseTest {
 
   private static final ObjectMapper JSON = new ObjectMapper();
   private static final String ORG_NAME = "secrets-org";
@@ -49,85 +45,41 @@ class SecretsResourceTest {
   private static final String OUTSIDER_SUB = "secrets-outsider";
   private static final String PROJECT = "secrets-proj";
 
-  @Inject EntityManager em;
-
-  @Inject StackCreator stackCreator;
+  @Inject ApiTokenHasher tokenHasher;
 
   @BeforeEach
   void seed() {
-    QuarkusTransaction.requiringNew()
+    TestDb.SeededOwner owner = db.seedOwner(ORG_NAME, RAW_TOKEN);
+    db.seedStack(ORG_NAME, PROJECT, "alpha");
+    db.seedStack(ORG_NAME, PROJECT, "beta");
+
+    requiringNew()
         .run(
             () -> {
-              Organization org = new Organization();
-              org.name = ORG_NAME;
-              org.displayName = "Secrets Org";
-              org.persistAndFlush();
-
-              User user = new User();
-              user.iss = "local:test";
-              user.sub = "secrets";
-              user.email = "secrets@example.com";
-              user.displayName = "Secrets Tester";
-              user.persistAndFlush();
-
-              OrgMember m = new OrgMember();
-              m.orgId = org.id;
-              m.userId = user.id;
-              m.role = OrgMember.Role.owner;
-              m.persistAndFlush();
-
-              ApiToken t = new ApiToken();
-              t.tokenHash = sha256Hex(RAW_TOKEN);
-              t.userId = user.id;
-              t.orgId = org.id;
-              t.kind = ApiToken.Kind.service_account;
-              t.expiresAt = java.time.Instant.now().plusSeconds(60 * 60);
-              t.description = "secrets-test";
-              t.persistAndFlush();
-
               ApiToken sso = new ApiToken();
-              sso.tokenHash = sha256Hex(RAW_TOKEN_SSO);
-              sso.userId = user.id;
+              sso.tokenHash = tokenHasher.hash(RAW_TOKEN_SSO);
+              sso.userId = owner.userId();
               sso.orgId = null; // account-scoped: role resolved per request from org_members
               sso.kind = ApiToken.Kind.oidc;
-              sso.expiresAt = java.time.Instant.now().plusSeconds(60 * 60);
+              sso.expiresAt = Instant.now().plusSeconds(3600);
               sso.description = "secrets-sso-test";
               sso.persistAndFlush();
 
               // A valid account-scoped token whose user has NO membership in the org.
               User outsider = new User();
-              outsider.iss = "local:test";
+              outsider.iss = TestDb.TEST_ISS;
               outsider.sub = OUTSIDER_SUB;
               outsider.email = "outsider@example.com";
               outsider.persistAndFlush();
 
               ApiToken outsiderToken = new ApiToken();
-              outsiderToken.tokenHash = sha256Hex(RAW_TOKEN_OUTSIDER);
+              outsiderToken.tokenHash = tokenHasher.hash(RAW_TOKEN_OUTSIDER);
               outsiderToken.userId = outsider.id;
               outsiderToken.orgId = null;
               outsiderToken.kind = ApiToken.Kind.oidc;
-              outsiderToken.expiresAt = java.time.Instant.now().plusSeconds(60 * 60);
+              outsiderToken.expiresAt = Instant.now().plusSeconds(3600);
               outsiderToken.description = "secrets-outsider-test";
               outsiderToken.persistAndFlush();
-
-              stackCreator.create(org.id, ORG_NAME, PROJECT, "alpha", Map.of());
-              stackCreator.create(org.id, ORG_NAME, PROJECT, "beta", Map.of());
-            });
-  }
-
-  @AfterEach
-  void cleanup() {
-    QuarkusTransaction.requiringNew()
-        .run(
-            () -> {
-              em.createNativeQuery("DELETE FROM organizations WHERE name = ?1")
-                  .setParameter(1, ORG_NAME)
-                  .executeUpdate();
-              em.createNativeQuery("DELETE FROM users WHERE iss = ?1 AND sub IN (?2, ?3)")
-                  .setParameter(1, "local:test")
-                  .setParameter(2, "secrets")
-                  .setParameter(3, OUTSIDER_SUB)
-                  .executeUpdate();
             });
   }
 
@@ -403,20 +355,5 @@ class SecretsResourceTest {
         + "\"ciphertext\":\""
         + ciphertext
         + "\"}";
-  }
-
-  private static String sha256Hex(String input) {
-    try {
-      byte[] digest =
-          MessageDigest.getInstance("SHA-256").digest(input.getBytes(StandardCharsets.UTF_8));
-      StringBuilder sb = new StringBuilder(digest.length * 2);
-      for (byte b : digest) {
-        sb.append(Character.forDigit((b >> 4) & 0xF, 16));
-        sb.append(Character.forDigit(b & 0xF, 16));
-      }
-      return sb.toString();
-    } catch (NoSuchAlgorithmException e) {
-      throw new IllegalStateException(e);
-    }
   }
 }

@@ -1,123 +1,57 @@
 package app.statedb.app.update;
 
+import static io.quarkus.narayana.jta.QuarkusTransaction.requiringNew;
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
-import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import app.statedb.app.DatabaseTest;
+import app.statedb.app.Races;
+import app.statedb.app.TestDb;
 import app.statedb.persistence.events.EventBatchAppender;
 import app.statedb.persistence.events.UpdateEvent;
-import app.statedb.persistence.identity.Organization;
 import app.statedb.persistence.journal.JournalAppender;
 import app.statedb.persistence.journal.JournalEntry;
-import app.statedb.persistence.lock.Lease;
-import app.statedb.persistence.lock.StackLockAcquirer;
+import app.statedb.persistence.lock.StackLock;
 import app.statedb.persistence.lock.StackLockedException;
 import app.statedb.persistence.stack.AssembledDeployment;
 import app.statedb.persistence.stack.CompactionJob;
+import app.statedb.persistence.stack.Stack;
 import app.statedb.persistence.stack.StackAssembler;
-import app.statedb.persistence.stack.StackCreator;
-import app.statedb.persistence.stack.StackRef;
 import app.statedb.persistence.stack.StackState;
 import app.statedb.persistence.update.StackUpdate;
 import app.statedb.persistence.update.StackUpdateCompleter;
-import app.statedb.persistence.update.StackUpdateStarter;
-import app.statedb.persistence.update.StartUpdateRequest;
 import app.statedb.testsupport.pulumi.PulumiDeploymentAssert;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import io.quarkus.narayana.jta.QuarkusTransaction;
 import io.quarkus.test.junit.QuarkusTest;
 import jakarta.inject.Inject;
-import jakarta.persistence.EntityManager;
 import jakarta.persistence.LockModeType;
 import java.util.List;
-import java.util.Map;
 import java.util.UUID;
-import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
-import java.util.concurrent.Future;
-import java.util.concurrent.TimeUnit;
-import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.EnumSource;
 
 @QuarkusTest
-class StackUpdateCompleterTest {
+class StackUpdateCompleterTest extends DatabaseTest {
 
   private static final ObjectMapper MAPPER = new ObjectMapper();
   private static final String ORG_NAME = "completer-org";
 
-  @Inject StackCreator stackCreator;
-  @Inject StackUpdateStarter starter;
-  @Inject StackLockAcquirer acquirer;
   @Inject StackUpdateCompleter completer;
   @Inject JournalAppender journalAppender;
   @Inject EventBatchAppender eventBatchAppender;
   @Inject StackAssembler assembler;
-  @Inject EntityManager em;
 
-  @AfterEach
-  void cleanup() {
-    cleanupOrg();
-  }
-
-  private void cleanupOrg() {
-    QuarkusTransaction.requiringNew()
-        .run(
-            () ->
-                em.createNativeQuery("DELETE FROM organizations WHERE name = ?1")
-                    .setParameter(1, ORG_NAME)
-                    .executeUpdate());
-  }
-
-  private record Fixture(UUID stackId, UUID updateId, UUID leaseId) {}
-
-  private Fixture seed(StackUpdate.Kind kind, String key) {
-    UUID stackId =
-        QuarkusTransaction.requiringNew()
-            .call(
-                () -> {
-                  Organization org = new Organization();
-                  org.name = ORG_NAME;
-                  org.displayName = "Completer Test";
-                  org.persistAndFlush();
-                  StackRef ref = stackCreator.create(org.id, ORG_NAME, "proj", "dev", Map.of());
-                  return ref.stackId();
-                });
-    UUID updateId =
-        starter
-            .start(
-                stackId,
-                kind,
-                null,
-                null,
-                key,
-                new StartUpdateRequest(Map.of(), Map.of(), Map.of(), "d", "yaml", "v3.234.0", "m"))
-            .updateId();
-    Lease lease = acquirer.acquire(stackId, updateId, "user:a", null, null).orElseThrow();
-    return new Fixture(stackId, updateId, lease.leaseId());
-  }
-
-  private Fixture startOnStack(UUID stackId, String key) {
-    UUID updateId =
-        starter
-            .start(
-                stackId,
-                StackUpdate.Kind.UPDATE,
-                null,
-                null,
-                key,
-                new StartUpdateRequest(Map.of(), Map.of(), Map.of(), "d", "yaml", "v3.234.0", "m"))
-            .updateId();
-    Lease lease = acquirer.acquire(stackId, updateId, "user:a", null, null).orElseThrow();
-    return new Fixture(stackId, updateId, lease.leaseId());
+  private TestDb.ActiveUpdate seed(StackUpdate.Kind kind) {
+    UUID stackId = db.seedStack(ORG_NAME).stackId();
+    return db.seedActiveUpdate(stackId, kind);
   }
 
   private void bumpJournalSeq(UUID stackId, long to) {
-    QuarkusTransaction.requiringNew()
+    requiringNew()
         .run(
             () -> {
               StackState state = StackState.find("stackId", stackId).<StackState>singleResult();
@@ -127,7 +61,7 @@ class StackUpdateCompleterTest {
 
   @Test
   void succeededUpdateReleasesLockBumpsVersionAndStampsEndSeq() {
-    Fixture f = seed(StackUpdate.Kind.UPDATE, "complete-ok");
+    TestDb.ActiveUpdate f = seed(StackUpdate.Kind.UPDATE);
     bumpJournalSeq(f.stackId(), 42L);
 
     completer.complete(f.leaseId(), f.stackId(), f.updateId(), StackUpdate.Status.SUCCEEDED);
@@ -143,7 +77,7 @@ class StackUpdateCompleterTest {
 
   @Test
   void completeEnqueuesOneActiveCompactionJobPerStack() {
-    Fixture first = seed(StackUpdate.Kind.UPDATE, "complete-compact-1");
+    TestDb.ActiveUpdate first = seed(StackUpdate.Kind.UPDATE);
 
     completer.complete(
         first.leaseId(), first.stackId(), first.updateId(), StackUpdate.Status.SUCCEEDED);
@@ -153,7 +87,7 @@ class StackUpdateCompleterTest {
         CompactionJob.count(
             "stackId = ?1 and status = ?2", first.stackId(), CompactionJob.Status.PENDING));
 
-    Fixture second = startOnStack(first.stackId(), "complete-compact-2");
+    TestDb.ActiveUpdate second = db.seedActiveUpdate(first.stackId(), StackUpdate.Kind.UPDATE);
 
     completer.complete(
         second.leaseId(), second.stackId(), second.updateId(), StackUpdate.Status.SUCCEEDED);
@@ -166,7 +100,7 @@ class StackUpdateCompleterTest {
 
   @Test
   void succeededPreviewLeavesStackVersionUnchanged() {
-    Fixture f = seed(StackUpdate.Kind.PREVIEW, "complete-prev");
+    TestDb.ActiveUpdate f = seed(StackUpdate.Kind.PREVIEW);
     bumpJournalSeq(f.stackId(), 7L);
 
     completer.complete(f.leaseId(), f.stackId(), f.updateId(), StackUpdate.Status.SUCCEEDED);
@@ -182,7 +116,7 @@ class StackUpdateCompleterTest {
 
   @Test
   void previewPersistsEventsButDoesNotChangeCurrentExport() throws Exception {
-    Fixture f = seed(StackUpdate.Kind.PREVIEW, "complete-preview-events");
+    TestDb.ActiveUpdate f = seed(StackUpdate.Kind.PREVIEW);
 
     eventBatchAppender.append(
         f.stackId(),
@@ -198,35 +132,27 @@ class StackUpdateCompleterTest {
     assertEquals(0, assemble(f.stackId()).deployment().required("resources").size());
   }
 
-  @Test
-  void mutatingKindsAdvanceVersionAndStampTerminalBoundary() {
-    for (StackUpdate.Kind kind :
-        List.of(
-            StackUpdate.Kind.UPDATE,
-            StackUpdate.Kind.REFRESH,
-            StackUpdate.Kind.DESTROY,
-            StackUpdate.Kind.IMPORT)) {
-      try {
-        Fixture f = seed(kind, "complete-kind-" + kind.name().toLowerCase());
-        bumpJournalSeq(f.stackId(), 13L);
+  @ParameterizedTest
+  @EnumSource(
+      value = StackUpdate.Kind.class,
+      names = {"UPDATE", "REFRESH", "DESTROY", "IMPORT"})
+  void mutatingKindsAdvanceVersionAndStampTerminalBoundary(StackUpdate.Kind kind) {
+    TestDb.ActiveUpdate f = seed(kind);
+    bumpJournalSeq(f.stackId(), 13L);
 
-        completer.complete(f.leaseId(), f.stackId(), f.updateId(), StackUpdate.Status.SUCCEEDED);
+    completer.complete(f.leaseId(), f.stackId(), f.updateId(), StackUpdate.Status.SUCCEEDED);
 
-        StackUpdate update = StackUpdate.findById(f.updateId());
-        assertEquals(StackUpdate.Status.SUCCEEDED, update.status);
-        assertEquals(13L, update.endJournalSeq);
-        assertEquals(1, stack(f.stackId()).version);
-        assertEquals(0L, app.statedb.persistence.lock.StackLock.count("stackId", f.stackId()));
-        assertNull(stack(f.stackId()).activeUpdateId);
-      } finally {
-        cleanupOrg();
-      }
-    }
+    StackUpdate update = update(f.updateId());
+    assertEquals(StackUpdate.Status.SUCCEEDED, update.status);
+    assertEquals(13L, update.endJournalSeq);
+    assertEquals(1, stack(f.stackId()).version);
+    assertEquals(0L, StackLock.count("stackId", f.stackId()));
+    assertNull(stack(f.stackId()).activeUpdateId);
   }
 
   @Test
   void failedUpdateStillBumpsVersion() {
-    Fixture f = seed(StackUpdate.Kind.UPDATE, "complete-fail");
+    TestDb.ActiveUpdate f = seed(StackUpdate.Kind.UPDATE);
 
     completer.complete(f.leaseId(), f.stackId(), f.updateId(), StackUpdate.Status.FAILED);
 
@@ -237,7 +163,7 @@ class StackUpdateCompleterTest {
 
   @Test
   void failedUpdateWithNoSuccessfulResourcesLeavesExportUnchanged() throws Exception {
-    Fixture succeeded = seed(StackUpdate.Kind.UPDATE, "complete-fail-base");
+    TestDb.ActiveUpdate succeeded = seed(StackUpdate.Kind.UPDATE);
     journalAppender.append(
         succeeded.stackId(),
         succeeded.updateId(),
@@ -249,7 +175,7 @@ class StackUpdateCompleterTest {
         succeeded.updateId(),
         StackUpdate.Status.SUCCEEDED);
 
-    Fixture failed = startOnStack(succeeded.stackId(), "complete-fail-terminal");
+    TestDb.ActiveUpdate failed = db.seedActiveUpdate(succeeded.stackId(), StackUpdate.Kind.UPDATE);
     journalAppender.append(
         failed.stackId(),
         failed.updateId(),
@@ -267,9 +193,9 @@ class StackUpdateCompleterTest {
     completer.complete(
         failed.leaseId(), failed.stackId(), failed.updateId(), StackUpdate.Status.FAILED);
 
-    StackUpdate failedUpdate = StackUpdate.findById(failed.updateId());
+    StackUpdate failedUpdate = update(failed.updateId());
     assertEquals(StackUpdate.Status.FAILED, failedUpdate.status);
-    assertEquals(0L, app.statedb.persistence.lock.StackLock.count("stackId", failed.stackId()));
+    assertEquals(0L, StackLock.count("stackId", failed.stackId()));
     assertEquals(1, assemble(failed.stackId()).deployment().required("resources").size());
     assertEquals(
         urn("base"),
@@ -284,7 +210,7 @@ class StackUpdateCompleterTest {
 
   @Test
   void failedUpdateKeepsSuccessfulJournalEntriesInExport() throws Exception {
-    Fixture f = seed(StackUpdate.Kind.UPDATE, "complete-fail-partial-success");
+    TestDb.ActiveUpdate f = seed(StackUpdate.Kind.UPDATE);
     journalAppender.append(
         f.stackId(),
         f.updateId(),
@@ -302,9 +228,9 @@ class StackUpdateCompleterTest {
 
     completer.complete(f.leaseId(), f.stackId(), f.updateId(), StackUpdate.Status.FAILED);
 
-    StackUpdate failedUpdate = StackUpdate.findById(f.updateId());
+    StackUpdate failedUpdate = update(f.updateId());
     assertEquals(StackUpdate.Status.FAILED, failedUpdate.status);
-    assertEquals(0L, app.statedb.persistence.lock.StackLock.count("stackId", f.stackId()));
+    assertEquals(0L, StackLock.count("stackId", f.stackId()));
 
     JsonNode resources = assemble(f.stackId()).deployment().required("resources");
     assertEquals(1, resources.size());
@@ -313,51 +239,27 @@ class StackUpdateCompleterTest {
 
   @Test
   void completeWaitsForStackStateLockBeforeStampingBoundary() throws Exception {
-    Fixture f = seed(StackUpdate.Kind.UPDATE, "complete-waits");
-    CountDownLatch locked = new CountDownLatch(1);
-    CountDownLatch release = new CountDownLatch(1);
-    ExecutorService pool = Executors.newFixedThreadPool(2);
-    try {
-      Future<?> holder =
-          pool.submit(
-              () ->
-                  QuarkusTransaction.requiringNew()
-                      .run(
-                          () -> {
-                            StackState state =
-                                StackState.find("stackId", f.stackId())
-                                    .withLock(LockModeType.PESSIMISTIC_WRITE)
-                                    .<StackState>singleResult();
-                            state.journalSeq = 21;
-                            locked.countDown();
-                            await(release);
-                          }));
+    TestDb.ActiveUpdate f = seed(StackUpdate.Kind.UPDATE);
+    Races.holdThenContend(
+        em,
+        () -> {
+          StackState state =
+              StackState.find("stackId", f.stackId())
+                  .withLock(LockModeType.PESSIMISTIC_WRITE)
+                  .<StackState>singleResult();
+          state.journalSeq = 21;
+        },
+        "%stack_state%",
+        () ->
+            completer.complete(
+                f.leaseId(), f.stackId(), f.updateId(), StackUpdate.Status.SUCCEEDED));
 
-      assertTrue(locked.await(5, TimeUnit.SECONDS));
-      Future<?> completing =
-          pool.submit(
-              () ->
-                  completer.complete(
-                      f.leaseId(), f.stackId(), f.updateId(), StackUpdate.Status.SUCCEEDED));
-
-      Thread.sleep(200);
-      assertFalse(completing.isDone(), "complete must wait for the stack_state row lock");
-
-      release.countDown();
-      holder.get(5, TimeUnit.SECONDS);
-      completing.get(5, TimeUnit.SECONDS);
-
-      StackUpdate update = StackUpdate.findById(f.updateId());
-      assertEquals(21L, update.endJournalSeq);
-    } finally {
-      release.countDown();
-      pool.shutdownNow();
-    }
+    assertEquals(21L, update(f.updateId()).endJournalSeq);
   }
 
   @Test
   void wrongLeaseIdThrowsAndLeavesLockIntact() {
-    Fixture f = seed(StackUpdate.Kind.UPDATE, "complete-wrong");
+    TestDb.ActiveUpdate f = seed(StackUpdate.Kind.UPDATE);
     UUID wrong = UUID.randomUUID();
 
     assertThrows(
@@ -374,7 +276,7 @@ class StackUpdateCompleterTest {
 
   @Test
   void forcedFailureMidTxRollsBackAllThreeRows() {
-    Fixture f = seed(StackUpdate.Kind.UPDATE, "complete-atomic");
+    TestDb.ActiveUpdate f = seed(StackUpdate.Kind.UPDATE);
     bumpJournalSeq(f.stackId(), 99L);
 
     // completer.complete is @Transactional(REQUIRED) so it joins this outer tx; throwing here
@@ -382,7 +284,7 @@ class StackUpdateCompleterTest {
     assertThrows(
         RuntimeException.class,
         () ->
-            QuarkusTransaction.requiringNew()
+            requiringNew()
                 .run(
                     () -> {
                       completer.complete(
@@ -402,11 +304,11 @@ class StackUpdateCompleterTest {
 
   @Test
   void completeOnAlreadyTerminalUpdateReleasesLockButLeavesStatusAndVersion() {
-    Fixture f = seed(StackUpdate.Kind.UPDATE, "complete-terminal");
+    TestDb.ActiveUpdate f = seed(StackUpdate.Kind.UPDATE);
     // Simulate a concurrent cancel: status flipped, active_update_id cleared, lock still present
     // (in the real cancel path the lock is gone too — here we test the "lock + terminal status"
     // window, which is what makes this branch worth defending).
-    QuarkusTransaction.requiringNew()
+    requiringNew()
         .run(
             () -> {
               em.createNativeQuery(
@@ -457,8 +359,12 @@ class StackUpdateCompleterTest {
     return ((Number) o).longValue();
   }
 
-  private app.statedb.persistence.stack.Stack stack(UUID stackId) {
-    return app.statedb.persistence.stack.Stack.findById(stackId);
+  private Stack stack(UUID stackId) {
+    return requiringNew().call(() -> Stack.findById(stackId));
+  }
+
+  private StackUpdate update(UUID updateId) {
+    return requiringNew().call(() -> StackUpdate.findById(updateId));
   }
 
   private static JsonNode event(int sequence, String kind, String payloadJson) throws Exception {
@@ -483,16 +389,5 @@ class StackUpdateCompleterTest {
 
   private static String urn(String name) {
     return "urn:pulumi:dev::proj::pkg:index:" + name + "::" + name;
-  }
-
-  private static void await(CountDownLatch latch) {
-    try {
-      if (!latch.await(5, TimeUnit.SECONDS)) {
-        throw new IllegalStateException("timed out waiting for latch");
-      }
-    } catch (InterruptedException e) {
-      Thread.currentThread().interrupt();
-      throw new RuntimeException(e);
-    }
   }
 }

@@ -1,5 +1,6 @@
 package app.statedb.app.update;
 
+import static io.quarkus.narayana.jta.QuarkusTransaction.requiringNew;
 import static io.restassured.RestAssured.given;
 import static org.hamcrest.Matchers.equalTo;
 import static org.hamcrest.Matchers.greaterThan;
@@ -7,88 +8,30 @@ import static org.hamcrest.Matchers.not;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-import app.statedb.persistence.auth.ApiToken;
-import app.statedb.persistence.identity.OrgMember;
-import app.statedb.persistence.identity.Organization;
-import app.statedb.persistence.identity.User;
+import app.statedb.app.DatabaseTest;
 import app.statedb.persistence.lock.LeaseTokenHasher;
 import app.statedb.persistence.lock.LockConfig;
-import app.statedb.persistence.stack.StackCreator;
-import io.quarkus.narayana.jta.QuarkusTransaction;
 import io.quarkus.test.junit.QuarkusTest;
 import jakarta.inject.Inject;
-import jakarta.persistence.EntityManager;
-import java.nio.charset.StandardCharsets;
-import java.security.MessageDigest;
-import java.security.NoSuchAlgorithmException;
 import java.time.Instant;
 import java.util.Map;
 import java.util.UUID;
-import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 @QuarkusTest
-class RenewLeaseContractTest {
+class RenewLeaseContractTest extends DatabaseTest {
 
   private static final String ORG = "renew-org";
   private static final String RAW_TOKEN = "renew-token";
   private static final String PROJECT = "recorder-test";
   private static final String STACK = "dev";
 
-  @Inject EntityManager em;
-  @Inject StackCreator stackCreator;
   @Inject LockConfig lockConfig;
 
   @BeforeEach
   void seed() {
-    QuarkusTransaction.requiringNew()
-        .run(
-            () -> {
-              Organization org = new Organization();
-              org.name = ORG;
-              org.displayName = "Renew Test";
-              org.persistAndFlush();
-
-              User user = new User();
-              user.iss = "local:test";
-              user.sub = "renew";
-              user.email = "renew@example.com";
-              user.displayName = "Renew Tester";
-              user.persistAndFlush();
-
-              OrgMember m = new OrgMember();
-              m.orgId = org.id;
-              m.userId = user.id;
-              m.role = OrgMember.Role.owner;
-              m.persistAndFlush();
-
-              ApiToken t = new ApiToken();
-              t.tokenHash = sha256Hex(RAW_TOKEN);
-              t.userId = user.id;
-              t.orgId = org.id;
-              t.kind = ApiToken.Kind.service_account;
-              t.expiresAt = java.time.Instant.now().plusSeconds(60 * 60);
-              t.description = "renew";
-              t.persistAndFlush();
-
-              stackCreator.create(org.id, ORG, PROJECT, STACK, Map.of());
-            });
-  }
-
-  @AfterEach
-  void cleanup() {
-    QuarkusTransaction.requiringNew()
-        .run(
-            () -> {
-              em.createNativeQuery("DELETE FROM organizations WHERE name = ?1")
-                  .setParameter(1, ORG)
-                  .executeUpdate();
-              em.createNativeQuery("DELETE FROM users WHERE iss = ?1 AND sub = ?2")
-                  .setParameter(1, "local:test")
-                  .setParameter(2, "renew")
-                  .executeUpdate();
-            });
+    db.seedOwnerWithStack(ORG, RAW_TOKEN, PROJECT, STACK);
   }
 
   @Test
@@ -97,7 +40,7 @@ class RenewLeaseContractTest {
     String token = acquireLock(updateId);
 
     // Back-date so the advance is observable without sub-second clock games.
-    QuarkusTransaction.requiringNew()
+    requiringNew()
         .run(
             () ->
                 em.createNativeQuery(
@@ -297,20 +240,5 @@ class RenewLeaseContractTest {
     if (raw instanceof java.time.OffsetDateTime o) return o.toInstant();
     if (raw instanceof java.sql.Timestamp t) return t.toInstant();
     throw new IllegalStateException("unexpected timestamp type: " + raw.getClass());
-  }
-
-  private static String sha256Hex(String input) {
-    try {
-      byte[] digest =
-          MessageDigest.getInstance("SHA-256").digest(input.getBytes(StandardCharsets.UTF_8));
-      StringBuilder sb = new StringBuilder(digest.length * 2);
-      for (byte b : digest) {
-        sb.append(Character.forDigit((b >> 4) & 0xF, 16));
-        sb.append(Character.forDigit(b & 0xF, 16));
-      }
-      return sb.toString();
-    } catch (NoSuchAlgorithmException e) {
-      throw new IllegalStateException(e);
-    }
   }
 }

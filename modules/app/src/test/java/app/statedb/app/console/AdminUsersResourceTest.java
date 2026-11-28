@@ -3,84 +3,66 @@ package app.statedb.app.console;
 import static app.statedb.app.console.LocalGlassTestSupport.COOKIE;
 import static app.statedb.app.console.LocalGlassTestSupport.PASSWORD;
 import static app.statedb.app.console.LocalGlassTestSupport.login;
+import static io.quarkus.narayana.jta.QuarkusTransaction.requiringNew;
 import static io.restassured.RestAssured.given;
 import static org.hamcrest.Matchers.is;
 import static org.hamcrest.Matchers.nullValue;
 
+import app.statedb.app.DatabaseTest;
 import app.statedb.persistence.auth.ApiToken;
 import app.statedb.persistence.identity.OrgMember;
 import app.statedb.persistence.identity.Organization;
 import app.statedb.persistence.identity.ServiceAccountCreator;
 import app.statedb.persistence.identity.User;
-import io.quarkus.narayana.jta.QuarkusTransaction;
 import io.quarkus.test.junit.QuarkusTest;
 import io.quarkus.test.junit.TestProfile;
 import jakarta.inject.Inject;
 import java.time.Instant;
 import java.util.UUID;
-import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 
 /** HTTP contract for the site-admin users audit view: identity, org role, and the service split. */
 @QuarkusTest
 @TestProfile(LocalGlassTestSupport.Profile.class)
-class AdminUsersResourceTest {
+class AdminUsersResourceTest extends DatabaseTest {
   private static final String HUMAN_ISS = "https://accounts.google.com";
   private static final String HUMAN_SUB = "s12-user-115";
   private static final String ORG = "s12-users-test-org";
 
   @Inject ServiceAccountCreator serviceAccounts;
 
-  private UUID orgId;
-  private UUID humanId;
-  private UUID serviceId;
-
-  @AfterEach
-  void cleanup() {
-    QuarkusTransaction.requiringNew()
-        .run(
-            () -> {
-              if (orgId != null) {
-                ApiToken.delete("orgId", orgId);
-                OrgMember.delete("orgId", orgId);
-                Organization.deleteById(orgId);
-              }
-              User.delete("iss = ?1 and sub = ?2", HUMAN_ISS, HUMAN_SUB);
-              if (serviceId != null) {
-                User.deleteById(serviceId);
-              }
-            });
-  }
-
   @Test
   void listsHumansAndServiceAccountsWithIdentityAndRole() {
-    QuarkusTransaction.requiringNew()
-        .run(
-            () -> {
-              Organization org = new Organization();
-              org.name = ORG;
-              org.displayName = "S12 Users Test";
-              org.persist();
-              orgId = org.id;
+    UUID[] seeded =
+        requiringNew()
+            .call(
+                () -> {
+                  Organization org = new Organization();
+                  org.name = ORG;
+                  org.displayName = "S12 Users Test";
+                  org.persist();
 
-              User human = new User();
-              human.iss = HUMAN_ISS;
-              human.sub = HUMAN_SUB;
-              human.email = "s12@example.com";
-              human.displayName = "S12 Human";
-              human.lastLoginAt = Instant.now();
-              human.persist();
-              humanId = human.id;
+                  User human = new User();
+                  human.iss = HUMAN_ISS;
+                  human.sub = HUMAN_SUB;
+                  human.email = "s12@example.com";
+                  human.displayName = "S12 Human";
+                  human.lastLoginAt = Instant.now();
+                  human.persist();
 
-              OrgMember membership = new OrgMember();
-              membership.orgId = orgId;
-              membership.userId = humanId;
-              membership.role = OrgMember.Role.member;
-              membership.persist();
-            });
+                  OrgMember membership = new OrgMember();
+                  membership.orgId = org.id;
+                  membership.userId = human.id;
+                  membership.role = OrgMember.Role.member;
+                  membership.persist();
+                  return new UUID[] {org.id, human.id};
+                });
+    UUID orgId = seeded[0];
+    UUID humanId = seeded[1];
+
     // ServiceAccountCreator manages its own transaction and mints a users row + service membership.
-    serviceId = serviceAccounts.create(orgId, "s12-ci-bot", 30, humanId).accountId();
-    QuarkusTransaction.requiringNew()
+    UUID serviceId = serviceAccounts.create(orgId, "s12-ci-bot", 30, humanId).accountId();
+    requiringNew()
         .run(
             () -> {
               ApiToken current =

@@ -1,5 +1,6 @@
 package app.statedb.app.events;
 
+import static io.quarkus.narayana.jta.QuarkusTransaction.requiringNew;
 import static io.restassured.RestAssured.given;
 import static io.restassured.http.ContentType.JSON;
 import static org.hamcrest.Matchers.containsString;
@@ -7,23 +8,14 @@ import static org.hamcrest.Matchers.equalTo;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-import app.statedb.persistence.auth.ApiToken;
-import app.statedb.persistence.identity.OrgMember;
-import app.statedb.persistence.identity.Organization;
-import app.statedb.persistence.identity.User;
-import app.statedb.persistence.stack.StackCreator;
+import app.statedb.app.DatabaseTest;
+import app.statedb.persistence.events.UpdateEvent;
 import app.statedb.testsupport.RepoRoot;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import io.quarkus.narayana.jta.QuarkusTransaction;
 import io.quarkus.test.junit.QuarkusTest;
-import jakarta.inject.Inject;
-import jakarta.persistence.EntityManager;
-import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.security.MessageDigest;
-import java.security.NoSuchAlgorithmException;
 import java.util.Base64;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -32,7 +24,6 @@ import java.util.UUID;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Stream;
-import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
@@ -45,14 +36,11 @@ import org.junit.jupiter.params.provider.MethodSource;
  * max wire sequence match the recorded payload.
  */
 @QuarkusTest
-class RecordedEventsBatchReplayTest {
+class RecordedEventsBatchReplayTest extends DatabaseTest {
 
   private static final ObjectMapper MAPPER = new ObjectMapper();
   private static final String FIXTURES_ROOT = "tools/pulumi/recorder/fixtures/by-command";
   private static final String RAW_TOKEN = "events-replay-tok";
-
-  @Inject EntityManager em;
-  @Inject StackCreator stackCreator;
 
   static Stream<Arguments> commands() {
     return Stream.of(
@@ -60,25 +48,6 @@ class RecordedEventsBatchReplayTest {
         Arguments.of("04-preview", "evt-prv-org", "p-prv", "s-prv"),
         Arguments.of("05-refresh", "evt-rfs-org", "p-rfs", "s-rfs"),
         Arguments.of("08-destroy", "evt-dst-org", "p-dst", "s-dst"));
-  }
-
-  private String org;
-
-  @AfterEach
-  void cleanup() {
-    if (org == null) return;
-    String orgName = org;
-    QuarkusTransaction.requiringNew()
-        .run(
-            () -> {
-              em.createNativeQuery("DELETE FROM organizations WHERE name = ?1")
-                  .setParameter(1, orgName)
-                  .executeUpdate();
-              em.createNativeQuery("DELETE FROM users WHERE iss = ?1 AND sub = ?2")
-                  .setParameter(1, "local:test")
-                  .setParameter(2, orgName)
-                  .executeUpdate();
-            });
   }
 
   // Filenames embed the upstream update slug, e.g. ".../update_update-0002_events_batch.json".
@@ -94,8 +63,7 @@ class RecordedEventsBatchReplayTest {
   @MethodSource("commands")
   void replayRecordedEventBatches(String command, String orgName, String project, String stack)
       throws Exception {
-    this.org = orgName;
-    seedIdentityAndStack(orgName, project, stack);
+    db.seedOwnerWithStack(orgName, RAW_TOKEN, project, stack);
 
     Map<String, List<Path>> bySlug = eventFixturesBySlug(command);
     assertTrue(!bySlug.isEmpty(), "expected at least one recorded events/batch under " + command);
@@ -144,42 +112,29 @@ class RecordedEventsBatchReplayTest {
         }
       }
 
-      long expectedRows = expectedRowCount;
-      int expectedMaxWire = maxWireSeq;
       UUID upd = UUID.fromString(updateId);
-      QuarkusTransaction.requiringNew()
-          .run(
-              () -> {
-                long actualRows =
-                    ((Number)
-                            em.createNativeQuery(
-                                    "SELECT count(*) FROM update_events WHERE update_id = ?1")
-                                .setParameter(1, upd)
-                                .getSingleResult())
-                        .longValue();
-                assertEquals(
-                    expectedRows, actualRows, command + "/" + slug + ": event row count mismatch");
+      assertEquals(
+          expectedRowCount,
+          UpdateEvent.count("updateId", upd),
+          command + "/" + slug + ": event row count mismatch");
 
-                int maxSeq =
-                    ((Number)
-                            em.createNativeQuery(
-                                    "SELECT MAX(sequence) FROM update_events WHERE update_id = ?1")
-                                .setParameter(1, upd)
-                                .getSingleResult())
-                        .intValue();
-                assertEquals(
-                    expectedMaxWire, maxSeq, command + "/" + slug + ": max sequence mismatch");
-              });
+      int maxSeq =
+          ((Number)
+                  em.createNativeQuery(
+                          "SELECT MAX(sequence) FROM update_events WHERE update_id = ?1")
+                      .setParameter(1, upd)
+                      .getSingleResult())
+              .intValue();
+      assertEquals(maxWireSeq, maxSeq, command + "/" + slug + ": max sequence mismatch");
     }
   }
 
   @Test
-  void emptyEventsArrayReturns400() throws Exception {
+  void emptyEventsArrayReturns400() {
     String orgName = "evt-empty-org";
     String project = "p-empty";
     String stack = "s-empty";
-    this.org = orgName;
-    seedIdentityAndStack(orgName, project, stack);
+    db.seedOwnerWithStack(orgName, RAW_TOKEN, project, stack);
     String updateId = startUpdate(orgName, project, stack);
     String token = acquireLock(orgName, project, stack, updateId);
 
@@ -204,12 +159,11 @@ class RecordedEventsBatchReplayTest {
   }
 
   @Test
-  void malformedGzipBodyReturns400() throws Exception {
+  void malformedGzipBodyReturns400() {
     String orgName = "evt-bad-gzip-org";
     String project = "p-bad";
     String stack = "s-bad";
-    this.org = orgName;
-    seedIdentityAndStack(orgName, project, stack);
+    db.seedOwnerWithStack(orgName, RAW_TOKEN, project, stack);
     String updateId = startUpdate(orgName, project, stack);
     String token = acquireLock(orgName, project, stack, updateId);
 
@@ -236,19 +190,10 @@ class RecordedEventsBatchReplayTest {
         .then()
         .statusCode(400);
 
-    UUID upd = UUID.fromString(updateId);
-    QuarkusTransaction.requiringNew()
-        .run(
-            () -> {
-              long actualRows =
-                  ((Number)
-                          em.createNativeQuery(
-                                  "SELECT count(*) FROM update_events WHERE update_id = ?1")
-                              .setParameter(1, upd)
-                              .getSingleResult())
-                      .longValue();
-              assertEquals(0L, actualRows, "no rows should land for a malformed gzip body");
-            });
+    assertEquals(
+        0L,
+        UpdateEvent.count("updateId", UUID.fromString(updateId)),
+        "no rows should land for a malformed gzip body");
   }
 
   @Test
@@ -256,8 +201,7 @@ class RecordedEventsBatchReplayTest {
     String orgName = "evt-conflict-org";
     String project = "p-conflict";
     String stack = "s-conflict";
-    this.org = orgName;
-    seedIdentityAndStack(orgName, project, stack);
+    db.seedOwnerWithStack(orgName, RAW_TOKEN, project, stack);
     String updateId = startUpdate(orgName, project, stack);
     String token = acquireLock(orgName, project, stack, updateId);
     String path =
@@ -309,41 +253,6 @@ class RecordedEventsBatchReplayTest {
         .body("message", containsString("duplicate event sequence for update"));
   }
 
-  private void seedIdentityAndStack(String orgName, String project, String stack) {
-    QuarkusTransaction.requiringNew()
-        .run(
-            () -> {
-              Organization o = new Organization();
-              o.name = orgName;
-              o.displayName = orgName;
-              o.persistAndFlush();
-
-              User user = new User();
-              user.iss = "local:test";
-              user.sub = orgName;
-              user.email = orgName + "@example.com";
-              user.displayName = orgName;
-              user.persistAndFlush();
-
-              OrgMember m = new OrgMember();
-              m.orgId = o.id;
-              m.userId = user.id;
-              m.role = OrgMember.Role.owner;
-              m.persistAndFlush();
-
-              ApiToken t = new ApiToken();
-              t.tokenHash = sha256Hex(RAW_TOKEN);
-              t.userId = user.id;
-              t.orgId = o.id;
-              t.kind = ApiToken.Kind.service_account;
-              t.expiresAt = java.time.Instant.now().plusSeconds(60 * 60);
-              t.description = "events-replay";
-              t.persistAndFlush();
-
-              stackCreator.create(o.id, orgName, project, stack, Map.of());
-            });
-  }
-
   private String startUpdate(String orgName, String project, String stack) {
     return given()
         .header("Authorization", "token " + RAW_TOKEN)
@@ -358,7 +267,7 @@ class RecordedEventsBatchReplayTest {
   }
 
   private void releaseLock(String orgName, String project, String stack) {
-    QuarkusTransaction.requiringNew()
+    requiringNew()
         .run(
             () ->
                 em.createNativeQuery(
@@ -402,20 +311,5 @@ class RecordedEventsBatchReplayTest {
               });
     }
     return bySlug;
-  }
-
-  private static String sha256Hex(String input) {
-    try {
-      byte[] digest =
-          MessageDigest.getInstance("SHA-256").digest(input.getBytes(StandardCharsets.UTF_8));
-      StringBuilder sb = new StringBuilder(digest.length * 2);
-      for (byte b : digest) {
-        sb.append(Character.forDigit((b >> 4) & 0xF, 16));
-        sb.append(Character.forDigit(b & 0xF, 16));
-      }
-      return sb.toString();
-    } catch (NoSuchAlgorithmException e) {
-      throw new IllegalStateException(e);
-    }
   }
 }

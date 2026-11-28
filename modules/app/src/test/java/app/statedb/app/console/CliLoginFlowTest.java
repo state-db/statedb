@@ -1,5 +1,6 @@
 package app.statedb.app.console;
 
+import static io.quarkus.narayana.jta.QuarkusTransaction.requiringNew;
 import static io.restassured.RestAssured.given;
 import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.nullValue;
@@ -8,27 +9,22 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import app.statedb.app.DatabaseTest;
 import app.statedb.persistence.identity.OidcProvider;
 import app.statedb.persistence.identity.User;
-import io.quarkus.narayana.jta.QuarkusTransaction;
 import io.quarkus.test.common.QuarkusTestResource;
 import io.quarkus.test.junit.QuarkusTest;
 import io.quarkus.test.oidc.server.OidcWiremockTestResource;
 import io.restassured.http.Cookie;
 import io.restassured.response.Response;
 import io.restassured.specification.RequestSpecification;
-import jakarta.inject.Inject;
-import jakarta.persistence.EntityManager;
 import java.net.URI;
 import java.net.URLDecoder;
 import java.nio.charset.StandardCharsets;
 import java.util.HashMap;
-import java.util.List;
 import java.util.Map;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
-import org.eclipse.microprofile.config.ConfigProvider;
-import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
@@ -42,56 +38,15 @@ import org.junit.jupiter.api.Test;
  */
 @QuarkusTest
 @QuarkusTestResource(OidcWiremockTestResource.class)
-class CliLoginFlowTest {
+class CliLoginFlowTest extends DatabaseTest {
 
-  private static final String PROVIDER = "wiremock";
-  private static final String FIXTURE_ISS = "https://server.example.com";
-  private static final String FIXTURE_SUB = "123456";
-
-  @Inject EntityManager em;
-
-  private String issuer() {
-    return ConfigProvider.getConfig().getValue("keycloak.url", String.class) + "/realms/quarkus";
-  }
+  private static final String PROVIDER = OidcConsoleSessionFixture.PROVIDER;
+  private static final String FIXTURE_ISS = OidcConsoleSessionFixture.FIXTURE_ISS;
+  private static final String FIXTURE_SUB = OidcConsoleSessionFixture.FIXTURE_SUB;
 
   @BeforeEach
   void seedProvider() {
-    QuarkusTransaction.requiringNew()
-        .run(
-            () -> {
-              em.createNativeQuery("DELETE FROM oidc_providers WHERE name = ?1")
-                  .setParameter(1, PROVIDER)
-                  .executeUpdate();
-              OidcProvider p = new OidcProvider();
-              p.name = PROVIDER;
-              p.issuerUrl = issuer();
-              p.clientId = "quarkus-app";
-              p.clientSecret = "secret";
-              p.scopes = List.of("openid", "profile", "email");
-              p.enabled = true;
-              p.persist();
-            });
-  }
-
-  @AfterEach
-  void cleanup() {
-    QuarkusTransaction.requiringNew()
-        .run(
-            () -> {
-              em.createNativeQuery("DELETE FROM oidc_providers WHERE name = ?1")
-                  .setParameter(1, PROVIDER)
-                  .executeUpdate();
-              em.createNativeQuery(
-                      "DELETE FROM api_tokens WHERE user_id IN"
-                          + " (SELECT id FROM users WHERE iss = ?1 AND sub = ?2)")
-                  .setParameter(1, FIXTURE_ISS)
-                  .setParameter(2, FIXTURE_SUB)
-                  .executeUpdate();
-              em.createNativeQuery("DELETE FROM users WHERE iss = ?1 AND sub = ?2")
-                  .setParameter(1, FIXTURE_ISS)
-                  .setParameter(2, FIXTURE_SUB)
-                  .executeUpdate();
-            });
+    OidcConsoleSessionFixture.seedProvider();
   }
 
   @Test
@@ -253,18 +208,7 @@ class CliLoginFlowTest {
         .body(containsString("my laptop"))
         .body(containsString("127.0.0.1:59123"));
 
-    long tokensAfterGet =
-        QuarkusTransaction.requiringNew()
-            .call(
-                () ->
-                    (Long)
-                        em.createQuery(
-                                "select count(t) from ApiToken t join User u on u.id = t.userId"
-                                    + " where u.iss = :iss and u.sub = :sub")
-                            .setParameter("iss", FIXTURE_ISS)
-                            .setParameter("sub", FIXTURE_SUB)
-                            .getSingleResult());
-    assertEquals(0L, tokensAfterGet, "GET confirmation must not mint a token");
+    assertEquals(0L, fixtureTokenCount(), "GET confirmation must not mint a token");
 
     String signedRequest = hiddenInput(confirmation.asString(), "request");
     Response mint =
@@ -415,18 +359,7 @@ class CliLoginFlowTest {
         .then()
         .statusCode(400);
 
-    long tokens =
-        QuarkusTransaction.requiringNew()
-            .call(
-                () ->
-                    (Long)
-                        em.createQuery(
-                                "select count(t) from ApiToken t join User u on u.id = t.userId"
-                                    + " where u.iss = :iss and u.sub = :sub")
-                            .setParameter("iss", FIXTURE_ISS)
-                            .setParameter("sub", FIXTURE_SUB)
-                            .getSingleResult());
-    assertEquals(1L, tokens, "replay must not mint a second token");
+    assertEquals(1L, fixtureTokenCount(), "replay must not mint a second token");
   }
 
   @Test
@@ -453,18 +386,7 @@ class CliLoginFlowTest {
         .statusCode(200)
         .body(containsString("No token was created"));
 
-    long tokens =
-        QuarkusTransaction.requiringNew()
-            .call(
-                () ->
-                    (Long)
-                        em.createQuery(
-                                "select count(t) from ApiToken t join User u on u.id = t.userId"
-                                    + " where u.iss = :iss and u.sub = :sub")
-                            .setParameter("iss", FIXTURE_ISS)
-                            .setParameter("sub", FIXTURE_SUB)
-                            .getSingleResult());
-    assertEquals(0L, tokens);
+    assertEquals(0L, fixtureTokenCount());
   }
 
   @Test
@@ -514,15 +436,23 @@ class CliLoginFlowTest {
     Cookie session = sessionCookie(callback);
     assertNotNull(session, "session cookie set on callback");
 
-    long provisioned =
-        QuarkusTransaction.requiringNew()
-            .call(() -> User.count("iss = ?1 and sub = ?2", FIXTURE_ISS, FIXTURE_SUB));
-    assertEquals(1L, provisioned, "callback provisions the user");
+    assertEquals(
+        1L, User.count("iss = ?1 and sub = ?2", FIXTURE_ISS, FIXTURE_SUB), "callback provisions");
     return new SignIn(session, callback);
   }
 
+  private long fixtureTokenCount() {
+    return (Long)
+        em.createQuery(
+                "select count(t) from ApiToken t join User u on u.id = t.userId"
+                    + " where u.iss = :iss and u.sub = :sub")
+            .setParameter("iss", FIXTURE_ISS)
+            .setParameter("sub", FIXTURE_SUB)
+            .getSingleResult();
+  }
+
   private void setProviderEnabled(boolean enabled) {
-    QuarkusTransaction.requiringNew()
+    requiringNew()
         .run(() -> OidcProvider.update("enabled = ?1 where name = ?2", enabled, PROVIDER));
   }
 

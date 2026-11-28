@@ -4,6 +4,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
 
+import app.statedb.app.DatabaseTest;
 import app.statedb.persistence.auth.ApiToken;
 import app.statedb.persistence.identity.OrgMember;
 import app.statedb.persistence.identity.Organization;
@@ -24,18 +25,15 @@ import com.fasterxml.jackson.databind.node.JsonNodeFactory;
 import io.quarkus.test.TestTransaction;
 import io.quarkus.test.junit.QuarkusTest;
 import jakarta.inject.Inject;
-import jakarta.persistence.EntityManager;
 import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
 import org.junit.jupiter.api.Test;
 
 @QuarkusTest
-class WorkspaceListFinderTest {
+class WorkspaceListFinderTest extends DatabaseTest {
 
   @Inject WorkspaceListFinder finder;
-
-  @Inject EntityManager em;
 
   @Inject ServiceAccountCreator serviceAccountCreator;
 

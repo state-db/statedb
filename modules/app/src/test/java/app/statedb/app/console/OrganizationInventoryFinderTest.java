@@ -2,6 +2,7 @@ package app.statedb.app.console;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
+import app.statedb.app.DatabaseTest;
 import app.statedb.persistence.identity.OrgMember;
 import app.statedb.persistence.identity.Organization;
 import app.statedb.persistence.identity.OrganizationInventoryFinder;
@@ -19,7 +20,7 @@ import java.util.stream.Collectors;
 import org.junit.jupiter.api.Test;
 
 @QuarkusTest
-class OrganizationInventoryFinderTest {
+class OrganizationInventoryFinderTest extends DatabaseTest {
 
   private static final String EMPTY = "inventory-count-a-empty";
   private static final String POPULATED = "inventory-count-b-populated";

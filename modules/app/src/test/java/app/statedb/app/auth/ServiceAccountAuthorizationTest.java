@@ -1,21 +1,21 @@
 package app.statedb.app.auth;
 
+import static io.quarkus.narayana.jta.QuarkusTransaction.requiringNew;
 import static io.restassured.RestAssured.given;
 import static org.hamcrest.Matchers.notNullValue;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import app.statedb.app.DatabaseTest;
 import app.statedb.persistence.auth.ApiToken;
 import app.statedb.persistence.auth.ApiToken.AccessProfile;
-import app.statedb.persistence.identity.Organization;
 import app.statedb.persistence.identity.ServiceAccountCreator;
 import app.statedb.persistence.identity.ServiceAccountRevoker;
 import app.statedb.persistence.identity.User;
-import io.quarkus.narayana.jta.QuarkusTransaction;
 import io.quarkus.test.junit.QuarkusTest;
 import jakarta.inject.Inject;
-import jakarta.persistence.EntityManager;
 import java.util.Map;
 import java.util.UUID;
-import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
@@ -25,7 +25,7 @@ import org.junit.jupiter.api.Test;
  * profile grants anything outside its org.
  */
 @QuarkusTest
-class ServiceAccountAuthorizationTest {
+class ServiceAccountAuthorizationTest extends DatabaseTest {
 
   private static final String ORG = "svc-acct-org";
   private static final String OTHER_ORG = "svc-acct-other-org";
@@ -33,13 +33,9 @@ class ServiceAccountAuthorizationTest {
   private static final String STACK = "dev";
   private static final String BASE = "/pulumi/api/stacks/" + ORG + "/" + PROJECT + "/" + STACK;
 
-  @Inject EntityManager em;
-
   @Inject ServiceAccountCreator creator;
 
   @Inject ServiceAccountRevoker revoker;
-
-  @Inject app.statedb.persistence.stack.StackCreator stackCreator;
 
   private UUID orgId;
   private UUID accountId;
@@ -47,41 +43,12 @@ class ServiceAccountAuthorizationTest {
 
   @BeforeEach
   void seed() {
-    QuarkusTransaction.requiringNew()
-        .run(
-            () -> {
-              Organization org = new Organization();
-              org.name = ORG;
-              org.displayName = "Service Account Test";
-              org.persistAndFlush();
-              orgId = org.id;
+    orgId = db.seedStack(ORG, PROJECT, STACK).orgId();
+    db.seedStack(OTHER_ORG, PROJECT, "secret");
 
-              Organization other = new Organization();
-              other.name = OTHER_ORG;
-              other.displayName = "Other Org";
-              other.persistAndFlush();
-
-              stackCreator.create(org.id, ORG, PROJECT, STACK, Map.of());
-              stackCreator.create(other.id, OTHER_ORG, PROJECT, "secret", Map.of());
-            });
-
-    var minted =
-        QuarkusTransaction.requiringNew().call(() -> creator.create(orgId, "ci-deploy", 90, null));
+    var minted = requiringNew().call(() -> creator.create(orgId, "ci-deploy", 90, null));
     accountId = minted.accountId();
     rawToken = minted.rawToken();
-  }
-
-  @AfterEach
-  void cleanup() {
-    QuarkusTransaction.requiringNew()
-        .run(
-            () -> {
-              em.createNativeQuery("DELETE FROM users WHERE iss = 'local:service'").executeUpdate();
-              em.createNativeQuery("DELETE FROM organizations WHERE name IN (?1, ?2)")
-                  .setParameter(1, ORG)
-                  .setParameter(2, OTHER_ORG)
-                  .executeUpdate();
-            });
   }
 
   @Test
@@ -135,7 +102,7 @@ class ServiceAccountAuthorizationTest {
   @Test
   void optedInStackLifecycleIsAllowedWithoutRenameOrTagAuthority() {
     String lifecycleToken =
-        QuarkusTransaction.requiringNew()
+        requiringNew()
             .call(
                 () ->
                     creator
@@ -179,7 +146,7 @@ class ServiceAccountAuthorizationTest {
   @Test
   void lifecycleProfileDoesNotOverrideProtectedStackGuardrail() {
     String lifecycleToken =
-        QuarkusTransaction.requiringNew()
+        requiringNew()
             .call(
                 () ->
                     creator
@@ -212,18 +179,17 @@ class ServiceAccountAuthorizationTest {
   void revokedAccountStopsAuthenticating() {
     asService().get(BASE).then().statusCode(200);
 
-    boolean revoked =
-        QuarkusTransaction.requiringNew().call(() -> revoker.revoke(orgId, accountId, null));
-    org.junit.jupiter.api.Assertions.assertTrue(revoked);
+    boolean revoked = requiringNew().call(() -> revoker.revoke(orgId, accountId, null));
+    assertTrue(revoked);
 
-    QuarkusTransaction.requiringNew()
+    requiringNew()
         .run(
             () -> {
               User account = User.findById(accountId);
               ApiToken token = ApiToken.find("userId", accountId).firstResult();
-              org.junit.jupiter.api.Assertions.assertNotNull(account);
-              org.junit.jupiter.api.Assertions.assertNotNull(account.deactivatedAt);
-              org.junit.jupiter.api.Assertions.assertNotNull(token.revokedAt);
+              assertNotNull(account);
+              assertNotNull(account.deactivatedAt);
+              assertNotNull(token.revokedAt);
             });
 
     asService().get(BASE).then().statusCode(401);

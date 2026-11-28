@@ -510,10 +510,6 @@ public final class FixtureReplay {
             });
   }
 
-  public static void cleanup(EntityManager em) {
-    TestIdentity.cleanup(em);
-  }
-
   private static void seedStack(Organization org) {
     Project project = new Project();
     project.orgId = org.id;

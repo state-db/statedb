@@ -1,5 +1,6 @@
 package app.statedb.app.lock;
 
+import static io.quarkus.narayana.jta.QuarkusTransaction.requiringNew;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
@@ -7,37 +8,24 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-import app.statedb.persistence.identity.Organization;
-import app.statedb.persistence.lock.Lease;
+import app.statedb.app.DatabaseTest;
+import app.statedb.app.TestDb;
 import app.statedb.persistence.lock.StackLock;
-import app.statedb.persistence.lock.StackLockAcquirer;
 import app.statedb.persistence.lock.StackLockCanceller;
 import app.statedb.persistence.lock.StackLockedException;
-import app.statedb.persistence.stack.StackCreator;
-import app.statedb.persistence.stack.StackRef;
 import app.statedb.persistence.update.StackUpdate;
-import app.statedb.persistence.update.StackUpdateStarter;
-import app.statedb.persistence.update.StartUpdateRequest;
-import io.quarkus.narayana.jta.QuarkusTransaction;
 import io.quarkus.test.junit.QuarkusTest;
 import jakarta.inject.Inject;
-import jakarta.persistence.EntityManager;
-import java.util.Map;
 import java.util.UUID;
-import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 @QuarkusTest
-class StackLockCancellerTest {
+class StackLockCancellerTest extends DatabaseTest {
 
   private static final String ORG_NAME = "canceller-org";
 
-  @Inject StackCreator stackCreator;
-  @Inject StackUpdateStarter starter;
-  @Inject StackLockAcquirer acquirer;
   @Inject StackLockCanceller canceller;
-  @Inject EntityManager em;
 
   private UUID stackId;
   private UUID updateId;
@@ -46,40 +34,12 @@ class StackLockCancellerTest {
 
   @BeforeEach
   void seed() {
-    stackId =
-        QuarkusTransaction.requiringNew()
-            .call(
-                () -> {
-                  Organization org = new Organization();
-                  org.name = ORG_NAME;
-                  org.displayName = "Canceller Test";
-                  org.persistAndFlush();
-                  StackRef ref = stackCreator.create(org.id, ORG_NAME, "proj", "dev", Map.of());
-                  return ref.stackId();
-                });
-    updateId =
-        starter
-            .start(
-                stackId,
-                StackUpdate.Kind.PREVIEW,
-                null,
-                null,
-                "cancel-key",
-                new StartUpdateRequest(Map.of(), Map.of(), Map.of(), "d", "yaml", "v3.234.0", "m"))
-            .updateId();
-    Lease lease = acquirer.acquire(stackId, updateId, "user:a", null, null).orElseThrow();
-    leaseId = lease.leaseId();
-    lockId = lease.leaseId();
-  }
-
-  @AfterEach
-  void cleanup() {
-    QuarkusTransaction.requiringNew()
-        .run(
-            () ->
-                em.createNativeQuery("DELETE FROM organizations WHERE name = ?1")
-                    .setParameter(1, ORG_NAME)
-                    .executeUpdate());
+    TestDb.ActiveUpdate active =
+        db.seedActiveUpdate(db.seedStack(ORG_NAME).stackId(), StackUpdate.Kind.PREVIEW);
+    stackId = active.stackId();
+    updateId = active.updateId();
+    leaseId = active.leaseId();
+    lockId = active.leaseId();
   }
 
   @Test
@@ -122,7 +82,7 @@ class StackLockCancellerTest {
     // Simulate a status that some other code path has already moved to a terminal value. The
     // status flip is guarded on IN_PROGRESS, so cancel must still release the lock but leave
     // the terminal status alone.
-    QuarkusTransaction.requiringNew()
+    requiringNew()
         .run(
             () ->
                 em.createNativeQuery(

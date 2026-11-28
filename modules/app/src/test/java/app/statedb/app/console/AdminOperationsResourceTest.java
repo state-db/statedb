@@ -3,6 +3,7 @@ package app.statedb.app.console;
 import static app.statedb.app.console.LocalGlassTestSupport.COOKIE;
 import static app.statedb.app.console.LocalGlassTestSupport.PASSWORD;
 import static app.statedb.app.console.LocalGlassTestSupport.login;
+import static io.quarkus.narayana.jta.QuarkusTransaction.requiringNew;
 import static io.restassured.RestAssured.given;
 import static io.restassured.http.ContentType.JSON;
 import static org.hamcrest.Matchers.hasSize;
@@ -12,6 +13,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 
+import app.statedb.app.DatabaseTest;
 import app.statedb.persistence.bootstrap.BootstrapProvisioner;
 import app.statedb.persistence.identity.Organization;
 import app.statedb.persistence.identity.ServiceAccountCreator;
@@ -22,39 +24,23 @@ import app.statedb.persistence.stack.Stack;
 import app.statedb.persistence.stack.StackCreator;
 import app.statedb.persistence.stack.StackRef;
 import app.statedb.persistence.update.StackUpdate;
-import io.quarkus.narayana.jta.QuarkusTransaction;
 import io.quarkus.test.junit.QuarkusTest;
 import io.quarkus.test.junit.TestProfile;
 import jakarta.inject.Inject;
 import java.time.Instant;
 import java.util.Map;
 import java.util.UUID;
-import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 
 /** HTTP contract for the site-admin locks and compaction queue inventory. */
 @QuarkusTest
 @TestProfile(LocalGlassTestSupport.Profile.class)
-class AdminOperationsResourceTest {
+class AdminOperationsResourceTest extends DatabaseTest {
   private static final String ORG = "s14-operations";
   private static final String PROJECT = "infra";
   private static final String STACK = "production";
 
   @Inject StackCreator stackCreator;
-
-  private UUID serviceHolderId;
-
-  @AfterEach
-  void cleanup() {
-    QuarkusTransaction.requiringNew()
-        .run(
-            () -> {
-              Organization.delete("name", ORG);
-              if (serviceHolderId != null) {
-                User.deleteById(serviceHolderId);
-              }
-            });
-  }
 
   @Test
   void invalidLockIdsReturnConsoleErrorBodies() {
@@ -136,7 +122,7 @@ class AdminOperationsResourceTest {
         .then()
         .statusCode(204);
 
-    QuarkusTransaction.requiringNew()
+    requiringNew()
         .run(
             () -> {
               assertEquals(0L, StackLock.count("id", seed.lockId()));
@@ -148,7 +134,7 @@ class AdminOperationsResourceTest {
   }
 
   private Seed seed() {
-    return QuarkusTransaction.requiringNew()
+    return requiringNew()
         .call(
             () -> {
               User bootstrap =
@@ -169,7 +155,6 @@ class AdminOperationsResourceTest {
               service.sub = UUID.randomUUID().toString();
               service.displayName = "deploy-bot";
               service.persist();
-              serviceHolderId = service.id;
 
               Instant now = Instant.now();
               StackUpdate update = new StackUpdate();
